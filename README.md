@@ -15,9 +15,15 @@ datacenters.
 *Locomotion policy (run to target) trained in Brax in ~20 seconds. Brax
 simulates this environment >3M frames per second on a single v100 GPU.*
 
-## Getting Started
+## Colab Notebooks
 
-To install brax from source, clone this repo, `cd` to it, and then:
+Explore Brax easily and quickly through a series of colab notebooks:
+
+* [Brax Basics](https://colab.research.google.com/github/google/brax/blob/main/notebooks/basics.ipynb) introduces the Brax API, and demonstrates simulating some basic physics primitives.
+
+## Using Brax locally
+
+To install Brax from source, clone this repo, `cd` to it, and then:
 
 ```
 python3 -m venv env
