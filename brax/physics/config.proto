@@ -1,0 +1,157 @@
+# Copyright 2021 The Brax Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+syntax = "proto3";
+
+package brax;
+
+// A point or scalar value in 3d space.
+message Vector3 {
+  float x = 1;
+  float y = 2;
+  float z = 3;
+}
+
+// Bodies have a rigid shape, mass, and rotational inertia. Bodies may connect
+// to other bodies via joints, forming a kinematic tree.
+message Body {
+  // Unique name for this body
+  string name = 1;
+  // Geometric primitives that define the shape of the body
+  repeated Collider colliders = 2;
+  // Diagonal of the inertia tensor of this body about its center-of-mass
+  Vector3 inertia = 3;
+  // Mass of this body in kg
+  float mass = 4;
+  // Static bodies are immovable but can still participate in collisions.
+  bool static = 5;
+}
+
+// Primitive shape that composes the collision surface of a body.
+message Collider {
+  // A 6-sided rectangular prism
+  message Box {
+    // Half the size of the box in each dimension.
+    Vector3 halfsize = 1;
+  }
+  // An infinite plane with normal vector (0, 0, 1)
+  message Plane {}
+  // A sphere
+  message Sphere {
+    float radius = 1;
+  }
+  // A cylinder with rounded ends.
+  message Capsule {
+    // Radius of the sphere at each rounded end
+    float radius = 1;
+    // End-to-end length of the capsule
+    float length = 2;
+    // Capsule end (0: both ends, 1: top end, -1: bottom end)
+    int32 end = 3;
+  }
+  // Position relative to parent body
+  Vector3 position = 1;
+  // Rotation relative to parent body
+  Vector3 rotation = 2;
+  // A collider may only be one type
+  oneof type {
+    Box box = 3;
+    Plane plane = 4;
+    Sphere sphere = 5;
+    Capsule capsule = 6;
+  }
+}
+
+// Joints connect two bodies and restrain their movement to a rotational frame.
+message Joint {
+  // Min/max tuple.
+  message Range {
+    float min = 1;
+    float max = 2;
+  }
+  // Unique name for this joint
+  string name = 1;
+  // Spring constant controlling the strength of this joint
+  float stiffness = 2;
+  // Parent body's name
+  string parent = 3;
+  // Child body's name
+  string child = 4;
+  // Offset from the parent's center of mass to the joint
+  Vector3 parent_offset = 5;
+  // Offset from the child's center of mass to the joint
+  Vector3 child_offset = 6;
+  // The offset rotation from the parent to the joint's coordinate system
+  // The joint's local x, y, and z axes are made active by
+  // supplying 1, 2, or 3 angle_limits, respectively.
+  Vector3 rotation = 7;
+  // Damps parent and child angular velocities to be equal
+  float angular_damping = 8;
+  // Limits for actuated axes.  Supply one Range for joint-local-x actuation
+  // and two for x,y.
+  repeated Range angle_limit = 9;
+}
+
+// Actuators provide interactive control of a system via the step function.
+// An actuator acts on a single joint.  It occupies as many dimensions in
+// the action vector as there are ranges in its joint.
+message Actuator {
+  // Unique name for this actuator
+  string name = 1;
+  // Joint for this actuator
+  string joint = 2;
+  // Spring constant multiplier on input value to output torque
+  float strength = 3;
+  // Applies a direct torque to the joint
+  message Torque {}
+  // Drives a joint to a desired target angle of rotation about its axes
+  message Angle {}
+  // An actuator may only be one type
+  oneof type {
+    Torque torque = 4;
+    Angle angle = 5;
+  }
+}
+
+// The configuration of a system for Brax to simulate
+message Config {
+  message NamePair {
+    string first = 1;
+    string second = 2;
+  }
+  // All of the bodies in the system
+  repeated Body bodies = 1;
+  // All of the joints in the system
+  repeated Joint joints = 2;
+  // All of the actuators in the system
+  repeated Actuator actuators = 3;
+  // Bounciness of all collisions
+  float elasticity = 4;
+  // How much surfaces in contact resist translation
+  float friction = 5;
+  // Uniform force applied to each body
+  Vector3 gravity = 6;
+  // Linear velocity damping applied to each body
+  float velocity_damping = 7;
+  // Angular velocity damping applied to each body
+  float angular_damping = 8;
+  // How aggressively interpenetrating bodies should push away from one another
+  float baumgarte_erp = 9;
+  // Pairs of bodies in the scene than can collide with one another
+  repeated NamePair collide_include = 10;
+  // Amount of time to simulate each step, in seconds
+  float dt = 11;
+  // How many substeps to perform to maintain numerical stability
+  int32 substeps = 12;
+}
