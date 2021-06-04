@@ -275,7 +275,7 @@ bodies {
 }
 joints {
   name: "head"
-  stiffness: 5000.0
+  stiffness: 15000.0
   parent: "torso"
   child: "head"
   rotation {
@@ -287,7 +287,7 @@ joints {
 }
 joints {
   name: "bthigh"
-  stiffness: 5000.0
+  stiffness: 15000.0
   parent: "torso"
   child: "bthigh"
   parent_offset {
@@ -306,7 +306,7 @@ joints {
 }
 joints {
   name: "bshin"
-  stiffness: 5000.0
+  stiffness: 15000.0
   parent: "bthigh"
   child: "bshin"
   parent_offset {
@@ -326,7 +326,7 @@ joints {
 }
 joints {
   name: "bfoot"
-  stiffness: 5000.0
+  stiffness: 15000.0
   parent: "bshin"
   child: "bfoot"
   parent_offset {
@@ -346,7 +346,7 @@ joints {
 }
 joints {
   name: "fthigh"
-  stiffness: 5000.0
+  stiffness: 15000.0
   parent: "torso"
   child: "fthigh"
   parent_offset {
@@ -365,7 +365,7 @@ joints {
 }
 joints {
   name: "fshin"
-  stiffness: 5000.0
+  stiffness: 15000.0
   parent: "fthigh"
   child: "fshin"
   parent_offset {
@@ -385,7 +385,7 @@ joints {
 }
 joints {
   name: "ffoot"
-  stiffness: 5000.0
+  stiffness: 15000.0
   parent: "fshin"
   child: "ffoot"
   parent_offset {
@@ -406,42 +406,42 @@ joints {
 actuators {
   name: "bthigh"
   joint: "bthigh"
-  strength: 240.0
+  strength: 350.0
   torque {
   }
 }
 actuators {
   name: "bshin"
   joint: "bshin"
-  strength: 180.0
+  strength: 350.0
   torque {
   }
 }
 actuators {
   name: "bfoot"
   joint: "bfoot"
-  strength: 120.0
+  strength: 240.0
   torque {
   }
 }
 actuators {
   name: "fthigh"
   joint: "fthigh"
-  strength: 240.0
+  strength: 350.0
   torque {
   }
 }
 actuators {
   name: "fshin"
   joint: "fshin"
-  strength: 120.0
+  strength: 240.0
   torque {
   }
 }
 actuators {
   name: "ffoot"
   joint: "ffoot"
-  strength: 60.0
+  strength: 120.0
   torque {
   }
 }
