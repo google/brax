@@ -10,7 +10,8 @@ use on acceleration hardware. It is both efficient for single-core training, and
 scalable to massively parallel simulation, without the need for pesky
 datacenters.
 
-![ant](./docs/img/ant.gif)![fetch](./docs/img/fetch.gif)![grasp](./docs/img/grasp.gif)![halfcheetah](./docs/img/halfcheetah.gif)![humanoid](./docs/img/humanoid.gif)
+<img src="./docs/img/ant.gif" width="174" height="124"/><img src="./docs/img/fetch.gif" width="174" height="124"/><img src="./docs/img/grasp.gif" width="174" height="124"/><img src="./docs/img/halfcheetah.gif" width="174" height="124"/><img src="./docs/img/humanoid.gif" width="174" height="124"/>
+
 *Some policies trained via Brax. Brax simulates environments like this at millions of physics steps per second on a TPU.*
 
 ## Colab Notebooks
