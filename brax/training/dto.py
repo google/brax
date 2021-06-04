@@ -17,7 +17,6 @@
 Note: this module is untested.
 """
 
-import functools
 import time
 from typing import Any, Callable, Dict, Optional
 
@@ -51,14 +50,18 @@ def train(
   key = jax.random.PRNGKey(seed)
   key, key_models, key_env = jax.random.split(key, 3)
 
-  create_env_fn = functools.partial(env.create_env,
-                                    environment_fn,
-                                    action_repeat=action_repeat,
-                                    episode_length=episode_length,
-                                    rng=key_env)
+  core_env = environment_fn(
+      action_repeat=action_repeat,
+      batch_size=num_envs,
+      episode_length=episode_length)
+  first_state, step_fn = env.wrap(core_env, key_env)
 
-  first_state, step_fn, core_env = create_env_fn(num_envs)
-  eval_first_state, eval_step_fn, _ = create_env_fn(num_eval_envs)
+  core_eval_env = environment_fn(
+      action_repeat=action_repeat,
+      batch_size=num_eval_envs,
+      episode_length=episode_length)
+  eval_first_state, eval_step_fn = env.wrap(core_eval_env, key_env)
+
   parametric_action_distribution = distribution.NormalTanhDistribution(
       event_size=core_env.action_size)
 

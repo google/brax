@@ -49,7 +49,8 @@ class Fetch(env.Env):
         'hits': zero,
         'weightedHits': zero,
         'movingToTarget': zero,
-        'torsoIsUp': zero
+        'torsoIsUp': zero,
+        'torsoHeight': zero
     }
     return env.State(rng, qp, info, obs, reward, done, steps, metrics)
 
@@ -70,6 +71,9 @@ class Fetch(env.Env):
     torso_up = math.rotate(up, qp.rot[self.torso_idx])
     torso_is_up = .1 * self.sys.config.dt * jnp.dot(torso_up, up)
 
+    # small reward for torso height
+    torso_height = .1 * self.sys.config.dt * qp.pos[0, 2]
+
     # big reward for reaching target and facing it
     fwd = jnp.array([1., 0., 0.])
     torso_fwd = math.rotate(fwd, qp.rot[self.torso_idx])
@@ -77,7 +81,7 @@ class Fetch(env.Env):
     target_hit = jnp.where(target_dist < self.target_radius, 1.0, 0.0)
     weighted_hit = target_hit * torso_facing
 
-    reward = moving_to_target + torso_is_up + weighted_hit
+    reward = torso_height + moving_to_target + torso_is_up + weighted_hit
 
     steps = state.steps + self.action_repeat
     done = jnp.where(steps >= self.episode_length, 1.0, 0.0)
@@ -85,7 +89,8 @@ class Fetch(env.Env):
         'hits': target_hit,
         'weightedHits': weighted_hit,
         'movingToTarget': moving_to_target,
-        'torsoIsUp': torso_is_up
+        'torsoIsUp': torso_is_up,
+        'torsoHeight': torso_height
     }
 
     # teleport any hit targets
@@ -367,61 +372,61 @@ actuators {
   name: "Torso_Shoulders"
   torque {}
   joint: "Torso_Shoulders"
-  strength: 150.0
+  strength: 300.0
 }
 actuators {
   name: "Torso_Hips"
   torque {}
   joint: "Torso_Hips"
-  strength: 150.0
+  strength: 300.0
 }
 actuators {
   name: "Shoulders_Front Right Upper"
   torque {}
   joint: "Shoulders_Front Right Upper"
-  strength: 150.0
+  strength: 300.0
 }
 actuators {
   name: "Front Right Upper_Front Right Lower"
   torque {}
   joint: "Front Right Upper_Front Right Lower"
-  strength: 150.0
+  strength: 300.0
 }
 actuators {
   name: "Shoulders_Front Left Upper"
   torque {}
   joint: "Shoulders_Front Left Upper"
-  strength: 150.0
+  strength: 300.0
 }
 actuators {
   name: "Front Left Upper_Front Left Lower"
   torque {}
   joint: "Front Left Upper_Front Left Lower"
-  strength: 150.0
+  strength: 300.0
 }
 actuators {
   name: "Hips_Back Right Upper"
   torque {}
   joint: "Hips_Back Right Upper"
-  strength: 150.0
+  strength: 300.0
 }
 actuators {
   name: "Back Right Upper_Back Right Lower"
   torque {}
   joint: "Back Right Upper_Back Right Lower"
-  strength: 150.0
+  strength: 300.0
 }
 actuators {
   name: "Hips_Back Left Upper"
   torque {}
   joint: "Hips_Back Left Upper"
-  strength: 150.0
+  strength: 300.0
 }
 actuators {
   name: "Back Left Upper_Back Left Lower"
   torque {}
   joint: "Back Left Upper_Back Left Lower"
-  strength: 150.0
+  strength: 300.0
 }
 friction: 0.6
 gravity { z: -9.8 }

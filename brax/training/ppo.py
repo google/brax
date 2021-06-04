@@ -220,21 +220,23 @@ def train(
   # key_models should be the same, so that models are initialized the same way
   # for different processes
 
-  create_env_fn = functools.partial(env.create_env,
-                                    environment_fn,
-                                    action_repeat=action_repeat,
-                                    episode_length=episode_length)
-
+  core_env = environment_fn(
+      action_repeat=action_repeat,
+      batch_size=num_envs // local_devices_to_use // process_count,
+      episode_length=episode_length)
   key_envs = jax.random.split(key_env, local_devices_to_use)
   tmp_env_states = []
   for key in key_envs:
-    first_state, step_fn, core_env = create_env_fn(
-        num_envs // local_devices_to_use // process_count, rng=key)
+    first_state, step_fn = env.wrap(core_env, key)
     tmp_env_states.append(first_state)
   first_state = jax.tree_multimap(lambda *args: jnp.stack(args),
                                   *tmp_env_states)
 
-  eval_first_state, eval_step_fn, _ = create_env_fn(num_eval_envs, rng=key_eval)
+  core_eval_env = environment_fn(
+      action_repeat=action_repeat,
+      batch_size=num_eval_envs,
+      episode_length=episode_length)
+  eval_first_state, eval_step_fn = env.wrap(core_eval_env, key_eval)
 
   parametric_action_distribution = distribution.NormalTanhDistribution(
       event_size=core_env.action_size)

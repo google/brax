@@ -17,7 +17,6 @@
 See: https://arxiv.org/pdf/1812.05905.pdf
 """
 
-import functools
 import time
 from typing import Any, Callable, Dict, Mapping, Optional, Tuple
 
@@ -47,6 +46,14 @@ class Transition:
   d_t: jnp.ndarray  # discount (1-done)
 
 
+# The rewarder allows to change the reward of before the learner trains.
+RewarderState = Any
+RewarderInit = Callable[[int, PRNGKey], RewarderState]
+ComputeReward = Callable[[RewarderState, Transition, PRNGKey],
+                         Tuple[RewarderState, jnp.ndarray]]
+Rewarder = Tuple[RewarderInit, ComputeReward]
+
+
 @flax.struct.dataclass
 class ReplayBuffer:
   """Contains data related to a replay buffer."""
@@ -65,6 +72,8 @@ class TrainingState:
   steps: jnp.ndarray
   alpha_optimizer: flax.optim.Optimizer
   normalizer_params: Any
+  # The is passed to the rewarder to update the reward.
+  rewarder_state: Any
 
 
 def make_sac_networks(
@@ -128,6 +137,9 @@ def train(
     max_replay_size: int = 1048576,
     grad_updates_per_step: float = 1,
     progress_fn: Optional[Callable[[int, Dict[str, Any]], None]] = None,
+    # The rewarder is an init function and a compute_reward function.
+    # It is used to change the reward before the learner trains on it.
+    make_rewarder: Optional[Callable[[], Rewarder]] = None,
 ):
   """SAC training."""
   assert min_replay_size % num_envs == 0
@@ -154,23 +166,25 @@ def train(
   min_replay_size = min_replay_size // local_devices_to_use
 
   key = jax.random.PRNGKey(seed)
-  key, key_models, key_env, key_eval = jax.random.split(key, 4)
+  key, key_models, key_env, key_eval, key_rewarder = jax.random.split(key, 5)
 
-  create_env_fn = functools.partial(env.create_env,
-                                    environment_fn,
-                                    action_repeat=action_repeat,
-                                    episode_length=episode_length)
-
+  core_env = environment_fn(
+      action_repeat=action_repeat,
+      batch_size=num_envs // local_devices_to_use // process_count,
+      episode_length=episode_length)
   key_envs = jax.random.split(key_env, local_devices_to_use)
   tmp_env_states = []
   for key in key_envs:
-    first_state, step_fn, core_env = create_env_fn(
-        num_envs // local_devices_to_use // process_count, rng=key)
+    first_state, step_fn = env.wrap(core_env, key)
     tmp_env_states.append(first_state)
   first_state = jax.tree_multimap(lambda *args: jnp.stack(args),
                                   *tmp_env_states)
 
-  eval_first_state, eval_step_fn, _ = create_env_fn(num_eval_envs, rng=key_eval)
+  core_eval_env = environment_fn(
+      action_repeat=action_repeat,
+      batch_size=num_eval_envs,
+      episode_length=episode_length)
+  eval_first_state, eval_step_fn = env.wrap(core_eval_env, key_eval)
 
   parametric_action_distribution = distribution.NormalTanhDistribution(
       event_size=core_env.action_size)
@@ -202,6 +216,15 @@ def train(
       normalization.create_observation_normalizer(
           obs_size, normalize_observations,
           pmap_to_devices=local_devices_to_use))
+
+  if make_rewarder is not None:
+    init, compute_reward = make_rewarder()
+    rewarder_state = init(obs_size, key_rewarder)
+    rewarder_state = normalization.bcast_local_devices(
+        rewarder_state, local_devices_to_use)
+  else:
+    rewarder_state = None
+    compute_reward = None
 
   key_debug = jax.random.PRNGKey(seed + 666)
 
@@ -296,7 +319,19 @@ def train(
         r_t=transitions[:, -2],
         d_t=transitions[:, -1])
 
-    key, key_alpha, key_critic, key_actor = jax.random.split(state.key, 4)
+    (key, key_alpha, key_critic, key_actor,
+     key_rewarder) = jax.random.split(state.key, 5)
+
+    if compute_reward is not None:
+      new_rewarder_state, rewards = compute_reward(state.rewarder_state,
+                                                   normalized_transitions,
+                                                   key_rewarder)
+      # Assertion prevents building errors.
+      assert hasattr(normalized_transitions, 'replace')
+      normalized_transitions = normalized_transitions.replace(r_t=rewards)
+    else:
+      new_rewarder_state = state.rewarder_state
+
     alpha = jnp.exp(state.alpha_optimizer.target)
     alpha_loss, alpha_grads = alpha_grad(alpha,
                                          state.policy_optimizer.target,
@@ -333,8 +368,8 @@ def train(
         key=key,
         steps=state.steps + 1,
         alpha_optimizer=alpha_optimizer,
-        normalizer_params=state.normalizer_params
-    )
+        normalizer_params=state.normalizer_params,
+        rewarder_state=new_rewarder_state)
     return new_state, metrics
 
   def collect_data(training_state, state):
@@ -432,7 +467,8 @@ def train(
       key=jnp.stack(jax.random.split(key, local_devices_to_use)),
       steps=jnp.zeros((local_devices_to_use,)),
       alpha_optimizer=alpha_optimizer,
-      normalizer_params=normalizer_params)
+      normalizer_params=normalizer_params,
+      rewarder_state=rewarder_state)
 
   training_walltime = 0
   eval_walltime = 0

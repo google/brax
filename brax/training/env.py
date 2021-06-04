@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Brax training environment."""
+"""Wraps the core environment with some extra statistics for training."""
 
-from typing import Callable, Dict
+from typing import Dict
 import flax
 import jax
 import jax.numpy as jnp
@@ -29,19 +29,9 @@ class EnvState:
   total_episodes: jnp.ndarray
 
 
-def create_env(core_env_fn: Callable[..., envs.Env],
-               num_parallel_envs: int = 1,
-               action_repeat: int = 1,
-               episode_length: int = 1000,
-               rng: jnp.ndarray = None):
-  """Creates a brax training env."""
-  core_env = core_env_fn(action_repeat=action_repeat,
-                         batch_size=num_parallel_envs,
-                         episode_length=episode_length)
-
-  if rng is None:
-    rng = jax.random.PRNGKey(0)
-  rng = jax.random.split(rng, num_parallel_envs)
+def wrap(core_env: envs.Env, rng: jnp.ndarray):
+  """Returns a wrapped state and step function for training."""
+  rng = jax.random.split(rng, core_env.batch_size)
 
   first_core = core_env.reset(rng)
   first_core.metrics['reward'] = first_core.reward
@@ -71,4 +61,4 @@ def create_env(core_env_fn: Callable[..., envs.Env],
         total_episodes=total_episodes)
     return state
 
-  return first_state, jax.jit(step), core_env
+  return first_state, jax.jit(step)
