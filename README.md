@@ -12,7 +12,7 @@ datacenters.
 
 <img src="./docs/img/ant.gif" width="150" height="107"/><img src="./docs/img/fetch.gif" width="150" height="107"/><img src="./docs/img/grasp.gif" width="150" height="107"/><img src="./docs/img/halfcheetah.gif" width="150" height="107"/><img src="./docs/img/humanoid.gif" width="150" height="107"/>
 
-*Some policies trained via Brax. Brax simulates environments like this at millions of physics steps per second on a TPU.*
+*Some policies trained via Brax. Brax simulates these environments at millions of physics steps per second on TPU.*
 
 ## Colab Notebooks
 
