@@ -10,10 +10,8 @@ use on acceleration hardware. It is both efficient for single-core training, and
 scalable to massively parallel simulation, without the need for pesky
 datacenters.
 
-![ant locomotion](./docs/img/ant_loco.gif)
-
-*Locomotion policy (run to target) trained in Brax in ~20 seconds. Brax
-simulates this environment >3M frames per second on a single v100 GPU.*
+![ant](./docs/img/ant.gif)![fetch](./docs/img/fetch.gif)![grasp](./docs/img/grasp.gif)![halfcheetah](./docs/img/halfcheetah.gif)![humanoid](./docs/img/humanoid.gif)
+*Some policies trained via Brax. Brax simulates environments like this at millions of physics steps per second on a TPU.*
 
 ## Colab Notebooks
 

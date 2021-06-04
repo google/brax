@@ -253,12 +253,18 @@ bodies {
 bodies {
   name: "Ground"
   colliders { plane {} }
-  static: true
+  frozen {
+    position { x: 1.0 y: 1.0 z: 1.0 }
+    rotation { x: 1.0 y: 1.0 z: 1.0 }
+  }
 }
 bodies {
   name: "Target"
   colliders { sphere { radius: 2 }}
-  static: true
+  frozen {
+    position { x: 1.0 y: 1.0 z: 1.0 }
+    rotation { x: 1.0 y: 1.0 z: 1.0 }
+  }
 }
 joints {
   name: "Torso_Shoulders"

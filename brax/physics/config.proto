@@ -23,6 +23,14 @@ message Vector3 {
   float z = 3;
 }
 
+// Frozen bodies are immovable but can still participate in collisions.
+message Frozen {
+  // Position degrees of freedom to freeze
+  Vector3 position = 1;
+  // Rotational degrees of freedom to freeze
+  Vector3 rotation = 2;
+}
+
 // Bodies have a rigid shape, mass, and rotational inertia. Bodies may connect
 // to other bodies via joints, forming a kinematic tree.
 message Body {
@@ -34,8 +42,9 @@ message Body {
   Vector3 inertia = 3;
   // Mass of this body in kg
   float mass = 4;
-  // Static bodies are immovable but can still participate in collisions.
-  bool static = 5;
+  // Frozen bodies are immovable but can still participate in collisions.
+  Frozen frozen = 5;
+
 }
 
 // Primitive shape that composes the collision surface of a body.
@@ -154,4 +163,6 @@ message Config {
   float dt = 11;
   // How many substeps to perform to maintain numerical stability
   int32 substeps = 12;
+  // Constraints to apply for every body in the system
+  Frozen frozen = 13;
 }

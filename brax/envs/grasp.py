@@ -14,7 +14,7 @@
 
 """Trains an claw hand to grasp an object and move it to targets."""
 
-from typing import Dict, Tuple
+from typing import Tuple
 
 import dataclasses
 import jax
@@ -218,7 +218,10 @@ bodies {
     z: 1.0
   }
   mass: 1.0
-  static: true
+  frozen {
+    position { x: 1.0 y: 1.0 z: 1.0 }
+    rotation { x: 1.0 y: 1.0 z: 1.0 }
+  }
 }
 bodies {
   name: "Object"
@@ -292,7 +295,10 @@ bodies {
     z: 10000000.0
   }
   mass: 10000000.0
-  static: true
+  frozen {
+    position { x: 1.0 y: 1.0 z: 1.0 }
+    rotation { x: 1.0 y: 1.0 z: 1.0 }
+  }
 }
 bodies {
   name: "HandPalm"
@@ -309,7 +315,10 @@ bodies {
     z: 10000.7224998474121094
   }
   mass: 1.0
-  static: true
+  frozen {
+    position { x: 1.0 y: 1.0 z: 1.0 }
+    rotation { x: 1.0 y: 1.0 z: 1.0 }
+  }
 }
 bodies {
   name: "HandThumbProximalTwo"
@@ -458,7 +467,10 @@ bodies {
 bodies {
   name: "Target"
   colliders { sphere { radius: 1.1 }}
-  static: true
+  frozen {
+    position { x: 1.0 y: 1.0 z: 1.0 }
+    rotation { x: 1.0 y: 1.0 z: 1.0 }
+  }
 }
 joints {
   name: "HandThumbMiddle_HandThumbDistal"

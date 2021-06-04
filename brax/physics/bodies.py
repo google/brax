@@ -43,12 +43,14 @@ class Body(object):
     """Returns Body from a brax config."""
     bodies = []
     for idx, body in enumerate(config.bodies):
+      frozen = jnp.sum(
+          vec_to_np(body.frozen.position) + vec_to_np(body.frozen.rotation))
       bodies.append(
           cls(
               idx=jnp.array(idx),
               inertia=jnp.linalg.inv(jnp.diag(vec_to_np(body.inertia))),
               mass=jnp.array(body.mass),
-              active=jnp.array(not body.static),
+              active=jnp.array(jnp.sum(frozen) != 6),
           ))
     return jax.tree_multimap((lambda *args: jnp.stack(args)), *bodies)
 

@@ -326,10 +326,12 @@ class MujocoConverter(object):
     body = config.bodies.add()
     if not parent_body:
       body.name = constants.WORLDBODY
-      body.static = True
+      body.frozen.position.x, body.frozen.position.y, body.frozen.position.z = (
+          1, 1, 1)
+      body.frozen.rotation.x, body.frozen.rotation.y, body.frozen.rotation.z = (
+          1, 1, 1)
     else:
       body.name = mujoco_body.name if mujoco_body.name else f'$body{body_idx}'
-      body.static = False
     logging.info('Body %s', body.name)
     geoms = mujoco_body.geom if hasattr(mujoco_body, 'geom') else []
     # We add the first geometry to the body itself.
@@ -356,8 +358,7 @@ class MujocoConverter(object):
               name=geom_name,
               colliders=[child_geom_collider.collider],
               mass=child_geom_collider.mass,
-              inertia=_vec(DEFAULT_INERTIA),
-              static=False))
+              inertia=_vec(DEFAULT_INERTIA)))
       config.joints.append(_create_fixed_joint(geom_name, body.name, geom_name))
       geom_colliders.append(child_geom_collider)
       # We use the same parent body name to ensure that multiple geometries of a

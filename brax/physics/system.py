@@ -16,7 +16,7 @@
 """A brax system."""
 
 import functools
-from typing import Optional, Tuple
+from typing import Tuple
 
 import jax
 import jax.numpy as jnp
@@ -26,7 +26,7 @@ from brax.physics import config_pb2
 from brax.physics import integrators
 from brax.physics import joints
 from brax.physics import tree
-from brax.physics.base import Info, P, QP, joint_dof
+from brax.physics.base import Info, P, QP, joint_dof, vec_to_np
 
 
 class System:
@@ -37,7 +37,22 @@ class System:
 
     self.num_bodies = len(config.bodies)
     self.body_idx = {b.name: i for i, b in enumerate(config.bodies)}
-    self.active = jnp.array([not b.static for b in config.bodies])
+
+    # masks for system-wide freezing of degrees of freedom
+    pos_mask = vec_to_np(config.frozen.position)
+    rot_mask = vec_to_np(config.frozen.rotation)
+
+    # constructing per-body position and rotation masks
+    self.active_pos = 1. * jnp.logical_not(
+        jnp.array([
+            jnp.logical_or(vec_to_np(b.frozen.position), pos_mask)
+            for b in config.bodies
+        ]))
+    self.active_rot = 1. * jnp.logical_not(
+        jnp.array([
+            jnp.logical_or(vec_to_np(b.frozen.rotation), rot_mask)
+            for b in config.bodies
+        ]))
 
     self.box_plane = colliders.BoxPlane(config)
     self.capsule_plane = colliders.CapsulePlane(config)
@@ -106,7 +121,8 @@ class System:
       dt = self.config.dt / self.config.substeps
 
       # apply kinetic step
-      qp = integrators.kinetic(self.config, qp, dt, self.active)
+      qp = integrators.kinetic(self.config, qp, dt, self.active_pos,
+                               self.active_rot)
 
       # apply impulses arising from joints and actuators
       dp_j = self.joint_revolute.apply(qp)
@@ -117,13 +133,15 @@ class System:
       dp_a += self.torque_1d.apply(qp, act)
       dp_a += self.torque_2d.apply(qp, act)
       dp_a += self.torque_3d.apply(qp, act)
-      qp = integrators.potential(self.config, qp, dp_j + dp_a, dt, self.active)
+      qp = integrators.potential(self.config, qp, dp_j + dp_a, dt,
+                                 self.active_pos, self.active_rot)
 
       # apply collision velocity updates
       dp_c = self.box_plane.apply(qp, dt)
       dp_c += self.capsule_plane.apply(qp, dt)
       dp_c += self.capsule_capsule.apply(qp, dt)
-      qp = integrators.potential_collision(self.config, qp, dp_c, self.active)
+      qp = integrators.potential_collision(self.config, qp, dp_c,
+                                           self.active_pos, self.active_rot)
 
       info = Info(
           contact=info.contact + dp_c,

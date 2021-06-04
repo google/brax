@@ -211,7 +211,10 @@ bodies {
   }
   inertia { x: 1.0 y: 1.0 z: 1.0 }
   mass: 1
-  static: true
+  frozen {
+    position { x: 1.0 y: 1.0 z: 1.0 }
+    rotation { x: 1.0 y: 1.0 z: 1.0 }
+  }
 }
 joints {
   name: "$ Torso_Aux 1"

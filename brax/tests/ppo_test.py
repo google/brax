@@ -75,7 +75,7 @@ class TrainingTest(parameterized.TestCase):
     _, _, metrics, _ = run_test(seed=0)
     logging.info(metrics)
     reward = metrics['eval/episode_reward']
-    self.assertGreater(reward, 5500 * 0.995)
+    self.assertGreater(reward, 5410 * 0.995)
 
   @parameterized.parameters(True, False)
   def testModelEncoding(self, normalize_observations=True):
