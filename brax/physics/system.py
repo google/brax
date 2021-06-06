@@ -74,6 +74,7 @@ class System:
     self.torque_3d = actuators.Torque3D.from_config(config,
                                                     self.joint_spherical)
 
+  @functools.partial(jax.jit, static_argnums=(0,))
   def default_qp(self) -> QP:
     """Returns a default state for the system."""
     root = tree.Link.from_config(self.config).to_world()
