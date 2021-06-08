@@ -40,3 +40,16 @@ learn
 
 Training on NVidia GPU is supported, but you must first install [CUDA, CuDNN,
 and JAX with GPU support](https://github.com/google/jax#installation).
+
+
+## Citing Brax
+
+To cite this repository:
+
+@software{brax2021github,
+  author = {C. Daniel Freeman and Erik Frey and Anton Raichuk and Sertan Girgin and Olivier Bachem},
+  title = {Brax - A Differentiable Physics Engine for Large Scale Rigid Body Simulation},
+  url = {http://github.com/google/brax},
+  version = {0.1.0},
+  year = {2021},
+}
