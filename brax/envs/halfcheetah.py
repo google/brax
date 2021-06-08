@@ -14,13 +14,10 @@
 
 """Trains a halfcheetah to run in the +x direction."""
 
-import jax
 import jax.numpy as jnp
 
 import brax
 from brax.envs import env
-from brax.physics import math
-from brax.physics.base import take
 
 from google.protobuf import text_format
 
@@ -50,7 +47,7 @@ class Halfcheetah(env.Env):
     x_before = state.qp.pos[0, 0]
     x_after = qp.pos[0, 0]
     forward_reward = (x_after - x_before) / self.sys.config.dt
-    ctrl_cost = -.1 * jnp.sum(jnp.square(action))
+    ctrl_cost = 0.1 * jnp.sum(jnp.square(action))
     reward = forward_reward + ctrl_cost
 
     steps = state.steps + self.action_repeat
@@ -82,8 +79,6 @@ _SYSTEM_CONFIG = """
 bodies {
   name: "torso"
   colliders {
-    position {
-    }
     rotation {
       y: 90.0
     }
@@ -92,15 +87,6 @@ bodies {
       length: 1.092
     }
   }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 7.0553303
-}
-bodies {
-  name: "head"
   colliders {
     position {
       x: 0.6
@@ -119,7 +105,7 @@ bodies {
     y: 1.0
     z: 1.0
   }
-  mass: 2.402003
+  mass: 9.457333
 }
 bodies {
   name: "bthigh"
@@ -271,18 +257,6 @@ bodies {
   frozen {
     position { x: 1.0 y: 1.0 z: 1.0 }
     rotation { x: 1.0 y: 1.0 z: 1.0 }
-  }
-}
-joints {
-  name: "head"
-  stiffness: 15000.0
-  parent: "torso"
-  child: "head"
-  rotation {
-    y: -90.0
-  }
-  angular_damping: 20.0
-  angle_limit {
   }
 }
 joints {
@@ -441,7 +415,7 @@ actuators {
 actuators {
   name: "ffoot"
   joint: "ffoot"
-  strength: 120.0
+  strength: 240.0
   torque {
   }
 }
@@ -449,7 +423,6 @@ friction: 0.6
 gravity {
   z: -9.81
 }
-velocity_damping: 0.01
 angular_damping: -0.05
 baumgarte_erp: 0.1
 collide_include {
@@ -458,38 +431,16 @@ collide_include {
 }
 collide_include {
   first: "floor"
-  second: "head"
-}
-collide_include {
-  first: "floor"
-  second: "bshin"
-}
-collide_include {
-  first: "floor"
   second: "bfoot"
-}
-collide_include {
-  first: "floor"
-  second: "fshin"
 }
 collide_include {
   first: "floor"
   second: "ffoot"
 }
 dt: 0.05
-substeps: 10
-  frozen {
-    position { x: 0.0 y: 1.0 z: 0.0 }
-    rotation { x: 1.0 y: 0.0 z: 1.0 }
-  }
-"""
-
-"""
-collide_include {
-  first: "floor"
-  second: "bthigh"
+substeps: 12
+frozen {
+  position { x: 0.0 y: 1.0 z: 0.0 }
+  rotation { x: 1.0 y: 0.0 z: 1.0 }
 }
-collide_include {
-  first: "floor"
-  second: "fthigh"
-}"""
+"""
