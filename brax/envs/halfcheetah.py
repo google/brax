@@ -47,7 +47,7 @@ class Halfcheetah(env.Env):
     x_before = state.qp.pos[0, 0]
     x_after = qp.pos[0, 0]
     forward_reward = (x_after - x_before) / self.sys.config.dt
-    ctrl_cost = 0.1 * jnp.sum(jnp.square(action))
+    ctrl_cost = -.1 * jnp.sum(jnp.square(action))
     reward = forward_reward + ctrl_cost
 
     steps = state.steps + self.action_repeat
