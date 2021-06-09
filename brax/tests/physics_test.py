@@ -176,7 +176,7 @@ class JointTest(parameterized.TestCase):
     # dist_to_anchor = 1.0
     # inertia_cm = 2/5 * mass * radius^2 (solid sphere)
     # T = 2 * pi * sqrt(inertia_about_anchor / (2 * mass * g * dist_to_anchor))
-    config.dt = 2 * jnp.pi * jnp.sqrt((.4 * radius**2 + 1.) / 9.8)
+    config.dt = float(2 * jnp.pi * jnp.sqrt((.4 * radius**2 + 1.) / 9.8))
     config.bodies[1].mass = mass
     config.bodies[1].inertia.x = .4 * mass * radius**2
     config.bodies[1].inertia.y = .4 * mass * radius**2
