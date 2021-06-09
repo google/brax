@@ -138,6 +138,37 @@ def take(objects, i: jnp.ndarray, axis=0):
   return jax.tree_unflatten(py_tree_def, sliced_data)
 
 
-def joint_dof(j: config_pb2.Joint) -> int:
-  """Returns number of degrees of freedom this joint has."""
-  return len(j.angle_limit)
+def validate_config(config: config_pb2.Config) -> config_pb2.Config:
+  """Validate and normalize config settings for use in systems."""
+  if config.dt <= 0:
+    raise RuntimeError("config.dt must be positive")
+  # TODO: more config validation
+
+  # reify all frozen dimensions in the system
+  allvec = config_pb2.Vector3(x=1.0, y=1.0, z=1.0)
+  frozen = config.frozen
+  if frozen.all:
+    frozen.position.CopyFrom(allvec)
+    frozen.rotation.CopyFrom(allvec)
+  if all([frozen.position.x, frozen.position.y, frozen.position.z,
+          frozen.rotation.x, frozen.rotation.y, frozen.rotation.z]):
+    config.frozen.all = True
+  for b in config.bodies:
+    b.frozen.position.x = b.frozen.position.x or frozen.position.x
+    b.frozen.position.y = b.frozen.position.y or frozen.position.y
+    b.frozen.position.z = b.frozen.position.z or frozen.position.z
+    b.frozen.rotation.x = b.frozen.rotation.x or frozen.rotation.x
+    b.frozen.rotation.y = b.frozen.rotation.y or frozen.rotation.y
+    b.frozen.rotation.z = b.frozen.rotation.z or frozen.rotation.z
+    if b.frozen.all:
+      b.frozen.position.CopyFrom(allvec)
+      b.frozen.rotation.CopyFrom(allvec)
+    if all([b.frozen.position.x, b.frozen.position.y, b.frozen.position.z,
+            b.frozen.rotation.x, b.frozen.rotation.y, b.frozen.rotation.z]):
+      b.frozen.all = True
+  frozen.all = all(b.frozen.all for b in config.bodies)
+
+  return config
+
+
+

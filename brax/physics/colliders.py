@@ -44,10 +44,7 @@ class BoxPlane:
     corners = []
 
     for box, plane in self.pairs:
-      frozen = jnp.sum(
-          vec_to_np(plane.frozen.position) +
-          vec_to_np(plane.frozen.rotation)) == 6
-      if not frozen:
+      if not plane.frozen.all:
         raise ValueError('active planes unsupported: %s' % plane)
       for i in range(8):
         box_idxs.append(body_idx[box.name])
@@ -121,10 +118,7 @@ class CapsulePlane:
 
     body_idx = {b.name: i for i, b in enumerate(config.bodies)}
     for _, plane in self.pairs:
-      frozen = jnp.sum(
-          vec_to_np(plane.frozen.position) +
-          vec_to_np(plane.frozen.rotation)) == 6
-      if not frozen:
+      if not plane.frozen.all:
         raise ValueError('active planes unsupported: %s' % plane)
 
     cap_idx = []

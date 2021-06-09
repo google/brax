@@ -57,7 +57,7 @@ class BoxTest(absltest.TestCase):
       colliders { box { halfsize { x: 0.5 y: 0.5 z: 0.5 }}}
       inertia { x: 1 y: 1 z: 1 }
     }
-    bodies { name: "Ground" static: true colliders { plane {}}}
+    bodies { name: "Ground" frozen: { all: true } colliders { plane {}}}
   """
 
   def test_box_hits_ground(self):
@@ -110,7 +110,7 @@ class CapsuleTest(absltest.TestCase):
       colliders { rotation { x: 45 } capsule { radius: 0.25 length: 1.0 }}
       inertia { x: 1 y: 1 z: 1 }
     }
-    bodies { name: "Ground" static: true colliders { plane {}}}
+    bodies { name: "Ground" frozen: { all: true } colliders { plane {}}}
   """
 
   def test_capsule_hits_ground(self):
@@ -154,7 +154,7 @@ class JointTest(parameterized.TestCase):
     substeps: 100000
     gravity { z: -9.8 }
     bodies {
-      name: "Anchor" static: true mass: 1
+      name: "Anchor" frozen: { all: true } mass: 1
       inertia { x: 1 y: 1 z: 1 }
     }
     bodies { name: "Bob" }
@@ -201,7 +201,7 @@ class Actuator1DTest(parameterized.TestCase):
     dt: 4.0
     gravity { z: -9.8 }
     bodies {
-      name: "Anchor" static: true mass: 1
+      name: "Anchor" frozen: { all: true } mass: 1
       inertia { x: 1 y: 1 z: 1 }
     }
     bodies { name: "Bob" mass: 1
@@ -251,7 +251,7 @@ class Actuator2DTest(parameterized.TestCase):
     dt: 2.0
     gravity { z: -9.8 }
     bodies {
-      name: "Anchor" static: true mass: 1
+      name: "Anchor" frozen: { all: true } mass: 1
       inertia { x: 1 y: 1 z: 1 }
     }
     bodies { name: "Bob" mass: 1
@@ -321,7 +321,7 @@ class Actuator3DTest(parameterized.TestCase):
     substeps: 8
     dt: .02
     bodies {
-      name: "Anchor" static: true mass: 1
+      name: "Anchor" frozen: { all: true } mass: 1
       inertia { x: 1 y: 1 z: 1 }
     }
     bodies { name: "Bob" mass: 1

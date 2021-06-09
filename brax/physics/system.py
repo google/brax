@@ -26,33 +26,22 @@ from brax.physics import config_pb2
 from brax.physics import integrators
 from brax.physics import joints
 from brax.physics import tree
-from brax.physics.base import Info, P, QP, joint_dof, vec_to_np
+from brax.physics.base import Info, P, QP, validate_config, vec_to_np
 
 
 class System:
   """A brax system."""
 
   def __init__(self, config: config_pb2.Config):
-    self.config = config
+    self.config = validate_config(config)
 
     self.num_bodies = len(config.bodies)
     self.body_idx = {b.name: i for i, b in enumerate(config.bodies)}
 
-    # masks for system-wide freezing of degrees of freedom
-    pos_mask = vec_to_np(config.frozen.position)
-    rot_mask = vec_to_np(config.frozen.rotation)
-
-    # constructing per-body position and rotation masks
     self.active_pos = 1. * jnp.logical_not(
-        jnp.array([
-            jnp.logical_or(vec_to_np(b.frozen.position), pos_mask)
-            for b in config.bodies
-        ]))
+        jnp.array([vec_to_np(b.frozen.position) for b in config.bodies]))
     self.active_rot = 1. * jnp.logical_not(
-        jnp.array([
-            jnp.logical_or(vec_to_np(b.frozen.rotation), rot_mask)
-            for b in config.bodies
-        ]))
+        jnp.array([vec_to_np(b.frozen.rotation) for b in config.bodies]))
 
     self.box_plane = colliders.BoxPlane(config)
     self.capsule_plane = colliders.CapsulePlane(config)
@@ -64,7 +53,7 @@ class System:
     self.joint_spherical = joints.Spherical.from_config(config)
 
     self.num_actuators = len(config.actuators)
-    self.num_joint_dof = sum(joint_dof(j) for j in config.joints)
+    self.num_joint_dof = sum(len(j.angle_limit) for j in config.joints)
 
     self.angle_1d = actuators.Angle1D.from_config(config, self.joint_revolute)
     self.angle_2d = actuators.Angle2D.from_config(config, self.joint_universal)

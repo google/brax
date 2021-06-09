@@ -23,12 +23,14 @@ message Vector3 {
   float z = 3;
 }
 
-// Frozen bodies are immovable but can still participate in collisions.
+// Prevents motion or rotation along specifed axes.
 message Frozen {
-  // Position degrees of freedom to freeze
+  // Freeze motion along the x, y, or z axes.
   Vector3 position = 1;
-  // Rotational degrees of freedom to freeze
+  // Freeze rotation around the x, y, or z axes.
   Vector3 rotation = 2;
+  // Override all the position and rotation fields, setting them to 1.
+  bool all = 3;
 }
 
 // Bodies have a rigid shape, mass, and rotational inertia. Bodies may connect
@@ -42,9 +44,8 @@ message Body {
   Vector3 inertia = 3;
   // Mass of this body in kg
   float mass = 4;
-  // Frozen bodies are immovable but can still participate in collisions.
+  // Prevents motion or rotation along specified axes for this body.
   Frozen frozen = 5;
-
 }
 
 // Primitive shape that composes the collision surface of a body.
@@ -163,6 +164,6 @@ message Config {
   float dt = 11;
   // How many substeps to perform to maintain numerical stability
   int32 substeps = 12;
-  // Constraints to apply for every body in the system
+  // Prevents motion or rotation along specified axes for the entire system.
   Frozen frozen = 13;
 }
