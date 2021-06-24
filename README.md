@@ -10,7 +10,7 @@ use on acceleration hardware. It is both efficient for single-core training, and
 scalable to massively parallel simulation, without the need for pesky
 datacenters.
 
-<img src="./docs/img/ant.gif" width="150" height="107"/><img src="./docs/img/fetch.gif" width="150" height="107"/><img src="./docs/img/grasp.gif" width="150" height="107"/><img src="./docs/img/halfcheetah.gif" width="150" height="107"/><img src="./docs/img/humanoid.gif" width="150" height="107"/>
+<img src="https://github.com/google/brax/raw/main/docs/img/ant.gif" width="150" height="107"/><img src="https://github.com/google/brax/raw/main/docs/img/fetch.gif" width="150" height="107"/><img src="https://github.com/google/brax/raw/main/docs/img/grasp.gif" width="150" height="107"/><img src="https://github.com/google/brax/raw/main/docs/img/halfcheetah.gif" width="150" height="107"/><img src="https://github.com/google/brax/raw/main/docs/img/humanoid.gif" width="150" height="107"/>
 
 *Some policies trained via Brax. Brax simulates these environments at millions of physics steps per second on TPU.*
 
