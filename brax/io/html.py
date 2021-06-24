@@ -74,7 +74,7 @@ body { margin: 0; }
   </head>
 
   <script type="application/javascript">
-  const system = <!-- system json goes here -->;
+  var system = <!-- system json goes here -->;
   </script>
 
   <body>
