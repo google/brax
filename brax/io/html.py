@@ -32,9 +32,13 @@ def save_html(path: str, sys: brax.System, qps: List[brax.QP]):
 
 
 def render(sys: brax.System, qps: List[brax.QP]) -> str:
-  d = {'config': json_format.MessageToDict(sys.config, True),
-       'pos': [qp.pos for qp in qps],
-       'rot': [qp.rot for qp in qps],}
+  if any((len(qp.pos.shape), len(qp.rot.shape)) != (2, 2) for qp in qps):
+    raise RuntimeError('unexpected shape in qp.')
+  d = {
+      'config': json_format.MessageToDict(sys.config, True),
+      'pos': [qp.pos for qp in qps],
+      'rot': [qp.rot for qp in qps],
+  }
   system = json.dumps(d, cls=JaxEncoder)
   return _HTML.replace('<!-- system json goes here -->', system)
 
