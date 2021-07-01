@@ -544,6 +544,7 @@ joints {
   rotation {
   }
   angular_damping: 20.0
+  limit_strength: 2000.0
   angle_limit {
     min: -10.0
     max: 10.0
@@ -590,6 +591,7 @@ joints {
   child_offset {
   }
   angular_damping: 20.0
+  limit_strength: 2000.0
   angle_limit {
     min: -10.0
     max: 10.0

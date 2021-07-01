@@ -33,7 +33,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto3',
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\x19\x62rax/physics/config.proto\x12\x04\x62rax\"*\n\x07Vector3\x12\t\n\x01x\x18\x01 \x01(\x02\x12\t\n\x01y\x18\x02 \x01(\x02\x12\t\n\x01z\x18\x03 \x01(\x02\"W\n\x06\x46rozen\x12\x1f\n\x08position\x18\x01 \x01(\x0b\x32\r.brax.Vector3\x12\x1f\n\x08rotation\x18\x02 \x01(\x0b\x32\r.brax.Vector3\x12\x0b\n\x03\x61ll\x18\x03 \x01(\x08\"\x83\x01\n\x04\x42ody\x12\x0c\n\x04name\x18\x01 \x01(\t\x12!\n\tcolliders\x18\x02 \x03(\x0b\x32\x0e.brax.Collider\x12\x1e\n\x07inertia\x18\x03 \x01(\x0b\x32\r.brax.Vector3\x12\x0c\n\x04mass\x18\x04 \x01(\x02\x12\x1c\n\x06\x66rozen\x18\x05 \x01(\x0b\x32\x0c.brax.Frozen\"\xf5\x02\n\x08\x43ollider\x12\x1f\n\x08position\x18\x01 \x01(\x0b\x32\r.brax.Vector3\x12\x1f\n\x08rotation\x18\x02 \x01(\x0b\x32\r.brax.Vector3\x12!\n\x03\x62ox\x18\x03 \x01(\x0b\x32\x12.brax.Collider.BoxH\x00\x12%\n\x05plane\x18\x04 \x01(\x0b\x32\x14.brax.Collider.PlaneH\x00\x12\'\n\x06sphere\x18\x05 \x01(\x0b\x32\x15.brax.Collider.SphereH\x00\x12)\n\x07\x63\x61psule\x18\x06 \x01(\x0b\x32\x16.brax.Collider.CapsuleH\x00\x1a&\n\x03\x42ox\x12\x1f\n\x08halfsize\x18\x01 \x01(\x0b\x32\r.brax.Vector3\x1a\x07\n\x05Plane\x1a\x18\n\x06Sphere\x12\x0e\n\x06radius\x18\x01 \x01(\x02\x1a\x36\n\x07\x43\x61psule\x12\x0e\n\x06radius\x18\x01 \x01(\x02\x12\x0e\n\x06length\x18\x02 \x01(\x02\x12\x0b\n\x03\x65nd\x18\x03 \x01(\x05\x42\x06\n\x04type\"\x97\x02\n\x05Joint\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x11\n\tstiffness\x18\x02 \x01(\x02\x12\x0e\n\x06parent\x18\x03 \x01(\t\x12\r\n\x05\x63hild\x18\x04 \x01(\t\x12$\n\rparent_offset\x18\x05 \x01(\x0b\x32\r.brax.Vector3\x12#\n\x0c\x63hild_offset\x18\x06 \x01(\x0b\x32\r.brax.Vector3\x12\x1f\n\x08rotation\x18\x07 \x01(\x0b\x32\r.brax.Vector3\x12\x17\n\x0f\x61ngular_damping\x18\x08 \x01(\x02\x12&\n\x0b\x61ngle_limit\x18\t \x03(\x0b\x32\x11.brax.Joint.Range\x1a!\n\x05Range\x12\x0b\n\x03min\x18\x01 \x01(\x02\x12\x0b\n\x03max\x18\x02 \x01(\x02\"\xa4\x01\n\x08\x41\x63tuator\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05joint\x18\x02 \x01(\t\x12\x10\n\x08strength\x18\x03 \x01(\x02\x12\'\n\x06torque\x18\x04 \x01(\x0b\x32\x15.brax.Actuator.TorqueH\x00\x12%\n\x05\x61ngle\x18\x05 \x01(\x0b\x32\x14.brax.Actuator.AngleH\x00\x1a\x08\n\x06Torque\x1a\x07\n\x05\x41ngleB\x06\n\x04type\"\x8b\x03\n\x06\x43onfig\x12\x1a\n\x06\x62odies\x18\x01 \x03(\x0b\x32\n.brax.Body\x12\x1b\n\x06joints\x18\x02 \x03(\x0b\x32\x0b.brax.Joint\x12!\n\tactuators\x18\x03 \x03(\x0b\x32\x0e.brax.Actuator\x12\x12\n\nelasticity\x18\x04 \x01(\x02\x12\x10\n\x08\x66riction\x18\x05 \x01(\x02\x12\x1e\n\x07gravity\x18\x06 \x01(\x0b\x32\r.brax.Vector3\x12\x18\n\x10velocity_damping\x18\x07 \x01(\x02\x12\x17\n\x0f\x61ngular_damping\x18\x08 \x01(\x02\x12\x15\n\rbaumgarte_erp\x18\t \x01(\x02\x12.\n\x0f\x63ollide_include\x18\n \x03(\x0b\x32\x15.brax.Config.NamePair\x12\n\n\x02\x64t\x18\x0b \x01(\x02\x12\x10\n\x08substeps\x18\x0c \x01(\x05\x12\x1c\n\x06\x66rozen\x18\r \x01(\x0b\x32\x0c.brax.Frozen\x1a)\n\x08NamePair\x12\r\n\x05\x66irst\x18\x01 \x01(\t\x12\x0e\n\x06second\x18\x02 \x01(\tb\x06proto3'
+  serialized_pb=b'\n\x19\x62rax/physics/config.proto\x12\x04\x62rax\"*\n\x07Vector3\x12\t\n\x01x\x18\x01 \x01(\x02\x12\t\n\x01y\x18\x02 \x01(\x02\x12\t\n\x01z\x18\x03 \x01(\x02\"W\n\x06\x46rozen\x12\x1f\n\x08position\x18\x01 \x01(\x0b\x32\r.brax.Vector3\x12\x1f\n\x08rotation\x18\x02 \x01(\x0b\x32\r.brax.Vector3\x12\x0b\n\x03\x61ll\x18\x03 \x01(\x08\"\x83\x01\n\x04\x42ody\x12\x0c\n\x04name\x18\x01 \x01(\t\x12!\n\tcolliders\x18\x02 \x03(\x0b\x32\x0e.brax.Collider\x12\x1e\n\x07inertia\x18\x03 \x01(\x0b\x32\r.brax.Vector3\x12\x0c\n\x04mass\x18\x04 \x01(\x02\x12\x1c\n\x06\x66rozen\x18\x05 \x01(\x0b\x32\x0c.brax.Frozen\"\xf5\x02\n\x08\x43ollider\x12\x1f\n\x08position\x18\x01 \x01(\x0b\x32\r.brax.Vector3\x12\x1f\n\x08rotation\x18\x02 \x01(\x0b\x32\r.brax.Vector3\x12!\n\x03\x62ox\x18\x03 \x01(\x0b\x32\x12.brax.Collider.BoxH\x00\x12%\n\x05plane\x18\x04 \x01(\x0b\x32\x14.brax.Collider.PlaneH\x00\x12\'\n\x06sphere\x18\x05 \x01(\x0b\x32\x15.brax.Collider.SphereH\x00\x12)\n\x07\x63\x61psule\x18\x06 \x01(\x0b\x32\x16.brax.Collider.CapsuleH\x00\x1a&\n\x03\x42ox\x12\x1f\n\x08halfsize\x18\x01 \x01(\x0b\x32\r.brax.Vector3\x1a\x07\n\x05Plane\x1a\x18\n\x06Sphere\x12\x0e\n\x06radius\x18\x01 \x01(\x02\x1a\x36\n\x07\x43\x61psule\x12\x0e\n\x06radius\x18\x01 \x01(\x02\x12\x0e\n\x06length\x18\x02 \x01(\x02\x12\x0b\n\x03\x65nd\x18\x03 \x01(\x05\x42\x06\n\x04type\"\xf7\x02\n\x05Joint\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x11\n\tstiffness\x18\x02 \x01(\x02\x12\x0e\n\x06parent\x18\x03 \x01(\t\x12\r\n\x05\x63hild\x18\x04 \x01(\t\x12$\n\rparent_offset\x18\x05 \x01(\x0b\x32\r.brax.Vector3\x12#\n\x0c\x63hild_offset\x18\x06 \x01(\x0b\x32\r.brax.Vector3\x12\x1f\n\x08rotation\x18\x07 \x01(\x0b\x32\r.brax.Vector3\x12\x17\n\x0f\x61ngular_damping\x18\x08 \x01(\x02\x12&\n\x0b\x61ngle_limit\x18\t \x03(\x0b\x32\x11.brax.Joint.Range\x12\x1b\n\x0elimit_strength\x18\n \x01(\x02H\x00\x88\x01\x01\x12\x1b\n\x0espring_damping\x18\x0b \x01(\x02H\x01\x88\x01\x01\x1a!\n\x05Range\x12\x0b\n\x03min\x18\x01 \x01(\x02\x12\x0b\n\x03max\x18\x02 \x01(\x02\x42\x11\n\x0f_limit_strengthB\x11\n\x0f_spring_damping\"\xa4\x01\n\x08\x41\x63tuator\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05joint\x18\x02 \x01(\t\x12\x10\n\x08strength\x18\x03 \x01(\x02\x12\'\n\x06torque\x18\x04 \x01(\x0b\x32\x15.brax.Actuator.TorqueH\x00\x12%\n\x05\x61ngle\x18\x05 \x01(\x0b\x32\x14.brax.Actuator.AngleH\x00\x1a\x08\n\x06Torque\x1a\x07\n\x05\x41ngleB\x06\n\x04type\"\x8b\x03\n\x06\x43onfig\x12\x1a\n\x06\x62odies\x18\x01 \x03(\x0b\x32\n.brax.Body\x12\x1b\n\x06joints\x18\x02 \x03(\x0b\x32\x0b.brax.Joint\x12!\n\tactuators\x18\x03 \x03(\x0b\x32\x0e.brax.Actuator\x12\x12\n\nelasticity\x18\x04 \x01(\x02\x12\x10\n\x08\x66riction\x18\x05 \x01(\x02\x12\x1e\n\x07gravity\x18\x06 \x01(\x0b\x32\r.brax.Vector3\x12\x18\n\x10velocity_damping\x18\x07 \x01(\x02\x12\x17\n\x0f\x61ngular_damping\x18\x08 \x01(\x02\x12\x15\n\rbaumgarte_erp\x18\t \x01(\x02\x12.\n\x0f\x63ollide_include\x18\n \x03(\x0b\x32\x15.brax.Config.NamePair\x12\n\n\x02\x64t\x18\x0b \x01(\x02\x12\x10\n\x08substeps\x18\x0c \x01(\x05\x12\x1c\n\x06\x66rozen\x18\r \x01(\x0b\x32\x0c.brax.Frozen\x1a)\n\x08NamePair\x12\r\n\x05\x66irst\x18\x01 \x01(\t\x12\x0e\n\x06second\x18\x02 \x01(\tb\x06proto3'
 )
 
 
@@ -428,8 +428,8 @@ _JOINT_RANGE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=925,
-  serialized_end=958,
+  serialized_start=983,
+  serialized_end=1016,
 )
 
 _JOINT = _descriptor.Descriptor(
@@ -503,6 +503,20 @@ _JOINT = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='limit_strength', full_name='brax.Joint.limit_strength', index=9,
+      number=10, type=2, cpp_type=6, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='spring_damping', full_name='brax.Joint.spring_damping', index=10,
+      number=11, type=2, cpp_type=6, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
   ],
   extensions=[
   ],
@@ -514,9 +528,19 @@ _JOINT = _descriptor.Descriptor(
   syntax='proto3',
   extension_ranges=[],
   oneofs=[
+    _descriptor.OneofDescriptor(
+      name='_limit_strength', full_name='brax.Joint._limit_strength',
+      index=0, containing_type=None,
+      create_key=_descriptor._internal_create_key,
+    fields=[]),
+    _descriptor.OneofDescriptor(
+      name='_spring_damping', full_name='brax.Joint._spring_damping',
+      index=1, containing_type=None,
+      create_key=_descriptor._internal_create_key,
+    fields=[]),
   ],
   serialized_start=679,
-  serialized_end=958,
+  serialized_end=1054,
 )
 
 
@@ -540,8 +564,8 @@ _ACTUATOR_TORQUE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1100,
-  serialized_end=1108,
+  serialized_start=1196,
+  serialized_end=1204,
 )
 
 _ACTUATOR_ANGLE = _descriptor.Descriptor(
@@ -564,8 +588,8 @@ _ACTUATOR_ANGLE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1110,
-  serialized_end=1117,
+  serialized_start=1206,
+  serialized_end=1213,
 )
 
 _ACTUATOR = _descriptor.Descriptor(
@@ -628,8 +652,8 @@ _ACTUATOR = _descriptor.Descriptor(
       create_key=_descriptor._internal_create_key,
     fields=[]),
   ],
-  serialized_start=961,
-  serialized_end=1125,
+  serialized_start=1057,
+  serialized_end=1221,
 )
 
 
@@ -667,8 +691,8 @@ _CONFIG_NAMEPAIR = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1482,
-  serialized_end=1523,
+  serialized_start=1578,
+  serialized_end=1619,
 )
 
 _CONFIG = _descriptor.Descriptor(
@@ -782,8 +806,8 @@ _CONFIG = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1128,
-  serialized_end=1523,
+  serialized_start=1224,
+  serialized_end=1619,
 )
 
 _FROZEN.fields_by_name['position'].message_type = _VECTOR3
@@ -819,6 +843,12 @@ _JOINT.fields_by_name['parent_offset'].message_type = _VECTOR3
 _JOINT.fields_by_name['child_offset'].message_type = _VECTOR3
 _JOINT.fields_by_name['rotation'].message_type = _VECTOR3
 _JOINT.fields_by_name['angle_limit'].message_type = _JOINT_RANGE
+_JOINT.oneofs_by_name['_limit_strength'].fields.append(
+  _JOINT.fields_by_name['limit_strength'])
+_JOINT.fields_by_name['limit_strength'].containing_oneof = _JOINT.oneofs_by_name['_limit_strength']
+_JOINT.oneofs_by_name['_spring_damping'].fields.append(
+  _JOINT.fields_by_name['spring_damping'])
+_JOINT.fields_by_name['spring_damping'].containing_oneof = _JOINT.oneofs_by_name['_spring_damping']
 _ACTUATOR_TORQUE.containing_type = _ACTUATOR
 _ACTUATOR_ANGLE.containing_type = _ACTUATOR
 _ACTUATOR.fields_by_name['torque'].message_type = _ACTUATOR_TORQUE

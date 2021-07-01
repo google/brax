@@ -25,6 +25,7 @@ from brax.envs import fetch
 from brax.envs import grasp
 from brax.envs import halfcheetah
 from brax.envs import humanoid
+from brax.envs import reacher
 from brax.envs import ur5e
 from brax.envs import wrappers
 
@@ -35,6 +36,7 @@ _envs = {
     'halfcheetah': halfcheetah.Halfcheetah,
     'humanoid': humanoid.Humanoid,
     'ur5e': ur5e.Ur5e,
+    'reacher': reacher.Reacher,
 }
 State = env.State
 Env = env.Env

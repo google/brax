@@ -111,6 +111,12 @@ message Joint {
   // Limits for actuated axes.  Supply one Range for joint-local-x actuation
   // and two for x,y.
   repeated Range angle_limit = 9;
+  // Strength of the force that restores joint to within the angle limits
+  // If not set, defaults to a joint-dependent fraction of `stiffness`.
+  optional float limit_strength = 10;
+  // Damps the spring connecting the parent to the child
+  // If not set, defaults to a joint-dependent fraction of `sqrt(stiffness)`.
+  optional float spring_damping = 11;
 }
 
 // Actuators provide interactive control of a system via the step function.

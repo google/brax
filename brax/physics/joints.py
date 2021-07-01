@@ -35,6 +35,8 @@ class Joint:
   """Connects to bodies together with some axes of rotation."""
   stiffness: jnp.ndarray
   angular_damping: jnp.ndarray
+  spring_damping: jnp.ndarray
+  limit_strength: jnp.ndarray
   limit: jnp.ndarray
   body_p: bodies.Body
   body_c: bodies.Body
@@ -56,10 +58,34 @@ class Joint:
         if type_to_dof[joint_type] == lim_to_dof[len(j.angle_limit)]
     ]
     if not joints:
-      return cls(*[None] * 12)
+      return cls(*[None] * 14)
 
     stiffness = jnp.array([j.stiffness for j in joints])
     angular_damping = jnp.array([j.angular_damping for j in joints])
+
+    spring_damping = []
+    limit_strength = []
+    # these values are empirically determined to be stable defaults
+    spring_damping_coeff = {
+        "revolute": .5,
+        "universal": 2.0,
+        "spherical": 2.0
+    }[joint_type]
+
+    for j in joints:
+      if j.HasField("spring_damping"):
+        spring_damping.append(j.spring_damping)
+      else:
+        spring_damping.append(spring_damping_coeff * jnp.sqrt(j.stiffness))
+
+      if j.HasField("limit_strength"):
+        limit_strength.append(j.limit_strength)
+      else:
+        limit_strength.append(j.stiffness)
+
+    spring_damping = jnp.array(spring_damping)
+    limit_strength = jnp.array(limit_strength)
+
     limits = []
     for j in joints:
       limits.append([[i.min, i.max] for i in j.angle_limit])
@@ -98,8 +124,9 @@ class Joint:
         ref_axes[i] = jnp.array([-ax1[2], 0., ax1[0]])
     ref = jnp.array([r / (1e-6 + jnp.linalg.norm(r)) for r in ref_axes])
 
-    return cls(stiffness, angular_damping, limit, body_p, body_c, axis_1,
-               axis_2, axis_3, off_p, off_c, ref, config)
+    return cls(stiffness, angular_damping, spring_damping, limit_strength,
+               limit, body_p, body_c, axis_1, axis_2, axis_3, off_p, off_c, ref,
+               config)
 
   @jax.vmap
   def _apply(self, qp_p: QP, qp_c: QP) -> Tuple[P, P]:
@@ -183,31 +210,27 @@ class Revolute(Joint):
     pos_c, vel_c = math.to_world(qp_c, self.off_c)
 
     # push the bodies towards their offsets
-    # TODO: expose this damping term to the config
-    damping = .5 * jnp.sqrt(self.stiffness)
     # TODO: cap this damping so that it can't overcorrect
-    impulse = (pos_p - pos_c) * self.stiffness + damping * (vel_p - vel_c)
+    impulse = (pos_p - pos_c) * self.stiffness + self.spring_damping * (
+        vel_p - vel_c)
     dp_p = self.body_p.impulse(qp_p, -impulse, pos_p)
     dp_c = self.body_c.impulse(qp_c, impulse, pos_c)
 
     # torque the bodies to align their axes
     (axis,), (angle,) = self.axis_angle(qp_p, qp_c)
     axis_c = math.rotate(self.axis_1, qp_c.rot)
-    torque_p = self.stiffness * jnp.cross(axis, axis_c)
-    torque_c = -torque_p
+    torque = self.stiffness * jnp.cross(axis, axis_c)
 
     # torque the bodies to stay within angle limits
     dang = jnp.where(angle < self.limit[0][0], self.limit[0][0] - angle, 0)
     dang = jnp.where(angle > self.limit[0][1], self.limit[0][1] - angle, dang)
-    torque_p -= self.stiffness * axis * dang
-    torque_c += self.stiffness * axis * dang
+    torque -= self.limit_strength * axis * dang
 
     # damp the angular motion
-    torque_p -= self.angular_damping * (qp_p.ang - qp_c.ang)
-    torque_c += self.angular_damping * (qp_p.ang - qp_c.ang)
+    torque -= self.angular_damping * (qp_p.ang - qp_c.ang)
 
-    dang_p = jnp.matmul(self.body_p.inertia, torque_p)
-    dang_c = jnp.matmul(self.body_c.inertia, torque_c)
+    dang_p = jnp.matmul(self.body_p.inertia, torque)
+    dang_c = jnp.matmul(self.body_c.inertia, -torque)
     dp_p = dp_p.replace(ang=dp_p.ang + dang_p)
     dp_c = dp_c.replace(ang=dp_c.ang + dang_c)
 
@@ -231,10 +254,9 @@ class Universal(Joint):
     pos_c, vel_c = math.to_world(qp_c, self.off_c)
 
     # push the bodies towards their offsets
-    # TODO: expose this damping term to the config
-    damping = 2.0 * jnp.sqrt(self.stiffness)
     # TODO: cap this damping so that it can't overcorrect
-    impulse = (pos_p - pos_c) * self.stiffness + damping * (vel_p - vel_c)
+    impulse = (pos_p - pos_c) * self.stiffness + self.spring_damping * (
+        vel_p - vel_c)
     dp_p = self.body_p.impulse(qp_p, -impulse, pos_p)
     dp_c = self.body_c.impulse(qp_c, impulse, pos_c)
 
@@ -242,8 +264,7 @@ class Universal(Joint):
     (axis_1, axis_2), (angle_1, angle_2) = self.axis_angle(qp_p, qp_c)
     axis_c_proj = axis_2 - jnp.dot(axis_2, axis_1) * axis_1
     axis_c_proj = axis_c_proj / math.safe_norm(axis_c_proj)
-    torque_p = (self.stiffness / 5.) * jnp.cross(axis_c_proj, axis_2)
-    torque_c = -torque_p
+    torque = (self.limit_strength / 5.) * jnp.cross(axis_c_proj, axis_2)
 
     # torque the bodies to stay within angle limits
     limit_1, limit_2 = self.limit
@@ -251,15 +272,13 @@ class Universal(Joint):
     dang_1 = jnp.where(angle_1 > limit_1[1], limit_1[1] - angle_1, dang_1)
     dang_2 = jnp.where(angle_2 < limit_2[0], limit_2[0] - angle_2, 0)
     dang_2 = jnp.where(angle_2 > limit_2[1], limit_2[1] - angle_2, dang_2)
-    torque_p -= self.stiffness * (axis_1 * dang_1 + axis_2 * dang_2)
-    torque_c += self.stiffness * (axis_1 * dang_1 + axis_2 * dang_2)
+    torque -= self.limit_strength * (axis_1 * dang_1 + axis_2 * dang_2)
 
     # damp the angular motion
-    torque_p -= self.angular_damping * (qp_p.ang - qp_c.ang)
-    torque_c += self.angular_damping * (qp_p.ang - qp_c.ang)
+    torque -= self.angular_damping * (qp_p.ang - qp_c.ang)
 
-    dang_p = jnp.matmul(self.body_p.inertia, torque_p)
-    dang_c = jnp.matmul(self.body_c.inertia, torque_c)
+    dang_p = jnp.matmul(self.body_p.inertia, torque)
+    dang_c = jnp.matmul(self.body_c.inertia, -torque)
     dp_p = dp_p.replace(ang=dp_p.ang + dang_p)
     dp_c = dp_c.replace(ang=dp_c.ang + dang_c)
 
@@ -288,12 +307,9 @@ class Spherical(Joint):
     pos_p, vel_p = math.to_world(qp_p, self.off_p)
     pos_c, vel_c = math.to_world(qp_c, self.off_c)
 
-    # this 2.0 is an empirically determined scaling for the damping term
-    spring_damping = 2. * jnp.sqrt(self.stiffness)
-
     # push the bodies towards their offsets
     # TODO: cap this damping so that it can't overcorrect
-    impulse = (pos_p - pos_c) * self.stiffness + spring_damping * (
+    impulse = (pos_p - pos_c) * self.stiffness + self.spring_damping * (
         vel_p - vel_c)
     dp_p = self.body_p.impulse(qp_p, -impulse, pos_p)
     dp_c = self.body_c.impulse(qp_c, impulse, pos_c)
@@ -310,19 +326,16 @@ class Spherical(Joint):
     dang_3 = jnp.where(angle_3 > limit_3[1], limit_3[1] - angle_3, dang_3)
 
     # TODO: fully decouple different torque axes
-    torque_p = axis[0] * dang_1 + axis[1] * dang_2 + axis[2] * dang_3
-    # TODO: where does this come from?
-    torque_p *= 2000.
-    torque_c = -torque_p
+    torque = axis[0] * dang_1 + axis[1] * dang_2 + axis[2] * dang_3
+    torque *= self.limit_strength
 
     # damp the angular motion
-    torque_p -= self.angular_damping * (qp_p.ang - qp_c.ang)
-    torque_c += self.angular_damping * (qp_p.ang - qp_c.ang)
+    torque -= self.angular_damping * (qp_p.ang - qp_c.ang)
 
     dp_p = dp_p.replace(ang=dp_p.ang +
-                        jnp.matmul(self.body_p.inertia, torque_p))
+                        jnp.matmul(self.body_p.inertia, torque))
     dp_c = dp_c.replace(ang=dp_c.ang +
-                        jnp.matmul(self.body_c.inertia, torque_c))
+                        jnp.matmul(self.body_c.inertia, -torque))
 
     return dp_p, dp_c
 
