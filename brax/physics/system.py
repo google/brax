@@ -55,13 +55,12 @@ class System:
     self.num_actuators = len(config.actuators)
     self.num_joint_dof = sum(len(j.angle_limit) for j in config.joints)
 
-    self.angle_1d = actuators.Angle1D.from_config(config, self.joint_revolute)
-    self.angle_2d = actuators.Angle2D.from_config(config, self.joint_universal)
-    self.torque_1d = actuators.Torque1D.from_config(config, self.joint_revolute)
-    self.torque_2d = actuators.Torque2D.from_config(config,
-                                                    self.joint_universal)
-    self.torque_3d = actuators.Torque3D.from_config(config,
-                                                    self.joint_spherical)
+    self.angle_1d = actuators.Angle.from_config(config, self.joint_revolute)
+    self.angle_2d = actuators.Angle.from_config(config, self.joint_universal)
+    self.angle_3d = actuators.Angle.from_config(config, self.joint_spherical)
+    self.torque_1d = actuators.Torque.from_config(config, self.joint_revolute)
+    self.torque_2d = actuators.Torque.from_config(config, self.joint_universal)
+    self.torque_3d = actuators.Torque.from_config(config, self.joint_spherical)
 
   @functools.partial(jax.jit, static_argnums=(0,))
   def default_qp(self) -> QP:
@@ -120,6 +119,7 @@ class System:
       dp_j += self.joint_spherical.apply(qp)
       dp_a = self.angle_1d.apply(qp, act)
       dp_a += self.angle_2d.apply(qp, act)
+      dp_a += self.angle_3d.apply(qp, act)
       dp_a += self.torque_1d.apply(qp, act)
       dp_a += self.torque_2d.apply(qp, act)
       dp_a += self.torque_3d.apply(qp, act)

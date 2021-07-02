@@ -39,7 +39,7 @@ class Actuator:
                   joint: joints.Joint) -> "Actuator":
     """Creates an actuator from a config."""
     joint_type = type(joint).__name__.lower()
-    act_type = cls.__name__.lower()[:-2]  # chop off 1d/2d
+    act_type = cls.__name__.lower()
     joints_filtered = [
         j for j in config.joints if joints.type_to_dof[joint_type] ==
         joints.lim_to_dof[len(j.angle_limit)]
@@ -89,110 +89,44 @@ class Actuator:
 
 
 @struct.dataclass
-class Angle1D(Actuator):
-  """Applies torque to satisfy a target angle of a revolute joint."""
+class Angle(Actuator):
+  """Applies torque to satisfy a target angle of a joint."""
 
   @jax.vmap
   def _apply(self, target: jnp.ndarray, qp_p: QP, qp_c: QP) -> Tuple[P, P]:
-    (axis,), (angle,) = self.joint.axis_angle(qp_p, qp_c)
+    axis, angle = self.joint.axis_angle(qp_p, qp_c)
+    axis, angle = jnp.array(axis), jnp.array(angle)
 
     # torque grows as target angle diverges from current angle
     target *= jnp.pi / 180.
-    target = jnp.clip(target, self.joint.limit[0][0], self.joint.limit[0][1])
+    target = jnp.clip(target, self.joint.limit[:, 0], self.joint.limit[:, 1])
     torque = (target - angle) * self.strength
+    torque = jnp.sum(jax.vmap(jnp.multiply)(axis, torque), axis=0)
 
-    dang_p = jnp.matmul(self.joint.body_p.inertia, -axis * torque)
-    dang_c = jnp.matmul(self.joint.body_c.inertia, axis * torque)
+    dang_p = jnp.matmul(self.joint.body_p.inertia, -torque)
+    dang_c = jnp.matmul(self.joint.body_c.inertia, torque)
 
     return dang_p, dang_c
 
 
 @struct.dataclass
-class Torque1D(Actuator):
-  """Applies a target torque to a revolute joint."""
+class Torque(Actuator):
+  """Applies a target torque to a joint."""
 
   @jax.vmap
   def _apply(self, target: jnp.ndarray, qp_p: QP, qp_c: QP) -> Tuple[P, P]:
-    (axis,), (angle,) = self.joint.axis_angle(qp_p, qp_c)
+    axis, angle = self.joint.axis_angle(qp_p, qp_c)
+    axis, angle = jnp.array(axis), jnp.array(angle)
 
     # clip torque if outside joint angle limits
     torque = target * self.strength
-    torque = jnp.where(angle < self.joint.limit[0][0], 0, torque)
-    torque = jnp.where(angle > self.joint.limit[0][1], 0, torque)
+    torque = jnp.where(angle < self.joint.limit[:, 0], 0, torque)
+    torque = jnp.where(angle > self.joint.limit[:, 1], 0, torque)
+    torque = jnp.sum(jax.vmap(jnp.multiply)(axis, torque), axis=0)
 
-    dang_p = jnp.matmul(self.joint.body_p.inertia, -axis * torque)
-    dang_c = jnp.matmul(self.joint.body_c.inertia, axis * torque)
-
-    return dang_p, dang_c
-
-
-@struct.dataclass
-class Angle2D(Actuator):
-  """Applies torque to satisfy a target angle of a revolute joint."""
-
-  @jax.vmap
-  def _apply(self, target: jnp.ndarray, qp_p: QP, qp_c: QP) -> Tuple[P, P]:
-    axis, angle = self.joint.axis_angle(qp_p, qp_c)
-    axis_1, axis_2 = axis
-    angle_1, angle_2 = angle
-
-    target *= jnp.pi / 180.
-    target = jnp.clip(target, self.joint.limit[:, 0], self.joint.limit[:, 1])
-    torque_1 = -1. * (target[0] - angle_1) * self.strength
-    torque_2 = -1. * (target[1] - angle_2) * self.strength
-
-    torque = axis_1 * torque_1 + axis_2 * torque_2
     dang_p = jnp.matmul(self.joint.body_p.inertia, torque)
     dang_c = jnp.matmul(self.joint.body_c.inertia, -torque)
 
-    return dang_p, dang_c
-
-
-@struct.dataclass
-class Torque2D(Actuator):
-  """Applies torque to satisfy a target angle of a revolute joint."""
-
-  @jax.vmap
-  def _apply(self, target: jnp.ndarray, qp_p: QP, qp_c: QP) -> Tuple[P, P]:
-    axis, angle = self.joint.axis_angle(qp_p, qp_c)
-    axis_1, axis_2 = axis
-    angle_1, angle_2 = angle
-
-    torque_1, torque_2 = target * self.strength
-    limit_1, limit_2 = self.joint.limit
-    torque_1 = jnp.where(angle_1 < limit_1[0], 0, torque_1)
-    torque_1 = jnp.where(angle_1 > limit_1[1], 0, torque_1)
-    torque_2 = jnp.where(angle_2 < limit_2[0], 0, torque_2)
-    torque_2 = jnp.where(angle_2 > limit_2[1], 0, torque_2)
-
-    torque = axis_1 * torque_1 + axis_2 * torque_2
-    dang_p = jnp.matmul(self.joint.body_p.inertia, torque)
-    dang_c = jnp.matmul(self.joint.body_c.inertia, -torque)
-
-    return dang_p, dang_c
-
-
-@struct.dataclass
-class Torque3D(Actuator):
-  """Applies torque along 3 axes."""
-
-  @jax.vmap
-  def _apply(self, target: jnp.ndarray, qp_p: QP, qp_c: QP) -> Tuple[P, P]:
-    axis, angle = self.joint.axis_angle(qp_p, qp_c)
-    axis_1, axis_2, axis_3 = axis
-    angle_1, angle_2, angle_3 = angle
-    torque_1, torque_2, torque_3 = target * self.strength
-    limit_1, limit_2, limit_3 = self.joint.limit
-    torque_1 = jnp.where(angle_1 < limit_1[0], 0, torque_1)
-    torque_1 = jnp.where(angle_1 > limit_1[1], 0, torque_1)
-    torque_2 = jnp.where(angle_2 < limit_2[0], 0, torque_2)
-    torque_2 = jnp.where(angle_2 > limit_2[1], 0, torque_2)
-    torque_3 = jnp.where(angle_3 < limit_3[0], 0, torque_3)
-    torque_3 = jnp.where(angle_3 > limit_3[1], 0, torque_3)
-
-    torque = axis_1 * torque_1 + axis_2 * torque_2 + axis_3 * torque_3
-    dang_p = jnp.matmul(self.joint.body_p.inertia, torque)
-    dang_c = jnp.matmul(self.joint.body_c.inertia, -torque)
     return dang_p, dang_c
 
 
@@ -208,19 +142,11 @@ def _act_idx(config, name):
   current_idx = 0
   for actuator in config.actuators:
     joint = _find_joint(config, actuator.joint)
-    if len(joint.angle_limit) == 1:
-      if actuator.name == name:
+    dof = len(joint.angle_limit)
+    if actuator.name == name:
+      if dof == 1:
         return current_idx
-      current_idx += 1
-    elif len(joint.angle_limit) == 2:
-      if actuator.name == name:
-        return (current_idx, current_idx + 1)
-      current_idx += 2
-    elif len(joint.angle_limit) == 3:
-      if actuator.name == name:
-        return (current_idx, current_idx + 1, current_idx + 2)
-      current_idx += 3
-    else:
-      if actuator.name == name:
-        return None
+      else:
+        return tuple(range(current_idx, current_idx + dof))
+    current_idx += dof
   raise ValueError(f"Actuator [{name}] does not exist.")

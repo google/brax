@@ -18,7 +18,6 @@ from absl.testing import absltest
 from absl.testing import parameterized
 from jax import numpy as jnp
 import brax
-from brax.physics import math
 from brax.physics.base import take
 from google.protobuf import text_format
 
@@ -231,17 +230,12 @@ class Actuator1DTest(parameterized.TestCase):
         vel=jnp.array([[0., 0., 0.], [0., 0., 0.]]),
         ang=jnp.array([[0., 0., 0.], [0., 0., 0.]]))
     qp, _ = sys.step(qp, jnp.array([target_angle]))
-    joint = sys.joint_revolute
-    qp_p = brax.physics.base.take(qp, 0)
-    qp_c = brax.physics.base.take(qp, 1)
-    axis_p = brax.physics.math.rotate(joint.axis_1.reshape(-1), qp_p.rot)
-    axis_c = brax.physics.math.rotate(joint.axis_1.reshape(-1), qp_c.rot)
-    final_angle = brax.physics.math.signed_angle(qp_p, qp_c,
-                                                   ((axis_p + axis_c) / 2.),
-                                                   joint.ref.reshape(-1))
+    qp_p = take(qp, 0)
+    qp_c = take(qp, 1)
+    joint = take(sys.joint_revolute, 0)
+    _, (angle,) = joint.axis_angle(qp_p, qp_c)
 
-    self.assertAlmostEqual(target_angle * jnp.pi / 180., final_angle,
-                           2)  # actuated to target angle (in radians)
+    self.assertAlmostEqual(target_angle * jnp.pi / 180, angle, 2)
 
 
 class Actuator2DTest(parameterized.TestCase):
@@ -296,23 +290,13 @@ class Actuator2DTest(parameterized.TestCase):
         vel=jnp.array([[0., 0., 0.], [0., 0., 0.]]),
         ang=jnp.array([[0., 0., 0.], [0., 0., 0.]]))
     qp, _ = sys.step(qp, jnp.array([target_angle_1, target_angle_2]))
-    joint = sys.joint_universal
-    qp_p = brax.physics.base.take(qp, 0)
-    qp_c = brax.physics.base.take(qp, 1)
-    axis_c = brax.physics.math.rotate(joint.axis_1.reshape(-1), qp_c.rot)
-    axis_2_p = brax.physics.math.rotate(joint.axis_2.reshape(-1), qp_p.rot)
-    ref_c = brax.physics.math.rotate(joint.ref.reshape(-1), qp_c.rot)
-    child_in_plane = jnp.cross(axis_2_p, axis_c)
-    angle_1 = brax.physics.math.signed_angle(qp_p, qp_c, axis_2_p,
-                                               joint.ref.reshape(-1))
-    angle_2 = jnp.arctan2(
-        jnp.dot(jnp.cross(child_in_plane, ref_c), axis_c),
-        jnp.dot(child_in_plane, ref_c))
+    qp_p = take(qp, 0)
+    qp_c = take(qp, 1)
+    joint = take(sys.joint_universal, 0)
+    _, angles = joint.axis_angle(qp_p, qp_c)
 
-    self.assertAlmostEqual(target_angle_1 * jnp.pi / 180., angle_1,
-                           2)  # actuated to target angle 1 (in radians)
-    self.assertAlmostEqual(target_angle_2 * jnp.pi / 180., angle_2,
-                           2)  # actuated to target angle 2 (in radians)
+    self.assertAlmostEqual(target_angle_1 * jnp.pi / 180, angles[0], 2)
+    self.assertAlmostEqual(target_angle_2 * jnp.pi / 180, angles[1], 2)
 
 
 class Actuator3DTest(parameterized.TestCase):
@@ -382,42 +366,12 @@ class Actuator3DTest(parameterized.TestCase):
 
       qp_p = take(qp, 0)
       qp_c = take(qp, 1)
-
-      axis_1 = math.rotate(sys.joint_spherical.axis_1[0], qp_p.rot)
-      axis_2 = math.rotate(sys.joint_spherical.axis_2[0], qp_p.rot)
-      axis_3 = math.rotate(sys.joint_spherical.axis_3[0], qp_p.rot)
-
-      axis_1_c = math.rotate(sys.joint_spherical.axis_1[0], qp_c.rot)
-      axis_2_c = math.rotate(sys.joint_spherical.axis_2[0], qp_c.rot)
-      axis_3_c = math.rotate(sys.joint_spherical.axis_3[0], qp_c.rot)
-
-      axis_2_in_plane = axis_2_c - jnp.dot(axis_2_c, axis_3) * axis_3
-      axis_2_in_projected_length = jnp.linalg.norm(axis_2_in_plane)
-      axis_2_in_plane = axis_2_in_plane / (1e-7 +
-                                           jnp.linalg.norm(axis_2_in_plane))
-
-      angle_1 = jnp.arctan2(
-          jnp.dot(axis_2_in_plane, axis_1), jnp.dot(axis_2_in_plane, axis_2))
-
-      angle_2 = -1. * jnp.arctan2(
-          jnp.dot(axis_2_c, axis_3), axis_2_in_projected_length)
-
-      axis_3_in_child_xz = axis_3 - jnp.dot(axis_3, axis_2_c) * axis_2_c
-
-      angle_3 = jnp.arctan2(
-          jnp.dot(
-              axis_3_in_child_xz -
-              jnp.dot(axis_3_in_child_xz, axis_3_c) * axis_3_c, axis_1_c),
-          jnp.dot(
-              axis_3_in_child_xz -
-              jnp.dot(axis_3_in_child_xz, axis_1_c) * axis_1_c, axis_3_c))
-
-      scale = 360. / (2 * jnp.pi)
-      final_angles = [angle_1 * scale, angle_2 * scale, angle_3 * scale]
-      for final_angle, limit, torque in zip(final_angles, limits, t):
+      joint = take(sys.joint_spherical, 0)
+      _, angles = joint.axis_angle(qp_p, qp_c)
+      angles = [a * 180 / jnp.pi for a in angles]
+      for angle, limit, torque in zip(angles, limits, t):
         if torque != 0:
-          self.assertAlmostEqual(final_angle, limit,
-                                 1)  # actuated to target angle (in degrees)
+          self.assertAlmostEqual(angle, limit, 1)  # actuated to target angle
 
 
 if __name__ == '__main__':

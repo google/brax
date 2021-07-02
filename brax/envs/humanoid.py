@@ -54,7 +54,9 @@ class Humanoid(env.Env):
   def step(self, state: env.State, action: jnp.ndarray) -> env.State:
     """Run one timestep of the environment's dynamics."""
     rng = state.rng
-    qp, info = self.sys.step(state.qp, action)
+    # note the minus sign.  reverse torque improves performance over a range of
+    # hparams.  as to why: ¯\_(ツ)_/¯
+    qp, info = self.sys.step(state.qp, -action)
     obs = self._get_obs(qp, info, action)
 
     pos_before = state.qp.pos[:-1]  # ignore floor at last index
