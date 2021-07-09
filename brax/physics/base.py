@@ -142,6 +142,18 @@ def validate_config(config: config_pb2.Config) -> config_pb2.Config:
   """Validate and normalize config settings for use in systems."""
   if config.dt <= 0:
     raise RuntimeError("config.dt must be positive")
+
+  def find_dupes(objs):
+    names = set()
+    for obj in objs:
+      if obj.name in names:
+        raise RuntimeError(f"duplicate name in config: {obj.name}")
+      names.add(obj.name)
+
+  find_dupes(config.bodies)
+  find_dupes(config.joints)
+  find_dupes(config.actuators)
+
   # TODO: more config validation
 
   # reify all frozen dimensions in the system

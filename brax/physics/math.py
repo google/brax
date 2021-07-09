@@ -284,7 +284,5 @@ def inv_quat(q):
   Returns:
     The inverse of q, where qmult(q, inv_quat(q)) = [1, 0, 0, 0].
   """
-  u = -1. * q[1:]
-  s = q[0]
-  return jnp.hstack([s, u])
+  return q * jnp.array([1., -1., -1., -1.])
 
