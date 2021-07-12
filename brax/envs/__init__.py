@@ -26,6 +26,7 @@ from brax.envs import grasp
 from brax.envs import halfcheetah
 from brax.envs import humanoid
 from brax.envs import reacher
+from brax.envs import reacherangle
 from brax.envs import ur5e
 from brax.envs import wrappers
 
@@ -37,6 +38,7 @@ _envs = {
     'humanoid': humanoid.Humanoid,
     'ur5e': ur5e.Ur5e,
     'reacher': reacher.Reacher,
+    'reacherangle': reacherangle.ReacherAngle,
 }
 State = env.State
 Env = env.Env

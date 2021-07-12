@@ -28,7 +28,7 @@ from brax import envs
 class EnvTest(parameterized.TestCase):
 
   @parameterized.parameters(('ant',), ('fetch',), ('grasp',), ('humanoid',),
-                            ('ur5e',), ('reacher',))
+                            ('ur5e',), ('reacher',), ('reacherangle',))
   def testSpeed(self, env_name):
     batch_size = 128
     episode_length = 1000

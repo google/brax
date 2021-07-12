@@ -70,7 +70,7 @@ def train(
   policy_model = make_direct_optimization_model(parametric_action_distribution,
                                                 obs_size)
 
-  optimizer_def = flax.optim.GradientDescent(learning_rate=learning_rate)
+  optimizer_def = flax.optim.Adam(learning_rate=learning_rate)
   optimizer = optimizer_def.create(policy_model.init(key_models))
 
   key_debug = jax.random.PRNGKey(seed + 666)
@@ -101,7 +101,7 @@ def train(
   def loss(params, state, key):
     _, rewards = jax.lax.scan(do_one_step, (state, params, key), (),
                               length=episode_length // action_repeat)
-    return -jnp.sum(rewards)
+    return -jnp.mean(rewards)
 
   loss_grad = jax.grad(loss)
 
@@ -173,8 +173,9 @@ def train(
 
 def make_direct_optimization_model(parametric_action_distribution, obs_size):
   return networks.make_model(
-      [32, parametric_action_distribution.param_size], obs_size,
-      activation=linen.tanh)
+      [32, 32, 32, 32, parametric_action_distribution.param_size],
+      obs_size,
+      activation=linen.swish)
 
 
 def make_params_and_inference_fn(observation_size, action_size):
