@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "brax"
-version = "0.0.3"
+version = "0.0.0"
 description = ""
 authors = ["Place holder <placeholder@google.com>"]
 
@@ -14,7 +14,14 @@ gym = "^0.18.3"
 [tool.poetry.dev-dependencies]
 tfp-nightly = {version = "<=0.13.0.dev20210422", extras = ["jax"]}
 tensorflow = "^2.5.0"
+poetry-dynamic-versioning = "^0.13.0"
+
+[tool.poetry-dynamic-versioning]
+enable = true
+
+[tool.poetry-dynamic-versioning.substitution]
+files = ["brax/__init__.py"]
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
+requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning"]
 build-backend = "poetry.core.masonry.api"
