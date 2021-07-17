@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "brax"
+version = "0.0.3"
+description = ""
+authors = ["Place holder <placeholder@google.com>"]
+
+[tool.poetry.dependencies]
+python = "3.8^"
+jax = "^0.2.17"
+flax = "^0.3.4"
+protobuf = "^3.17.3"
+gym = "^0.18.3"
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
