@@ -12,6 +12,8 @@ protobuf = "^3.17.3"
 gym = "^0.18.3"
 
 [tool.poetry.dev-dependencies]
+tfp-nightly = {version = "<=0.13.0.dev20210422", extras = ["jax"]}
+tensorflow = "^2.5.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
