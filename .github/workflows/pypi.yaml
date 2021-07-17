@@ -27,4 +27,4 @@ jobs:
       run: pip install poetry-dynamic-versioning && poetry install --no-dev && poetry build --format sdist
     - name: Publish distribution 📦 to PyPI
       if: startsWith(github.ref, 'refs/tags')
-      run: poetry config pypi-token.pypi ${{ secrets.pypi_token }} && poetry publish
+      run: poetry config pypi-token.pypi ${{ secrets.PYPI_API_TOKEN }} && poetry publish
