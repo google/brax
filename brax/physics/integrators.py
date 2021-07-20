@@ -15,8 +15,6 @@
 # pylint:disable=g-multiple-import
 """A collection of integrators."""
 
-import functools
-
 import jax
 import jax.numpy as jnp
 from brax.physics import config_pb2

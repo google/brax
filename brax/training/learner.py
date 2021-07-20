@@ -29,7 +29,6 @@ from brax.training import dto
 from brax.training import es
 from brax.training import ppo
 from brax.training import sac
-import tensorflow as tf
 
 FLAGS = flags.FLAGS
 
