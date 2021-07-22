@@ -19,7 +19,7 @@ from typing import List
 
 import jax.numpy as np
 import brax
-import tensorflow as tf
+from brax.io import File
 
 from google.protobuf import json_format
 
@@ -33,7 +33,7 @@ class JaxEncoder(json.JSONEncoder):
 
 
 def save(path: str, sys: brax.System, qps: List[brax.QP]):
-  with tf.io.gfile.GFile(path, 'w') as fout:
+  with File(path, 'w') as fout:
     d = {'config': json_format.MessageToDict(sys.config, True),
          'pos': [qp.pos for qp in qps],
          'rot': [qp.rot for qp in qps],}

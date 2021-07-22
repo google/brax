@@ -12,3 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+GFile = None
+try:
+  from tensorflow.io.gfile import GFile
+except:
+  pass
+
+class File:
+  def __init__ (self, fileName, mode='r'):
+    if GFile is not None:
+      self.f = GFile(fileName, mode)
+    else:
+      self.f = open(fileName)
+  def __enter__ (self):
+    return self.f
+  def __exit__ (self, exc_type, exc_value, traceback):
+    self.f.close()

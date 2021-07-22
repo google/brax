@@ -19,7 +19,7 @@ from typing import List
 
 import brax
 from brax.io.json import JaxEncoder
-from tensorflow.io import gfile
+from brax.io import File
 
 
 from google.protobuf import json_format
@@ -27,7 +27,7 @@ from google.protobuf import json_format
 
 def save_html(path: str, sys: brax.System, qps: List[brax.QP]):
   """Saves trajectory as a HTML file."""
-  with gfile.GFile(path, 'wb') as fout:
+  with File(path, 'wb') as fout:
     fout.write(render(sys, qps))
 
 
