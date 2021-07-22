@@ -19,7 +19,7 @@ from typing import List
 
 import brax
 from brax.io.json import JaxEncoder
-from brax.io import File
+from brax.io.file import File
 
 
 from google.protobuf import json_format
