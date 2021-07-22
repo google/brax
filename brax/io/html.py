@@ -27,7 +27,7 @@ from google.protobuf import json_format
 
 def save_html(path: str, sys: brax.System, qps: List[brax.QP]):
   """Saves trajectory as a HTML file."""
-  with File(path, 'wb') as fout:
+  with File(path, 'w') as fout:
     fout.write(render(sys, qps))
 
 
