@@ -23,7 +23,7 @@ class File:
     if GFile is not None:
       self.f = GFile(fileName, mode)
     else:
-      self.f = open(fileName)
+      self.f = open(fileName, mode)
   def __enter__ (self):
     return self.f
   def __exit__ (self, exc_type, exc_value, traceback):
