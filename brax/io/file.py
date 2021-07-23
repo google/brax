@@ -11,3 +11,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+
+class File:
+
+  def __init__ (self, fileName, mode='r'):
+    self.f = open(fileName, mode)
+
+  def __enter__ (self):
+    return self.f
+
+  def __exit__ (self, exc_type, exc_value, traceback):
+    self.f.close()
