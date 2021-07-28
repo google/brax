@@ -57,3 +57,16 @@ def create_fn(env_name: str, **kwargs) -> Callable[..., Env]:
 def create_gym_env(env_name: str, **kwargs) -> gym.Env:
   """Creates a Gym Env with a specified brax system."""
   return wrappers.GymWrapper(create(env_name, **kwargs))
+
+
+def create_gym_vector_env(env_name: str, **kwargs) -> gym.vector.VectorEnv:
+    """Creates a Gym Vector Env with a specified brax system."""
+    return wrappers.VecGymWrapper(create(env_name, **kwargs))
+
+
+def create_baselines_vec_env(env_name: str, **kwargs):
+    """Creates a StableBaselines3 VecEnv with a specified brax system."""
+    try:
+        return wrappers.VecEnvWrapper(create(env_name, **kwargs))
+    except ImportError:
+        raise ImportError('StableBaselines3 is not available.')
