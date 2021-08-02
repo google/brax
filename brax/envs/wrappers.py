@@ -16,6 +16,7 @@
 
 import gym
 from gym import spaces
+from gym.vector.utils import batch_space
 import jax
 import numpy as np
 from brax.envs import env
@@ -26,7 +27,7 @@ class GymWrapper(gym.Env):
 
   def __init__(self, environment: env.Env, seed: int = 0):
     self._environment = environment
-    self._key = jax.random.PRNGKey(seed)
+    self.seed(seed)
 
     # action_space = None
     obs_high = np.inf * np.ones(self._environment.observation_size)
@@ -55,3 +56,49 @@ class GymWrapper(gym.Env):
   def step(self, action):
     self._state, obs, reward, done = self._step(self._state, action)
     return obs, reward, done, {}
+
+  def seed(self, seed: int = 0):
+    self._key = jax.random.PRNGKey(seed)
+
+
+class VectorGymWrapper(gym.vector.VectorEnv):
+  """A wrapper that converts batched Brax Env to one that follows Gym VectorEnv API."""
+
+  def __init__(self, environment: env.Env, seed: int = 0):
+    self._environment = environment
+    assert self._environment.batch_size  # Make sure underlying environment is batched
+
+    self.num_envs = self._environment.batch_size
+    self._key_size = self.num_envs + 1
+    self.seed(seed)
+
+    obs_high = np.inf * np.ones(self._environment.observation_size)
+    self.single_observation_space = spaces.Box(-obs_high, obs_high, dtype=np.float32)
+    self.observation_space = batch_space(self.single_observation_space, self.num_envs)
+
+    action_high = np.ones(self._environment.action_size)
+    self.single_action_space = spaces.Box(-action_high, action_high, dtype=np.float32)
+    self.action_space = batch_space(self.single_action_space, self.num_envs)
+    self._state = None
+
+    def reset(key):
+      keys = jax.random.split(key, self._key_size)
+      state = self._environment.reset(keys[1:])
+      return state, state.obs, keys[0]
+    self._reset = jax.jit(reset)
+
+    def step(state, action):
+      state = self._environment.step(state, action)
+      return state, state.obs, state.reward, state.done
+    self._step = jax.jit(step, backend='cpu')
+
+  def reset(self):
+    self._state, obs, self._key = self._reset(self._key)
+    return obs
+
+  def step(self, action):
+    self._state, obs, reward, done = self._step(self._state, action)
+    return obs, reward, done, {}
+
+  def seed(self, seed: int = 0):
+    self._key = jax.random.PRNGKey(seed)
