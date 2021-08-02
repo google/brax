@@ -48,17 +48,6 @@ class ReacherAngle(env.Env):
     ranges = [l[1] - l[0] for l in limits]
     self._min_act = jnp.array(mins)
     self._range_act = jnp.array(ranges)
-    # empirical mean
-    self.obs_mean = jnp.array([
-        2.4210392e-01, 1.4890432e-01, -3.3588089e-02, -1.3370272e-02,
-        -3.0244035e-03, 2.8977355e-03, -7.0985764e-02, -3.6812623e-03,
-        4.3059189e-02, -9.8842122e-03, 5.5879354e-09
-    ])
-    # empirical standard deviation
-    self.obs_std = jnp.array([
-        0.6778426, 0.69381183, 0.693388, 0.7044671, 0.09719404, 0.09498172,
-        0.28192997, 0.26796508, 0.15018663, 0.13984281, 1.
-    ])
 
   def reset(self, rng: jnp.ndarray) -> env.State:
     qp = self.sys.default_qp()
@@ -86,7 +75,6 @@ class ReacherAngle(env.Env):
     reward_dist = -jnp.linalg.norm(obs[-3:])
 
     reward = reward_dist
-    obs = (obs - self.obs_mean) / self.obs_std  # empirical normalization
 
     steps = state.steps + self.action_repeat
     done = jnp.where(steps >= self.episode_length, 1.0, 0.0)

@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Brax single env Gym wrapper."""
+"""Brax Gym wrapper for single and batched environments."""
 
 import gym
 from gym import spaces
-from gym.vector.utils import batch_space
+from gym.vector import utils
 import jax
 import numpy as np
 from brax.envs import env
@@ -66,19 +66,24 @@ class VectorGymWrapper(gym.vector.VectorEnv):
 
   def __init__(self, environment: env.Env, seed: int = 0):
     self._environment = environment
-    assert self._environment.batch_size  # Make sure underlying environment is batched
+    if not self._environment.batch_size:
+      raise ValueError('underlying environment must be batched')
 
     self.num_envs = self._environment.batch_size
     self._key_size = self.num_envs + 1
     self.seed(seed)
 
     obs_high = np.inf * np.ones(self._environment.observation_size)
-    self.single_observation_space = spaces.Box(-obs_high, obs_high, dtype=np.float32)
-    self.observation_space = batch_space(self.single_observation_space, self.num_envs)
+    self.single_observation_space = spaces.Box(
+        -obs_high, obs_high, dtype=np.float32)
+    self.observation_space = utils.batch_space(self.single_observation_space,
+                                               self.num_envs)
 
     action_high = np.ones(self._environment.action_size)
-    self.single_action_space = spaces.Box(-action_high, action_high, dtype=np.float32)
-    self.action_space = batch_space(self.single_action_space, self.num_envs)
+    self.single_action_space = spaces.Box(
+        -action_high, action_high, dtype=np.float32)
+    self.action_space = utils.batch_space(self.single_action_space,
+                                          self.num_envs)
     self._state = None
 
     def reset(key):

@@ -37,4 +37,4 @@ def save(path: str, sys: brax.System, qps: List[brax.QP]):
     d = {'config': json_format.MessageToDict(sys.config, True),
          'pos': [qp.pos for qp in qps],
          'rot': [qp.rot for qp in qps],}
-    json.dump(d, fout, cls=JaxEncoder)
+    fout.write(json.dumps(d, cls=JaxEncoder))

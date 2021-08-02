@@ -29,13 +29,13 @@ from brax.training import dto
 
 
 def run_test(seed):
-  env_name = 'ant'
-  eval_frequency = 10
-  episode_length = 1000
-  action_repeat = 1
-  learning_rate = 1
-  num_envs = 1
-  max_gradient_norm = 0.2
+  env_name = 'reacherangle'
+  eval_frequency = 200
+  episode_length = 100
+  action_repeat = 4
+  learning_rate = 3e-3
+  num_envs = 1024
+  normalize_observations = True
   env_fn = envs.create_fn(env_name)
 
   inference, params, metrics = dto.train(
@@ -43,9 +43,9 @@ def run_test(seed):
       log_frequency=eval_frequency,
       episode_length=episode_length,
       action_repeat=action_repeat,
+      normalize_observations=normalize_observations,
       learning_rate=learning_rate,
       num_envs=num_envs,
-      max_gradient_norm=max_gradient_norm,
       seed=seed)
 
   return inference, params, metrics, env_fn
@@ -56,6 +56,7 @@ class TrainingTest(parameterized.TestCase):
   def testTraining(self):
     _, _, metrics, _ = run_test(seed=0)
     logging.info(metrics)
+    assert metrics['eval/episode_reward'] > -2
 
 
 if __name__ == '__main__':

@@ -18,8 +18,8 @@ import json
 from typing import List
 
 import brax
-from brax.io.json import JaxEncoder
 from brax.io.file import File
+from brax.io.json import JaxEncoder
 
 
 from google.protobuf import json_format

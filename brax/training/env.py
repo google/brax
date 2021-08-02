@@ -14,7 +14,7 @@
 
 """Wraps the core environment with some extra statistics for training."""
 
-from typing import Dict
+from typing import Callable, Dict, Tuple
 import flax
 import jax
 import jax.numpy as jnp
@@ -28,8 +28,11 @@ class EnvState:
   total_metrics: Dict[str, jnp.ndarray]
   total_episodes: jnp.ndarray
 
+Action = jnp.ndarray
+StepFn = Callable[[EnvState, Action], EnvState]
 
-def wrap(core_env: envs.Env, rng: jnp.ndarray):
+
+def wrap(core_env: envs.Env, rng: jnp.ndarray) -> Tuple[EnvState, StepFn]:
   """Returns a wrapped state and step function for training."""
   rng = jax.random.split(rng, core_env.batch_size)
 
@@ -43,7 +46,7 @@ def wrap(core_env: envs.Env, rng: jnp.ndarray):
       total_metrics=first_total_metrics,
       total_episodes=first_total_episodes)
 
-  def step(state, action):
+  def step(state: EnvState, action: Action) -> EnvState:
     core = core_env.step(state.core, action)
     core.metrics['reward'] = core.reward
     def test_done(a, b):
@@ -55,10 +58,9 @@ def wrap(core_env: envs.Env, rng: jnp.ndarray):
     total_metrics = jax.tree_multimap(lambda a, b: a + jnp.sum(b),
                                       state.total_metrics, core.metrics)
     total_episodes = state.total_episodes + jnp.sum(core.done)
-    state = EnvState(
+    return EnvState(
         core=core,
         total_metrics=total_metrics,
         total_episodes=total_episodes)
-    return state
 
   return first_state, jax.jit(step)

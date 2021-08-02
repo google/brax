@@ -14,13 +14,13 @@
 
 """RL training with an environment running entirely on an accelerator."""
 
+import dataclasses
 import os
 import uuid
 
 from absl import app
 from absl import flags
 from clu import metric_writers
-import dataclasses
 import jax
 from brax import envs
 from brax.io import html
@@ -138,6 +138,8 @@ def main(unused_argv):
           log_frequency=FLAGS.eval_frequency,
           learning_rate=FLAGS.learning_rate,
           seed=FLAGS.seed,
+          max_devices_per_host=FLAGS.max_devices_per_host,
+          normalize_observations=FLAGS.normalize_observations,
           max_gradient_norm=FLAGS.max_gradient_norm,
           episode_length=FLAGS.episode_length,
           progress_fn=writer.write_scalars)
@@ -164,12 +166,6 @@ def main(unused_argv):
 
   env = env_fn()
   state = env.reset(jax.random.PRNGKey(FLAGS.seed))
-
-  # Save to TF Saved Model.
-  def saved_inference_fn(obs, key):
-    return inference_fn(params, obs, key)
-  model_path = os.path.join(FLAGS.logdir, 'saved_model')
-  model.save(model_path, saved_inference_fn, state.obs, state.rng)
 
   # Save to flax serialized checkpoint.
   filename = f'{FLAGS.env}_{FLAGS.learner}.flax'

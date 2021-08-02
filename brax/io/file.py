@@ -12,14 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""General-purpose file interface to support different backing file APIs."""
+
+
 
 class File:
+  """General purpose file resource."""
 
-  def __init__ (self, fileName, mode='r'):
-    self.f = open(fileName, mode)
+  def __init__(self, fileName, mode='r'):
+    self.f = None
+    if not self.f:
+      self.f = open(fileName, mode)
 
-  def __enter__ (self):
+  def __enter__(self):
     return self.f
 
-  def __exit__ (self, exc_type, exc_value, traceback):
+  def __exit__(self, exc_type, exc_value, traceback):
     self.f.close()

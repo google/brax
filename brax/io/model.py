@@ -14,29 +14,19 @@
 
 """Loading/saving of inference functions."""
 
-from typing import Any, Callable
+from typing import Any
 from flax import serialization
 
-from jax.experimental import jax2tf
-import tensorflow as tf
-from tensorflow.io import gfile
-
-# TODO: would it better to just load/save native jax?
+from brax.io.file import File
 
 
-def load(path: str) -> Callable[..., Any]:
-  return tf.saved_model.load(path).f
-
-
-def save(path: str, inference_fn: Callable[..., Any], *trace_args):
-  model = tf.Module()
-  model.f = tf.function(jax2tf.convert(inference_fn), autograph=False)
-  # for input tracing so that the model has the correct shapes
-  model.f(*trace_args)
-  tf.saved_model.save(model, path)
+def load_params(path: str, target: Any) -> Any:
+  with File(path, 'rb') as fin:
+    buf = fin.read()
+  return serialization.from_bytes(target, buf)
 
 
 def save_params(path: str, params: Any):
   """Saves parameters in Flax format."""
-  with gfile.GFile(path, 'wb') as fout:
+  with File(path, 'wb') as fout:
     fout.write(serialization.to_bytes(params))
