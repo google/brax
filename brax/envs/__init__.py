@@ -31,32 +31,34 @@ from brax.envs import ur5e
 from brax.envs import wrappers
 
 _envs = {
-    'fetch': fetch.Fetch,
-    'ant': ant.Ant,
-    'grasp': grasp.Grasp,
-    'halfcheetah': halfcheetah.Halfcheetah,
-    'humanoid': humanoid.Humanoid,
-    'ur5e': ur5e.Ur5e,
-    'reacher': reacher.Reacher,
-    'reacherangle': reacherangle.ReacherAngle,
+    "fetch": fetch.Fetch,
+    "ant": ant.Ant,
+    "grasp": grasp.Grasp,
+    "halfcheetah": halfcheetah.Halfcheetah,
+    "humanoid": humanoid.Humanoid,
+    "ur5e": ur5e.Ur5e,
+    "reacher": reacher.Reacher,
+    "reacherangle": reacherangle.ReacherAngle,
 }
 State = env.State
 Env = env.Env
 
 
 def create(env_name: str, **kwargs) -> Env:
-  """Creates an Env with a specified brax system."""
-  return _envs[env_name](**kwargs)
+    """Creates an Env with a specified brax system."""
+    return _envs[env_name](**kwargs)
 
 
 def create_fn(env_name: str, **kwargs) -> Callable[..., Env]:
-  """Returns a function that when called, creates an Env."""
-  return functools.partial(create, env_name, **kwargs)
+    """Returns a function that when called, creates an Env."""
+    return functools.partial(create, env_name, **kwargs)
 
 
-def create_gym_env(env_name: str, seed: int = 0, **kwargs) -> gym.Env:
-  environment = create(env_name=env_name, **kwargs)
-  if environment.batch_size:
-    return wrappers.VectorGymWrapper(environment, seed=seed)
-  else:
-    return wrappers.GymWrapper(environment, seed=seed)
+def create_gym_env(
+    env_name: str, seed: int = 0, backend: str = "cpu", **kwargs
+) -> gym.Env:
+    environment = create(env_name=env_name, **kwargs)
+    if environment.batch_size:
+        return wrappers.VectorGymWrapper(environment, seed=seed, backend=backend)
+    else:
+        return wrappers.GymWrapper(environment, seed=seed, backend=backend)
