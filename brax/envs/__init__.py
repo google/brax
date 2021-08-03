@@ -15,7 +15,7 @@
 """Some example environments to help get started quickly with brax."""
 
 import functools
-from typing import Callable
+from typing import Callable, Optional, Union, overload
 
 import gym
 import brax
@@ -46,7 +46,7 @@ Env = env.Env
 
 def create(env_name: str, **kwargs) -> Env:
     """Creates an Env with a specified brax system."""
-    return _envs[env_name](**kwargs)
+    return _envs[env_name](**kwargs)  # type: ignore
 
 
 def create_fn(env_name: str, **kwargs) -> Callable[..., Env]:
@@ -54,11 +54,33 @@ def create_fn(env_name: str, **kwargs) -> Callable[..., Env]:
     return functools.partial(create, env_name, **kwargs)
 
 
+@overload
 def create_gym_env(
-    env_name: str, seed: int = 0, backend: str = "cpu", **kwargs
-) -> gym.Env:
-    environment = create(env_name=env_name, **kwargs)
-    if environment.batch_size:
+    env_name: str,
+    batch_size: None = None,
+    seed: int = 0,
+    backend: str = "cpu",
+    **kwargs
+) -> wrappers.GymWrapper:
+    ...
+
+
+@overload
+def create_gym_env(
+    env_name: str, batch_size: int = 0, seed: int = 0, backend: str = "cpu", **kwargs
+) -> wrappers.VectorGymWrapper:
+    ...
+
+
+def create_gym_env(
+    env_name: str,
+    batch_size: Optional[int] = None,
+    seed: int = 0,
+    backend: str = "cpu",
+    **kwargs
+) -> Union[wrappers.GymWrapper, wrappers.VectorGymWrapper]:
+    environment = create(env_name=env_name, batch_size=batch_size, **kwargs)
+    if batch_size:
         return wrappers.VectorGymWrapper(environment, seed=seed, backend=backend)
     else:
         return wrappers.GymWrapper(environment, seed=seed, backend=backend)
