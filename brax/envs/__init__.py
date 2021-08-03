@@ -62,6 +62,28 @@ def create_gym_env(
     backend: str = "cpu",
     **kwargs
 ) -> wrappers.GymWrapper:
+    """Creates a `gym.Env` or `gym.vector.VectorEnv` instance from a Brax environment.
+
+    Parameters
+    ----------
+    env_name : str
+        Name of the environment to create.
+    batch_size : Optional[int], optional
+        Number of parallel environments. Defaults to `None`, in which case a single env
+        is returned. When `batch_size` > 1, a subclass of `gym.vector.VectorEnv` is
+        returned instead.
+    seed : int, optional
+        Random seed, by default 0.
+    backend : str, optional
+        Backend used for jit compilation of the `reset` and `step` methods. Defaults to
+        "cpu".
+
+    Returns
+    -------
+    Union[wrappers.GymWrapper, wrappers.VectorGymWrapper]
+        A `wrappers.GymWrapper` or a `wrappers.VectorGymWrapper`, depending on the value
+        of `batch_size`.
+    """
     ...
 
 
@@ -79,28 +101,6 @@ def create_gym_env(
     backend: str = "cpu",
     **kwargs
 ) -> Union[wrappers.GymWrapper, wrappers.VectorGymWrapper]:
-    """Creates a gym wrapper around a Brax env.
-
-    Parameters
-    ----------
-    env_name : str
-        Name of the environment to create.
-    batch_size : Optional[int], optional
-        Number of parallel environments. Defaults to `None`, in which case a single env
-        is returned. When `batch_size` > 1, a subclass of `gym.vector.VectorEnv` is
-        returned.
-    seed : int, optional
-        Random seed, by default 0.
-    backend : str, optional
-        Backend used for jit compilation of the `reset` and `step` methods. Defaults to
-        "cpu".
-
-    Returns
-    -------
-    Union[wrappers.GymWrapper, wrappers.VectorGymWrapper]
-        A `wrappers.GymWrapper` or a `wrappers.VectorGymWrapper`, depending on the value
-        of `batch_size`.
-    """
     environment = create(env_name=env_name, batch_size=batch_size, **kwargs)
     if batch_size:
         return wrappers.VectorGymWrapper(environment, seed=seed, backend=backend)
