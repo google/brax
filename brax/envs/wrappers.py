@@ -70,6 +70,10 @@ class GymWrapper(gym.Env):
 class VectorGymWrapper(gym.vector.VectorEnv):
   """A wrapper that converts batched Brax Env to one that follows Gym VectorEnv API."""
 
+  # Flag that prevents `gym.register` from misinterpreting the `_step` and `_reset` as
+  # signs of a deprecated gym Env API.
+  _gym_disable_underscore_compat: ClassVar[bool] = True
+
   def __init__(self, environment: env.Env, seed: int = 0, backend: str = "cpu"):
     self._environment = environment
     if not self._environment.batch_size:

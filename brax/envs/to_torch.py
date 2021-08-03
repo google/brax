@@ -18,20 +18,20 @@ from jaxlib.xla_extension import DeviceArray
 from torch import Tensor
 from torch.utils import dlpack as torch_dlpack
 
-from brax.envs.wrappers import GymWrapper
+from brax.envs.wrappers import GymWrapper, VectorGymWrapper
 
 
 class JaxToTorchWrapper(gym.Wrapper):
     """Wrapper that converts Jax tensors to PyTorch tensors."""
 
-    def __init__(self, env: GymWrapper, device: torch.device = None):
-        """Creates a Wrapper around a `GymWrapper` or `VecGymWrapper` so it outputs
+    def __init__(self, env: Union[GymWrapper, VectorGymWrapper], device: torch.device = None):
+        """Creates a Wrapper around a `GymWrapper` or `VectorGymWrapper` so it outputs
         PyTorch tensors.
 
         Parameters
         ----------
-        env : Union[GymWrapper, VecGymWrapper]
-            A `GymWrapper` or `VecGymWrapper` to wrap.
+        env : Union[GymWrapper, VectorGymWrapper]
+            A `GymWrapper` or `VectorGymWrapper` to wrap.
         device : torch.device, optional
             device on which to move the Tensors. Defaults to `None`, in which case the
             tensors will be on the same devices as their Jax equivalents.
@@ -77,7 +77,7 @@ class JaxToTorchWrapper(gym.Wrapper):
 def torch_to_jax(v: Any) -> Any:
     """Converts values to JAX tensors."""
     # Don't do anything by default, and when a handler is registered for this type of
-    # value, it gets used to convert it to a torch tensor.
+    # value, it gets used to convert it to a Jax DeviceArray.
     # NOTE: The alternative would be to raise an error when an unsupported value is
     # encountered:
     # raise NotImplementedError(f"Don't know how to convert {v} to a Jax tensor")
