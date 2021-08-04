@@ -15,7 +15,7 @@
 """Some example environments to help get started quickly with brax."""
 
 import functools
-from typing import Callable, Optional, Union, overload, Dict, Type
+from typing import Callable, Union, Optional, overload
 
 import gym
 import brax
@@ -30,7 +30,7 @@ from brax.envs import reacherangle
 from brax.envs import ur5e
 from brax.envs import wrappers
 
-_envs: Dict[str, Type[env.Env]] = {
+_envs = {
     "fetch": fetch.Fetch,
     "ant": ant.Ant,
     "grasp": grasp.Grasp,
@@ -46,7 +46,7 @@ Env = env.Env
 
 def create(env_name: str, **kwargs) -> Env:
     """Creates an Env with a specified brax system."""
-    return _envs[env_name](**kwargs)
+    return _envs[env_name](**kwargs)  # type: ignore
 
 
 def create_fn(env_name: str, **kwargs) -> Callable[..., Env]:
@@ -59,10 +59,31 @@ def create_gym_env(
     env_name: str,
     batch_size: None = None,
     seed: int = 0,
-    backend: str = "cpu",
+    backend: Optional[str] = None,
     **kwargs
-) -> wrappers.GymWrapper:
-    """Creates a `gym.Env` or `gym.vector.VectorEnv` instance from a Brax environment.
+) -> gym.Env:
+    ...
+
+
+@overload
+def create_gym_env(
+    env_name: str,
+    batch_size: int,
+    seed: int = 0,
+    backend: Optional[str] = None,
+    **kwargs
+) -> gym.vector.VectorEnv:
+    ...
+
+
+def create_gym_env(
+    env_name: str,
+    batch_size: Optional[int] = None,
+    seed: int = 0,
+    backend: Optional[str] = None,
+    **kwargs
+) -> Union[gym.Env, gym.vector.VectorEnv]:
+    """Creates a `gym.Env` or `gym.vector.VectorEnv` from a Brax environment.
 
     Parameters
     ----------
@@ -76,33 +97,14 @@ def create_gym_env(
         Random seed, by default 0.
     backend : str, optional
         Backend used for jit compilation of the `reset` and `step` methods. Defaults to
-        "cpu".
+        `None`, in which case the backend is chosen automatically.
 
     Returns
     -------
-    Union[wrappers.GymWrapper, wrappers.VectorGymWrapper]
-        A `wrappers.GymWrapper` or a `wrappers.VectorGymWrapper`, depending on the value
-        of `batch_size`.
+    Union[gym.Env, gym.vector.VectorEnv]
+        A `gym.Env` or a gym.vector.VectorEnv`, depending on the value of `batch_size`.
     """
-    ...
-
-
-@overload
-def create_gym_env(
-    env_name: str, batch_size: int = 0, seed: int = 0, backend: str = "cpu", **kwargs
-) -> wrappers.VectorGymWrapper:
-    ...
-
-
-def create_gym_env(
-    env_name: str,
-    batch_size: Optional[int] = None,
-    seed: int = 0,
-    backend: str = "cpu",
-    **kwargs
-) -> Union[wrappers.GymWrapper, wrappers.VectorGymWrapper]:
     environment = create(env_name=env_name, batch_size=batch_size, **kwargs)
     if batch_size:
         return wrappers.VectorGymWrapper(environment, seed=seed, backend=backend)
-    else:
-        return wrappers.GymWrapper(environment, seed=seed, backend=backend)
+    return wrappers.GymWrapper(environment, seed=seed, backend=backend)

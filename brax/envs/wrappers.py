@@ -20,7 +20,7 @@ from gym.vector import utils
 import jax
 import numpy as np
 from brax.envs import env
-from typing import ClassVar
+from typing import ClassVar, Optional
 
 
 class GymWrapper(gym.Env):
@@ -30,7 +30,7 @@ class GymWrapper(gym.Env):
   # signs of a deprecated gym Env API.
   _gym_disable_underscore_compat: ClassVar[bool] = True
 
-  def __init__(self, environment: env.Env, seed: int = 0, backend: str = "cpu"):
+  def __init__(self, environment: env.Env, seed: int = 0, backend: Optional[str] = None):
     self._environment = environment
     self.seed(seed)
 
@@ -74,7 +74,7 @@ class VectorGymWrapper(gym.vector.VectorEnv):
   # signs of a deprecated gym Env API.
   _gym_disable_underscore_compat: ClassVar[bool] = True
 
-  def __init__(self, environment: env.Env, seed: int = 0, backend: str = "cpu"):
+  def __init__(self, environment: env.Env, seed: int = 0, backend: Optional[str] = None):
     self._environment = environment
     if not self._environment.batch_size:
       raise ValueError('underlying environment must be batched')
