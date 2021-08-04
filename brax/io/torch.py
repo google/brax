@@ -10,8 +10,6 @@ from jaxlib.xla_extension import DeviceArray
 
 try:
     import torch
-    from torch import Tensor
-    from torch.utils import dlpack as torch_dlpack
 except ImportError:
     warnings.warn(
         "to_torch requires PyTorch. Please run `pip install torch` for this function "
@@ -19,6 +17,8 @@ except ImportError:
     )
     raise
 
+from torch import Tensor
+from torch.utils import dlpack as torch_dlpack
 Device = Union[str, torch.device]
 
 
