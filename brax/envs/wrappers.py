@@ -35,10 +35,10 @@ class GymWrapper(gym.Env):
     self.seed(seed)
 
     # action_space = None
-    obs_high = np.inf * np.ones(self._environment.observation_size)
+    obs_high = (np.inf * np.ones(self._environment.observation_size)).astype(np.float32)
     self.observation_space = spaces.Box(-obs_high, obs_high, dtype=np.float32)
 
-    action_high = np.ones(self._environment.action_size)
+    action_high = np.ones(self._environment.action_size, dtype=np.float32)
     self.action_space = spaces.Box(-action_high, action_high, dtype=np.float32)
 
     self._state = None
@@ -84,13 +84,13 @@ class VectorGymWrapper(gym.vector.VectorEnv):
     self.seed(seed)
     self.backend = backend
 
-    obs_high = np.inf * np.ones(self._environment.observation_size)
+    obs_high = (np.inf * np.ones(self._environment.observation_size)).astype(np.float32)
     self.single_observation_space = spaces.Box(
         -obs_high, obs_high, dtype=np.float32)
     self.observation_space = utils.batch_space(self.single_observation_space,
                                                self.num_envs)
 
-    action_high = np.ones(self._environment.action_size)
+    action_high = np.ones(self._environment.action_size, dtype=np.float32)
     self.single_action_space = spaces.Box(
         -action_high, action_high, dtype=np.float32)
     self.action_space = utils.batch_space(self.single_action_space,
