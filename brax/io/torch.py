@@ -1,9 +1,9 @@
 """ Generic functions to convert Jax DeviceArrays into PyTorch Tensors and vice-versa.
 """
 import warnings
+from collections import abc
 from functools import singledispatch
 from typing import Any, Union, Dict
-from collections import abc
 
 from jax._src import dlpack as jax_dlpack
 from jaxlib.xla_extension import DeviceArray
@@ -12,8 +12,8 @@ try:
     import torch
 except ImportError:
     warnings.warn(
-        "to_torch requires PyTorch. Please run `pip install torch` for this function "
-        "to work."
+        "brax.io.torch requires PyTorch. Please run `pip install torch` to use "
+        "functions from this module."
     )
     raise
 
