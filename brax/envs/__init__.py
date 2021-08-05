@@ -31,14 +31,14 @@ from brax.envs import ur5e
 from brax.envs import wrappers
 
 _envs = {
-  'fetch': fetch.Fetch,
-  'ant': ant.Ant,
-  'grasp': grasp.Grasp,
-  'halfcheetah': halfcheetah.Halfcheetah,
-  'humanoid': humanoid.Humanoid,
-  'ur5e': ur5e.Ur5e,
-  'reacher': reacher.Reacher,
-  'reacherangle': reacherangle.ReacherAngle,
+    'fetch': fetch.Fetch,
+    'ant': ant.Ant,
+    'grasp': grasp.Grasp,
+    'halfcheetah': halfcheetah.Halfcheetah,
+    'humanoid': humanoid.Humanoid,
+    'ur5e': ur5e.Ur5e,
+    'reacher': reacher.Reacher,
+    'reacherangle': reacherangle.ReacherAngle,
 }
 State = env.State
 Env = env.Env
