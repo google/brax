@@ -105,6 +105,8 @@ def create_gym_env(
       A `gym.Env` or a gym.vector.VectorEnv`, depending on the value of `batch_size`.
   """
   environment = create(env_name=env_name, batch_size=batch_size, **kwargs)
-  if batch_size:
+  if batch_size is not None:
+    if batch_size <= 0:
+      raise ValueError("`batch_size` should either be None or a positive integer.")
     return wrappers.VectorGymWrapper(environment, seed=seed, backend=backend)
   return wrappers.GymWrapper(environment, seed=seed, backend=backend)
