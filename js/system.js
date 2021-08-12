@@ -94,7 +94,7 @@ function createScene(system) {
         child.quaternion.z = -tmp;
       }
       if (collider.position) {
-        child.position.set(collider.position.x, collider.position.pos.z,
+        child.position.set(collider.position.x, collider.position.z,
                            collider.position.y);
       }
       parent.add(child);
