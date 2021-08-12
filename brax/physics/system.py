@@ -46,6 +46,7 @@ class System:
     self.box_plane = colliders.BoxPlane(config)
     self.capsule_plane = colliders.CapsulePlane(config)
     self.capsule_capsule = colliders.CapsuleCapsule(config)
+    self.box_heightMap = colliders.BoxHeightMap(config)
 
     self.num_joints = len(config.joints)
     self.joint_revolute = joints.Revolute.from_config(config)
@@ -91,6 +92,7 @@ class System:
     dp_c = self.box_plane.apply(qp, 1.)
     dp_c += self.capsule_plane.apply(qp, 1.)
     dp_c += self.capsule_capsule.apply(qp, 1.)
+    dp_c += self.box_heightMap.apply(qp, 1.)
 
     dp_j = self.joint_revolute.apply(qp)
     dp_j += self.joint_universal.apply(qp)
@@ -130,6 +132,7 @@ class System:
       dp_c = self.box_plane.apply(qp, dt)
       dp_c += self.capsule_plane.apply(qp, dt)
       dp_c += self.capsule_capsule.apply(qp, dt)
+      dp_c += self.box_heightMap.apply(qp, dt)
       qp = integrators.potential_collision(self.config, qp, dp_c,
                                            self.active_pos, self.active_rot)
 
