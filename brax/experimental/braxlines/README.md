@@ -28,7 +28,7 @@ implements
 
 <img src="https://github.com/google/brax/raw/main/docs/img/braxlines/ant_smm.gif" width="150" height="107"/>
 
-Matching a target marginal state distribution is the foundation for (adversarial inverse RL)[https://arxiv.org/abs/1911.02256] algorithms
-in imitation learning, as well as recently popularized (state marginal matching)[https://arxiv.org/abs/1906.05274] methods.
+Matching a target marginal state distribution is the foundation for [adversarial inverse RL](https://arxiv.org/abs/1911.02256) algorithms
+in imitation learning, as well as recently popularized [state marginal matching](https://arxiv.org/abs/1906.05274) methods.
 [IRL_SMM Basics](https://colab.research.google.com/github/google/brax/blob/main/notebooks/braxlines/irl_smm.ipynb)
-runs a family of adversarial inverse RL algorithms, which includes (GAIL)[https://arxiv.org/abs/1606.03476], (AIRL)[https://arxiv.org/abs/1710.11248], and (FAIRL)[https://arxiv.org/abs/1911.02256] as special cases. These algorithms minimize D(p(s,a), p*(s,a)) or D(p(s), p*(s)), the divergence D between the policy's state(-action) marginal distribution p(s,a) or p(s), and a given target distribution p*(s,a) or p*(s). As discussed in (f-MAX)[https://arxiv.org/abs/1911.02256], these algorithms could also be used for [state-marginal matching](https://arxiv.org/abs/1906.05274) RL besides imitation learning.
+runs a family of adversarial inverse RL algorithms, which includes [GAIL](https://arxiv.org/abs/1606.03476), [AIRL](https://arxiv.org/abs/1710.11248), and [FAIRL](https://arxiv.org/abs/1911.02256) as special cases. These algorithms minimize D(p(s,a), p*(s,a)) or D(p(s), p*(s)), the divergence D between the policy's state(-action) marginal distribution p(s,a) or p(s), and a given target distribution p*(s,a) or p*(s). As discussed in [f-MAX](https://arxiv.org/abs/1911.02256), these algorithms could also be used for [state-marginal matching](https://arxiv.org/abs/1906.05274) RL besides imitation learning.
