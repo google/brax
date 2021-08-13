@@ -14,35 +14,38 @@
 
 """Brax Gym wrapper for single and batched environments."""
 
+from typing import ClassVar, Optional
+
 import gym
 from gym import spaces
 from gym.vector import utils
 import jax
 import numpy as np
 from brax.envs import env
-from typing import ClassVar, Optional
 
 
 class GymWrapper(gym.Env):
   """A wrapper that converts Brax Env to one that follows Gym API."""
 
-  # Flag that prevents `gym.register` from misinterpreting the `_step` and `_reset` as
-  # signs of a deprecated gym Env API.
+  # Flag that prevents `gym.register` from misinterpreting the `_step` and
+  # `_reset` as signs of a deprecated gym Env API.
   _gym_disable_underscore_compat: ClassVar[bool] = True
 
-  def __init__(self, environment: env.Env, seed: int = 0, backend: Optional[str] = None):
+  def __init__(self,
+               environment: env.Env,
+               seed: int = 0,
+               backend: Optional[str] = None):
     self._environment = environment
     self.seed(seed)
+    self.backend = backend
+    self._state = None
 
-    # action_space = None
-    obs_high = (np.inf * np.ones(self._environment.observation_size)).astype(np.float32)
+    obs_high = (np.inf * np.ones(self._environment.observation_size)).astype(
+        np.float32)
     self.observation_space = spaces.Box(-obs_high, obs_high, dtype=np.float32)
 
     action_high = np.ones(self._environment.action_size, dtype=np.float32)
     self.action_space = spaces.Box(-action_high, action_high, dtype=np.float32)
-
-    self._state = None
-    self.backend = backend
 
     def reset(key):
       key1, key2 = jax.random.split(key)
@@ -70,11 +73,14 @@ class GymWrapper(gym.Env):
 class VectorGymWrapper(gym.vector.VectorEnv):
   """A wrapper that converts batched Brax Env to one that follows Gym VectorEnv API."""
 
-  # Flag that prevents `gym.register` from misinterpreting the `_step` and `_reset` as
-  # signs of a deprecated gym Env API.
+  # Flag that prevents `gym.register` from misinterpreting the `_step` and
+  # `_reset` as signs of a deprecated gym Env API.
   _gym_disable_underscore_compat: ClassVar[bool] = True
 
-  def __init__(self, environment: env.Env, seed: int = 0, backend: Optional[str] = None):
+  def __init__(self,
+               environment: env.Env,
+               seed: int = 0,
+               backend: Optional[str] = None):
     self._environment = environment
     if not self._environment.batch_size:
       raise ValueError('underlying environment must be batched')
@@ -83,8 +89,10 @@ class VectorGymWrapper(gym.vector.VectorEnv):
     self._key_size = self.num_envs + 1
     self.seed(seed)
     self.backend = backend
+    self._state = None
 
-    obs_high = (np.inf * np.ones(self._environment.observation_size)).astype(np.float32)
+    obs_high = (np.inf * np.ones(self._environment.observation_size)).astype(
+        np.float32)
     self.single_observation_space = spaces.Box(
         -obs_high, obs_high, dtype=np.float32)
     self.observation_space = utils.batch_space(self.single_observation_space,
@@ -95,7 +103,6 @@ class VectorGymWrapper(gym.vector.VectorEnv):
         -action_high, action_high, dtype=np.float32)
     self.action_space = utils.batch_space(self.single_action_space,
                                           self.num_envs)
-    self._state = None
 
     def reset(key):
       keys = jax.random.split(key, self._key_size)

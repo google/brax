@@ -27,6 +27,7 @@ from brax.physics import bodies
 from brax.physics import config_pb2
 from brax.physics import math
 from brax.physics.base import P, QP, euler_to_quat, vec_to_np, take
+from brax.physics.math import safe_norm
 
 
 class BoxPlane:
@@ -326,14 +327,14 @@ def _find_closest_segment(cap_a: CapsuleCapsule.Capsule,
   # check if lines are overlapping
   a_segment = a2 - a1
   b_segment = b2 - b1
-  a_len = jnp.linalg.norm(a_segment)
-  b_len = jnp.linalg.norm(b_segment)
+  a_len = safe_norm(a_segment)
+  b_len = safe_norm(b_segment)
 
   a_unit_vec = a_segment / (1e-10 + a_len)
   b_unit_vec = b_segment / (1e-10 + b_len)
 
   cross = jnp.cross(a_unit_vec, b_unit_vec)
-  denom = jnp.linalg.norm(cross)**2.
+  denom = safe_norm(cross)**2.
 
   # closest point test if segments are parallel
 
@@ -353,7 +354,7 @@ def _find_closest_segment(cap_a: CapsuleCapsule.Capsule,
   pa_par = jnp.where(segments_are_parallel, qp_a.pos, pa_par)
   pb_par = jnp.where(segments_are_parallel, qp_b.pos, pb_par)
   closest_dist = jnp.where(segments_are_parallel,
-                           jnp.linalg.norm(((d1 * a_unit_vec) + a1) - b1),
+                           safe_norm(((d1 * a_unit_vec) + a1) - b1),
                            closest_dist)
 
   # segments parallel, with segment b before segment a
@@ -362,8 +363,8 @@ def _find_closest_segment(cap_a: CapsuleCapsule.Capsule,
                      jnp.where(orientation_bool, b1, b2), pb_par)
   closest_dist = jnp.where(
       segments_are_parallel * b_is_before_a,
-      jnp.where(orientation_bool, jnp.linalg.norm(a1 - b1),
-                jnp.linalg.norm(a1 - b2)), closest_dist)
+      jnp.where(orientation_bool, safe_norm(a1 - b1),
+                safe_norm(a1 - b2)), closest_dist)
 
   # segments parallel, with segment a before segment b
   pa_par = jnp.where(
@@ -373,8 +374,8 @@ def _find_closest_segment(cap_a: CapsuleCapsule.Capsule,
       jnp.where(orientation_bool, b1, b2), pb_par)
   closest_dist = jnp.where(
       segments_are_parallel * a_is_before_b * (1 - b_is_before_a),
-      jnp.where(orientation_bool, jnp.linalg.norm(a2 - b1),
-                jnp.linalg.norm(a2 - b2)), closest_dist)
+      jnp.where(orientation_bool, safe_norm(a2 - b1),
+                safe_norm(a2 - b2)), closest_dist)
 
   # closest point test if segments are NOT parallel
 
@@ -398,7 +399,7 @@ def _find_closest_segment(cap_a: CapsuleCapsule.Capsule,
   pb = point_on_segment(pa, pb, b1, b_unit_vec, t1, a_len, b_len)
   pa = point_on_segment(pb, pa, a1, a_unit_vec, t2, b_len, a_len)
 
-  fa = lambda _: (pa, pb, jnp.linalg.norm(pa - pb))
+  fa = lambda _: (pa, pb, safe_norm(pa - pb))
   fb = lambda _: (pa_par, pb_par, closest_dist)
 
   return jax.lax.cond(jnp.equal(segments_are_parallel, 0.), fa, fb, None)

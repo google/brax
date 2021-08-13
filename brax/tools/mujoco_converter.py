@@ -20,7 +20,7 @@ from absl import app
 from absl import flags
 from absl import logging
 from brax.tools import mujoco
-from tensorflow.io import gfile
+from brax.io import file
 
 from google.protobuf import text_format
 
@@ -50,7 +50,7 @@ def main(argv: Sequence[str]) -> None:
 
   # Read the Mujoco model.
   filename = FLAGS.xml_model_path
-  with gfile.GFile(filename) as f:
+  with file.File(filename) as f:
     logging.info('Loading mujoco model from %s', filename)
     xml_string = f.read()
 
@@ -69,7 +69,8 @@ def main(argv: Sequence[str]) -> None:
   # Save the config.
   if FLAGS.config_path:
     text_proto = text_format.MessageToString(config)
-    gfile.GFileText(FLAGS.config_path, mode='wt').write(text_proto)
+    with file.File(FLAGS.config_path, mode='w+') as f:
+      f.write(text_proto)
 
 
 if __name__ == '__main__':
