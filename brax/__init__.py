@@ -14,6 +14,8 @@
 
 """Import top-level classes and functions here for encapsulation/clarity."""
 
+__version__ = '0.0.3'
+
 from brax.physics.base import Info
 from brax.physics.base import QP
 from brax.physics.config_pb2 import Config

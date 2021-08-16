@@ -49,8 +49,10 @@ setup(
         # TODO: restore this once tfp-nightly and tensorflow are compatible
         # breakage caused by https://github.com/tensorflow/probability/commit/fdbdece116a98e101420ce38e8a45aa1e7e5656f
         "tfp-nightly[jax]<=0.13.0.dev20210422",
-        "tensorflow",
     ],
+    extras_require={
+        "develop": ["pytest", "bumpversion", "transforms3d"],
+    },
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",

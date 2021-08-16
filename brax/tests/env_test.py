@@ -23,13 +23,15 @@ import jax
 import jax.numpy as np
 from brax import envs
 
-
+_EXPECTED_SPS = {
+  'ant': 1000,
+  'fetch': 1000
+}
 
 class EnvTest(parameterized.TestCase):
 
-  @parameterized.parameters(('ant',), ('fetch',), ('grasp',), ('humanoid',),
-                            ('ur5e',), ('reacher',), ('reacherangle',))
-  def testSpeed(self, env_name):
+  @parameterized.parameters(_EXPECTED_SPS.items())
+  def testSpeed(self, env_name, expected_sps):
     batch_size = 128
     episode_length = 1000
 
@@ -66,6 +68,7 @@ class EnvTest(parameterized.TestCase):
 
     mean_sps = np.mean(np.array(sps))
     logging.info('%s SPS %s %s', env_name, mean_sps, sps)
+    self.assertGreater(mean_sps, expected_sps * 0.99)
 
 if __name__ == '__main__':
   absltest.main()

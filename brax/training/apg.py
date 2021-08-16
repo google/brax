@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Direct trajectory optimization training.
+"""Analytic policy gradient training.
 
 Note: this module is untested.
 """

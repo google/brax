@@ -25,14 +25,14 @@ import jax
 from brax import envs
 from brax.io import html
 from brax.io import model
-from brax.training import dto
+from brax.training import apg
 from brax.training import es
 from brax.training import ppo
 from brax.training import sac
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_enum('learner', 'ppo', ['ppo', 'dto', 'es', 'sac'],
+flags.DEFINE_enum('learner', 'ppo', ['ppo', 'apg', 'es', 'sac'],
                   'Which algorithm to run.')
 flags.DEFINE_string('env', 'ant', 'Name of environment to train.')
 flags.DEFINE_integer('total_env_steps', 50000000,
@@ -130,8 +130,8 @@ def main(unused_argv):
           seed=FLAGS.seed,
           episode_length=FLAGS.episode_length,
           progress_fn=writer.write_scalars)
-    if FLAGS.learner == 'dto':
-      inference_fn, params, _ = dto.train(
+    if FLAGS.learner == 'apg':
+      inference_fn, params, _ = apg.train(
           environment_fn=env_fn,
           num_envs=FLAGS.num_envs,
           action_repeat=FLAGS.action_repeat,

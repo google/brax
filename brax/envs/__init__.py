@@ -15,12 +15,13 @@
 """Some example environments to help get started quickly with brax."""
 
 import functools
-from typing import Callable, Union, Optional, overload
+from typing import Callable, Optional, Union, overload
 
 import gym
 import brax
 from brax.envs import ant
 from brax.envs import env
+from brax.envs import fast
 from brax.envs import fetch
 from brax.envs import grasp
 from brax.envs import halfcheetah
@@ -31,14 +32,15 @@ from brax.envs import ur5e
 from brax.envs import wrappers
 
 _envs = {
-    'fetch': fetch.Fetch,
     'ant': ant.Ant,
+    'fast': fast.Fast,
+    'fetch': fetch.Fetch,
     'grasp': grasp.Grasp,
     'halfcheetah': halfcheetah.Halfcheetah,
     'humanoid': humanoid.Humanoid,
-    'ur5e': ur5e.Ur5e,
     'reacher': reacher.Reacher,
     'reacherangle': reacherangle.ReacherAngle,
+    'ur5e': ur5e.Ur5e,
 }
 State = env.State
 Env = env.Env

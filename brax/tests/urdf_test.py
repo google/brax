@@ -69,9 +69,13 @@ class UrdfTest(absltest.TestCase):
     m = urdf.UrdfConverter(_TEST_XML, add_collision_pairs=True)
     # Sanity check.
     config = m.config
-    self.assertTrue(config.bodies)
-    self.assertTrue(config.joints)
-    self.assertTrue(config.actuators)
+    self.assertEqual(len(config.bodies), 2)
+    self.assertEqual(config.bodies[0].name, 'parent_link')
+    self.assertEqual(config.bodies[1].name, 'child_link')
+    self.assertEqual(len(config.joints), 1)
+    self.assertEqual(config.joints[0].name, 'test_joint')
+    self.assertEqual(len(config.actuators), 1)
+    self.assertEqual(config.actuators[0].name, 'test_joint')
 
 
 if __name__ == '__main__':
