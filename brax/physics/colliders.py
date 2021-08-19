@@ -346,8 +346,11 @@ class BoxHeightMap:
 
     @jax.vmap
     def apply(box, corner, qp_box, qp_heightMap, size, meshSize, heights):
-      pos, vel = math.to_world(qp_box, corner)
-      uv_pos = (pos[:2]-qp_heightMap.pos[:2])/size*(meshSize-1)
+      world_pos, vel = math.to_world(qp_box, corner)
+
+      pos = math.inv_rotate(world_pos-qp_heightMap.pos, qp_heightMap.rot)
+
+      uv_pos = (pos[:2])/size*(meshSize-1)
 
       uv_idx = jnp.floor(uv_pos).astype(jnp.int32) # poorly choosen name for the indexes of the point that form the square around the corner
       uv_idx_u = uv_idx + jnp.array([1, 0], dtype=jnp.int32)
@@ -366,11 +369,12 @@ class BoxHeightMap:
 
       raw_normal = jnp.array([-mu*(h1-h0), -mu*(h2-h0), 1*(size/(meshSize-1))])
       normal = raw_normal / jnp.linalg.norm(raw_normal)
+      rotated_normal = math.rotate(normal, qp_heightMap.rot)
 
-      pos_0 = qp_heightMap.pos + jnp.array([point_0[0]*size/(meshSize-1), point_0[1]*size/(meshSize-1), h0])
+      pos_0 = jnp.array([point_0[0]*size/(meshSize-1), point_0[1]*size/(meshSize-1), h0])
       penetration = jnp.dot(pos - pos_0, normal)
 
-      dp = _collide(self.config, box, qp_box, pos, vel, normal, penetration, dt)
+      dp = _collide(self.config, box, qp_box, pos, vel, rotated_normal, penetration, dt)
       collided = jnp.where(penetration < 0., 1., 0.)
       return dp, collided
 
@@ -610,7 +614,7 @@ def _collide(config: config_pb2.Config, body: bodies.Body, qp: QP,
 
   # factor of 2.0 here empirically helps object grip
   # TODO: expose friction physics parameters in config
-  return dp_n * colliding_n + dp_d * colliding_d * 2.0
+  return dp_n * colliding_n + dp_d * colliding_d # * 2.0
 
 
 def _collide_pair(config: config_pb2.Config, body_a: bodies.Body,
