@@ -282,7 +282,6 @@ class BoxHeightMap:
     self.config = config
     self.pairs = _find_body_pairs(config, 'box', 'heightMap')
     if not self.pairs:
-      print("no_pairs")
       return
 
     body_idx = {b.name: i for i, b in enumerate(config.bodies)}
@@ -308,7 +307,10 @@ class BoxHeightMap:
         corner = corner + vec_to_np(col.position)
         corners.append(corner)
 
-        meshSize = heightMap.colliders[0].heightMap.meshSize
+        meshSize = int(jnp.round(jnp.sqrt(len(heightMap.colliders[0].heightMap.data))))
+        if not len(heightMap.colliders[0].heightMap.data) == meshSize ** 2:
+          raise ValueError("The data lenght for an height map should be a perfect square.")
+
         height = jnp.array(heightMap.colliders[0].heightMap.data).reshape((meshSize,meshSize))
         heights.append(height)
 
@@ -608,8 +610,7 @@ def _collide(config: config_pb2.Config, body: bodies.Body, qp: QP,
 
   # factor of 2.0 here empirically helps object grip
   # TODO: expose friction physics parameters in config
-  # This factor of two makes not much of a physical sense. It kinda breaks the math, and it breaks collisions with normal not alligned with gravity vector.
-  return dp_n * colliding_n + dp_d * colliding_d # * 2.0
+  return dp_n * colliding_n + dp_d * colliding_d * 2.0
 
 
 def _collide_pair(config: config_pb2.Config, body_a: bodies.Body,

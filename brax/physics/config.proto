@@ -50,8 +50,7 @@ message Collider {
   // A height map aligned with the x-y plane
   message HeightMap {
     float size = 1;
-    int32 meshSize = 2;
-    repeated float data = 3;
+    repeated float data = 2;
   }
   
   // A cylinder with rounded ends.
@@ -107,10 +106,10 @@ message Joint {
   repeated Range angle_limit = 9;
   // Strength of the force that restores joint to within the angle limits
   // If not set, defaults to a joint-dependent fraction of `stiffness`.
-  float limit_strength = 10;
+  optional float limit_strength = 10;
   // Damps the spring connecting the parent to the child
   // If not set, defaults to a joint-dependent fraction of `sqrt(stiffness)`.
-  float spring_damping = 11;
+  optional float spring_damping = 11;
 }
 
 // Actuators provide interactive control of a system via the step function.
