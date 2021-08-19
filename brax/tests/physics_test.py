@@ -16,10 +16,12 @@
 
 from absl.testing import absltest
 from absl.testing import parameterized
+import jax
 from jax import numpy as jnp
 import brax
 from brax.physics.base import take
 from google.protobuf import text_format
+import numpy as np
 
 
 class BodyTest(absltest.TestCase):
@@ -372,6 +374,45 @@ class Actuator3DTest(parameterized.TestCase):
       for angle, limit, torque in zip(angles, limits, t):
         if torque != 0:
           self.assertAlmostEqual(angle, limit, 1)  # actuated to target angle
+
+class HeightMapTest(absltest.TestCase):
+
+  def create_test_system (self, data):
+    bouncy_box = brax.Config(dt=2, substeps=1000)
+
+    ground = bouncy_box.bodies.add(name='ground')
+    ground.frozen.all = True
+    heightMap = ground.colliders.add().heightMap
+    heightMap.size = 10
+    heightMap.data.extend(data)
+    heightMap.SetInParent()
+
+    box = bouncy_box.bodies.add(name='box', mass=1)
+    box.inertia.x, box.inertia.y, box.inertia.z = 0.1, 0.1, 0.1
+    cap = box.colliders.add().box
+    cap.halfsize.x, cap.halfsize.y, cap.halfsize.z = (0.3, 0.3, 0.3)
+
+    # gravity is -9.8 m/s^2 in z dimension
+    bouncy_box.gravity.z = -9.8
+
+    sys = brax.System(bouncy_box)
+    qp = sys.default_qp()
+
+    np_pos = np.asarray([[0, 0, 0], [5, 5, 1]])
+    pos = jax.ops.index_update(qp.pos, jax.ops.index[:, :], np_pos)
+    qp = qp.replace(pos=pos)
+
+    bouncy_box.elasticity = 0.
+    bouncy_box.friction = 1
+    bouncy_box.baumgarte_erp = 0.1
+
+    return sys, qp
+
+  def test_box_stays_on_heightMap (self):
+    """A box falls onto the height map and stops."""
+    sys, qp = self.create_test_system([0 for i in range(3**2)]) # flat height map
+    qp, _ = sys.step(qp, [])
+    self.assertAlmostEqual(qp.pos[1, 2], 0.3, 2)
 
 
 if __name__ == '__main__':

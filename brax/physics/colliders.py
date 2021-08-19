@@ -614,7 +614,7 @@ def _collide(config: config_pb2.Config, body: bodies.Body, qp: QP,
 
   # factor of 2.0 here empirically helps object grip
   # TODO: expose friction physics parameters in config
-  return dp_n * colliding_n + dp_d * colliding_d # * 2.0
+  return dp_n * colliding_n + dp_d * colliding_d * 2.0
 
 
 def _collide_pair(config: config_pb2.Config, body_a: bodies.Body,
