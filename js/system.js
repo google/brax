@@ -69,7 +69,7 @@ function createHeightMap(heightMap) {
   const n_subdiv = Math.sqrt(heightMap.data.length)-1;
 
   if (!Number.isInteger(n_subdiv)) {
-    throw 'The data lenght for an height map should be a perfect square.';
+    throw 'The data length for an height map should be a perfect square.';
   }
 
   function builder(v, u, target) {

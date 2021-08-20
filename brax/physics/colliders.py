@@ -276,7 +276,7 @@ class CapsuleCapsule:
     return P(vel_a + vel_b, ang_a + ang_b)
 
 class BoxHeightMap:
-  """ A collision between the box corners and a Heihtmap. """
+  """ A collision between the box corners and a Heightmap. """
 
   def __init__(self, config: config_pb2.Config):
     self.config = config
@@ -309,7 +309,7 @@ class BoxHeightMap:
 
         meshSize = int(jnp.round(jnp.sqrt(len(heightMap.colliders[0].heightMap.data))))
         if not len(heightMap.colliders[0].heightMap.data) == meshSize ** 2:
-          raise ValueError("The data lenght for an height map should be a perfect square.")
+          raise ValueError("The data length for an height map should be a perfect square.")
 
         height = jnp.array(heightMap.colliders[0].heightMap.data).reshape((meshSize,meshSize))
         heights.append(height)
@@ -352,14 +352,18 @@ class BoxHeightMap:
 
       uv_pos = (pos[:2])/size*(meshSize-1)
 
-      uv_idx = jnp.floor(uv_pos).astype(jnp.int32) # poorly choosen name for the indexes of the point that form the square around the corner
+      # first we find the square in the mesh that enclose the candidate point, with mesh indices ux_idx, ux_udx_u, uv_idx_v, uv_idx_uv.
+      uv_idx = jnp.floor(uv_pos).astype(jnp.int32)
       uv_idx_u = uv_idx + jnp.array([1, 0], dtype=jnp.int32)
       uv_idx_v = uv_idx + jnp.array([0, 1], dtype=jnp.int32)
       uv_idx_uv = uv_idx + jnp.array([1, 1], dtype=jnp.int32)
 
+      # then we find the orientation of the triangle of this square that encloses the candidate point
       delta_uv = uv_pos - uv_idx
       mu = jnp.where(delta_uv[0]+delta_uv[1]<1, 1, -1) # whether the corner lies on the first or secound triangle
-      point_0 = jnp.where(delta_uv[0]+delta_uv[1]<1, uv_idx, uv_idx_uv) # poorly choosen name for the indexes of the point that form the triangle around the corner
+      
+      # and we compute the mesh indices of the vertices of this triangle
+      point_0 = jnp.where(delta_uv[0]+delta_uv[1]<1, uv_idx, uv_idx_uv)
       point_1 = jnp.where(delta_uv[0]+delta_uv[1]<1, uv_idx_u, uv_idx_v)
       point_2 = jnp.where(delta_uv[0]+delta_uv[1]<1, uv_idx_v, uv_idx_u)
 
