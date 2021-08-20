@@ -63,6 +63,40 @@ function createSphere(sphere, name) {
   return mesh;
 }
 
+function createHeightMap(heightMap) {
+
+  const size = heightMap.size;
+  const n_subdiv = Math.sqrt(heightMap.data.length)-1;
+
+  if (!Number.isInteger(n_subdiv)) {
+    throw 'The data length for an height map should be a perfect square.';
+  }
+
+  function builder(v, u, target) {
+    const idx = Math.round(v*(n_subdiv) + u*n_subdiv*(n_subdiv+1));
+    const x = u*size;
+    const y = -v*size;
+    const z = heightMap.data[idx];
+    target.set(x, y, z).multiplyScalar(1);
+  }
+
+
+  const geometry = new THREE.ParametricGeometry(builder, n_subdiv, n_subdiv);
+  geometry.normalizeNormals();
+
+  const group = new THREE.Group();
+  const mesh = new THREE.Mesh(
+      geometry,
+      new THREE.MeshStandardMaterial( { color: 0x796049, flatShading: true} )
+    );
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.receiveShadow = true;
+  group.add(mesh);
+
+  return group;
+}
+
+
 function createScene(system) {
   const scene = new THREE.Scene();
 
@@ -79,6 +113,8 @@ function createScene(system) {
         child = createPlane(collider.plane);
       } else if ('sphere' in collider) {
         child = createSphere(collider.sphere, body.name);
+      }else if ('heightMap' in collider) {
+        child = createHeightMap(collider.heightMap);
       }
       if (collider.rotation) {
         // convert from z-up to y-up coordinate system
