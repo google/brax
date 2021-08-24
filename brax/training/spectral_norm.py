@@ -20,7 +20,7 @@ Reference:
     - https://arxiv.org/abs/1802.05957
     - https://github.com/deepmind/dm-haiku/blob/main/haiku/_src/spectral_norm.py
 """
-from typing import (Any, Callable, Tuple)
+from typing import Any, Callable, Tuple
 
 from jax import lax
 import jax.numpy as jnp
@@ -29,14 +29,10 @@ from flax import linen
 from flax.linen.initializers import lecun_normal, normal, zeros
 
 
-default_kernel_init = lecun_normal()
-
 PRNGKey = Any
 Array = Any
 Shape = Tuple[int]
 Dtype = Any
-
-_no_init = lambda rng, shape: ()
 
 
 def _l2_normalize(x, axis=None, eps=1e-12):
@@ -74,7 +70,7 @@ class SNDense(linen.Module):
   use_bias: bool = True
   dtype: Any = jnp.float32
   precision: Any = None
-  kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
+  kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = lecun_normal()
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
   eps: float = 1e-4
   n_steps: int = 1
@@ -100,7 +96,7 @@ class SNDense(linen.Module):
     # Handle scalars.
     if kernel.ndim <= 1:
       raise ValueError("Spectral normalization is not well defined for "
-                      "scalar inputs.")
+                       "scalar inputs.")
     # Handle higher-order tensors.
     elif kernel.ndim > 2:
       kernel = jnp.reshape(kernel, [-1, kernel.shape[-1]])

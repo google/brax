@@ -93,7 +93,6 @@ def make_model(layer_sizes: Sequence[int],
   Returns:
     a model
   """
-  module = MLP(layer_sizes=layer_sizes, activation=activation)
   dummy_obs = jnp.zeros((1, obs_size))
   if spectral_norm:
     module = SNMLP(layer_sizes=layer_sizes, activation=activation)
