@@ -22,6 +22,8 @@ from flax import linen
 import jax
 import jax.numpy as jnp
 
+from brax.training.spectral_norm import SNDense
+
 
 @dataclasses.dataclass
 class FeedForwardModel:
@@ -52,9 +54,33 @@ class MLP(linen.Module):
     return hidden
 
 
+class SNMLP(linen.Module):
+  """MLP module with Spectral Normalization."""
+  layer_sizes: Sequence[int]
+  activation: Callable[[jnp.ndarray], jnp.ndarray] = linen.relu
+  kernel_init: Callable[..., Any] = jax.nn.initializers.lecun_uniform()
+  activate_final: bool = False
+  bias: bool = True
+
+  @linen.compact
+  def __call__(self, data: jnp.ndarray):
+    hidden = data
+    for i, hidden_size in enumerate(self.layer_sizes):
+      hidden = SNDense(
+          hidden_size,
+          name=f'hidden_{i}',
+          kernel_init=self.kernel_init,
+          use_bias=self.bias)(
+              hidden)
+      if i != len(self.layer_sizes) - 1 or self.activate_final:
+        hidden = self.activation(hidden)
+    return hidden
+
+
 def make_model(layer_sizes: Sequence[int],
                obs_size: int,
                activation: Callable[[jnp.ndarray], jnp.ndarray] = linen.swish,
+               spectral_norm: bool = False,
                ) -> FeedForwardModel:
   """Creates a model.
 
@@ -62,14 +88,24 @@ def make_model(layer_sizes: Sequence[int],
     layer_sizes: layers
     obs_size: size of an observation
     activation: activation
+    spectral_norm: whether to use a spectral normalization (default: False).
 
   Returns:
     a model
   """
   module = MLP(layer_sizes=layer_sizes, activation=activation)
   dummy_obs = jnp.zeros((1, obs_size))
-  return FeedForwardModel(
-      init=lambda rng: module.init(rng, dummy_obs), apply=module.apply)
+  if spectral_norm:
+    module = SNMLP(layer_sizes=layer_sizes, activation=activation)
+    model = FeedForwardModel(
+        init=lambda rng1, rng2: module.init(
+            {'params': rng1, 'sing_vec': rng2}, dummy_obs),
+        apply=module.apply)
+  else:
+    module = MLP(layer_sizes=layer_sizes, activation=activation)
+    model = FeedForwardModel(
+        init=lambda rng: module.init(rng, dummy_obs), apply=module.apply)
+  return model
 
 
 def make_models(policy_params_size: int,

@@ -67,6 +67,7 @@ def train(train_job_params: Dict[str, Any],
   seed = config.pop('seed', 0)
   diayn_num_skills = config.pop('diayn_num_skills', 8)
   disc_update_ratio = config.pop('disc_update_ratio', 1.0)
+  spectral_norm = config.pop('spectral_norm', False)
   ppo_params = dict(
       num_timesteps=int(5e7),
       reward_scaling=10,
@@ -97,7 +98,8 @@ def train(train_job_params: Dict[str, Any],
       obs_indices=obs_indices,
       scale=env_scale,
       diayn_num_skills=diayn_num_skills,
-      logits_clip_range=logits_clip_range)
+      logits_clip_range=logits_clip_range,
+      spectral_norm=spectral_norm)
   disc = disc_fn(env=base_env, normalize_obs=normalize_obs_for_disc)
   extra_params = disc.init_model(rng=jax.random.PRNGKey(seed=seed))
   env_fn = vgcrl_utils.create_fn(env_name=env_name, disc=disc)

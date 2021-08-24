@@ -55,7 +55,8 @@ class Discriminator(object):
                obs_indices: Optional[List[Any]] = None,
                logits_clip_range=None,
                param_name: str = DISC_PARAM_NAME,
-               normalize_obs: bool = False):
+               normalize_obs: bool = False,
+               spectral_norm: bool = False):
     self.z_size = z_size
     self.env_obs_size = env.observation_size
     self.ll_q_offset = ll_q_offset
@@ -67,6 +68,7 @@ class Discriminator(object):
     self.obs_indices = observers.index_preprocess(obs_indices, env)
     self.normalize_fn = normalization.make_data_and_apply_fn(
         [self.env_obs_size+self.z_size], self.normalize_obs)[1]
+    self.spectral_norm = spectral_norm
 
     # define dist_params_to_dist for q_z_o
     dist_q_params = copy.deepcopy(dist_q_params) or {}
@@ -120,16 +122,39 @@ class Discriminator(object):
     elif q_fn == 'mlp':
       input_size = q_fn_params.get('input_size')
       output_size = q_fn_params.get('output_size')
-      model = networks.make_model([32, 32, output_size], input_size)
-      model_params = model.init(rng)
+      model = networks.make_model(
+          [32, 32, output_size],
+          input_size,
+          spectral_norm=self.spectral_norm)
       self.model = model
-      self.q_fn = lambda params, x: (model.apply(params, x),)
+      if self.spectral_norm:
+        rng1, rng2, rng3 = jax.random.split(rng, 3)
+        model_params = model.init(rng1, rng2)
+        self.q_fn = lambda params, x: (
+            model.apply(
+                params, x, rngs={'sing_vec': rng3}, mutable=['sing_vec'])[0],)
+      else:
+        model_params = model.init(rng)
+        self.q_fn = lambda params, x: (model.apply(params, x),)
     elif q_fn == 'indexing_mlp':
       output_size = q_fn_params.get('output_size')
-      model = networks.make_model([32, 32, output_size], len(self.obs_indices))
-      model_params = model.init(rng)
+      model = networks.make_model(
+          [32, 32, output_size],
+          len(self.obs_indices),
+          spectral_norm=self.spectral_norm)
       self.model = model
-      self.q_fn = lambda params, x: (model.apply(params, self.index_obs(x)),)
+      if self.spectral_norm:
+        rng1, rng2, rng3 = jax.random.split(rng, 3)
+        model_params = model.init(rng1, rng2)
+        self.q_fn = lambda params, x: (
+            model.apply(
+                params,
+                self.index_obs(x),
+                rngs={'sing_vec': rng3},
+                mutable=['sing_vec'])[0],)
+      else:
+        model_params = model.init(rng)
+        self.q_fn = lambda params, x: (model.apply(params, self.index_obs(x)),)
     else:
       raise NotImplementedError(q_fn)
     self.initialized = True
@@ -281,7 +306,8 @@ def create_disc_fn(algo_name: str,
                    obs_indices: Tuple[Any] = None,
                    scale: float = 1.0,
                    diayn_num_skills: int = 8,
-                   logits_clip_range=5.):
+                   logits_clip_range: float = 5.0,
+                   spectral_norm: bool = False):
   """Create a standard discriminator."""
   disc_fn = {
       'fixed_gcrl':
@@ -310,6 +336,7 @@ def create_disc_fn(algo_name: str,
               z_size=len(obs_indices),
               obs_indices=obs_indices,
               q_fn_params=dict(output_size=len(obs_indices),),
+              spectral_norm=spectral_norm,
           ),
       'diayn':
           functools.partial(
@@ -321,6 +348,7 @@ def create_disc_fn(algo_name: str,
               dist_p='UniformCategorial',
               dist_q='Categorial',
               logits_clip_range=logits_clip_range,
+              spectral_norm=spectral_norm,
           ),
       'diayn_full':
           functools.partial(
@@ -334,6 +362,7 @@ def create_disc_fn(algo_name: str,
               dist_p='UniformCategorial',
               dist_q='Categorial',
               logits_clip_range=logits_clip_range,
+              spectral_norm=spectral_norm,
           ),
   }.get(algo_name, None)
   assert disc_fn, f'invalid algo_name: {algo_name}'
