@@ -12,10 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Analytic policy gradient training.
-
-Note: this module is untested.
-"""
+"""Analytic policy gradient training."""
 
 import time
 from typing import Any, Callable, Dict, Optional
@@ -46,6 +43,7 @@ def train(
     seed=0,
     log_frequency=10,
     progress_fn: Optional[Callable[[int, Dict[str, Any]], None]] = None,
+    truncation_length: Optional[int] = None,
 ):
   """Direct trajectory optimization training."""
   xt = time.time()
@@ -58,9 +56,8 @@ def train(
     local_devices_to_use = min(local_devices_to_use, max_devices_per_host)
   logging.info(
       'Device count: %d, process count: %d (id %d), local device count: %d, '
-      'devices to be used count: %d',
-      jax.device_count(), process_count, process_id, local_device_count,
-      local_devices_to_use)
+      'devices to be used count: %d', jax.device_count(), process_count,
+      process_id, local_device_count, local_devices_to_use)
 
   key = jax.random.PRNGKey(seed)
   key, key_models, key_env = jax.random.split(key, 3)
@@ -94,13 +91,14 @@ def train(
 
   optimizer_def = flax.optim.Adam(learning_rate=learning_rate)
   optimizer = optimizer_def.create(policy_model.init(key_models))
-  optimizer = normalization.bcast_local_devices(
-      optimizer, local_devices_to_use)
+  optimizer = normalization.bcast_local_devices(optimizer, local_devices_to_use)
 
   normalizer_params, obs_normalizer_update_fn, obs_normalizer_apply_fn = (
       normalization.create_observation_normalizer(
-          core_env.observation_size, normalize_observations,
-          num_leading_batch_dims=2, pmap_to_devices=local_devices_to_use))
+          core_env.observation_size,
+          normalize_observations,
+          num_leading_batch_dims=2,
+          pmap_to_devices=local_devices_to_use))
 
   key_debug = jax.random.PRNGKey(seed + 666)
 
@@ -123,20 +121,25 @@ def train(
         length=episode_length // action_repeat)
     return state, key
 
-  def do_one_step(carry, unused_target_t):
+  def do_one_step(carry, step_index):
     state, params, normalizer_params, key = carry
     key, key_sample = jax.random.split(key)
     normalized_obs = obs_normalizer_apply_fn(normalizer_params, state.core.obs)
     logits = policy_model.apply(params, normalized_obs)
     actions = parametric_action_distribution.sample(logits, key_sample)
     nstate = step_fn(state, actions)
-    return (nstate, params, normalizer_params, key), (
-        nstate.core.reward, state.core.obs)
+    if truncation_length is not None and truncation_length > 0:
+      truncate = jnp.mod(step_index+1, truncation_length) == 0
+      nstate = jax.lax.select(truncate, jax.lax.stop_gradient(nstate), nstate)
+
+    return (nstate, params, normalizer_params, key), (nstate.core.reward,
+                                                      state.core.obs)
 
   def loss(params, normalizer_params, state, key):
-    _, (rewards, obs) = jax.lax.scan(do_one_step,
-                                     (state, params, normalizer_params, key),
-                                     (), length=episode_length // action_repeat)
+    _, (rewards, obs) = jax.lax.scan(
+        do_one_step, (state, params, normalizer_params, key),
+        (jnp.array(range(episode_length // action_repeat))),
+        length=episode_length // action_repeat)
     normalizer_params = obs_normalizer_update_fn(normalizer_params, obs)
     return -jnp.mean(rewards), normalizer_params
 
@@ -156,8 +159,10 @@ def train(
     grad = clip_by_global_norm(grad)
     grad = jax.lax.pmean(grad, axis_name='i')
     optimizer = optimizer.apply_gradient(grad)
-    metrics = {'grad_norm': optax.global_norm(grad),
-               'params_norm': optax.global_norm(optimizer.target)}
+    metrics = {
+        'grad_norm': optax.global_norm(grad),
+        'params_norm': optax.global_norm(optimizer.target)
+    }
     return optimizer, normalizer_params, key, metrics
 
   minimize = jax.pmap(_minimize, axis_name='i')
@@ -184,8 +189,10 @@ def train(
           episode_length * eval_first_state.core.reward.shape[0] /
           (time.time() - t))
       metrics = dict(
-          dict({f'eval/episode_{name}': value / eval_state.total_episodes
-                for name, value in eval_state.total_metrics.items()}),
+          dict({
+              f'eval/episode_{name}': value / eval_state.total_episodes
+              for name, value in eval_state.total_metrics.items()
+          }),
           **dict({
               'eval/total_episodes': eval_state.total_episodes,
               'speed/sps': sps,
@@ -241,7 +248,7 @@ def make_params_and_inference_fn(observation_size, action_size,
   parametric_action_distribution = distribution.NormalTanhDistribution(
       event_size=action_size)
   obs_normalizer_params, obs_normalizer_apply_fn = normalization.make_data_and_apply_fn(
-      normalize_observations)
+      observation_size, normalize_observations)
   policy_model = make_direct_optimization_model(parametric_action_distribution,
                                                 observation_size)
 

@@ -338,7 +338,7 @@ def make_params_and_inference_fn(observation_size, action_size,
                                  normalize_observations):
   """Creates params and inference function for the ES agent."""
   obs_normalizer_params, obs_normalizer_apply_fn = normalization.make_data_and_apply_fn(
-      normalize_observations)
+      observation_size, normalize_observations)
   parametric_action_distribution = distribution.NormalTanhDistribution(
       event_size=action_size)
   policy_model = make_es_model(parametric_action_distribution,

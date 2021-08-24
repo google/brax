@@ -64,45 +64,40 @@ function createSphere(sphere, name) {
 }
 
 function createHeightMap(heightMap) {
-
   const size = heightMap.size;
-  const n_subdiv = Math.sqrt(heightMap.data.length)-1;
+  const n_subdiv = Math.sqrt(heightMap.data.length) - 1;
 
   if (!Number.isInteger(n_subdiv)) {
     throw 'The data length for an height map should be a perfect square.';
   }
 
   function builder(v, u, target) {
-    const idx = Math.round(v*(n_subdiv) + u*n_subdiv*(n_subdiv+1));
-    const x = u*size;
-    const y = -v*size;
+    const idx = Math.round(v * (n_subdiv) + u * n_subdiv * (n_subdiv + 1));
+    const x = u * size;
+    const y = -v * size;
     const z = heightMap.data[idx];
     target.set(x, y, z).multiplyScalar(1);
   }
 
-
-  const geometry = new THREE.ParametricGeometry(builder, n_subdiv, n_subdiv);
-  geometry.normalizeNormals();
+  const geom = new THREE.ParametricGeometry(builder, n_subdiv, n_subdiv);
+  geom.normalizeNormals();
 
   const group = new THREE.Group();
   const mesh = new THREE.Mesh(
-      geometry,
-      new THREE.MeshStandardMaterial( { color: 0x796049, flatShading: true} )
-    );
+      geom,
+      new THREE.MeshStandardMaterial({color: 0x796049, flatShading: true}));
   mesh.rotation.x = -Math.PI / 2;
   mesh.receiveShadow = true;
   group.add(mesh);
-
   return group;
 }
-
 
 function createScene(system) {
   const scene = new THREE.Scene();
 
   system.config.bodies.forEach(function(body) {
     const parent = new THREE.Group();
-    parent.name = body.name.replaceAll('/', '_'); // sanitize node name
+    parent.name = body.name.replaceAll('/', '_');  // sanitize node name
     body.colliders.forEach(function(collider) {
       let child;
       if ('box' in collider) {
@@ -113,13 +108,13 @@ function createScene(system) {
         child = createPlane(collider.plane);
       } else if ('sphere' in collider) {
         child = createSphere(collider.sphere, body.name);
-      }else if ('heightMap' in collider) {
+      } else if ('heightMap' in collider) {
         child = createHeightMap(collider.heightMap);
       }
       if (collider.rotation) {
         // convert from z-up to y-up coordinate system
-        const rot = new THREE.Vector3(collider.rotation.x, collider.rotation.y,
-                                      collider.rotation.z);
+        const rot = new THREE.Vector3(
+            collider.rotation.x, collider.rotation.y, collider.rotation.z);
         rot.multiplyScalar(Math.PI / 180);
         const eul = new THREE.Euler();
         eul.setFromVector3(rot);
@@ -130,8 +125,8 @@ function createScene(system) {
         child.quaternion.z = -tmp;
       }
       if (collider.position) {
-        child.position.set(collider.position.x, collider.position.z,
-                           collider.position.y);
+        child.position.set(
+            collider.position.x, collider.position.z, collider.position.y);
       }
       parent.add(child);
     });
@@ -142,11 +137,12 @@ function createScene(system) {
 }
 
 function createTrajectory(system) {
-  const times = [...Array(system.pos.length).keys()].map(x => x * system.config.dt);
+  const times =
+      [...Array(system.pos.length).keys()].map(x => x * system.config.dt);
   const tracks = [];
 
   system.config.bodies.forEach(function(body, bi) {
-    const group = body.name.replaceAll('/', '_'); // sanitize node name
+    const group = body.name.replaceAll('/', '_');  // sanitize node name
     const pos = system.pos.map(p => [p[bi][0], p[bi][2], p[bi][1]]);
     const rot =
         system.rot.map(r => [-r[bi][1], -r[bi][3], -r[bi][2], r[bi][0]]);
@@ -159,4 +155,4 @@ function createTrajectory(system) {
   return new THREE.AnimationClip('Action', -1, tracks);
 }
 
-export { createScene, createTrajectory };
+export {createScene, createTrajectory};

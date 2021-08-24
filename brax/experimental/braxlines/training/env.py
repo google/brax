@@ -18,10 +18,10 @@
 """
 
 from typing import Callable, Dict, Tuple
+from brax import envs
 import flax
 import jax
 import jax.numpy as jnp
-from brax import envs
 
 
 @flax.struct.dataclass
@@ -52,8 +52,9 @@ def wrap(core_env: envs.Env, rng: jnp.ndarray) -> Tuple[EnvState, StepFn]:
   def step(
       state: EnvState,
       action: Action,
-      learned_params: Dict[str, Dict[str, jnp.ndarray]] = None) -> EnvState:
-    core = core_env.step(state.core, action, learned_params)
+      normalizer_params: Dict[str, jnp.ndarray] = None,
+      extra_params: Dict[str, Dict[str, jnp.ndarray]] = None) -> EnvState:
+    core = core_env.step(state.core, action, normalizer_params, extra_params)
     core.metrics['reward'] = core.reward
     def test_done(a, b):
       if a is first_core.done or a is first_core.metrics or a is first_core.reward:

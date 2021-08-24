@@ -47,12 +47,6 @@ message Collider {
   message Sphere {
     float radius = 1;
   }
-  // A height map aligned with the x-y plane
-  message HeightMap {
-    float size = 1;
-    repeated float data = 2;
-  }
-  
   // A cylinder with rounded ends.
   message Capsule {
     // Radius of the sphere at each rounded end
@@ -61,6 +55,11 @@ message Collider {
     float length = 2;
     // Capsule end (0: both ends, 1: top end, -1: bottom end)
     int32 end = 3;
+  }
+  // A height map aligned with the x-y plane
+  message HeightMap {
+    float size = 1;
+    repeated float data = 2;
   }
   // Position relative to parent body
   Vector3 position = 1;

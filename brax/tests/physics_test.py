@@ -21,7 +21,6 @@ from jax import numpy as jnp
 import brax
 from brax.physics.base import take
 from google.protobuf import text_format
-import numpy as np
 
 
 class BodyTest(absltest.TestCase):
@@ -84,6 +83,39 @@ class BoxTest(absltest.TestCase):
     self.assertAlmostEqual(qp.pos[0, 2], 0.5, 2)
     self.assertAlmostEqual(qp.vel[0, 0], 0, 2)  # friction brings it to a stop
     self.assertLess(qp.pos[0, 0], 1.5)  # ... and keeps it from travelling 2m
+
+
+class HeightMapTest(absltest.TestCase):
+
+  _CONFIG = """
+    dt: 2 substeps: 1000 friction: 1 baumgarte_erp: 0.1 elasticity: 0
+    gravity { z: -9.8 }
+    bodies {
+      name: "box" mass: 1
+      colliders { box { halfsize { x: 0.3 y: 0.3 z: 0.3 }}}
+      inertia { x: 0.1 y: 0.1 z: 0.1 }
+    }
+    bodies {
+      name: "ground"
+      frozen: { all: true }
+      colliders {
+        heightMap {
+          size: 10
+          data: [0, 0, 0, 0, 0, 0, 0, 0, 0]
+        }
+      }
+    }
+  """
+
+  def test_box_stays_on_heightMap (self):
+    """A box falls onto the height map and stops."""
+    sys = brax.System(text_format.Parse(HeightMapTest._CONFIG, brax.Config()))
+    qp = sys.default_qp()
+    np_pos = jnp.array([[5, 5, 1], [0, 0, 0]])
+    pos = jax.ops.index_update(qp.pos, jax.ops.index[:, :], np_pos)
+    qp = qp.replace(pos=pos)
+    qp, _ = sys.step(qp, [])
+    self.assertAlmostEqual(qp.pos[0, 2], 0.3, 2)
 
 
 class CapsuleTest(absltest.TestCase):
@@ -374,45 +406,6 @@ class Actuator3DTest(parameterized.TestCase):
       for angle, limit, torque in zip(angles, limits, t):
         if torque != 0:
           self.assertAlmostEqual(angle, limit, 1)  # actuated to target angle
-
-class HeightMapTest(absltest.TestCase):
-
-  def create_test_system (self, data):
-    bouncy_box = brax.Config(dt=2, substeps=1000)
-
-    ground = bouncy_box.bodies.add(name='ground')
-    ground.frozen.all = True
-    heightMap = ground.colliders.add().heightMap
-    heightMap.size = 10
-    heightMap.data.extend(data)
-    heightMap.SetInParent()
-
-    box = bouncy_box.bodies.add(name='box', mass=1)
-    box.inertia.x, box.inertia.y, box.inertia.z = 0.1, 0.1, 0.1
-    cap = box.colliders.add().box
-    cap.halfsize.x, cap.halfsize.y, cap.halfsize.z = (0.3, 0.3, 0.3)
-
-    # gravity is -9.8 m/s^2 in z dimension
-    bouncy_box.gravity.z = -9.8
-
-    sys = brax.System(bouncy_box)
-    qp = sys.default_qp()
-
-    np_pos = np.asarray([[0, 0, 0], [5, 5, 1]])
-    pos = jax.ops.index_update(qp.pos, jax.ops.index[:, :], np_pos)
-    qp = qp.replace(pos=pos)
-
-    bouncy_box.elasticity = 0.
-    bouncy_box.friction = 1
-    bouncy_box.baumgarte_erp = 0.1
-
-    return sys, qp
-
-  def test_box_stays_on_heightMap (self):
-    """A box falls onto the height map and stops."""
-    sys, qp = self.create_test_system([0 for i in range(3**2)]) # flat height map
-    qp, _ = sys.step(qp, [])
-    self.assertAlmostEqual(qp.pos[1, 2], 0.3, 2)
 
 
 if __name__ == '__main__':

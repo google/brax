@@ -44,9 +44,10 @@ class System:
         jnp.array([vec_to_np(b.frozen.rotation) for b in config.bodies]))
 
     self.box_plane = colliders.BoxPlane(config)
+    # TODO: add capsule <> heightmap
+    self.box_heightMap = colliders.BoxHeightMap(config)
     self.capsule_plane = colliders.CapsulePlane(config)
     self.capsule_capsule = colliders.CapsuleCapsule(config)
-    self.box_heightMap = colliders.BoxHeightMap(config)
 
     self.num_joints = len(config.joints)
     self.joint_revolute = joints.Revolute.from_config(config)
@@ -90,9 +91,9 @@ class System:
   def info(self, qp: QP) -> Info:
     """Return info about a system state."""
     dp_c = self.box_plane.apply(qp, 1.)
+    dp_c += self.box_heightMap.apply(qp, 1.)
     dp_c += self.capsule_plane.apply(qp, 1.)
     dp_c += self.capsule_capsule.apply(qp, 1.)
-    dp_c += self.box_heightMap.apply(qp, 1.)
 
     dp_j = self.joint_revolute.apply(qp)
     dp_j += self.joint_universal.apply(qp)
@@ -130,9 +131,9 @@ class System:
 
       # apply collision velocity updates
       dp_c = self.box_plane.apply(qp, dt)
+      dp_c += self.box_heightMap.apply(qp, dt)
       dp_c += self.capsule_plane.apply(qp, dt)
       dp_c += self.capsule_capsule.apply(qp, dt)
-      dp_c += self.box_heightMap.apply(qp, dt)
       qp = integrators.potential_collision(self.config, qp, dp_c,
                                            self.active_pos, self.active_rot)
 

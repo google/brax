@@ -108,6 +108,141 @@ class BoxPlane:
     return P(vel, ang)
 
 
+class BoxHeightMap:
+  """A collision between box corners and a height map."""
+
+  def __init__(self, config: config_pb2.Config):
+    self.config = config
+    self.pairs = _find_body_pairs(config, 'box', 'heightMap')
+    if not self.pairs:
+      return
+
+    body_idx = {b.name: i for i, b in enumerate(config.bodies)}
+    box_idxs = []
+    heightMap_idxs = []
+    corners = []
+    heights = []
+    sizes = []
+    meshSizes = []
+
+    for box, heightMap in self.pairs:
+      if not heightMap.frozen.all:
+        raise ValueError('active height maps unsupported: %s' % heightMap)
+      for i in range(8):
+        box_idxs.append(body_idx[box.name])
+        heightMap_idxs.append(body_idx[heightMap.name])
+        corner = jnp.array(
+            [i % 2 * 2 - 1, 2 * (i // 4) - 1, i // 2 % 2 * 2 - 1],
+            dtype=jnp.float32)
+        col = box.colliders[0]
+        corner = corner * vec_to_np(col.box.halfsize)
+        corner = math.rotate(corner, euler_to_quat(col.rotation))
+        corner = corner + vec_to_np(col.position)
+        corners.append(corner)
+
+        meshSize = int(
+            jnp.round(jnp.sqrt(len(heightMap.colliders[0].heightMap.data))))
+        if not len(heightMap.colliders[0].heightMap.data) == meshSize**2:
+          raise ValueError(
+              'data length for an height map should be a perfect square.')
+
+        height = jnp.array(heightMap.colliders[0].heightMap.data).reshape(
+            (meshSize, meshSize))
+        heights.append(height)
+
+        sizes.append(heightMap.colliders[0].heightMap.size)
+        meshSizes.append(meshSize)
+
+    body = bodies.Body.from_config(config)
+    self.box = take(body, jnp.array(box_idxs))
+    self.heightMap = take(body, jnp.array(heightMap_idxs))
+    self.corner = jnp.array(corners)
+    self.size = jnp.array(sizes)
+    self.meshSize = jnp.array(meshSizes)
+    self.heights = jnp.array(heights)
+
+  def apply(self, qp: QP, dt: float) -> P:
+    """Returns impulse from a collision between box corners and a static height map.
+
+    Note that impulses returned by this function are *not* scaled by dt when
+    applied to parts.  Collision impulses are applied directly as velocity and
+    angular velocity updates.
+    Args:
+      qp: Coordinate/velocity frame of the bodies.
+      dt: Integration time step length.
+
+    Returns:
+      dP: Delta velocity to apply to the box bodies in the collision.
+      colliding: Mask for each body: 1 = colliding, 0 = not colliding.
+    """
+    if not self.pairs:
+      return P(jnp.zeros_like(qp.vel), jnp.zeros_like(qp.ang))
+
+    @jax.vmap
+    def apply(box, corner, qp_box, qp_heightMap, size, meshSize, heights):
+      world_pos, vel = math.to_world(qp_box, corner)
+
+      pos = math.inv_rotate(world_pos - qp_heightMap.pos, qp_heightMap.rot)
+
+      uv_pos = (pos[:2]) / size * (meshSize - 1)
+
+      # find the square in the mesh that enclose the candidate point, with mesh
+      # indices ux_idx, ux_udx_u, uv_idx_v, uv_idx_uv.
+      uv_idx = jnp.floor(uv_pos).astype(jnp.int32)
+      uv_idx_u = uv_idx + jnp.array([1, 0], dtype=jnp.int32)
+      uv_idx_v = uv_idx + jnp.array([0, 1], dtype=jnp.int32)
+      uv_idx_uv = uv_idx + jnp.array([1, 1], dtype=jnp.int32)
+
+      # find the orientation of the triangle of this square that encloses the
+      # candidate point
+      delta_uv = uv_pos - uv_idx
+      mu = jnp.where(
+          delta_uv[0] + delta_uv[1] < 1, 1,
+          -1)  # whether the corner lies on the first or secound triangle
+
+      # compute the mesh indices of the vertices of this triangle
+      point_0 = jnp.where(delta_uv[0] + delta_uv[1] < 1, uv_idx, uv_idx_uv)
+      point_1 = jnp.where(delta_uv[0] + delta_uv[1] < 1, uv_idx_u, uv_idx_v)
+      point_2 = jnp.where(delta_uv[0] + delta_uv[1] < 1, uv_idx_v, uv_idx_u)
+
+      h0 = heights[point_0[0], point_0[1]]
+      h1 = heights[point_1[0], point_1[1]]
+      h2 = heights[point_2[0], point_2[1]]
+
+      raw_normal = jnp.array(
+          [-mu * (h1 - h0), -mu * (h2 - h0), 1 * (size / (meshSize - 1))])
+      normal = raw_normal / jnp.linalg.norm(raw_normal)
+      rotated_normal = math.rotate(normal, qp_heightMap.rot)
+
+      pos_0 = jnp.array([
+          point_0[0] * size / (meshSize - 1),
+          point_0[1] * size / (meshSize - 1), h0
+      ])
+      penetration = jnp.dot(pos - pos_0, normal)
+
+      dp = _collide(self.config, box, qp_box, pos, vel, rotated_normal,
+                    penetration, dt)
+      collided = jnp.where(penetration < 0., 1., 0.)
+      return dp, collided
+
+    qp_box = take(qp, self.box.idx)
+    qp_heightMap = take(qp, self.heightMap.idx)
+    dp, colliding = apply(self.box, self.corner, qp_box, qp_heightMap,
+                          self.size, self.meshSize, self.heights)
+
+    # collapse/sum across all corners
+    num_bodies = len(self.config.bodies)
+    colliding = ops.segment_sum(colliding, self.box.idx, num_bodies)
+    vel = ops.segment_sum(dp.vel, self.box.idx, num_bodies)
+    ang = ops.segment_sum(dp.ang, self.box.idx, num_bodies)
+
+    # equally distribute contact force over each box (corner ?)
+    vel = vel / jnp.reshape(1e-8 + colliding, (vel.shape[0], 1))
+    ang = ang / jnp.reshape(1e-8 + colliding, (ang.shape[0], 1))
+
+    return P(vel, ang)
+
+
 class CapsulePlane:
   """A collision between a capsule and a static plane."""
 
@@ -275,129 +410,6 @@ class CapsuleCapsule:
 
     return P(vel_a + vel_b, ang_a + ang_b)
 
-class BoxHeightMap:
-  """ A collision between the box corners and a Heightmap. """
-
-  def __init__(self, config: config_pb2.Config):
-    self.config = config
-    self.pairs = _find_body_pairs(config, 'box', 'heightMap')
-    if not self.pairs:
-      return
-
-    body_idx = {b.name: i for i, b in enumerate(config.bodies)}
-    box_idxs = []
-    heightMap_idxs = []
-    corners = []
-    heights = []
-    sizes = []
-    meshSizes = []
-
-    for box, heightMap in self.pairs:
-      if not heightMap.frozen.all:
-        raise ValueError('active height maps unsupported: %s' % heightMap)
-      for i in range(8):
-        box_idxs.append(body_idx[box.name])
-        heightMap_idxs.append(body_idx[heightMap.name])
-        corner = jnp.array(
-            [i % 2 * 2 - 1, 2 * (i // 4) - 1, i // 2 % 2 * 2 - 1],
-            dtype=jnp.float32)
-        col = box.colliders[0]
-        corner = corner * vec_to_np(col.box.halfsize)
-        corner = math.rotate(corner, euler_to_quat(col.rotation))
-        corner = corner + vec_to_np(col.position)
-        corners.append(corner)
-
-        meshSize = int(jnp.round(jnp.sqrt(len(heightMap.colliders[0].heightMap.data))))
-        if not len(heightMap.colliders[0].heightMap.data) == meshSize ** 2:
-          raise ValueError("The data length for an height map should be a perfect square.")
-
-        height = jnp.array(heightMap.colliders[0].heightMap.data).reshape((meshSize,meshSize))
-        heights.append(height)
-
-        sizes.append(heightMap.colliders[0].heightMap.size)
-        meshSizes.append(meshSize)
-
-    body = bodies.Body.from_config(config)
-    self.box = take(body, jnp.array(box_idxs))
-    self.heightMap = take(body, jnp.array(heightMap_idxs))
-    self.corner = jnp.array(corners)
-    self.size = jnp.array(sizes)
-    self.meshSize = jnp.array(meshSizes)
-    self.heights = jnp.array(heights)
-
-
-  def apply(self, qp: QP, dt: float) -> P:
-    """Returns impulse from a collision between box corners and a static height map.
-
-    Note that impulses returned by this function are *not* scaled by dt when
-    applied to parts.  Collision impulses are applied directly as velocity and
-    angular velocity updates.
-
-    Args:
-      qp: Coordinate/velocity frame of the bodies.
-      dt: Integration time step length.
-
-    Returns:
-      dP: Delta velocity to apply to the box bodies in the collision.
-      colliding: Mask for each body: 1 = colliding, 0 = not colliding.
-    """
-    if not self.pairs:
-      return P(jnp.zeros_like(qp.vel), jnp.zeros_like(qp.ang))
-
-    @jax.vmap
-    def apply(box, corner, qp_box, qp_heightMap, size, meshSize, heights):
-      world_pos, vel = math.to_world(qp_box, corner)
-
-      pos = math.inv_rotate(world_pos-qp_heightMap.pos, qp_heightMap.rot)
-
-      uv_pos = (pos[:2])/size*(meshSize-1)
-
-      # first we find the square in the mesh that enclose the candidate point, with mesh indices ux_idx, ux_udx_u, uv_idx_v, uv_idx_uv.
-      uv_idx = jnp.floor(uv_pos).astype(jnp.int32)
-      uv_idx_u = uv_idx + jnp.array([1, 0], dtype=jnp.int32)
-      uv_idx_v = uv_idx + jnp.array([0, 1], dtype=jnp.int32)
-      uv_idx_uv = uv_idx + jnp.array([1, 1], dtype=jnp.int32)
-
-      # then we find the orientation of the triangle of this square that encloses the candidate point
-      delta_uv = uv_pos - uv_idx
-      mu = jnp.where(delta_uv[0]+delta_uv[1]<1, 1, -1) # whether the corner lies on the first or secound triangle
-      
-      # and we compute the mesh indices of the vertices of this triangle
-      point_0 = jnp.where(delta_uv[0]+delta_uv[1]<1, uv_idx, uv_idx_uv)
-      point_1 = jnp.where(delta_uv[0]+delta_uv[1]<1, uv_idx_u, uv_idx_v)
-      point_2 = jnp.where(delta_uv[0]+delta_uv[1]<1, uv_idx_v, uv_idx_u)
-
-      h0 = heights[point_0[0], point_0[1]]
-      h1 = heights[point_1[0], point_1[1]]
-      h2 = heights[point_2[0], point_2[1]]
-
-      raw_normal = jnp.array([-mu*(h1-h0), -mu*(h2-h0), 1*(size/(meshSize-1))])
-      normal = raw_normal / jnp.linalg.norm(raw_normal)
-      rotated_normal = math.rotate(normal, qp_heightMap.rot)
-
-      pos_0 = jnp.array([point_0[0]*size/(meshSize-1), point_0[1]*size/(meshSize-1), h0])
-      penetration = jnp.dot(pos - pos_0, normal)
-
-      dp = _collide(self.config, box, qp_box, pos, vel, rotated_normal, penetration, dt)
-      collided = jnp.where(penetration < 0., 1., 0.)
-      return dp, collided
-
-    qp_box = take(qp, self.box.idx)
-    qp_heightMap = take(qp, self.heightMap.idx)
-    dp, colliding = apply(self.box, self.corner, qp_box, qp_heightMap, self.size, self.meshSize, self.heights)
-
-    # collapse/sum across all corners
-    num_bodies = len(self.config.bodies)
-    colliding = ops.segment_sum(colliding, self.box.idx, num_bodies)
-    vel = ops.segment_sum(dp.vel, self.box.idx, num_bodies)
-    ang = ops.segment_sum(dp.ang, self.box.idx, num_bodies)
-
-    # equally distribute contact force over each box (corner ?)
-    vel = vel / jnp.reshape(1e-8 + colliding, (vel.shape[0], 1))
-    ang = ang / jnp.reshape(1e-8 + colliding, (ang.shape[0], 1))
-
-    return P(vel, ang)
-
 
 def _find_closest_segment(cap_a: CapsuleCapsule.Capsule,
                           cap_b: CapsuleCapsule.Capsule, qp_a: QP,
@@ -486,8 +498,8 @@ def _find_closest_segment(cap_a: CapsuleCapsule.Capsule,
                      jnp.where(orientation_bool, b1, b2), pb_par)
   closest_dist = jnp.where(
       segments_are_parallel * b_is_before_a,
-      jnp.where(orientation_bool, safe_norm(a1 - b1),
-                safe_norm(a1 - b2)), closest_dist)
+      jnp.where(orientation_bool, safe_norm(a1 - b1), safe_norm(a1 - b2)),
+      closest_dist)
 
   # segments parallel, with segment a before segment b
   pa_par = jnp.where(
@@ -497,8 +509,8 @@ def _find_closest_segment(cap_a: CapsuleCapsule.Capsule,
       jnp.where(orientation_bool, b1, b2), pb_par)
   closest_dist = jnp.where(
       segments_are_parallel * a_is_before_b * (1 - b_is_before_a),
-      jnp.where(orientation_bool, safe_norm(a2 - b1),
-                safe_norm(a2 - b2)), closest_dist)
+      jnp.where(orientation_bool, safe_norm(a2 - b1), safe_norm(a2 - b2)),
+      closest_dist)
 
   # closest point test if segments are NOT parallel
 

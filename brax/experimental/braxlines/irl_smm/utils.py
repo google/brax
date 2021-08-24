@@ -21,15 +21,17 @@ See:
 
 
 import functools
-from typing import Callable, List, Tuple, Optional, Dict
-import jax
-import jax.numpy as jnp
-from brax import envs
+from typing import Any, Callable, List, Tuple, Optional, Dict
 from brax.envs.env import Env
 from brax.envs.env import State
 from brax.experimental.braxlines.common import dist_utils
+from brax.experimental.composer import composer
+from brax.experimental.composer import observers
 from brax.training import networks
+from brax.training import normalization
 from brax.training.ppo import StepData
+import jax
+import jax.numpy as jnp
 import tensorflow_probability as tfp
 
 tfp = tfp.substrates.jax
@@ -43,26 +45,39 @@ class IRLDiscriminator(object):
 
   def __init__(
       self,
+      env: Env,
       input_size: int,
       reward_type: str = 'gail',
       arch: Tuple[int] = (32, 32),
-      obs_indices: Optional[List[int]] = None,
+      obs_indices: Optional[List[Any]] = None,
       act_indices: Optional[List[int]] = None,
       include_action: bool = False,
       logits_clip_range: float = None,
       param_name: str = DISC_PARAM_NAME,
+      target_data: jnp.ndarray = None,
+      balance_data: bool = True,
+      normalize_obs: bool = False,
   ):
+    self.env_obs_size = env.observation_size
     self.arch = arch
     self.input_size = input_size
     self.dist_fn = lambda x: dist_utils.clipped_bernoulli(
         logits=x, clip_range=logits_clip_range)
-    self.obs_indices = obs_indices
+    self.obs_indices = observers.index_preprocess(obs_indices, env)
     self.act_indices = act_indices
     self.include_action = include_action
     self.reward_type = reward_type
     self.param_name = param_name
     self.model = None
     self.initialized = False
+    self.target_data = target_data
+    self.balance_data = balance_data
+    self.normalize_obs = normalize_obs
+    self.normalize_fn = normalization.make_data_and_apply_fn(
+        [self.env_obs_size], self.normalize_obs)[1]
+
+  def set_target_data(self, target_data: jnp.ndarray):
+    self.target_data = target_data
 
   def init_model(self, rng: jnp.ndarray = None):
     model = networks.make_model(self.arch + (1,), self.input_size)
@@ -95,14 +110,13 @@ class IRLDiscriminator(object):
     """Compute IRL reward."""
     dist = self.dist(data, params=params)
     if self.reward_type == 'gail':
+      r = -dist.log_prob(jnp.zeros_like(dist.logits))
+    elif self.reward_type == 'gail2':
+      # https://arxiv.org/abs/2106.00672
       r = dist.log_prob(jnp.ones_like(dist.logits))
     elif self.reward_type == 'airl':
-      # r = dist.log_prob(jnp.ones_like(dist.logits))
-      # r -= dist.log_prob(jnp.zeros_like(dist.logits))
       r = dist.logits
     elif self.reward_type == 'fairl':
-      # r = dist.log_prob(jnp.ones_like(dist.logits))
-      # r -= dist.log_prob(jnp.zeros_like(dist.logits))
       r = dist.logits
       r = jnp.exp(r) * -r
     else:
@@ -114,17 +128,34 @@ class IRLDiscriminator(object):
     """Convert obs and actions into data."""
     assert obs.shape[:-1] == act.shape[:-1], f'obs={obs.shape}, act={act.shape}'
     data = obs
-    if self.obs_indices:
-      data = obs.take(self.obs_indices, axis=-1)
+    data = self.index_obs(data)
     if self.include_action:
       if self.act_indices:
         act = act.take(self.act_indices, axis=-1)
       data = jnp.concatenate([data, act], axis=-1)
     return data
 
+  def index_obs(self, obs: jnp.ndarray):
+    if self.obs_indices:
+      return obs.take(self.obs_indices, axis=-1)
+    else:
+      return obs
+
+  def disc_loss_fn(self, data: StepData, udata: StepData, rng: jnp.ndarray,
+                   params: Dict[str, Dict[str, jnp.ndarray]]):
+    return disc_loss_fn(
+        data,
+        udata,
+        rng,
+        params,
+        disc=self,
+        normalize_obs=self.normalize_obs,
+        target_data=self.target_data,
+        balance_data=self.balance_data)
+
 
 class IRLWrapper(Env):
-  """A wrapper that adds an IRL reward to a Brax Env."""
+  """A wrapper that adds an IRL reward to a Physax Env."""
 
   def __init__(
       self,
@@ -145,10 +176,11 @@ class IRLWrapper(Env):
   def step(self,
            state: State,
            action: jnp.ndarray,
+           normalizer_params: Dict[str, jnp.ndarray] = None,
            params: Dict[str, Dict[str, jnp.ndarray]] = None) -> State:
     """Run one timestep of the environment's dynamics."""
-    new_reward = disc_reward_fn(
-        state.obs, action, params=params, disc=self.disc)
+    obs = self.disc.normalize_fn(normalizer_params, state.obs)
+    new_reward = disc_reward_fn(obs, action, params=params, disc=self.disc)
     state = self._environment.step(state, action)
     return state.replace(reward=new_reward)
 
@@ -165,28 +197,37 @@ def disc_reward_fn(
 
 
 def disc_loss_fn(data: StepData,
+                 udata: StepData,
                  rng: jnp.ndarray,
                  params: Dict[str, Dict[str, jnp.ndarray]],
                  disc: IRLDiscriminator,
                  target_data: jnp.ndarray,
-                 balance_data: bool = True):
+                 balance_data: bool = True,
+                 normalize_obs: bool = False):
   """Discriminator loss function."""
-  data = disc.obs_act2data(data.obs[:data.actions.shape[0]], data.actions)
-  if balance_data:
-    indices = jnp.arange(0, data.shape[0])
-    indices = jax.random.shuffle(rng, indices)
-    data = data[indices[:target_data.shape[0]]]
+  d = data if normalize_obs else udata
+  target_d = target_data  # TODO: add normalize option for target_data
+  d = disc.obs_act2data(d.obs[:d.actions.shape[0]], d.actions)
+  if balance_data and d.shape[0] != target_d.shape[0]:
+    rng, loss_key = jax.random.split(rng)
+    if d.shape[0] > target_d.shape[0]:
+      indices = jnp.arange(0, d.shape[0])
+      indices = jax.random.shuffle(loss_key, indices)
+      d = d[indices[:target_d.shape[0]]]
+    else:
+      indices = jnp.arange(0, target_d.shape[0])
+      indices = jax.random.shuffle(loss_key, indices)
+      target_d = target_d[indices[:d.shape[0]]]
   disc_loss = -jnp.mean(
-      disc.ll(data, jnp.zeros(data.shape[:-1] + (1,)), params=params))
+      disc.ll(d, jnp.zeros(d.shape[:-1] + (1,)), params=params))
   disc_loss += -jnp.mean(
-      disc.ll(
-          target_data, jnp.ones(target_data.shape[:-1] + (1,)), params=params))
-  return disc_loss
+      disc.ll(target_d, jnp.ones(target_d.shape[:-1] + (1,)), params=params))
+  return disc_loss, rng
 
 
 def create(env_name: str, disc: IRLDiscriminator, **kwargs) -> Env:
   """Creates an Env with a specified brax system."""
-  env = envs.create(env_name, **kwargs)
+  env = composer.create(env_name, **kwargs)
   return IRLWrapper(env, disc)
 
 

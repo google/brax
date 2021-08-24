@@ -15,18 +15,24 @@
 """Exports a system config and trajectory as an html view."""
 
 import json
+import os
 from typing import List
 
 import brax
 from brax.io.file import File
+from brax.io.file import MakeDirs
 from brax.io.json import JaxEncoder
-
 
 from google.protobuf import json_format
 
 
-def save_html(path: str, sys: brax.System, qps: List[brax.QP]):
+def save_html(path: str,
+              sys: brax.System,
+              qps: List[brax.QP],
+              make_dir: bool = False):
   """Saves trajectory as a HTML file."""
+  if make_dir and path:
+    MakeDirs(os.path.dirname(path))
   with File(path, 'w') as fout:
     fout.write(render(sys, qps))
 
@@ -47,7 +53,7 @@ _HTML = """
 <html>
 
   <head>
-    <title>Brax visualizer</title>
+    <title>brax visualizer</title>
     <style>
       body {
         margin: 0;
@@ -70,7 +76,7 @@ _HTML = """
     <div id="brax-viewer"></div>
 
     <script type="module">
-      import {Viewer} from 'https://cdn.jsdelivr.net/gh/google/brax@a93dadc48a41177a4d9e7794ce17c1ad98ed8583/js/viewer.js';
+      import {Viewer} from 'https://cdn.jsdelivr.net/gh/google/brax@ab65a0356bc837ba32b409410acf534dbe9b115b/js/viewer.js';
       const domElement = document.getElementById('brax-viewer');
       var viewer = new Viewer(domElement, system);
     </script>

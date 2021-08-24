@@ -18,17 +18,19 @@ See:
   VGCRL https://arxiv.org/abs/2106.01404
 """
 
-
+import copy
 import functools
-from typing import Callable, Dict
-import jax
-import jax.numpy as jnp
-from brax import envs
+from typing import Any, Callable, Dict, Optional, List, Tuple
 from brax.envs.env import Env
 from brax.envs.env import State
 from brax.experimental.braxlines.common import dist_utils
+from brax.experimental.composer import composer
+from brax.experimental.composer import observers
 from brax.training import networks
+from brax.training import normalization
 from brax.training.ppo import StepData
+import jax
+import jax.numpy as jnp
 import tensorflow_probability as tfp
 
 tfp = tfp.substrates.jax
@@ -40,35 +42,39 @@ DISC_PARAM_NAME = 'vgcrl_disc_params'
 class Discriminator(object):
   """Container for p(z), q(z|o) in empowerment."""
 
-  def __init__(
-      self,
-      q_fn='indexing',
-      q_fn_params=None,
-      dist_p='Uniform',
-      dist_p_params=None,
-      dist_q='FixedSigma',
-      dist_q_params=None,
-      ll_q_offset='auto',
-      z_size=0,
-      logits_clip_range=None,
-      param_name: str = DISC_PARAM_NAME,
-  ):
+  def __init__(self,
+               env: Env,
+               q_fn='indexing',
+               q_fn_params=None,
+               dist_p='Uniform',
+               dist_p_params=None,
+               dist_q='FixedSigma',
+               dist_q_params=None,
+               ll_q_offset='auto',
+               z_size=0,
+               obs_indices: Optional[List[Any]] = None,
+               logits_clip_range=None,
+               param_name: str = DISC_PARAM_NAME,
+               normalize_obs: bool = False):
     self.z_size = z_size
+    self.env_obs_size = env.observation_size
     self.ll_q_offset = ll_q_offset
     self.model = None
     self.param_name = param_name
     self.q_fn_str = q_fn
     self.q_fn_params = q_fn_params or {}
+    self.normalize_obs = normalize_obs
+    self.obs_indices = observers.index_preprocess(obs_indices, env)
+    self.normalize_fn = normalization.make_data_and_apply_fn(
+        [self.env_obs_size+self.z_size], self.normalize_obs)[1]
 
     # define dist_params_to_dist for q_z_o
-    dist_q_params = dist_q_params or {}
-    q_scale = dist_q_params.get('scale', 1.)
+    dist_q_params = copy.deepcopy(dist_q_params) or {}
+    q_scale = dist_q_params.pop('scale', 1.)
+    q_scale = jnp.array(q_scale) * jnp.ones(self.z_size)
     assert z_size
     if dist_q == 'FixedSigma':
-      self.dist_q_fn = lambda x: tfd.MultivariateNormalDiag(
-          x,
-          jnp.ones(self.z_size) * q_scale,
-      )
+      self.dist_q_fn = lambda x: tfd.MultivariateNormalDiag(x, q_scale)
       # if an environment terminates, it's useful to ensure reward is positive,
       #  this ensures that within 3*std the log likelihood is positive.
       if self.ll_q_offset == 'auto':
@@ -83,20 +89,24 @@ class Discriminator(object):
         self.ll_q_offset = 0.
     else:
       raise NotImplementedError(dist_q)
+    assert not dist_q_params, f'unused dist_q_params: {dist_q_params}'
 
     # define dist for p_z
-    dist_p_params = dist_q_params or {}
-    p_scale = dist_p_params.get('scale', 1.)
+    dist_p_params = copy.deepcopy(dist_p_params) or {}
     if dist_p == 'Uniform':
-      self.dist_p_fn = lambda: tfd.Uniform(
-          low=jnp.ones(self.z_size) * -p_scale,
-          high=jnp.ones(self.z_size) * p_scale,
-      )
+      p_scale = dist_p_params.pop('scale', 1.)
+      p_scale = jnp.array(p_scale) * jnp.ones(self.z_size)
+      self.dist_p_fn = lambda: tfd.Uniform(low=-p_scale, high=p_scale)
     elif dist_p == 'UniformCategorial':
       self.dist_p_fn = lambda: tfd.OneHotCategorical(
           logits=jnp.zeros(self.z_size))
+    elif dist_p == 'Deterministic':
+      p_value = dist_p_params.pop('value')
+      p_value = jnp.array(p_value) * jnp.ones(self.z_size)
+      self.dist_p_fn = lambda: tfd.Deterministic(loc=p_value)
     else:
       raise NotImplementedError(dist_p)
+    assert not dist_p_params, f'unused dist_p_params: {dist_p_params}'
 
     self.initialized = False
 
@@ -106,8 +116,7 @@ class Discriminator(object):
     # define observation_to_dist_params mapping for q_z_o
     q_fn, q_fn_params = self.q_fn_str, self.q_fn_params
     if q_fn == 'indexing':
-      indices = q_fn_params.get('indices')
-      self.q_fn = lambda params, x: (x.take(indices, axis=-1),)
+      self.q_fn = lambda params, x: (self.index_obs(x),)
     elif q_fn == 'mlp':
       input_size = q_fn_params.get('input_size')
       output_size = q_fn_params.get('output_size')
@@ -116,13 +125,11 @@ class Discriminator(object):
       self.model = model
       self.q_fn = lambda params, x: (model.apply(params, x),)
     elif q_fn == 'indexing_mlp':
-      indices = q_fn_params.get('indices')
       output_size = q_fn_params.get('output_size')
-      model = networks.make_model([32, 32, output_size], len(indices))
+      model = networks.make_model([32, 32, output_size], len(self.obs_indices))
       model_params = model.init(rng)
       self.model = model
-      q_fn_apply = lambda x: x.take(indices, axis=-1)
-      self.q_fn = lambda params, x: (model.apply(params, q_fn_apply(x)),)
+      self.q_fn = lambda params, x: (model.apply(params, self.index_obs(x)),)
     else:
       raise NotImplementedError(q_fn)
     self.initialized = True
@@ -162,19 +169,36 @@ class Discriminator(object):
     return ll
 
   def split_obs(self, obs: jnp.ndarray):
-    """Split observation."""
     env_obs = obs[..., :-self.z_size]
     z = obs[..., -self.z_size:]
     return env_obs, z
 
+  def index_obs(self, obs: jnp.ndarray):
+    if self.obs_indices:
+      return obs.take(self.obs_indices, axis=-1)
+    else:
+      return obs
+
+  def unindex_obs(self, indexed_obs: jnp.ndarray):
+    if self.obs_indices:
+      obs = jnp.zeros(indexed_obs.shape[:-1] + (self.env_obs_size,))
+      obs[..., self.obs_indices] += indexed_obs
+      return obs
+    else:
+      return indexed_obs
+
   def concat_obs(self, obs: jnp.ndarray, z: jnp.ndarray):
-    """Concat observation."""
     new_obs = jnp.concatenate([obs, z], axis=-1)
     return new_obs
 
+  def disc_loss_fn(self, data: StepData, udata: StepData, rng: jnp.ndarray,
+                   params: Dict[str, Dict[str, jnp.ndarray]]):
+    return disc_loss_fn(
+        data, udata, rng, params, disc=self, normalize_obs=self.normalize_obs)
+
 
 class ParameterizeWrapper(Env):
-  """A wrapper that parameterizes Brax Env."""
+  """A wrapper that parameterizes Physax Env."""
 
   def __init__(self, environment: Env, disc: Discriminator):
     self._environment = environment
@@ -183,22 +207,26 @@ class ParameterizeWrapper(Env):
     self.sys = self._environment.sys
     self.disc = disc
     self.z_size = disc.z_size
+    self.env_obs_size = self._environment.observation_size
 
   def concat(
       self,
       state: State,
       z: jnp.ndarray,
+      normalizer_params: Dict[str, jnp.ndarray] = None,
       params: Dict[str, Dict[str, jnp.ndarray]] = None,
       replace_reward: bool = True,
   ) -> State:
     """Concatenate state with param and recompute reward."""
+    new_obs = self.disc.concat_obs(state.obs, z)
+    state = state.replace(obs=new_obs)
     if replace_reward:
+      new_obs = self.disc.normalize_fn(normalizer_params, new_obs)
+      env_obs, z = self.disc.split_obs(new_obs)
       new_reward = self.disc.ll_q_z_o(
-          z, state.obs, params=params, add_offset=True)
+          z, env_obs, params=params, add_offset=True)
       new_reward = jax.lax.stop_gradient(new_reward)
       state = state.replace(reward=new_reward)
-    new_obs = jnp.concatenate([state.obs, z], axis=-1)
-    state = state.replace(obs=new_obs)
     return state
 
   def reset(self, rng: jnp.ndarray, z: jnp.ndarray = None) -> State:
@@ -208,33 +236,37 @@ class ParameterizeWrapper(Env):
       z = self.disc.sample_p_z(self.batch_size, rng)
     else:
       assert z.shape[-1] == self.z_size, f'{z.shape}[-1] != {self.z_size}'
-    return self.concat(state, z=z, replace_reward=False)
+    return self.concat(state, z, replace_reward=False)
 
   def step(self,
            state: State,
            action: jnp.ndarray,
+           normalizer_params: Dict[str, jnp.ndarray] = None,
            params: Dict[str, Dict[str, jnp.ndarray]] = None) -> State:
     """Run one timestep of the environment's dynamics."""
     _, z = self.disc.split_obs(state.obs)
     state = self._environment.step(state, action)
-    return self.concat(state, z=z, params=params, replace_reward=True)
+    return self.concat(state, z, normalizer_params, params, replace_reward=True)
 
 
-def disc_loss_fn(data: StepData, rng: jnp.ndarray,
-                 params: Dict[str, Dict[str,
-                                        jnp.ndarray]], disc: Discriminator):
+def disc_loss_fn(data: StepData,
+                 udata: StepData,
+                 rng: jnp.ndarray,
+                 params: Dict[str, Dict[str, jnp.ndarray]],
+                 disc: Discriminator,
+                 normalize_obs: bool = False):
   """Discriminator loss function."""
-  del rng
   disc_loss = 0
   if disc and disc.model:
-    env_obs, z = disc.split_obs(data.obs)
+    d = data if normalize_obs else udata
+    env_obs, z = disc.split_obs(d.obs)
     disc_loss = -jnp.mean(disc.ll_q_z_o(z, env_obs, params=params))
-  return disc_loss
+  return disc_loss, rng
 
 
 def create(env_name: str, disc: Discriminator, **kwargs) -> Env:
   """Creates an Env with a specified brax system."""
-  env = envs.create(env_name, **kwargs)
+  env = composer.create(env_name=env_name, **kwargs)
   return ParameterizeWrapper(env, disc)
 
 
@@ -242,3 +274,67 @@ def create_fn(env_name: str, disc: Discriminator,
               **kwargs) -> Callable[..., Env]:
   """Returns a function that when called, creates an Env."""
   return functools.partial(create, env_name, disc, **kwargs)
+
+
+def create_disc_fn(algo_name: str,
+                   observation_size: int,
+                   obs_indices: Tuple[Any] = None,
+                   scale: float = 1.0,
+                   diayn_num_skills: int = 8,
+                   logits_clip_range=5.):
+  """Create a standard discriminator."""
+  disc_fn = {
+      'fixed_gcrl':
+          functools.partial(
+              Discriminator,
+              q_fn='indexing',
+              z_size=len(obs_indices),
+              obs_indices=obs_indices,
+              dist_p='Deterministic',
+              dist_p_params=dict(value=scale),
+              dist_q_params=dict(scale=scale),
+          ),
+      'gcrl':
+          functools.partial(
+              Discriminator,
+              q_fn='indexing',
+              z_size=len(obs_indices),
+              obs_indices=obs_indices,
+              dist_p_params=dict(scale=scale),
+              dist_q_params=dict(scale=scale),
+          ),
+      'cdiayn':
+          functools.partial(
+              Discriminator,
+              q_fn='indexing_mlp',
+              z_size=len(obs_indices),
+              obs_indices=obs_indices,
+              q_fn_params=dict(output_size=len(obs_indices),),
+          ),
+      'diayn':
+          functools.partial(
+              Discriminator,
+              q_fn='indexing_mlp',
+              z_size=diayn_num_skills,
+              obs_indices=obs_indices,
+              q_fn_params=dict(output_size=diayn_num_skills,),
+              dist_p='UniformCategorial',
+              dist_q='Categorial',
+              logits_clip_range=logits_clip_range,
+          ),
+      'diayn_full':
+          functools.partial(
+              Discriminator,
+              q_fn='mlp',
+              z_size=diayn_num_skills,
+              q_fn_params=dict(
+                  input_size=observation_size,
+                  output_size=diayn_num_skills,
+              ),
+              dist_p='UniformCategorial',
+              dist_q='Categorial',
+              logits_clip_range=logits_clip_range,
+          ),
+  }.get(algo_name, None)
+  assert disc_fn, f'invalid algo_name: {algo_name}'
+  return disc_fn

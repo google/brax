@@ -51,7 +51,7 @@ setup(
         "tfp-nightly[jax]<=0.13.0.dev20210422",
     ],
     extras_require={
-        "develop": ["pytest", "bumpversion", "transforms3d"],
+        "develop": ["pytest", "transforms3d"],
     },
     classifiers=[
         "Development Status :: 4 - Beta",

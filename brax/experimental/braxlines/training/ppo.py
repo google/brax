@@ -21,17 +21,17 @@ See: https://arxiv.org/pdf/1707.06347.pdf
 
 import functools
 import time
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Tuple, Optional
 
 from absl import logging
-import flax
-import jax
-import jax.numpy as jnp
 from brax import envs
 from brax.experimental.braxlines.training import env
 from brax.training import distribution
 from brax.training import networks
 from brax.training import normalization
+import flax
+import jax
+import jax.numpy as jnp
 
 
 def compute_gae(truncation: jnp.ndarray,
@@ -110,6 +110,7 @@ class TrainingState:
 def compute_ppo_loss(
     models: Dict[str, Any],
     data: StepData,
+    udata: StepData,
     rng: jnp.ndarray,
     parametric_action_distribution: distribution.ParametricDistribution,
     policy_apply: Any,
@@ -177,8 +178,7 @@ def compute_ppo_loss(
   extra_losses = {}
   if extra_loss_fns:
     for key, loss_fn in extra_loss_fns.items():
-      rng, key_extra = jax.random.split(rng)
-      loss = loss_fn(data=data, rng=key_extra, params=extra_params)
+      loss, rng = loss_fn(data=data, udata=udata, rng=rng, params=extra_params)
       if extra_loss_update_ratios and key in extra_loss_update_ratios:
         # enable loss gradient p*100 percent of the time
         rng, key_update = jax.random.split(rng)
@@ -216,6 +216,15 @@ def train(environment_fn: Callable[..., envs.Env],
           normalize_observations=False,
           reward_scaling=1.,
           progress_fn: Optional[Callable[[int, Dict[str, Any]], None]] = None,
+          parametric_action_distribution_fn: Optional[Callable[[
+              int,
+          ], distribution.ParametricDistribution]] = distribution
+          .NormalTanhDistribution,
+          make_models_fn: Optional[Callable[
+              [int, int],
+              Tuple[networks.FeedForwardModel]]] = networks.make_models,
+          policy_params: Optional[Dict[str, jnp.ndarray]] = None,
+          value_params: Optional[Dict[str, jnp.ndarray]] = None,
           extra_params: Optional[Dict[str, Dict[str, jnp.ndarray]]] = None,
           extra_loss_update_ratios: Optional[Dict[str, float]] = None,
           extra_loss_fns: Optional[Dict[str, Callable[[StepData],
@@ -256,17 +265,17 @@ def train(environment_fn: Callable[..., envs.Env],
       episode_length=episode_length)
   eval_first_state, eval_step_fn = env.wrap(core_eval_env, key_eval)
 
-  parametric_action_distribution = distribution.NormalTanhDistribution(
+  parametric_action_distribution = parametric_action_distribution_fn(
       event_size=core_env.action_size)
 
-  policy_model, value_model = networks.make_models(
+  policy_model, value_model = make_models_fn(
       parametric_action_distribution.param_size, core_env.observation_size)
   key_policy, key_value = jax.random.split(key_models)
 
   optimizer_def = flax.optim.Adam(learning_rate=learning_rate)
   optimizer_params = {
-      'policy': policy_model.init(key_policy),
-      'value': value_model.init(key_value),
+      'policy': policy_params or policy_model.init(key_policy),
+      'value': value_params or value_model.init(key_value),
       'extra': extra_params,
   }
   optimizer = optimizer_def.create(optimizer_params)
@@ -304,17 +313,16 @@ def train(environment_fn: Callable[..., envs.Env],
   def do_one_step_eval(carry, unused_target_t):
     state, policy_params, normalizer_params, extra_params, key = carry
     key, key_sample = jax.random.split(key)
-    # TODO: Make this nicer ([0] comes from pmapping).
-    obs = obs_normalizer_apply_fn(
-        jax.tree_map(lambda x: x[0], normalizer_params), state.core.obs)
+    obs = obs_normalizer_apply_fn(normalizer_params, state.core.obs)
     logits = policy_model.apply(policy_params, obs)
     actions = parametric_action_distribution.sample(logits, key_sample)
-    nstate = eval_step_fn(state, actions, extra_params)
+    nstate = eval_step_fn(state, actions, normalizer_params, extra_params)
     return (nstate, policy_params, normalizer_params, extra_params, key), ()
 
   @jax.jit
   def run_eval(state, key, policy_params, normalizer_params, extra_params):
     policy_params = jax.tree_map(lambda x: x[0], policy_params)
+    normalizer_params = jax.tree_map(lambda x: x[0], normalizer_params)
     extra_params = jax.tree_map(lambda x: x[0], extra_params)
     (state, _, _, _, key), _ = jax.lax.scan(
         do_one_step_eval,
@@ -330,7 +338,8 @@ def train(environment_fn: Callable[..., envs.Env],
     actions = parametric_action_distribution.sample_no_postprocessing(
         logits, key_sample)
     postprocessed_actions = parametric_action_distribution.postprocess(actions)
-    nstate = step_fn(state, postprocessed_actions, extra_params)
+    nstate = step_fn(state, postprocessed_actions, normalizer_params,
+                     extra_params)
     return (nstate, normalizer_params, policy_params, extra_params,
             key), StepData(
                 obs=state.core.obs,
@@ -355,16 +364,17 @@ def train(environment_fn: Callable[..., envs.Env],
             [data.dones, jnp.expand_dims(state.core.done, axis=0)]))
     return (state, normalizer_params, policy_params, extra_params, key), data
 
-  def update_model(carry, data):
+  def update_model(carry, data_tuple):
     optimizer, key = carry
+    data, udata = data_tuple
     key, key_loss = jax.random.split(key)
-    loss_grad, metrics = grad_loss(optimizer.target, data, key_loss)
+    loss_grad, metrics = grad_loss(optimizer.target, data, udata, key_loss)
     loss_grad = jax.lax.pmean(loss_grad, axis_name='i')
     optimizer = optimizer.apply_gradient(loss_grad)
     return (optimizer, key), metrics
 
   def minimize_epoch(carry, unused_t):
-    optimizer, data, key = carry
+    optimizer, data, udata, key = carry
     key, key_perm, key_grad = jax.random.split(key, 3)
     permutation = jax.random.permutation(key_perm, data.obs.shape[1])
 
@@ -376,9 +386,11 @@ def train(environment_fn: Callable[..., envs.Env],
       return data
 
     ndata = jax.tree_map(lambda x: convert_data(x, permutation), data)
+    u_ndata = jax.tree_map(lambda x: convert_data(x, permutation), udata)
     (optimizer, _), metrics = jax.lax.scan(
-        update_model, (optimizer, key_grad), ndata, length=num_minibatches)
-    return (optimizer, data, key), metrics
+        update_model, (optimizer, key_grad), (ndata, u_ndata),
+        length=num_minibatches)
+    return (optimizer, data, udata, key), metrics
 
   def run_epoch(carry, unused_t):
     training_state, state = carry
@@ -399,11 +411,13 @@ def train(environment_fn: Callable[..., envs.Env],
     # Update normalization params and normalize observations.
     normalizer_params = obs_normalizer_update_fn(
         training_state.normalizer_params, data.obs[:-1])
+    udata = data
     data = data.replace(
         obs=obs_normalizer_apply_fn(normalizer_params, data.obs))
 
-    (optimizer, _, _), metrics = jax.lax.scan(
-        minimize_epoch, (training_state.optimizer, data, key_minimize), (),
+    (optimizer, _, _, _), metrics = jax.lax.scan(
+        minimize_epoch, (training_state.optimizer, data, udata, key_minimize),
+        (),
         length=num_update_epochs)
 
     new_training_state = TrainingState(
@@ -492,9 +506,9 @@ def train(environment_fn: Callable[..., envs.Env],
 
   logging.info('total steps: %s', normalizer_params[0] * action_repeat)
 
-  _, inference = make_params_and_inference_fn(core_env.observation_size,
-                                              core_env.action_size,
-                                              normalize_observations)
+  _, inference = make_params_and_inference_fn(
+      core_env.observation_size, core_env.action_size, normalize_observations,
+      parametric_action_distribution_fn, make_models_fn)
   params = normalizer_params, policy_params, extra_params
 
   if process_count > 1:
@@ -507,14 +521,16 @@ def train(environment_fn: Callable[..., envs.Env],
 
 
 def make_params_and_inference_fn(observation_size, action_size,
-                                 normalize_observations):
+                                 normalize_observations,
+                                 parametric_action_distribution_fn,
+                                 make_models_fn):
   """Creates params and inference function for the PPO agent."""
   obs_normalizer_params, obs_normalizer_apply_fn = normalization.make_data_and_apply_fn(
-      normalize_observations)
-  parametric_action_distribution = distribution.NormalTanhDistribution(
+      observation_size, normalize_observations=normalize_observations)
+  parametric_action_distribution = parametric_action_distribution_fn(
       event_size=action_size)
-  policy_model, _ = networks.make_models(
-      parametric_action_distribution.param_size, observation_size)
+  policy_model, _ = make_models_fn(parametric_action_distribution.param_size,
+                                   observation_size)
 
   def inference_fn(params, obs, key):
     normalizer_params, policy_params = params[:2]

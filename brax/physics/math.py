@@ -285,4 +285,3 @@ def inv_quat(q):
     The inverse of q, where qmult(q, inv_quat(q)) = [1, 0, 0, 0].
   """
   return q * jnp.array([1., -1., -1., -1.])
-

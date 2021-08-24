@@ -181,6 +181,3 @@ def validate_config(config: config_pb2.Config) -> config_pb2.Config:
   frozen.all = all(b.frozen.all for b in config.bodies)
 
   return config
-
-
-
