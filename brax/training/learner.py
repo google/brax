@@ -26,13 +26,14 @@ from brax import envs
 from brax.io import html
 from brax.io import model
 from brax.training import apg
+from brax.training import ars
 from brax.training import es
 from brax.training import ppo
 from brax.training import sac
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_enum('learner', 'ppo', ['ppo', 'apg', 'es', 'sac'],
+flags.DEFINE_enum('learner', 'ppo', ['ppo', 'apg', 'es', 'sac', 'ars'],
                   'Which algorithm to run.')
 flags.DEFINE_string('env', 'ant', 'Name of environment to train.')
 flags.DEFINE_integer('total_env_steps', 50000000,
@@ -83,6 +84,18 @@ flags.DEFINE_integer('max_replay_size', 1048576, 'Maximal replay buffer size.')
 flags.DEFINE_float('grad_updates_per_step', 1.0,
                    'How many SAC gradient updates to run per one step in the '
                    'environment.')
+# ARS hps.
+flags.DEFINE_integer('number_of_directions', 60,
+                     'Number of directions to explore. The actual number is 2x '
+                     'larger (used for antithetic sampling.')
+flags.DEFINE_integer('top_directions', 20,
+                     'Number of top directions to select.')
+flags.DEFINE_float('exploration_noise_std', 0.1,
+                   'Std of a random noise added by ARS.')
+flags.DEFINE_float('reward_shift', 0.,
+                   'A reward shift to get rid of "stay alive" bonus.')
+flags.DEFINE_enum('head_type', '', ['', 'clip', 'tanh'],
+                  'Which policy head to use.')
 
 
 def main(unused_argv):
@@ -163,7 +176,23 @@ def main(unused_argv):
           reward_scaling=FLAGS.reward_scaling,
           episode_length=FLAGS.episode_length,
           progress_fn=writer.write_scalars)
-
+    if FLAGS.learner == 'ars':
+      inference_fn, params, _ = ars.train(
+          environment_fn=env_fn,
+          number_of_directions=FLAGS.number_of_directions,
+          max_devices_per_host=FLAGS.max_devices_per_host,
+          action_repeat=FLAGS.action_repeat,
+          normalize_observations=FLAGS.normalize_observations,
+          num_timesteps=FLAGS.total_env_steps,
+          exploration_noise_std=FLAGS.exploration_noise_std,
+          log_frequency=FLAGS.eval_frequency,
+          seed=FLAGS.seed,
+          step_size=FLAGS.learning_rate,
+          top_directions=FLAGS.top_directions,
+          reward_shift=FLAGS.reward_shift,
+          head_type=FLAGS.head_type,
+          episode_length=FLAGS.episode_length,
+          progress_fn=writer.write_scalars)
   env = env_fn()
   state = env.reset(jax.random.PRNGKey(FLAGS.seed))
 
@@ -176,11 +205,11 @@ def main(unused_argv):
   qps = []
   jit_inference_fn = jax.jit(inference_fn)
   jit_step_fn = jax.jit(env.step)
+  rng = jax.random.PRNGKey(FLAGS.seed)
   while not state.done:
     qps.append(state.qp)
-    key, subkey = jax.random.split(state.rng)
-    act = jit_inference_fn(params, state.obs, subkey)
-    state = dataclasses.replace(state, rng=key)
+    tmp_key, rng = jax.random.split(rng)
+    act = jit_inference_fn(params, state.obs, tmp_key)
     state = jit_step_fn(state, act)
 
   html_path = f'{FLAGS.logdir}/trajectory_{uuid.uuid4()}.html'

@@ -33,12 +33,9 @@ class BodyTest(absltest.TestCase):
     dt: 1 substeps: 1000
     gravity { z: -9.8 }
     bodies { name: "Ball" mass: 1 }
+    defaults { qps { name: "Ball" vel {x: 1}}}
     """, brax.Config()))
-    qp = brax.QP(
-        pos=jnp.array([[0., 0., 0.]]),
-        rot=jnp.array([[1., 0., 0., 0.]]),
-        vel=jnp.array([[1., 0., 0.]]),
-        ang=jnp.array([[0., 0., 0.]]))
+    qp = sys.default_qp()
     qp, _ = sys.step(qp, jnp.array([]))
     # v = v_0 + a * t
     self.assertAlmostEqual(qp.vel[0, 2], -9.8, 2)
@@ -53,34 +50,29 @@ class BoxTest(absltest.TestCase):
     dt: 1.5 substeps: 1000 friction: 0.6 baumgarte_erp: 0.1
     gravity { z: -9.8 }
     bodies {
-      name: "Torso" mass: 1
+      name: "box" mass: 1
       colliders { box { halfsize { x: 0.5 y: 0.5 z: 0.5 }}}
       inertia { x: 1 y: 1 z: 1 }
     }
     bodies { name: "Ground" frozen: { all: true } colliders { plane {}}}
+    defaults { qps { name: "box" pos { z: 1 }}}
+    defaults { qps { name: "box" pos { z: 2 } vel {x: 2}}}
   """
 
   def test_box_hits_ground(self):
     """A box falls onto the ground and stops."""
     sys = brax.System(text_format.Parse(BoxTest._CONFIG, brax.Config()))
-    qp = brax.QP(
-        pos=jnp.array([[0., 0., 1.], [0, 0, 0]]),
-        rot=jnp.array([[1., 0., 0., 0.], [1., 0., 0., 0.]]),
-        vel=jnp.array([[0., 0., 0.], [0., 0., 0.]]),
-        ang=jnp.array([[0., 0., 0.], [0., 0., 0.]]))
+    qp = sys.default_qp(0)
     qp, _ = sys.step(qp, jnp.array([]))
     self.assertAlmostEqual(qp.pos[0, 2], 0.5, 2)
 
   def test_box_slide(self):
     """A box slides across the ground and comes to a stop."""
     sys = brax.System(text_format.Parse(BoxTest._CONFIG, brax.Config()))
-    qp = brax.QP(
-        pos=jnp.array([[0., 0., 2.], [0, 0, 0]]),
-        rot=jnp.array([[1., 0., 0., 0.], [1., 0., 0., 0.]]),
-        vel=jnp.array([[2., 0., 0.], [0., 0., 0.]]),
-        ang=jnp.array([[0., 0., 0.], [0., 0., 0.]]))
+    qp = sys.default_qp(1)
     qp, _ = sys.step(qp, jnp.array([]))
     self.assertAlmostEqual(qp.pos[0, 2], 0.5, 2)
+    self.assertGreater(qp.pos[0, 0], 1)  # after sliding for a bit...
     self.assertAlmostEqual(qp.vel[0, 0], 0, 2)  # friction brings it to a stop
     self.assertLess(qp.pos[0, 0], 1.5)  # ... and keeps it from travelling 2m
 
@@ -105,15 +97,13 @@ class HeightMapTest(absltest.TestCase):
         }
       }
     }
+    defaults { qps { name: "box" pos: {x: 5 y: 5 z: 1}}}
   """
 
   def test_box_stays_on_heightMap (self):
     """A box falls onto the height map and stops."""
     sys = brax.System(text_format.Parse(HeightMapTest._CONFIG, brax.Config()))
     qp = sys.default_qp()
-    np_pos = jnp.array([[5, 5, 1], [0, 0, 0]])
-    pos = jax.ops.index_update(qp.pos, jax.ops.index[:, :], np_pos)
-    qp = qp.replace(pos=pos)
     qp, _ = sys.step(qp, [])
     self.assertAlmostEqual(qp.pos[0, 2], 0.3, 2)
 
@@ -144,20 +134,24 @@ class CapsuleTest(absltest.TestCase):
       inertia { x: 1 y: 1 z: 1 }
     }
     bodies { name: "Ground" frozen: { all: true } colliders { plane {}}}
+    defaults {
+      qps { name: "Capsule1" pos {z: 1}}
+      qps { name: "Capsule2" pos {x:1 z: 1}}
+      qps { name: "Capsule3" pos {x:3 z: 1}}
+      qps { name: "Capsule4" pos {x:5 z: 1}}
+    }
+    defaults {
+      qps { name: "Capsule1" pos {z: 1}}
+      qps { name: "Capsule2" pos {z: 2}}
+      qps { name: "Capsule3" pos {x:3 z: 1}}
+      qps { name: "Capsule4" pos {x:5 z: 1}}
+    }
   """
 
   def test_capsule_hits_ground(self):
     """A capsule falls onto the ground and stops."""
     sys = brax.System(text_format.Parse(CapsuleTest._CONFIG, brax.Config()))
-    qp = brax.QP(
-        pos=jnp.array([[0., 0., 1.], [1., 0., 1.], [3., 0., 1.], [5., 0., 1.],
-                       [0, 0, 0]]),
-        rot=jnp.array([[1., 0., 0., 0.], [1., 0., 0., 0.], [1., 0., 0., 0.],
-                       [1., 0., 0., 0.], [1., 0., 0., 0.]]),
-        vel=jnp.array([[0., 0., 0.], [0., 0., 0.], [0., 0., 0.], [0., 0., 0.],
-                       [0., 0., 0.]]),
-        ang=jnp.array([[0., 0., 0.], [0., 0., 0.], [0., 0., 0.], [0., 0., 0.],
-                       [0., 0., 0.]]))
+    qp = sys.default_qp(0)
     qp, _ = sys.step(qp, jnp.array([]))
     self.assertAlmostEqual(qp.pos[0, 2], 0.5, 2)  # standing up and down
     self.assertAlmostEqual(qp.pos[1, 2], 0.25, 2)  # lying on its side
@@ -167,15 +161,7 @@ class CapsuleTest(absltest.TestCase):
   def test_capsule_hits_capsule(self):
     """A capsule falls onto another capsule and balances on it."""
     sys = brax.System(text_format.Parse(CapsuleTest._CONFIG, brax.Config()))
-    qp = brax.QP(
-        pos=jnp.array([[0., 0., 1.], [0., 0., 2.], [3., 0., 1.], [5., 0., 1.],
-                       [0, 0, 0]]),
-        rot=jnp.array([[1., 0., 0., 0.], [1., 0., 0., 0.], [1., 0., 0., 0.],
-                       [1., 0., 0., 0.], [1., 0., 0., 0.]]),
-        vel=jnp.array([[0., 0., 0.], [0., 0., 0.], [0., 0., 0.], [0., 0., 0.],
-                       [0., 0., 0.]]),
-        ang=jnp.array([[0., 0., 0.], [0., 0., 0.], [0., 0., 0.], [0., 0., 0.],
-                       [0., 0., 0.]]))
+    qp = sys.default_qp(1)
     qp, _ = sys.step(qp, jnp.array([]))
     self.assertAlmostEqual(qp.pos[0, 2], 0.5, 2)  # standing up and down
     self.assertAlmostEqual(qp.pos[1, 2], 1.25, 2)  # lying on Capsule1
@@ -237,32 +223,28 @@ class Actuator1DTest(parameterized.TestCase):
       name: "Anchor" frozen: { all: true } mass: 1
       inertia { x: 1 y: 1 z: 1 }
     }
-    bodies { name: "Bob" mass: 1
-      inertia { x: 1 y: 1 z: 1 }}
+    bodies { name: "Bob" mass: 1 inertia { x: 1 y: 1 z: 1 }}
     joints {
       name: "Joint" parent: "Anchor" child: "Bob" stiffness: 10000
       child_offset { z: 1 }
       angle_limit { min: -180 max: 180 }
       angular_damping: 140.0
-      }
-    actuators {
-    name: "Joint"
-    joint: "Joint"
-    strength: 15000.0
-    angle {}
     }
-"""
+    actuators {
+      name: "Joint"
+      joint: "Joint"
+      strength: 15000.0
+      angle {}
+    }
+    defaults { qps { name: "Anchor" pos {z: 2}} qps { name: "Bob" pos {z: 1}}}
+  """
 
   @parameterized.parameters(15., 30., 45., 90.)
   def test_1d_angle_actuator(self, target_angle):
     """A simple part actuates to a target angle."""
     config = text_format.Parse(Actuator1DTest._CONFIG, brax.Config())
     sys = brax.System(config=config)
-    qp = brax.QP(
-        pos=jnp.array([[0., 0., 2.], [0., 0., 1.]]),
-        rot=jnp.array([[1., 0., 0., 0.], [1., 0., 0., 0.]]),
-        vel=jnp.array([[0., 0., 0.], [0., 0., 0.]]),
-        ang=jnp.array([[0., 0., 0.], [0., 0., 0.]]))
+    qp = sys.default_qp()
     qp, _ = sys.step(qp, jnp.array([target_angle]))
     qp_p = take(qp, 0)
     qp_c = take(qp, 1)
@@ -282,14 +264,9 @@ class Actuator2DTest(parameterized.TestCase):
       name: "Anchor" frozen: { all: true } mass: 1
       inertia { x: 1 y: 1 z: 1 }
     }
-    bodies { name: "Bob" mass: 1
-      inertia { x: 1 y: 1 z: 1 }
-    colliders {
-      capsule {
-        radius: 0.5
-        length: 2.0
-      }
-      }
+    bodies {
+      name: "Bob" mass: 1 inertia { x: 1 y: 1 z: 1 }
+      colliders { capsule { radius: 0.5 length: 2.0 }}
     }
     joints {
       name: "Joint" parent: "Anchor" child: "Bob" stiffness: 10000
@@ -303,14 +280,15 @@ class Actuator2DTest(parameterized.TestCase):
         max: 180
       }
       angular_damping: 200.0
-      }
-    actuators {
-    name: "Joint"
-    joint: "Joint"
-    strength: 2000.0
-    angle {}
     }
-"""
+    actuators {
+      name: "Joint"
+      joint: "Joint"
+      strength: 2000.0
+      angle {}
+    }
+    defaults { qps { name: "Anchor" pos {z: 2}} qps { name: "Bob" pos {z: 1}}}
+  """
 
   @parameterized.parameters((15., 30.), (45., 90.5), (-120, 60.), (30., -120.),
                             (-150, -130), (130, 165))
@@ -318,11 +296,7 @@ class Actuator2DTest(parameterized.TestCase):
     """A simple part actuates 2d-angle actuator to two target angles."""
     config = text_format.Parse(Actuator2DTest._CONFIG, brax.Config())
     sys = brax.System(config=config)
-    qp = brax.QP(
-        pos=jnp.array([[0., 0., 2.], [0., 0., 1.]]),
-        rot=jnp.array([[1., 0., 0., 0.], [1., 0., 0., 0.]]),
-        vel=jnp.array([[0., 0., 0.], [0., 0., 0.]]),
-        ang=jnp.array([[0., 0., 0.], [0., 0., 0.]]))
+    qp = sys.default_qp()
     qp, _ = sys.step(qp, jnp.array([target_angle_1, target_angle_2]))
     qp_p = take(qp, 0)
     qp_c = take(qp, 1)
@@ -342,14 +316,9 @@ class Actuator3DTest(parameterized.TestCase):
       name: "Anchor" frozen: { all: true } mass: 1
       inertia { x: 1 y: 1 z: 1 }
     }
-    bodies { name: "Bob" mass: 1
-      inertia { x: 1 y: 1 z: 1 }
-    colliders {
-      capsule {
-        radius: 0.5
-        length: 2.0
-      }
-      }
+    bodies {
+      name: "Bob" mass: 1 inertia { x: 1 y: 1 z: 1 }
+      colliders { capsule { radius: 0.5 length: 2.0 } }
     }
     joints {
       name: "Joint" parent: "Anchor" child: "Bob" stiffness: 10000
@@ -367,13 +336,14 @@ class Actuator3DTest(parameterized.TestCase):
         max: 100
       }
       angular_damping: 120.0
-      }
-    actuators {
-    name: "Joint"
-    joint: "Joint"
-    strength: 40.0
-    torque {}
     }
+    actuators {
+      name: "Joint"
+      joint: "Joint"
+      strength: 40.0
+      torque {}
+    }
+    defaults { qps { name: "Anchor" pos {z: 2}} qps { name: "Bob" pos {z: 1}}}
   """
   torques = [(1, 0, 0), (0, 1, 0), (0, 0, 1), (1, 1, 1)]
 
@@ -388,11 +358,7 @@ class Actuator3DTest(parameterized.TestCase):
         angle_limit.max = limit
 
       sys = brax.System(config=config)
-      qp = brax.QP(
-          pos=jnp.array([[0., 0., 2.], [0., 0., 1.]]),
-          rot=jnp.array([[1., 0., 0., 0.], [1., 0., 0., 0.]]),
-          vel=jnp.array([[0., 0., 0.], [0., 0., 0.]]),
-          ang=jnp.array([[0., 0., 0.], [0., 0., 0.]]))
+      qp = sys.default_qp()
 
       # cuts down compile time for test to only compile a short step
       for _ in range(1000):

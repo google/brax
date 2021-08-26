@@ -65,14 +65,16 @@ def visualize_skills(
 
   # Reset and run environment
   batch_env = env_fn(batch_size=D * M)
-  state = batch_env.reset(
-      jnp.array([jax.random.PRNGKey(seed + i) for i in range(D * M)]),
-      z=batch_z)
+  rng = jax.random.PRNGKey(seed)
+  rng, reset_key = jax.random.split(rng)
+  reset_key = jnp.stack(jax.random.split(reset_key, D * M))
+  state = batch_env.reset(reset_key, z=batch_z)
   states = [state]
   jit_step = jax.jit(batch_env.step)
   jit_inference_fn = jax.jit(inference_fn)
   while not state.done.all():
-    act = jit_inference_fn(params, state.obs, state.rng[0])
+    tmp_key, rng = jax.random.split(rng)
+    act = jit_inference_fn(params, state.obs, tmp_key)
     state = jit_step(state, act, params[0], params[-1])
     states.append(state)
 

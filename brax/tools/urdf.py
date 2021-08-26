@@ -30,7 +30,7 @@ Quaternion = np.ndarray
 
 def _rpy_to_ax_angle(rpy):
   if rpy:
-    rpy = rpy.split(' ')
+    rpy = rpy.split()
     rpy = [float(a) for a in rpy]
     ax, ang = euler.euler2axangle(rpy[0], rpy[1], rpy[2], 'sxyz')
   else:
@@ -48,7 +48,7 @@ def _relative_quat_from_parent(rpy, quat):
 
 def _rpy_to_quat(rpy):
   if rpy:
-    rpy = rpy.split(' ')
+    rpy = rpy.split()
     rpy = [float(a) for a in rpy]
     rpy = euler.euler2quat(*rpy, axes='sxyz')
   else:
@@ -58,7 +58,7 @@ def _rpy_to_quat(rpy):
 
 def _xyz_to_vec(xyz):
   if xyz:
-    xyz = xyz.split(' ')
+    xyz = xyz.split()
     xyz = [float(a) for a in xyz]
   else:
     xyz = [0., 0., 0.]
@@ -124,8 +124,8 @@ class UrdfConverter(object):
     for joint in ghum_xml.findall('joint'):
       name = joint.get('name')
       self.joints[name] = joint
-      parent = joint[0].get('link')
-      child = joint[1].get('link')
+      parent = joint.find('parent').get('link')
+      child = joint.find('child').get('link')
       if parent not in self.body_tree:
         self.body_tree[parent] = {'joints': [], 'parent': None}
 

@@ -4,7 +4,7 @@ class Selector extends THREE.EventDispatcher {
   constructor(viewer) {
     super();
 
-    const ignore = ['target', 'ground'];
+    const ignore = ['target', 'ground', 'floor'];
 
     this.viewer = viewer;
     this.raycaster = new THREE.Raycaster();

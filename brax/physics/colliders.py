@@ -337,9 +337,7 @@ class CapsuleCapsule:
   class Capsule:
     body: bodies.Body
     radius: jnp.ndarray
-    length: jnp.ndarray
-    pos: jnp.ndarray
-    axis: jnp.ndarray
+    end: jnp.ndarray
 
   def __init__(self, config: config_pb2.Config):
     self.config = config
@@ -348,27 +346,29 @@ class CapsuleCapsule:
       return None
 
     body_idx = {b.name: i for i, b in enumerate(config.bodies)}
-    cols_a = [c.colliders[0] for c, _ in self.pairs]
-    body_idx_a = jnp.array([body_idx[c.name] for c, _ in self.pairs])
-    cols_rot_a = jnp.array([euler_to_quat(c.rotation) for c in cols_a])
-    cols_b = [c.colliders[0] for _, c in self.pairs]
-    body_idx_b = jnp.array([body_idx[c.name] for _, c in self.pairs])
-    cols_rot_b = jnp.array([euler_to_quat(c.rotation) for c in cols_b])
-    v_rot = jax.vmap(math.rotate, in_axes=[None, 0])
+    body_idxs = []
+    radii = []
+    ends = []
+
+    for body_a, body_b in self.pairs:
+      col_a, col_b = body_a.colliders[0], body_b.colliders[0]
+      body_idxs.append((body_idx[body_a.name], body_idx[body_b.name]))
+      radii.append((col_a.capsule.radius, col_b.capsule.radius))
+      def cap_end(col):
+        axis = math.rotate(jnp.array([0., 0., 1.]), euler_to_quat(col.rotation))
+        segment_length = col.capsule.length / 2. - col.capsule.radius
+        return vec_to_np(col.position) + axis * segment_length
+      ends.append((cap_end(col_a), cap_end(col_b)))
 
     body = bodies.Body.from_config(config)
     self.cap_a = CapsuleCapsule.Capsule(
-        body=take(body, body_idx_a),
-        radius=jnp.array([c.capsule.radius for c in cols_a]),
-        length=jnp.array([c.capsule.length for c in cols_a]),
-        pos=jnp.array([vec_to_np(c.position) for c in cols_a]),
-        axis=v_rot(jnp.array([0., 0., 1.]), cols_rot_a))
+        body=take(body, jnp.array([a for a, _ in body_idxs])),
+        radius=jnp.array([a for a, _ in radii]),
+        end=jnp.array([a for a, _ in ends]))
     self.cap_b = CapsuleCapsule.Capsule(
-        body=take(body, body_idx_b),
-        radius=jnp.array([c.capsule.radius for c in cols_b]),
-        length=jnp.array([c.capsule.length for c in cols_b]),
-        pos=jnp.array([vec_to_np(c.position) for c in cols_b]),
-        axis=v_rot(jnp.array([0., 0., 1.]), cols_rot_b))
+        body=take(body, jnp.array([b for _, b in body_idxs])),
+        radius=jnp.array([b for _, b in radii]),
+        end=jnp.array([b for _, b in ends]))
 
   def apply(self, qp: QP, dt: float) -> P:
     """Returns impulses between capsules in collision.
@@ -387,15 +387,41 @@ class CapsuleCapsule:
     @jax.vmap
     def apply(cap_a, cap_b, qp_a, qp_b):
       """Extracts collision points and applies collision to capsules."""
-      p1, p2, p1_p2_dist = _find_closest_segment(cap_a, cap_b, qp_a, qp_b)
-      radius_sum = cap_a.radius + cap_b.radius
 
-      penetration = p1_p2_dist - radius_sum
-      collision_normal = (p2 - p1) / (1e-6 + math.safe_norm(p2 - p1))
+      def endpoints(cap, qp):
+        end = math.rotate(cap.end, qp.rot)
+        return qp.pos + end, qp.pos - end
+
+      def closest_segment_point(a, b, pt):
+        ab = b - a
+        t = jnp.dot(pt - a, ab) / jnp.dot(ab, ab)
+        return a + jnp.clip(t, 0., 1.) * ab
+
+      a_A, a_B = endpoints(cap_a, qp_a)
+      b_A, b_B = endpoints(cap_b, qp_b)
+
+      v0 = b_A - a_A
+      v1 = b_B - a_A
+      v2 = b_A - a_B
+      v3 = b_B - a_B
+
+      d0 = jnp.dot(v0, v0)
+      d1 = jnp.dot(v1, v1)
+      d2 = jnp.dot(v2, v2)
+      d3 = jnp.dot(v3, v3)
+
+      bestA = jnp.where((d2 < d0) | (d2 < d1) | (d3 < d0) | (d3 < d1), a_B, a_A)
+      bestB = closest_segment_point(b_A, b_B, bestA)
+      bestA = closest_segment_point(a_A, a_B, bestB)
+
+      penetration_vec = bestB - bestA
+      dist = math.safe_norm(penetration_vec)
+      collision_normal = penetration_vec / (1e-6 + dist)
+      penetration = dist - cap_a.radius - cap_b.radius
+      pos_c = (bestA + bestB) / 2.
 
       dp_a, dp_b = _collide_pair(self.config, cap_a.body, cap_b.body, qp_a,
-                                 qp_b, (p1 * cap_b.radius + p2 * cap_a.radius) /
-                                 radius_sum, collision_normal, penetration, dt)
+                                 qp_b, pos_c, collision_normal, penetration, dt)
       return dp_a, dp_b
 
     qp_a = take(qp, self.cap_a.body.idx)
@@ -409,135 +435,6 @@ class CapsuleCapsule:
     ang_b = ops.segment_sum(dp_b.ang, self.cap_b.body.idx, num_bodies)
 
     return P(vel_a + vel_b, ang_a + ang_b)
-
-
-def _find_closest_segment(cap_a: CapsuleCapsule.Capsule,
-                          cap_b: CapsuleCapsule.Capsule, qp_a: QP,
-                          qp_b: QP) -> Tuple[jnp.ndarray, jnp.ndarray, float]:
-  """Finds the closest points between two capsules."""
-
-  def endpoints(axis, qp, radius, length, offset):
-    segment_length = length / 2. - radius
-    segment_point = axis * segment_length
-    return qp.pos + offset + math.rotate(segment_point,
-                                         qp.rot), qp.pos + offset + math.rotate(
-                                             -1. * segment_point, qp.rot)
-
-  def point_on_segment(close_a, close_b, point_b, unit_vec, projection,
-                       segment_a_len, segment_b_len):
-    """Finds the point on segment B closest to segment A.
-
-    Represented in fn args, this finds the close_b satisfying
-    point_b + unit_vec*dot = close_b
-
-    such that close_b is as close as possible to close_a
-
-    Args:
-      close_a: The current closest candidate point to segment B on segment A
-      close_b: The current closest candidate point to segment A on segment B
-      point_b: A point on an endcap of segment B
-      unit_vec: A unit vector pointing along the length of segment B, relative
-        to point_b
-      projection: Distance from segment B to segment A projected along segment
-        B's axis
-      segment_a_len: Length of segment A
-      segment_b_len: Length of segment B
-
-    Returns:
-      Closest point on segment B
-    """
-    dot = jnp.dot(unit_vec, (close_a - point_b))
-    dot = jnp.where(
-        jnp.less(dot, 0), 0,
-        jnp.where(jnp.greater(dot, segment_b_len), segment_b_len, dot))
-    close_b = jnp.where(
-        jnp.logical_or(
-            jnp.less(projection, 0), jnp.greater(projection, segment_a_len)),
-        point_b + (unit_vec * dot), close_b)
-    return close_b
-
-  a1, a2 = endpoints(cap_a.axis, qp_a, cap_a.radius, cap_a.length, cap_a.pos)
-  b1, b2 = endpoints(cap_b.axis, qp_b, cap_b.radius, cap_b.length, cap_b.pos)
-
-  # check if lines are overlapping
-  a_segment = a2 - a1
-  b_segment = b2 - b1
-  a_len = safe_norm(a_segment)
-  b_len = safe_norm(b_segment)
-
-  a_unit_vec = a_segment / (1e-10 + a_len)
-  b_unit_vec = b_segment / (1e-10 + b_len)
-
-  cross = jnp.cross(a_unit_vec, b_unit_vec)
-  denom = safe_norm(cross)**2.
-
-  # closest point test if segments are parallel
-
-  d1 = jnp.dot(a_unit_vec, (b1 - a1))
-  d2 = jnp.dot(a_unit_vec, (b2 - a1))
-
-  pa_par = jnp.zeros(3)
-  pb_par = jnp.zeros(3)
-  closest_dist = 0.
-
-  segments_are_parallel = jnp.less(denom, 1e-6)
-  b_is_before_a = jnp.greater_equal(jnp.less_equal(d1, 0), d2)
-  a_is_before_b = jnp.less_equal(jnp.greater_equal(d1, a_len), d2)
-  orientation_bool = jnp.less(jnp.absolute(d1), jnp.absolute(d2))
-
-  # base case, segments perfectly overlap
-  pa_par = jnp.where(segments_are_parallel, qp_a.pos, pa_par)
-  pb_par = jnp.where(segments_are_parallel, qp_b.pos, pb_par)
-  closest_dist = jnp.where(segments_are_parallel,
-                           safe_norm(((d1 * a_unit_vec) + a1) - b1),
-                           closest_dist)
-
-  # segments parallel, with segment b before segment a
-  pa_par = jnp.where(segments_are_parallel * b_is_before_a, a1, pa_par)
-  pb_par = jnp.where(segments_are_parallel * b_is_before_a,
-                     jnp.where(orientation_bool, b1, b2), pb_par)
-  closest_dist = jnp.where(
-      segments_are_parallel * b_is_before_a,
-      jnp.where(orientation_bool, safe_norm(a1 - b1), safe_norm(a1 - b2)),
-      closest_dist)
-
-  # segments parallel, with segment a before segment b
-  pa_par = jnp.where(
-      segments_are_parallel * a_is_before_b * (1 - b_is_before_a), a2, pa_par)
-  pb_par = jnp.where(
-      segments_are_parallel * a_is_before_b * (1 - b_is_before_a),
-      jnp.where(orientation_bool, b1, b2), pb_par)
-  closest_dist = jnp.where(
-      segments_are_parallel * a_is_before_b * (1 - b_is_before_a),
-      jnp.where(orientation_bool, safe_norm(a2 - b1), safe_norm(a2 - b2)),
-      closest_dist)
-
-  # closest point test if segments are NOT parallel
-
-  t = (b1 - a1)
-
-  det_a = math.det(t, b_unit_vec, cross)
-  det_b = math.det(t, a_unit_vec, cross)
-
-  t1 = det_a / (1e-10 + denom)
-  t2 = det_b / (1e-10 + denom)
-
-  pa = a1 + (a_unit_vec * t1)  # Projected closest point on segment A
-  pb = b1 + (b_unit_vec * t2)  # Projected closest point on segment B
-
-  # if the closest point on the line running through segment_i to segment_j
-  # is not actually contained within the segment, then clamp it to the closest
-  # endcap of segment_i
-  pa = jnp.where(jnp.less(t1, 0), a1, jnp.where(jnp.greater(t1, a_len), a2, pa))
-  pb = jnp.where(jnp.less(t2, 0), b1, jnp.where(jnp.greater(t2, b_len), b2, pb))
-
-  pb = point_on_segment(pa, pb, b1, b_unit_vec, t1, a_len, b_len)
-  pa = point_on_segment(pb, pa, a1, a_unit_vec, t2, b_len, a_len)
-
-  fa = lambda _: (pa, pb, safe_norm(pa - pb))
-  fb = lambda _: (pa_par, pb_par, closest_dist)
-
-  return jax.lax.cond(jnp.equal(segments_are_parallel, 0.), fa, fb, None)
 
 
 def _find_body_pairs(

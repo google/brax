@@ -96,6 +96,14 @@ class QP(object):
   def __mul__(self, o):
     return QP(self.pos * o, self.rot * o, self.vel * o, self.ang * o)
 
+  @classmethod
+  def zero(cls):
+    return cls(
+        pos=jnp.zeros(3),
+        rot=jnp.array([1., 0., 0., 0]),
+        vel=jnp.zeros(3),
+        ang=jnp.zeros(3))
+
 
 @struct.dataclass
 class Info(object):
@@ -162,8 +170,10 @@ def validate_config(config: config_pb2.Config) -> config_pb2.Config:
   if frozen.all:
     frozen.position.CopyFrom(allvec)
     frozen.rotation.CopyFrom(allvec)
-  if all([frozen.position.x, frozen.position.y, frozen.position.z,
-          frozen.rotation.x, frozen.rotation.y, frozen.rotation.z]):
+  if all([
+      frozen.position.x, frozen.position.y, frozen.position.z,
+      frozen.rotation.x, frozen.rotation.y, frozen.rotation.z
+  ]):
     config.frozen.all = True
   for b in config.bodies:
     b.frozen.position.x = b.frozen.position.x or frozen.position.x
@@ -175,8 +185,10 @@ def validate_config(config: config_pb2.Config) -> config_pb2.Config:
     if b.frozen.all:
       b.frozen.position.CopyFrom(allvec)
       b.frozen.rotation.CopyFrom(allvec)
-    if all([b.frozen.position.x, b.frozen.position.y, b.frozen.position.z,
-            b.frozen.rotation.x, b.frozen.rotation.y, b.frozen.rotation.z]):
+    if all([
+        b.frozen.position.x, b.frozen.position.y, b.frozen.position.z,
+        b.frozen.rotation.x, b.frozen.rotation.y, b.frozen.rotation.z
+    ]):
       b.frozen.all = True
   frozen.all = all(b.frozen.all for b in config.bodies)
 

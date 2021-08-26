@@ -30,7 +30,8 @@ def bcast_local_devices(value, local_devices_to_use=1):
 def create_observation_normalizer(obs_size, normalize_observations=True,
                                   pmap_to_devices: Optional[int] = None,
                                   pmap_axis_name: str = 'i',
-                                  num_leading_batch_dims: int = 1):
+                                  num_leading_batch_dims: int = 1,
+                                  apply_clipping: bool = True):
   """Observation normalization based on running statistics."""
   assert num_leading_batch_dims == 1 or num_leading_batch_dims == 2
   if normalize_observations:
@@ -67,13 +68,15 @@ def create_observation_normalizer(obs_size, normalize_observations=True,
       if pmap_to_devices:
         step_increment = jax.lax.psum(step_increment, axis_name=pmap_axis_name)
       return (params[0] + step_increment, params[1], params[2])
-  data, apply_fn = make_data_and_apply_fn(obs_size, normalize_observations)
+  data, apply_fn = make_data_and_apply_fn(obs_size, normalize_observations,
+                                          apply_clipping)
   if pmap_to_devices:
     data = bcast_local_devices(data, pmap_to_devices)
   return data, update_fn, apply_fn
 
 
-def make_data_and_apply_fn(obs_size, normalize_observations=True):
+def make_data_and_apply_fn(obs_size, normalize_observations=True,
+                           apply_clipping=True):
   """Creates data and an apply function for the normalizer."""
   if normalize_observations:
     data = (jnp.zeros(()), jnp.zeros((obs_size,)), jnp.ones((obs_size,)))
@@ -82,8 +85,11 @@ def make_data_and_apply_fn(obs_size, normalize_observations=True):
       variance = running_variance / (normalization_steps + 1.0)
       # We clip because the running_variance can become negative,
       # presumably because of numerical instabilities.
-      variance = jnp.clip(variance, std_min_value, std_max_value)
-      return jnp.clip((obs - running_mean) / jnp.sqrt(variance), -5, 5)
+      if apply_clipping:
+        variance = jnp.clip(variance, std_min_value, std_max_value)
+        return jnp.clip((obs - running_mean) / jnp.sqrt(variance), -5, 5)
+      else:
+        return (obs - running_mean) / jnp.sqrt(variance)
   else:
     data = (jnp.zeros(()), jnp.zeros(()), jnp.zeros(()))
     def apply_fn(params, obs):

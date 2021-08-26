@@ -55,7 +55,7 @@ class SACTest(parameterized.TestCase):
 
     # Compute one action.
     state = env.reset(jax.random.PRNGKey(0))
-    action = inference(decoded_params, state.obs, state.rng)
+    action = inference(decoded_params, state.obs, jax.random.PRNGKey(0))
     env.step(state, action)
 
 

@@ -20,8 +20,8 @@ import jax
 import jax.numpy as jnp
 
 from brax.physics import config_pb2
-from brax.physics.base import P, QP, vec_to_np
-
+from brax.physics import math
+from brax.physics.base import P, QP, euler_to_quat, vec_to_np
 
 @struct.dataclass
 class Body(object):
@@ -68,3 +68,36 @@ class Body(object):
     dvel = impulse / self.mass
     dang = jnp.matmul(self.inertia, jnp.cross(pos - qp.pos, impulse))
     return P(vel=dvel, ang=dang)
+
+def min_z(qp: QP, body: config_pb2.Body) -> float:
+  """Returns the lowest z of all the colliders in a body."""
+  result = float('inf')
+
+  for col in body.colliders:
+    if col.HasField('sphere'):
+      sphere_pos = math.rotate(vec_to_np(col.position), qp.rot)
+      min_z = qp.pos[2] + sphere_pos[2] - col.sphere.radius
+      result = jnp.min(jnp.array([result, min_z]))
+    elif col.HasField('capsule'):
+      axis = math.rotate(jnp.array([0., 0., 1.]), euler_to_quat(col.rotation))
+      length = col.capsule.length / 2 - col.capsule.radius
+      for end in (-1, 1):
+        sphere_pos = vec_to_np(col.position) + end * axis * length
+        sphere_pos = math.rotate(sphere_pos, qp.rot)
+        min_z = qp.pos[2] + sphere_pos[2] - col.capsule.radius
+        result = jnp.min(jnp.array([result, min_z]))
+    elif col.HasField('box'):
+      corners = [(i % 2 * 2 - 1, 2 * (i // 4) - 1, i // 2 % 2 * 2 - 1)
+                 for i in range(8)]
+      corners = jnp.array(corners, dtype=jnp.float32)
+      for corner in corners:
+        corner = corner * vec_to_np(col.box.halfsize)
+        corner = math.rotate(corner, euler_to_quat(col.rotation))
+        corner = corner + vec_to_np(col.position)
+        corner = math.rotate(corner, qp.rot) + qp.pos
+        result = jnp.min(jnp.array([result, corner[2]]))
+    else:
+      # ignore planes and other stuff
+      result = jnp.min(jnp.array([result, 0.0]))
+
+  return result

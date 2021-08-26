@@ -33,21 +33,22 @@ def visualize_env(
     output_name: str = 'video',
 ):
   """Visualize environment."""
+  rng = jax.random.PRNGKey(seed=seed)
+  rng, reset_key = jax.random.split(rng)
   if batch_size:
-    rng = jnp.array([jax.random.PRNGKey(seed + i) for i in range(batch_size)])
-  else:
-    rng = jax.random.PRNGKey(seed=seed)
+    reset_key = jnp.stack(jax.random.split(reset_key, batch_size))
   env = env_fn(batch_size=batch_size)
   jit_env_reset = jax.jit(env.reset)
   jit_env_step = jax.jit(env.step)
   jit_inference_fn = jax.jit(inference_fn)
   qps = []
   states = []
-  state = jit_env_reset(rng, *reset_args)
+  state = jit_env_reset(reset_key, *reset_args)
   while not jnp.all(state.done):
     qps.append(state.qp)
     states.append(state)
-    act = jit_inference_fn(params, state.obs, state.rng)
+    tmp_key, rng = jax.random.split(rng)
+    act = jit_inference_fn(params, state.obs, tmp_key)
     state = jit_env_step(state, act, *step_args)
   if output_path:
     output_name = os.path.splitext(output_name)[0]

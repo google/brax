@@ -132,6 +132,33 @@ message Actuator {
   }
 }
 
+// DefaultState determines the default orientations of bodies in the system
+// returned by the default_qp() function.
+message DefaultState {
+  message JointAngle {
+    // Joint name
+    string name = 1;
+    // Default angles in degrees
+    Vector3 angle = 2;
+  }
+  message QP {
+    // Name of body
+    string name = 1;
+    // Position of body in world space
+    Vector3 pos = 2;
+    // Rotation of body in world space
+    Vector3 rot = 3;
+    // Velocity of body in world space
+    Vector3 vel = 4;
+    // Angular velocity of body in world space
+    Vector3 ang = 5;
+  }
+  // Default joint angles.
+  repeated JointAngle angles = 1;
+  // Default orientations for root bodies (not a child of a joint).
+  repeated QP qps = 2;
+}
+
 // The configuration of a system for Brax to simulate
 message Config {
   message NamePair {
@@ -164,4 +191,6 @@ message Config {
   int32 substeps = 12;
   // Prevents motion or rotation along specified axes for the entire system.
   Frozen frozen = 13;
+  // Default states of bodies in the system.
+  repeated DefaultState defaults = 14;
 }

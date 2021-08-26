@@ -225,9 +225,6 @@ class ComponentEnv(Env):
   def step(self, state: State, action: jnp.ndarray) -> State:
     """Run one timestep of the environment's dynamics."""
     rng = state.rng
-    # some codes, e.g. policy function, does not update state.rng.
-    # this ensures that at each step, state.rng is updated for external use.
-    rng, _ = jax.random.split(rng)
     qp, info = self.sys.step(state.qp, action)
     obs = self._get_obs(qp, info)
     reward = 0.0

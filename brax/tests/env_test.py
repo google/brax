@@ -23,10 +23,8 @@ import jax
 import jax.numpy as np
 from brax import envs
 
-_EXPECTED_SPS = {
-  'ant': 1000,
-  'fetch': 1000
-}
+_EXPECTED_SPS = {'ant': 1000, 'fetch': 1000}
+
 
 class EnvTest(parameterized.TestCase):
 
@@ -69,6 +67,7 @@ class EnvTest(parameterized.TestCase):
     mean_sps = np.mean(np.array(sps))
     logging.info('%s SPS %s %s', env_name, mean_sps, sps)
     self.assertGreater(mean_sps, expected_sps * 0.99)
+
 
 if __name__ == '__main__':
   absltest.main()

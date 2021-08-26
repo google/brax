@@ -193,7 +193,7 @@ joints {
   parent: "ground"
   child: "body0"
   parent_offset {
-    z: 0.1
+    z: 0.01
   }
   child_offset {
   }

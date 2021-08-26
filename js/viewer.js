@@ -9,7 +9,7 @@ import {GUI} from 'https://threejs.org/examples/jsm/libs/dat.gui.module.js';
 
 import {Animator} from './animator.js';
 import {Selector} from './selector.js';
-import {createTrajectory, createScene} from './system.js';
+import {createScene, createTrajectory} from './system.js';
 
 function downloadDataUri(name, uri) {
   let link = document.createElement('a');
@@ -59,6 +59,7 @@ class Viewer {
     this.camera = new THREE.PerspectiveCamera(40, 1, 0.01, 100);
     this.camera.position.set(5, 2, 8);
     this.camera.follow = true;
+    this.camera.freezeAngle = false;
     this.camera.followDistance = 10;
 
     this.scene.background = new THREE.Color(0xa0a0a0);
@@ -85,6 +86,7 @@ class Viewer {
     this.controls.enableDamping = true;
     this.controls.addEventListener('start', () => {this.setDirty()});
     this.controls.addEventListener('change', () => {this.setDirty()});
+    this.controlTargetPos = this.controls.target.clone();
 
     /* set up gui */
     this.gui = new GUI({autoPlace: false});
@@ -92,6 +94,15 @@ class Viewer {
     this.gui.domElement.style.position = 'absolute';
     this.gui.domElement.style.right = 0;
     this.gui.domElement.style.top = 0;
+
+    /* add camera inspectors */
+    const cameraFolder = this.gui.addFolder('Camera');
+    cameraFolder.add(this.camera, 'freezeAngle').name('Freeze Angle');
+    cameraFolder.add(this.camera, 'follow').name('Follow Target');
+    cameraFolder.add(this.camera, 'followDistance')
+        .name('Follow Distance')
+        .min(1)
+        .max(50);
 
     /* set up animator and load trajectory */
     this.animator = new Animator(this);
@@ -117,9 +128,9 @@ class Viewer {
           folder.add(c.position, 'x').name('pos.x'),
           folder.add(c.position, 'y').name('pos.y'),
           folder.add(c.position, 'z').name('pos.z'),
-          folder.add(c.position, 'x').name('rot.x'),
-          folder.add(c.position, 'y').name('rot.y'),
-          folder.add(c.position, 'z').name('rot.z'),
+          folder.add(c.rotation, 'x').name('rot.x'),
+          folder.add(c.rotation, 'y').name('rot.y'),
+          folder.add(c.rotation, 'z').name('rot.z'),
       );
     }
     let saveFolder = this.gui.addFolder('Save / Capture');
@@ -187,17 +198,39 @@ class Viewer {
     // make sure the orbiter is pointed at the right target
     const targetPos = new THREE.Vector3();
     this.target.getWorldPosition(targetPos);
-    this.controls.target = this.controls.target.lerp(targetPos, 0.1);
+
+    // if the target gets too far from the camera, nudge the camera
+    if (this.camera.follow) {
+      this.controls.target.lerp(targetPos, 0.1);
+      if (this.camera.position.distanceTo(this.controls.target) >
+          this.camera.followDistance) {
+        const followBehind = this.controls.target.clone()
+                                 .sub(this.camera.position)
+                                 .normalize()
+                                 .multiplyScalar(this.camera.followDistance)
+                                 .sub(this.controls.target)
+                                 .negate();
+        this.camera.position.lerp(followBehind, 0.5);
+        this.setDirty();
+      }
+    }
+
     if (this.controls.update()) {
       this.setDirty();
     }
 
-    // if the target gets too far from the camera, nudge the camera
-    if (this.camera.follow &&
-        this.camera.position.distanceTo(targetPos) > this.camera.followDistance) {
-      this.camera.position.lerp(targetPos, 0.01);
-      this.setDirty();
+    // if freezeAngle requested, move the camera on xz plane to match target
+    if (this.camera.freezeAngle) {
+      const off = new THREE.Vector3();
+      off.add(this.controls.target).sub(this.controlTargetPos);
+      off.setComponent(1, 0);
+      if (off.lengthSq() > 0) {
+        this.camera.position.add(off);
+        this.setDirty();
+      }
     }
+    this.controlTargetPos.copy(this.controls.target);
+
 
     if (this.needsRender) {
       this.render();

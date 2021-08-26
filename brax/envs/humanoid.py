@@ -552,12 +552,12 @@ joints {
     max: 10.0
   }
   angle_limit {
-    min: -10.0
-    max: 10.0
-  }
-  angle_limit {
     min: -30.0
     max: 70.0
+  }
+  angle_limit {
+    min: -10.0
+    max: 10.0
   }
 }
 joints {
@@ -599,12 +599,12 @@ joints {
     max: 10.0
   }
   angle_limit {
-    min: -10.0
-    max: 10.0
-  }
-  angle_limit {
     min: -30.0
     max: 70.0
+  }
+  angle_limit {
+    min: -10.0
+    max: 10.0
   }
 }
 joints {
