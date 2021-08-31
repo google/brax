@@ -18,19 +18,18 @@ See: https://arxiv.org/pdf/1703.03864.pdf
 """
 
 import time
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from absl import logging
-import flax
-import jax
-import jax.numpy as jnp
-import optax
-
 from brax import envs
 from brax.training import distribution
 from brax.training import env
 from brax.training import networks
 from brax.training import normalization
+import flax
+import jax
+import jax.numpy as jnp
+import optax
 
 
 @flax.struct.dataclass
@@ -127,7 +126,8 @@ def train(
     return (nstate, policy_params, normalizer_params, key), ()
 
   @jax.jit
-  def run_eval(state, key, policy_params, normalizer_params):
+  def run_eval(state, key, policy_params,
+               normalizer_params) -> Tuple[env.EnvState, env.PRNGKey]:
     (state, _, _, key), _ = jax.lax.scan(
         do_one_step_eval, (state, policy_params, normalizer_params, key), (),
         length=episode_length // action_repeat)
@@ -286,15 +286,20 @@ def train(
           run_eval(eval_first_state, key_debug,
                    training_state.optimizer.target,
                    training_state.normalizer_params))
-      eval_state.total_episodes.block_until_ready()
+      eval_state.completed_episodes.block_until_ready()
       eval_walltime += time.time() - t
       eval_sps = (episode_length * eval_first_state.core.reward.shape[0] /
                   (time.time() - t))
+      avg_episode_length = (
+          eval_state.completed_episodes_steps / eval_state.completed_episodes)
       metrics = dict(
-          dict({f'eval/episode_{name}': value / eval_state.total_episodes
-                for name, value in eval_state.total_metrics.items()}),
+          dict({
+              f'eval/episode_{name}': value / eval_state.completed_episodes
+              for name, value in eval_state.completed_episodes_metrics.items()
+          }),
           **dict({
-              'eval/total_episodes': eval_state.total_episodes,
+              'eval/completed_episodes': eval_state.completed_episodes,
+              'eval/avg_episode_length': avg_episode_length,
               'speed/sps': sps,
               'speed/eval_sps': eval_sps,
               'speed/training_walltime': training_walltime,

@@ -24,6 +24,15 @@ ENV_DESCS = {
                 ant2=dict(component='ant', pos=(0, -1, 0)),
             ),
             edges=dict(ant1__ant2=dict(collide_type='full'),)),
+    'tri_ant':
+        dict(
+            components=dict(
+                ant1=dict(component='ant', pos=(0, 1, 0)),
+                ant2=dict(component='ant', pos=(0, -1, 0)),
+                ant3=dict(component='ant', pos=(1, 0, 0)),
+            ),
+            edges=dict(),
+        ),
     'ant_cheetah':
         dict(
             components=dict(

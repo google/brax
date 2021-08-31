@@ -115,13 +115,13 @@ def count_configuration(config, root=True, num_samples_per_dist=1):
 def index_configuration(config, index=0, root=True, count=(), return_copy=True):
   """Configuration."""
   if isinstance(config, dict):
-    c = {
-        k: index_configuration(v, index=index, root=False)
-        for k, v in sorted(config.items())
-    }
+    c = {}
+    for k, v in sorted(config.items()):
+      c_, index = index_configuration(v, index=index, root=False)
+      c[k] = c_
     if root and return_copy:
       c = copy.deepcopy(c)
-    return c
+    return c, index
   elif callable(config):
     raise NotImplementedError(
         'callable not allowed; call sample_configuration_dist first')
@@ -134,17 +134,17 @@ def index_configuration(config, index=0, root=True, count=(), return_copy=True):
         i += 1
       assert i < len(config) and index_ >= 0 and index_ <= count[
           i], f'invalid index={index} wrt count={count}'
-      c = index_configuration(config[i], index=index_, root=False)
+      c, i = index_configuration(config[i], index=index_, root=False)
       if return_copy:
         c = copy.deepcopy(c)
-      return c
+      return c, i
     else:
       i = index % len(config)
       index_ = int(index / len(config))
-      return index_configuration(config[i], index=index_, root=False)
+      return config[i], index_
   else:
     assert not root
-    return config
+    return config, index
 
 
 def sample_configuration_dist(config, root=True, num_samples_per_dist=1):

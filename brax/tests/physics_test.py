@@ -237,6 +237,7 @@ class Actuator1DTest(parameterized.TestCase):
       angle {}
     }
     defaults { qps { name: "Anchor" pos {z: 2}} qps { name: "Bob" pos {z: 1}}}
+    defaults { angles { name: "Joint" angle: { x: 60 } } }
   """
 
   @parameterized.parameters(15., 30., 45., 90.)

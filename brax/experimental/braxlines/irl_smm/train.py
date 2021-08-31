@@ -12,27 +12,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Train VGCRL."""
+"""Train."""
 import copy
 import datetime
 import functools
 import math
 from typing import Dict, Any
+from brax.experimental.braxlines.common import evaluators
 from brax.experimental.braxlines.common import logger_utils
+from brax.experimental.braxlines.irl_smm import evaluators as irl_evaluators
+from brax.experimental.braxlines.irl_smm import utils as irl_utils
 from brax.experimental.braxlines.training import ppo
-from brax.experimental.braxlines.vgcrl import evaluators as vgcrl_evaluators
-from brax.experimental.braxlines.vgcrl import utils as vgcrl_utils
 from brax.experimental.composer import composer
 from brax.experimental.composer.obs_descs import OBS_INDICES
 from brax.io import file
 import jax
 import matplotlib.pyplot as plt
-import tensorflow_probability as tfp
 
-tfp = tfp.substrates.jax
-tfd = tfp.distributions
-
-TASK_KEYS = (('env_name',), ('obs_indices',), ('obs_scale',))
+TASK_KEYS = (
+    ('env_name',),
+    ('obs_indices',),
+    ('obs_scale',),
+    ('target_num_modes',),
+    ('target_num_samples',),
+)
 
 
 def train(train_job_params: Dict[str, Any],
@@ -53,17 +56,17 @@ def train(train_job_params: Dict[str, Any],
   obs_indices = config.pop('obs_indices', 'vel')
   obs_scale = config.pop('obs_scale', 5.0)
   obs_indices = OBS_INDICES[obs_indices][env_name]
+  target_num_modes = config.pop('target_num_modes', 2)
+  target_num_samples = config.pop('target_num_samples', 250)
 
   # @markdown **Experiment Parameters**
-  algo_name = config.pop('algo_name', 'diayn')
+  reward_type = config.pop('reward_type', 'gail2')
   logits_clip_range = config.pop('logits_clip_range', 5.0)
   env_reward_multiplier = config.pop('env_reward_multiplier', 0.0)
   normalize_obs_for_disc = config.pop('normalize_obs_for_disc', False)
+  balance_data_for_disc = config.pop('balance_data_for_disc', False)
   seed = config.pop('seed', 0)
-  evaluate_mi = config.pop('evaluate_mi', False)
-  evaluate_lgr = config.pop('evaluate_lgr', False)
-  diayn_num_skills = config.pop('diayn_num_skills', 8)
-  disc_update_ratio = config.pop('disc_update_ratio', 1.0)
+  evaluate_dist = config.pop('evaluate_dist', False)
   spectral_norm = config.pop('spectral_norm', False)
   ppo_params = dict(
       num_timesteps=int(5e7),
@@ -83,30 +86,43 @@ def train(train_job_params: Dict[str, Any],
   ppo_params.update(config.pop('ppo_params', {}))
   assert not config, f'unused config: {config}'
 
-  # @title Visualizing Brax environments
-  # Create baseline environment to get observation specs
+  # generate target data
+  rng = jax.random.PRNGKey(seed=seed)
+  jit_get_dist = jax.jit(
+      functools.partial(
+          irl_utils.get_multimode_2d_dist,
+          num_modes=target_num_modes,
+          scale=obs_scale))
+  target_dist = jit_get_dist()
+  target_data_2d = target_dist.sample(
+      seed=rng, sample_shape=(target_num_samples,))
+  target_data = target_data_2d[..., :len(obs_indices)]
+
+  # make env_fn
   base_env_fn = composer.create_fn(env_name=env_name)
   base_env = base_env_fn()
-  env_obs_size = base_env.observation_size
-
-  # Create discriminator-parameterized environment
-  disc = vgcrl_utils.create_disc_fn(
-      algo_name=algo_name,
-      observation_size=env_obs_size,
+  disc = irl_utils.IRLDiscriminator(
+      input_size=len(obs_indices),
       obs_indices=obs_indices,
-      scale=obs_scale,
-      diayn_num_skills=diayn_num_skills,
+      obs_scale=obs_scale,
+      include_action=False,
+      arch=(32, 32),
       logits_clip_range=logits_clip_range,
       spectral_norm=spectral_norm,
-      env=base_env,
-      normalize_obs=normalize_obs_for_disc)()
-  extra_params = disc.init_model(rng=jax.random.PRNGKey(seed=seed))
-  env_fn = vgcrl_utils.create_fn(
+      reward_type=reward_type,
+      normalize_obs=normalize_obs_for_disc,
+      balance_data=balance_data_for_disc,
+      target_data=target_data,
+      target_dist_fn=jit_get_dist,
+      env=base_env)
+  extra_params = disc.init_model(rng=jax.random.PRNGKey(seed=0))
+  env_fn = irl_utils.create_fn(
       env_name=env_name,
       wrapper_params=dict(
-          env_reward_multiplier=env_reward_multiplier, disc=disc))
-
-  # make inference function and test goals
+          disc=disc,
+          env_reward_multiplier=env_reward_multiplier,
+      ))
+  # make inference functions and goals for evaluation
   core_env = env_fn()
   _, inference_fn = ppo.make_params_and_inference_fn(
       core_env.observation_size,
@@ -114,23 +130,20 @@ def train(train_job_params: Dict[str, Any],
       normalize_observations=ppo_params.get('normalize_observation', True),
       extra_params=extra_params)
   inference_fn = jax.jit(inference_fn)
-  goals = tfd.Uniform(
-      low=-disc.obs_scale, high=disc.obs_scale).sample(
-          seed=jax.random.PRNGKey(0), sample_shape=(10,))
 
-  # @title Training
   tab = logger_utils.Tabulator(
       output_path=f'{output_dir}/training_curves.csv', append=False)
-
   # We determined some reasonable hyperparameters offline and share them here.
   train_fn = functools.partial(ppo.train, **ppo_params)
 
   times = [datetime.datetime.now()]
   plotdata = {}
   plotkeys = [
-      'eval/episode_reward', 'losses/disc_loss', 'metrics/lgr',
-      'metrics/entropy_all_', 'metrics/entropy_z_', 'metrics/mi_'
+      'eval/episode_reward', 'losses/disc_loss', 'losses/total_loss',
+      'losses/policy_loss', 'losses/value_loss', 'losses/entropy_loss',
+      'metrics/energy_dist'
   ]
+
   ncols = 5
 
   def plot(output_path: str = None, output_name: str = 'training_curves'):
@@ -158,36 +171,21 @@ def train(train_job_params: Dict[str, Any],
         plt.savefig(f)
 
   def progress(num_steps, metrics, params):
-    if evaluate_mi:
-      mi_metrics = vgcrl_evaluators.estimate_empowerment_metric(
-          env_fn=env_fn,
-          disc=disc,
-          inference_fn=inference_fn,
-          params=params,
-          num_z=10,
-          num_samples_per_z=10,
-          time_subsampling=1,
-          time_last_n=500,
-          num_1d_bins=1000,
-          num_2d_bins=30,
-          verbose=True,
-          seed=0)
-      metrics.update(mi_metrics)
-
-    if evaluate_lgr:
-      lgr_metrics = vgcrl_evaluators.estimate_latent_goal_reaching_metric(
-          params=params,
-          env_fn=env_fn,
-          disc=disc,
-          inference_fn=inference_fn,
-          goals=goals,
-          num_samples_per_z=10,
-          time_subsampling=1,
-          time_last_n=500,
-          seed=0)
-      metrics.update(lgr_metrics)
-
     times.append(datetime.datetime.now())
+
+    if evaluate_dist:
+      dist_metrics = irl_evaluators.estimate_energy_distance_metric(
+          params=params,
+          disc=disc,
+          target_data=target_data,
+          env_fn=env_fn,
+          inference_fn=inference_fn,
+          num_samples=10,
+          time_subsampling=10,
+          time_last_n=500,
+          visualize=False,
+          seed=0)
+      metrics.update(dist_metrics)
 
     for key, v in metrics.items():
       plotdata[key] = plotdata.get(key, dict(x=[], y=[]))
@@ -200,35 +198,44 @@ def train(train_job_params: Dict[str, Any],
       return_dict.update(dict(num_steps=num_steps, **metrics))
       progress_dict.update(dict(num_steps=num_steps, **metrics))
 
-  extra_loss_fns = dict(disc_loss=disc.disc_loss_fn) if extra_params else None
-  extra_loss_update_ratios = dict(
-      disc_loss=disc_update_ratio) if extra_params else None
+  extra_loss_fns = dict(disc_loss=disc.disc_loss_fn)
   inference_fn, params, _ = train_fn(
       environment_fn=env_fn,
       progress_fn=progress,
       extra_params=extra_params,
-      extra_loss_fns=extra_loss_fns,
-      extra_loss_update_ratios=extra_loss_update_ratios,
-  )
+      extra_loss_fns=extra_loss_fns)
   plot(output_path=output_dir)
+  irl_evaluators.visualize_disc(
+      params=params, disc=disc, num_grid=25, output_path=output_dir)
 
   return_dict.update(dict(time_to_jit=times[1] - times[0]))
   return_dict.update(dict(time_to_train=times[-1] - times[1]))
   print(f'time to jit: {times[1] - times[0]}')
   print(f'time to train: {times[-1] - times[1]}')
 
-  vgcrl_evaluators.visualize_skills(
+  for i in range(3):
+    evaluators.visualize_env(
+        env_fn=env_fn,
+        inference_fn=inference_fn,
+        params=params,
+        batch_size=0,
+        step_args=(params['normalizer'], params['extra']),
+        output_path=output_dir,
+        output_name=f'video_eps{i}',
+    )
+
+  metrics = irl_evaluators.estimate_energy_distance_metric(
+      params=params,
+      disc=disc,
+      target_data=target_data,
       env_fn=env_fn,
       inference_fn=inference_fn,
-      disc=disc,
-      params=params,
-      output_path=output_dir,
-      verbose=True,
-      num_z=20,
-      num_samples_per_z=5,
+      num_samples=10,
       time_subsampling=10,
       time_last_n=500,
-      seed=seed,
-      save_video=True)
+      visualize=True,
+      output_path=output_dir,
+      seed=0)
+  return_dict.update(metrics)
 
   return return_dict

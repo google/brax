@@ -36,13 +36,15 @@ from jax import numpy as jnp
 
 
 def index_preprocess(indices: List[Any], env: Env = None) -> List[int]:
-  """Preprocess indices to a list of ints."""
+  """Preprocess indices to a list of ints and a list of str labels."""
   if indices is None:
     return None
   int_indices = []
+  labels = []
   for index in indices:
     if isinstance(index, int):
       int_indices += [index]
+      labels += [f'obs[{index}]']
     elif isinstance(index, tuple):
       assert len(index) == 2, 'tuple indexing is of form: (obs_dict_key, index)'
       key, i = index
@@ -50,9 +52,10 @@ def index_preprocess(indices: List[Any], env: Env = None) -> List[int]:
       assert env.observation_size  # ensure env.observer_shapes is set
       obs_shape = env.observer_shapes
       int_indices += [obs_shape[key]['start'] + i]
+      labels += [f'{key}[{i}]']
     else:
       raise NotImplementedError(index)
-  return int_indices
+  return int_indices, labels
 
 
 def index_obs(obs: jnp.ndarray, indices: List[Any], env: Env = None):

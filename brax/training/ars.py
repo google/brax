@@ -134,7 +134,7 @@ def train(
     return (nstate, policy_params, normalizer_params), ()
 
   @jax.jit
-  def run_eval(state, policy_params, normalizer_params):
+  def run_eval(state, policy_params, normalizer_params) -> env.EnvState:
     (state, _, _), _ = jax.lax.scan(
         do_one_step_eval, (state, policy_params, normalizer_params), (),
         length=episode_length // action_repeat)
@@ -241,25 +241,29 @@ def train(
       eval_state = run_eval(eval_first_state,
                             training_state.policy_params,
                             training_state.normalizer_params)
-      eval_state.total_episodes.block_until_ready()
+      eval_state.completed_episodes.block_until_ready()
       eval_walltime += time.time() - t
-      eval_sps = (episode_length * eval_first_state.core.reward.shape[0] /
-                  (time.time() - t))
+      eval_sps = (
+          episode_length * eval_first_state.core.reward.shape[0] /
+          (time.time() - t))
+      avg_episode_length = (
+          eval_state.completed_episodes_steps / eval_state.completed_episodes)
       metrics = dict(
-          dict({f'eval/episode_{name}': value / eval_state.total_episodes
-                for name, value in eval_state.total_metrics.items()}),
+          dict({
+              f'eval/episode_{name}': value / eval_state.completed_episodes
+              for name, value in eval_state.completed_episodes_metrics.items()
+          }),
           **dict({
-              'eval/total_episodes': eval_state.total_episodes,
+              f'train/{name}': value for name, value in summary.items()
+          }),
+          **dict({
+              'eval/completed_episodes': eval_state.completed_episodes,
+              'eval/episode_length': avg_episode_length,
               'speed/sps': sps,
               'speed/eval_sps': eval_sps,
               'speed/training_walltime': training_walltime,
               'speed/eval_walltime': eval_walltime,
               'speed/timestamp': training_walltime,
-              'train/params_norm': summary.get('params_norm', 0),
-              'train/eval_scores_mean': summary.get('eval_scores_mean', 0),
-              'train/eval_scores_std': summary.get('eval_scores_std', 0),
-              'train/weights': summary.get('weights', 0),
-              'train/reward_std': summary.get('reward_std', 0),
           }))
       logging.info('Step %s metrics %s',
                    int(training_state.normalizer_params[0]) * action_repeat,

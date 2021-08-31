@@ -15,19 +15,19 @@
 """Analytic policy gradient training."""
 
 import time
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from absl import logging
-import flax
-from flax import linen
-import jax
-import jax.numpy as jnp
-import optax
 from brax import envs
 from brax.training import distribution
 from brax.training import env
 from brax.training import networks
 from brax.training import normalization
+import flax
+from flax import linen
+import jax
+import jax.numpy as jnp
+import optax
 
 
 def train(
@@ -114,7 +114,8 @@ def train(
     return (nstate, params, normalizer_params, key), ()
 
   @jax.jit
-  def run_eval(params, state, normalizer_params, key):
+  def run_eval(params, state, normalizer_params,
+               key) -> Tuple[env.EnvState, env.PRNGKey]:
     params = jax.tree_map(lambda x: x[0], params)
     (state, _, _, key), _ = jax.lax.scan(
         do_one_step_eval, (state, params, normalizer_params, key), (),
@@ -184,17 +185,20 @@ def train(
     if process_id == 0:
       eval_state, key_debug = run_eval(optimizer.target, eval_first_state,
                                        normalizer_params, key_debug)
-      eval_state.total_episodes.block_until_ready()
+      eval_state.completed_episodes.block_until_ready()
       eval_sps = (
           episode_length * eval_first_state.core.reward.shape[0] /
           (time.time() - t))
+      avg_episode_length = (
+          eval_state.completed_episodes_steps / eval_state.completed_episodes)
       metrics = dict(
           dict({
-              f'eval/episode_{name}': value / eval_state.total_episodes
-              for name, value in eval_state.total_metrics.items()
+              f'eval/episode_{name}': value / eval_state.completed_episodes
+              for name, value in eval_state.completed_episodes_metrics.items()
           }),
           **dict({
-              'eval/total_episodes': eval_state.total_episodes,
+              'eval/completed_episodes': eval_state.completed_episodes,
+              'eval/avg_episode_length': avg_episode_length,
               'speed/sps': sps,
               'speed/eval_sps': eval_sps,
               'speed/training_walltime': training_walltime,

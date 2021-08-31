@@ -18,6 +18,7 @@ See:
   VGCRL https://arxiv.org/abs/2106.01404
 """
 
+
 import copy
 import functools
 from typing import Any, Callable, Dict, Optional, List, Tuple
@@ -53,10 +54,12 @@ class Discriminator(object):
                ll_q_offset='auto',
                z_size=0,
                obs_indices: Optional[List[Any]] = None,
+               obs_scale: Optional[List[float]] = None,
                logits_clip_range=None,
                param_name: str = DISC_PARAM_NAME,
                normalize_obs: bool = False,
                spectral_norm: bool = False):
+    assert obs_scale is not None
     self.z_size = z_size
     self.env_obs_size = env.observation_size
     self.ll_q_offset = ll_q_offset
@@ -65,9 +68,13 @@ class Discriminator(object):
     self.q_fn_str = q_fn
     self.q_fn_params = q_fn_params or {}
     self.normalize_obs = normalize_obs
-    self.obs_indices = observers.index_preprocess(obs_indices, env)
+    self.obs_indices, self.obs_labels = observers.index_preprocess(
+        obs_indices, env)
+    self.indexed_obs_size = len(self.obs_indices)
+    self.obs_scale = jnp.array(obs_scale or 1.) * jnp.ones(
+        self.indexed_obs_size)
     self.normalize_fn = normalization.make_data_and_apply_fn(
-        [self.env_obs_size+self.z_size], self.normalize_obs)[1]
+        [self.env_obs_size + self.z_size], self.normalize_obs)[1]
     self.spectral_norm = spectral_norm
 
     # define dist_params_to_dist for q_z_o
@@ -122,36 +129,32 @@ class Discriminator(object):
     elif q_fn == 'mlp':
       input_size = q_fn_params.get('input_size')
       output_size = q_fn_params.get('output_size')
-      model = networks.make_model(
-          [32, 32, output_size],
-          input_size,
-          spectral_norm=self.spectral_norm)
+      model = networks.make_model([32, 32, output_size],
+                                  input_size,
+                                  spectral_norm=self.spectral_norm)
       self.model = model
       if self.spectral_norm:
         rng1, rng2, rng3 = jax.random.split(rng, 3)
         model_params = model.init(rng1, rng2)
-        self.q_fn = lambda params, x: (
-            model.apply(
-                params, x, rngs={'sing_vec': rng3}, mutable=['sing_vec'])[0],)
+        self.q_fn = lambda params, x: (model.apply(
+            params, x, rngs={'sing_vec': rng3}, mutable=['sing_vec'])[0],)
       else:
         model_params = model.init(rng)
         self.q_fn = lambda params, x: (model.apply(params, x),)
     elif q_fn == 'indexing_mlp':
       output_size = q_fn_params.get('output_size')
-      model = networks.make_model(
-          [32, 32, output_size],
-          len(self.obs_indices),
-          spectral_norm=self.spectral_norm)
+      model = networks.make_model([32, 32, output_size],
+                                  len(self.obs_indices),
+                                  spectral_norm=self.spectral_norm)
       self.model = model
       if self.spectral_norm:
         rng1, rng2, rng3 = jax.random.split(rng, 3)
         model_params = model.init(rng1, rng2)
-        self.q_fn = lambda params, x: (
-            model.apply(
-                params,
-                self.index_obs(x),
-                rngs={'sing_vec': rng3},
-                mutable=['sing_vec'])[0],)
+        self.q_fn = lambda params, x: (model.apply(
+            params,
+            self.index_obs(x),
+            rngs={'sing_vec': rng3},
+            mutable=['sing_vec'])[0],)
       else:
         model_params = model.init(rng)
         self.q_fn = lambda params, x: (model.apply(params, self.index_obs(x)),)
@@ -167,6 +170,9 @@ class Discriminator(object):
     param = params.get(self.param_name, {})
     dist_params = self.q_fn(param, data)
     return self.dist_q_fn(*dist_params)
+
+  def dist_p_z(self):
+    return self.dist_p_fn()
 
   def sample_p_z(self, batch_size: int, rng: jnp.ndarray):
     """Sample from p(z)."""
@@ -207,7 +213,8 @@ class Discriminator(object):
   def unindex_obs(self, indexed_obs: jnp.ndarray):
     if self.obs_indices:
       obs = jnp.zeros(indexed_obs.shape[:-1] + (self.env_obs_size,))
-      obs[..., self.obs_indices] += indexed_obs
+      obs = jax.ops.index_add(obs, jax.ops.index[..., self.obs_indices],
+                              indexed_obs)
       return obs
     else:
       return indexed_obs
@@ -225,7 +232,10 @@ class Discriminator(object):
 class ParameterizeWrapper(Env):
   """A wrapper that parameterizes Physax Env."""
 
-  def __init__(self, environment: Env, disc: Discriminator):
+  def __init__(self,
+               environment: Env,
+               disc: Discriminator,
+               env_reward_multiplier: float = 0.0):
     self._environment = environment
     self.action_repeat = self._environment.action_repeat
     self.batch_size = self._environment.batch_size
@@ -233,6 +243,7 @@ class ParameterizeWrapper(Env):
     self.disc = disc
     self.z_size = disc.z_size
     self.env_obs_size = self._environment.observation_size
+    self.env_reward_multiplier = env_reward_multiplier
 
   def concat(
       self,
@@ -251,7 +262,8 @@ class ParameterizeWrapper(Env):
       new_reward = self.disc.ll_q_z_o(
           z, env_obs, params=params, add_offset=True)
       new_reward = jax.lax.stop_gradient(new_reward)
-      state = state.replace(reward=new_reward)
+      state = state.replace(reward=new_reward +
+                            self.env_reward_multiplier * state.reward)
     return state
 
   def reset(self, rng: jnp.ndarray, z: jnp.ndarray = None) -> State:
@@ -273,6 +285,12 @@ class ParameterizeWrapper(Env):
     state = self._environment.step(state, action)
     return self.concat(state, z, normalizer_params, params, replace_reward=True)
 
+  def step2(self, state: State, action: jnp.ndarray) -> State:
+    """Run one timestep of the environment's dynamics."""
+    _, z = self.disc.split_obs(state.obs)
+    state = self._environment.step(state, action)
+    return self.concat(state, z, replace_reward=False)
+
 
 def disc_loss_fn(data: StepData,
                  udata: StepData,
@@ -289,16 +307,16 @@ def disc_loss_fn(data: StepData,
   return disc_loss, rng
 
 
-def create(env_name: str, disc: Discriminator, **kwargs) -> Env:
+def create(env_name: str, wrapper_params: Dict[str, Any], **kwargs) -> Env:
   """Creates an Env with a specified brax system."""
   env = composer.create(env_name=env_name, **kwargs)
-  return ParameterizeWrapper(env, disc)
+  return ParameterizeWrapper(env, **wrapper_params)
 
 
-def create_fn(env_name: str, disc: Discriminator,
+def create_fn(env_name: str, wrapper_params: Dict[str, Any],
               **kwargs) -> Callable[..., Env]:
   """Returns a function that when called, creates an Env."""
-  return functools.partial(create, env_name, disc, **kwargs)
+  return functools.partial(create, env_name, wrapper_params, **kwargs)
 
 
 def create_disc_fn(algo_name: str,
@@ -307,7 +325,8 @@ def create_disc_fn(algo_name: str,
                    scale: float = 1.0,
                    diayn_num_skills: int = 8,
                    logits_clip_range: float = 5.0,
-                   spectral_norm: bool = False):
+                   spectral_norm: bool = False,
+                   **kwargs):
   """Create a standard discriminator."""
   disc_fn = {
       'fixed_gcrl':
@@ -318,7 +337,6 @@ def create_disc_fn(algo_name: str,
               obs_indices=obs_indices,
               dist_p='Deterministic',
               dist_p_params=dict(value=scale),
-              dist_q_params=dict(scale=scale),
           ),
       'gcrl':
           functools.partial(
@@ -326,8 +344,7 @@ def create_disc_fn(algo_name: str,
               q_fn='indexing',
               z_size=len(obs_indices),
               obs_indices=obs_indices,
-              dist_p_params=dict(scale=scale),
-              dist_q_params=dict(scale=scale),
+              dist_p_params=dict(scale=scale / 2.0),
           ),
       'cdiayn':
           functools.partial(
@@ -355,6 +372,7 @@ def create_disc_fn(algo_name: str,
               Discriminator,
               q_fn='mlp',
               z_size=diayn_num_skills,
+              obs_indices=obs_indices,
               q_fn_params=dict(
                   input_size=observation_size,
                   output_size=diayn_num_skills,
@@ -366,4 +384,5 @@ def create_disc_fn(algo_name: str,
           ),
   }.get(algo_name, None)
   assert disc_fn, f'invalid algo_name: {algo_name}'
+  disc_fn = functools.partial(disc_fn, obs_scale=scale, **kwargs)
   return disc_fn

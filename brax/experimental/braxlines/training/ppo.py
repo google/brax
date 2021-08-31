@@ -436,6 +436,10 @@ def train(environment_fn: Callable[..., envs.Env],
 
   minimize_loop = jax.pmap(_minimize_loop, axis_name='i')
 
+  _, inference = make_params_and_inference_fn(
+      core_env.observation_size, core_env.action_size, normalize_observations,
+      parametric_action_distribution_fn, make_models_fn)
+
   training_state = TrainingState(
       optimizer=optimizer,
       key=jnp.stack(jax.random.split(key, local_devices_to_use)),
@@ -478,11 +482,16 @@ def train(environment_fn: Callable[..., envs.Env],
           }))
       logging.info(metrics)
       if progress_fn:
-        updated_optimizer_params = jax.tree_map(lambda x: x[0],
-                                                training_state.optimizer.target)
+        params = dict(
+            normalizer=jax.tree_map(lambda x: x[0],
+                                    training_state.normalizer_params),
+            policy=jax.tree_map(lambda x: x[0],
+                                training_state.optimizer.target['policy']),
+            extra=jax.tree_map(lambda x: x[0],
+                               training_state.optimizer.target['extra']))
         progress_fn(
             int(training_state.normalizer_params[0][0]) * action_repeat,
-            metrics, updated_optimizer_params)
+            metrics, params)
 
     if it == log_frequency:
       break
@@ -506,10 +515,8 @@ def train(environment_fn: Callable[..., envs.Env],
 
   logging.info('total steps: %s', normalizer_params[0] * action_repeat)
 
-  _, inference = make_params_and_inference_fn(
-      core_env.observation_size, core_env.action_size, normalize_observations,
-      parametric_action_distribution_fn, make_models_fn)
-  params = normalizer_params, policy_params, extra_params
+  params = dict(
+      normalizer=normalizer_params, policy=policy_params, extra=extra_params)
 
   if process_count > 1:
     # Make sure all processes stay up until the end of main.
@@ -520,10 +527,18 @@ def train(environment_fn: Callable[..., envs.Env],
   return (inference, params, metrics)
 
 
-def make_params_and_inference_fn(observation_size, action_size,
-                                 normalize_observations,
-                                 parametric_action_distribution_fn,
-                                 make_models_fn):
+def make_params_and_inference_fn(
+    observation_size: int,
+    action_size: int,
+    normalize_observations: bool = False,
+    parametric_action_distribution_fn: Optional[Callable[[
+        int,
+    ], distribution.ParametricDistribution]] = distribution
+    .NormalTanhDistribution,
+    make_models_fn: Optional[Callable[
+        [int, int], Tuple[networks.FeedForwardModel]]] = networks.make_models,
+    extra_params: Dict[str, Dict[str, jnp.ndarray]] = None,
+):
   """Creates params and inference function for the PPO agent."""
   obs_normalizer_params, obs_normalizer_apply_fn = normalization.make_data_and_apply_fn(
       observation_size, normalize_observations=normalize_observations)
@@ -533,11 +548,15 @@ def make_params_and_inference_fn(observation_size, action_size,
                                    observation_size)
 
   def inference_fn(params, obs, key):
-    normalizer_params, policy_params = params[:2]
+    normalizer_params, policy_params = params['normalizer'], params['policy']
     obs = obs_normalizer_apply_fn(normalizer_params, obs)
     action = parametric_action_distribution.sample(
         policy_model.apply(policy_params, obs), key)
     return action
 
-  params = (obs_normalizer_params, policy_model.init(jax.random.PRNGKey(0)))
+  params = dict(
+      normalizer=obs_normalizer_params,
+      policy=policy_model.init(jax.random.PRNGKey(0)),
+      extra={} if extra_params is None else extra_params
+      )
   return params, inference_fn
