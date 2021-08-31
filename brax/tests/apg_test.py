@@ -25,13 +25,14 @@ class APGTest(parameterized.TestCase):
 
   def testTraining(self):
     _, _, metrics = apg.train(
-      environment_fn=envs.create_fn('reacherangle'),
-      episode_length=100,
-      action_repeat=4,
-      num_envs=16,
-      learning_rate=3e-3,
-      normalize_observations=True,
-      log_frequency=200
+        environment_fn=envs.create_fn('reacherangle'),
+        episode_length=100,
+        action_repeat=4,
+        num_envs=16,
+        learning_rate=3e-3,
+        normalize_observations=True,
+        log_frequency=200,
+        truncation_length=10,
     )
     self.assertGreater(metrics['eval/episode_reward'], -2)
 

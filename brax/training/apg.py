@@ -130,8 +130,9 @@ def train(
     actions = parametric_action_distribution.sample(logits, key_sample)
     nstate = step_fn(state, actions)
     if truncation_length is not None and truncation_length > 0:
-      truncate = jnp.mod(step_index+1, truncation_length) == 0
-      nstate = jax.lax.select(truncate, jax.lax.stop_gradient(nstate), nstate)
+      nstate = jax.lax.cond(
+          jnp.mod(step_index + 1, truncation_length) == 0.,
+          lambda x: jax.lax.stop_gradient(x), lambda x: x, nstate)
 
     return (nstate, params, normalizer_params, key), (nstate.core.reward,
                                                       state.core.obs)
