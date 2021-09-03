@@ -249,6 +249,7 @@ class CapsulePlane:
   def __init__(self, config: config_pb2.Config):
     self.config = config
     self.pairs = _find_body_pairs(config, 'capsule', 'plane')
+    self.pairs += _find_body_pairs(config, 'sphere', 'plane')
     if not self.pairs:
       return
 
@@ -262,7 +263,13 @@ class CapsulePlane:
     cap_end = []
     cap_radius = []
     for cap, plane in self.pairs:
-      capsule = cap.colliders[0].capsule
+      if cap.colliders[0].WhichOneof('type') == 'sphere':
+        capsule = config_pb2.Collider.Capsule()
+        capsule.radius = cap.colliders[0].sphere.radius
+        capsule.length = 2 * capsule.radius
+        capsule.end = 1
+      else:
+        capsule = cap.colliders[0].capsule
       ends = [capsule.end] if capsule.end else [-1, 1]
       for end in ends:
         cap_idx.append(body_idx[cap.name])
@@ -465,6 +472,8 @@ def _find_body_pairs(
     if include and ((body_a.name, body_b.name) not in include):
       continue
     if (body_a.name, body_b.name) in ignore:
+      continue
+    if body_a.frozen.all and body_b.frozen.all:
       continue
 
     collider_type_a = body_a.colliders[0].WhichOneof('type')

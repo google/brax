@@ -353,16 +353,16 @@ class Spherical(Joint):
     axis_2_in_plane = axis_2_in_plane / (1e-7 +
                                          jnp.linalg.norm(axis_2_in_plane))
 
-    angle_1 = jnp.arctan2(
+    angle_z = jnp.arctan2(
         jnp.dot(axis_2_in_plane, axis_1_p),
         jnp.dot(axis_2_in_plane, axis_2_p))  # parent z axis torque
-    angle_2 = -1. * jnp.arctan2(
+    angle_x = -1. * jnp.arctan2(
         jnp.dot(axis_2_c, axis_3_p),
         axis_2_in_projected_length)  # child x axis torque
     axis_3_in_child_xz = axis_3_p - jnp.dot(axis_3_p, axis_2_c) * axis_2_c
     axis_3_in_child_xz = axis_3_in_child_xz / (
         1e-7 + jnp.linalg.norm(axis_3_in_child_xz))
-    angle_3 = jnp.arctan2(
+    angle_y = jnp.arctan2(
         jnp.dot(
             axis_3_in_child_xz -
             jnp.dot(axis_3_in_child_xz, axis_3_c) * axis_3_c, axis_1_c),
@@ -371,7 +371,7 @@ class Spherical(Joint):
             jnp.dot(axis_3_in_child_xz, axis_1_c) * axis_1_c,
             axis_3_c))  # child y torque
 
-    axis = (axis_3_p, axis_1_c, axis_2_c)
-    angle = (angle_1, angle_2, angle_3)
+    axis = (axis_1_c, axis_2_c, axis_3_p,)
+    angle = (angle_x, angle_y, angle_z)
 
     return axis, angle

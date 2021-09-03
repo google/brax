@@ -98,7 +98,7 @@ class System:
         joint = parent_joint[body.name]
         axes = rot_axes(jnp.eye(3), euler_to_quat(joint.rotation))
         if joint.name in default_angles:
-          angles = vec_to_np(default_angles[joint.name].angle) * jnp.pi / 360
+          angles = vec_to_np(default_angles[joint.name].angle) * jnp.pi / 180
         else:
           angles = [(l.min + l.max) * jnp.pi / 360 for l in joint.angle_limit]
 

@@ -58,7 +58,8 @@ class IRLDiscriminator(object):
                target_dist_fn=None,
                balance_data: bool = True,
                normalize_obs: bool = False,
-               spectral_norm: bool = False):
+               spectral_norm: bool = False,
+               gradient_penalty_weight: float = 0.,):
     assert obs_scale is not None
     self.env_obs_size = env.observation_size
     self.arch = arch
@@ -89,6 +90,7 @@ class IRLDiscriminator(object):
     self.normalize_fn = normalization.make_data_and_apply_fn(
         [self.env_obs_size], self.normalize_obs)[1]
     self.spectral_norm = spectral_norm
+    self.gradient_penalty_weight = gradient_penalty_weight
 
   def set_target_data(self, target_data: jnp.ndarray):
     self.target_data = target_data
@@ -106,6 +108,11 @@ class IRLDiscriminator(object):
     else:
       model_params = model.init(rng)
       self.fn = model.apply
+
+    def mean_fn(params, x):
+      return jnp.mean(self.fn(params, x))
+    self.dmean_fn_dx = jax.grad(mean_fn, argnums=1)
+
     self.model = model
     self.initialized = True
     return {self.param_name: model_params}
@@ -181,7 +188,8 @@ class IRLDiscriminator(object):
         disc=self,
         normalize_obs=self.normalize_obs,
         target_data=self.target_data,
-        balance_data=self.balance_data)
+        balance_data=self.balance_data,
+        gradient_penalty_weight=self.gradient_penalty_weight,)
 
 
 class IRLWrapper(Env):
@@ -236,11 +244,14 @@ def disc_loss_fn(data: StepData,
                  disc: IRLDiscriminator,
                  target_data: jnp.ndarray,
                  balance_data: bool = True,
-                 normalize_obs: bool = False):
+                 normalize_obs: bool = False,
+                 gradient_penalty_weight: float = 0.,):
   """Discriminator loss function."""
   d = data if normalize_obs else udata
   target_d = target_data  # TODO: add normalize option for target_data
   d = disc.obs_act2data(d.obs[:d.actions.shape[0]], d.actions)
+  d = jnp.reshape(d, [-1, d.shape[-1]])
+  target_d = jnp.reshape(target_d, [-1, target_d.shape[-1]])
   if balance_data and d.shape[0] != target_d.shape[0]:
     rng, loss_key = jax.random.split(rng)
     if d.shape[0] > target_d.shape[0]:
@@ -255,6 +266,22 @@ def disc_loss_fn(data: StepData,
       disc.ll(d, jnp.zeros(d.shape[:-1] + (1,)), params=params))
   disc_loss += -jnp.mean(
       disc.ll(target_d, jnp.ones(target_d.shape[:-1] + (1,)), params=params))
+
+  if gradient_penalty_weight > 0.:
+    assert d.shape == target_d.shape, \
+        f'd shape {d.shape} does not match target_d shape {target_d.shape}!'
+    rng, sub_key = jax.random.split(rng)
+    w_shape = [d.shape[0], 1]
+    w = jax.random.uniform(sub_key, shape=w_shape, minval=0., maxval=1.)
+    interp_d = w * d + (1. - w) * target_d
+
+    p = params[disc.param_name]
+    grad = disc.dmean_fn_dx(p, interp_d)
+    if len(grad.shape) > 2:
+      grad = jnp.reshape(grad, [grad.shape[0], -1])
+    grad_norm = jnp.sum(jnp.linalg.norm(grad, axis=-1))
+    disc_loss = disc_loss + gradient_penalty_weight * grad_norm
+
   return disc_loss, rng
 
 

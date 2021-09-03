@@ -108,6 +108,28 @@ class HeightMapTest(absltest.TestCase):
     self.assertAlmostEqual(qp.pos[0, 2], 0.3, 2)
 
 
+class SphereTest(absltest.TestCase):
+
+  _CONFIG = """
+    dt: 5 substeps: 5000 friction: 0.6 baumgarte_erp: 0.1
+    gravity { z: -9.8 }
+    bodies {
+      name: "Sphere1" mass: 1
+      colliders { sphere { radius: 0.25}}
+      inertia { x: 1 y: 1 z: 1 }
+    }
+    bodies { name: "Ground" frozen: { all: true } colliders { plane {}}}
+    defaults {qps { name: "Sphere1" pos {z: 1}}}
+  """
+
+  def test_sphere_hits_ground(self):
+    """A sphere falls onto the ground and stops."""
+    sys = brax.System(text_format.Parse(SphereTest._CONFIG, brax.Config()))
+    qp = sys.default_qp(0)
+    qp, _ = sys.step(qp, jnp.array([]))
+    self.assertAlmostEqual(qp.pos[0, 2], 0.25, 2)
+
+
 class CapsuleTest(absltest.TestCase):
 
   _CONFIG = """

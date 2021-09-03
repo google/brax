@@ -19,7 +19,6 @@ to minutes:
     [PPO](https://github.com/google/brax/blob/main/brax/training/ppo.py),
     [SAC](https://github.com/google/brax/blob/main/brax/training/sac.py), and
     [evolutionary strategies](https://github.com/google/brax/blob/main/brax/training/es.py).
-*   Experimental algorithms such as [Variational GCRL](https://colab.research.google.com/github/google/brax/blob/main/notebooks/braxlines/vgcrl.ipynb), [Adversarial Inverse RL, and State Marginal Matching](https://colab.research.google.com/github/google/brax/blob/main/notebooks/braxlines/irl_smm.ipynb)
 *   Learning algorithms that leverage the differentiability of the simulator, such as [analytic policy gradients](https://github.com/google/brax/blob/main/brax/training/apg.py).
 
 ## Quickstart: Colab in the Cloud
