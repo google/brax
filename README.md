@@ -32,7 +32,17 @@ Explore Brax easily and quickly through a series of colab notebooks:
 
 ## Using Brax locally
 
-To install Brax from source, clone this repo, `cd` to it, and then:
+
+To install Brax from pypi, install it with:
+
+```
+python3 -m venv env
+source env/bin/activate
+pip install --upgrade pip
+pip install brax
+```
+
+Alternatively, to install Brax from source, clone this repo, `cd` to it, and then:
 
 ```
 python3 -m venv env
@@ -41,14 +51,7 @@ pip install --upgrade pip
 pip install -e .
 ```
 
-Alternatively, to install Brax from pypi, install it with:
 
-```
-python3 -m venv env
-source env/bin/activate
-pip install --upgrade pip
-pip install brax
-```
 
 To train a model:
 
