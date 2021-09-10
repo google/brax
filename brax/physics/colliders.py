@@ -18,16 +18,14 @@
 import itertools
 from typing import List, Tuple
 
+from brax.physics import bodies
+from brax.physics import config_pb2
+from brax.physics import math
+from brax.physics.base import P, QP, euler_to_quat, take, vec_to_np
 from flax import struct
 import jax
 from jax import ops
 import jax.numpy as jnp
-
-from brax.physics import bodies
-from brax.physics import config_pb2
-from brax.physics import math
-from brax.physics.base import P, QP, euler_to_quat, vec_to_np, take
-from brax.physics.math import safe_norm
 
 
 class BoxPlane:
@@ -119,18 +117,18 @@ class BoxHeightMap:
 
     body_idx = {b.name: i for i, b in enumerate(config.bodies)}
     box_idxs = []
-    heightMap_idxs = []
+    height_map_idxs = []
     corners = []
     heights = []
     sizes = []
-    meshSizes = []
+    mesh_sizes = []
 
-    for box, heightMap in self.pairs:
-      if not heightMap.frozen.all:
-        raise ValueError('active height maps unsupported: %s' % heightMap)
+    for box, height_map in self.pairs:
+      if not height_map.frozen.all:
+        raise ValueError('active height maps unsupported: %s' % height_map)
       for i in range(8):
         box_idxs.append(body_idx[box.name])
-        heightMap_idxs.append(body_idx[heightMap.name])
+        height_map_idxs.append(body_idx[height_map.name])
         corner = jnp.array(
             [i % 2 * 2 - 1, 2 * (i // 4) - 1, i // 2 % 2 * 2 - 1],
             dtype=jnp.float32)
@@ -140,25 +138,24 @@ class BoxHeightMap:
         corner = corner + vec_to_np(col.position)
         corners.append(corner)
 
-        meshSize = int(
-            jnp.round(jnp.sqrt(len(heightMap.colliders[0].heightMap.data))))
-        if not len(heightMap.colliders[0].heightMap.data) == meshSize**2:
+        mesh_size = int(
+            jnp.round(jnp.sqrt(len(height_map.colliders[0].heightMap.data))))
+        if len(height_map.colliders[0].heightMap.data) != mesh_size**2:
           raise ValueError(
               'data length for an height map should be a perfect square.')
 
-        height = jnp.array(heightMap.colliders[0].heightMap.data).reshape(
-            (meshSize, meshSize))
+        height = jnp.array(height_map.colliders[0].heightMap.data).reshape(
+            (mesh_size, mesh_size))
         heights.append(height)
-
-        sizes.append(heightMap.colliders[0].heightMap.size)
-        meshSizes.append(meshSize)
+        sizes.append(height_map.colliders[0].heightMap.size)
+        mesh_sizes.append(mesh_size)
 
     body = bodies.Body.from_config(config)
     self.box = take(body, jnp.array(box_idxs))
-    self.heightMap = take(body, jnp.array(heightMap_idxs))
+    self.height_map = take(body, jnp.array(height_map_idxs))
     self.corner = jnp.array(corners)
     self.size = jnp.array(sizes)
-    self.meshSize = jnp.array(meshSizes)
+    self.mesh_size = jnp.array(mesh_sizes)
     self.heights = jnp.array(heights)
 
   def apply(self, qp: QP, dt: float) -> P:
@@ -179,12 +176,10 @@ class BoxHeightMap:
       return P(jnp.zeros_like(qp.vel), jnp.zeros_like(qp.ang))
 
     @jax.vmap
-    def apply(box, corner, qp_box, qp_heightMap, size, meshSize, heights):
+    def apply(box, corner, qp_box, qp_height_map, size, mesh_size, heights):
       world_pos, vel = math.to_world(qp_box, corner)
-
-      pos = math.inv_rotate(world_pos - qp_heightMap.pos, qp_heightMap.rot)
-
-      uv_pos = (pos[:2]) / size * (meshSize - 1)
+      pos = math.inv_rotate(world_pos - qp_height_map.pos, qp_height_map.rot)
+      uv_pos = (pos[:2]) / size * (mesh_size - 1)
 
       # find the square in the mesh that enclose the candidate point, with mesh
       # indices ux_idx, ux_udx_u, uv_idx_v, uv_idx_uv.
@@ -210,13 +205,13 @@ class BoxHeightMap:
       h2 = heights[point_2[0], point_2[1]]
 
       raw_normal = jnp.array(
-          [-mu * (h1 - h0), -mu * (h2 - h0), 1 * (size / (meshSize - 1))])
+          [-mu * (h1 - h0), -mu * (h2 - h0), 1 * (size / (mesh_size - 1))])
       normal = raw_normal / jnp.linalg.norm(raw_normal)
-      rotated_normal = math.rotate(normal, qp_heightMap.rot)
+      rotated_normal = math.rotate(normal, qp_height_map.rot)
 
       pos_0 = jnp.array([
-          point_0[0] * size / (meshSize - 1),
-          point_0[1] * size / (meshSize - 1), h0
+          point_0[0] * size / (mesh_size - 1),
+          point_0[1] * size / (mesh_size - 1), h0
       ])
       penetration = jnp.dot(pos - pos_0, normal)
 
@@ -226,9 +221,9 @@ class BoxHeightMap:
       return dp, collided
 
     qp_box = take(qp, self.box.idx)
-    qp_heightMap = take(qp, self.heightMap.idx)
-    dp, colliding = apply(self.box, self.corner, qp_box, qp_heightMap,
-                          self.size, self.meshSize, self.heights)
+    qp_height_map = take(qp, self.height_map.idx)
+    dp, colliding = apply(self.box, self.corner, qp_box, qp_height_map,
+                          self.size, self.mesh_size, self.heights)
 
     # collapse/sum across all corners
     num_bodies = len(self.config.bodies)
@@ -534,9 +529,7 @@ def _collide(config: config_pb2.Config, body: bodies.Body, qp: QP,
   colliding_d = colliding_n
   colliding_d *= jnp.where(math.safe_norm(rel_vel_d) > (1. / 100.), 1., 0.)
 
-  # factor of 2.0 here empirically helps object grip
-  # TODO: expose friction physics parameters in config
-  return dp_n * colliding_n + dp_d * colliding_d * 2.0
+  return dp_n * colliding_n + dp_d * colliding_d
 
 
 def _collide_pair(config: config_pb2.Config, body_a: bodies.Body,

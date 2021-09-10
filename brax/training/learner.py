@@ -73,8 +73,6 @@ flags.DEFINE_integer('fitness_shaping', 0,
                      'numbers mean.')
 flags.DEFINE_bool('center_fitness', False,
                   'Whether to normalize fitness after the shaping.')
-flags.DEFINE_integer('fitness_episode_length', 1000,
-                     'Episode length to be used for fitness computation.')
 flags.DEFINE_float('l2coeff', 0,
                    'L2 regularization coefficient for model params.')
 # SAC hps.
@@ -138,7 +136,6 @@ def main(unused_argv):
           log_frequency=FLAGS.eval_frequency,
           center_fitness=FLAGS.center_fitness,
           l2coeff=FLAGS.l2coeff,
-          fitness_episode_length=FLAGS.fitness_episode_length,
           learning_rate=FLAGS.learning_rate,
           seed=FLAGS.seed,
           episode_length=FLAGS.episode_length,

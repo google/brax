@@ -178,7 +178,7 @@ class Discriminator(object):
     """Sample from p(z)."""
     dist_p = self.dist_p_fn()
     if batch_size:
-      return dist_p.sample(seed=rng[-1], sample_shape=(batch_size,))
+      return dist_p.sample(seed=rng, sample_shape=(batch_size,))
     else:
       return dist_p.sample(seed=rng, sample_shape=())
 
@@ -238,7 +238,10 @@ class ParameterizeWrapper(Env):
                env_reward_multiplier: float = 0.0):
     self._environment = environment
     self.action_repeat = self._environment.action_repeat
-    self.batch_size = self._environment.batch_size
+    if hasattr(self._environment, 'batch_size'):
+      self.batch_size = self._environment.batch_size
+    else:
+      self.batch_size = None
     self.sys = self._environment.sys
     self.disc = disc
     self.z_size = disc.z_size

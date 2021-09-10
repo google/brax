@@ -14,24 +14,20 @@
 
 """Trains a humanoid to run in the +x direction."""
 
-import jax
-import jax.numpy as jnp
-
 import brax
 from brax.envs import env
 from brax.physics import bodies
 from brax.physics.base import take
-
-from google.protobuf import text_format
+import jax
+import jax.numpy as jnp
 
 
 class Humanoid(env.Env):
   """Trains a humanoid to run in the +x direction."""
 
   def __init__(self, **kwargs):
-    config = text_format.Parse(_SYSTEM_CONFIG, brax.Config())
-    super().__init__(config, **kwargs)
-    body = bodies.Body.from_config(config)
+    super().__init__(_SYSTEM_CONFIG, **kwargs)
+    body = bodies.Body.from_config(self.sys.config)
     body = take(body, body.idx[:-1])  # skip the floor body
     self.mass = body.mass.reshape(-1, 1)
     self.inertia = body.inertia
@@ -42,21 +38,18 @@ class Humanoid(env.Env):
     qp, info = self.sys.step(qp,
                              jax.random.uniform(rng, (self.action_size,)) * .5)
     obs = self._get_obs(qp, info, jnp.zeros(self.action_size))
-    reward, done, steps = jnp.zeros(3)
+    reward, done, zero = jnp.zeros(3)
     metrics = {
-        'reward_linvel': jnp.zeros(()),
-        'reward_quadctrl': jnp.zeros(()),
-        'reward_alive': jnp.zeros(()),
-        'reward_impact': jnp.zeros(())
+        'reward_linvel': zero,
+        'reward_quadctrl': zero,
+        'reward_alive': zero,
+        'reward_impact': zero
     }
-    return env.State(rng, qp, info, obs, reward, done, steps, metrics)
+    return env.State(qp, obs, reward, done, metrics)
 
   def step(self, state: env.State, action: jnp.ndarray) -> env.State:
     """Run one timestep of the environment's dynamics."""
-    rng = state.rng
-    # note the minus sign.  reverse torque improves performance over a range of
-    # hparams.  as to why: ¯\_(ツ)_/¯
-    qp, info = self.sys.step(state.qp, -action)
+    qp, info = self.sys.step(state.qp, action)
     obs = self._get_obs(qp, info, action)
 
     pos_before = state.qp.pos[:-1]  # ignore floor at last index
@@ -70,18 +63,15 @@ class Humanoid(env.Env):
     alive_bonus = 5.0
     reward = lin_vel_cost - quad_ctrl_cost - quad_impact_cost + alive_bonus
 
-    steps = state.steps + self.action_repeat
-    done = jnp.where(steps >= self.episode_length, x=1.0, y=0.0)
-    done = jnp.where(qp.pos[0, 2] < 0.6, x=1.0, y=done)
+    done = jnp.where(qp.pos[0, 2] < 0.65, x=1.0, y=0.0)
     done = jnp.where(qp.pos[0, 2] > 2.1, x=1.0, y=done)
-    metrics = {
-        'reward_linvel': lin_vel_cost,
-        'reward_quadctrl': -quad_ctrl_cost,
-        'reward_alive': alive_bonus,
-        'reward_impact': -quad_impact_cost
-    }
+    state.metrics.update(
+        reward_linvel=lin_vel_cost,
+        reward_quadctrl=quad_ctrl_cost,
+        reward_alive=alive_bonus,
+        reward_impact=quad_impact_cost)
 
-    return env.State(rng, qp, info, obs, reward, done, steps, metrics)
+    return state.replace(qp=qp, obs=obs, reward=reward, done=done)
 
   def _get_obs(self, qp: brax.QP, info: brax.Info,
                action: jnp.ndarray) -> jnp.ndarray:
@@ -106,9 +96,8 @@ class Humanoid(env.Env):
     # angular velocity of the torso (3,)
     # joint angle velocities (8,)
     qvel = [
-        qp.vel[0], qp.ang[0], joint_1d_vel[0], joint_2d_vel[0],
-        joint_2d_vel[1], joint_3d_vel[0], joint_3d_vel[1],
-        joint_3d_vel[2]
+        qp.vel[0], qp.ang[0], joint_1d_vel[0], joint_2d_vel[0], joint_2d_vel[1],
+        joint_3d_vel[0], joint_3d_vel[1], joint_3d_vel[2]
     ]
 
     # actuator forces
@@ -158,6 +147,7 @@ class Humanoid(env.Env):
 
     return jnp.concatenate(qpos + qvel + cinert + cvel + qfrc_actuator +
                            cfrc_ext)
+
 
 _SYSTEM_CONFIG = """
 bodies {
@@ -799,6 +789,16 @@ collide_include {
 collide_include {
   first: "floor"
   second: "right_shin"
+}
+defaults {
+  angles {
+    name: "left_knee"
+    angle { x: -25. y: 0 z: 0 }
+  }
+  angles {
+    name: "right_knee"
+    angle { x: -25. y: 0 z: 0 }
+  }
 }
 friction: 1.0
 gravity {

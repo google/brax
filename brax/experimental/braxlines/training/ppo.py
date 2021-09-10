@@ -253,11 +253,11 @@ def train(environment_fn: Callable[..., envs.Env],
   # key_models should be the same, so that models are initialized the same way
   # for different processes
 
+  key_envs = jax.random.split(key_env, local_devices_to_use)
   core_env = environment_fn(
       action_repeat=action_repeat,
       batch_size=num_envs // local_devices_to_use // process_count,
       episode_length=episode_length)
-  key_envs = jax.random.split(key_env, local_devices_to_use)
 
   core_eval_env = environment_fn(
       action_repeat=action_repeat,

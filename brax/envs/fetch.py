@@ -16,22 +16,18 @@
 
 from typing import Tuple
 
-import dataclasses
-import jax
-import jax.numpy as jnp
 import brax
 from brax.envs import env
 from brax.physics import math
-
-from google.protobuf import text_format
+import jax
+import jax.numpy as jnp
 
 
 class Fetch(env.Env):
   """Fetch trains a dog to run to a target location."""
 
   def __init__(self, **kwargs):
-    config = text_format.Parse(_SYSTEM_CONFIG, brax.Config())
-    super().__init__(config, **kwargs)
+    super().__init__(_SYSTEM_CONFIG, **kwargs)
     self.target_idx = self.sys.body_idx['Target']
     self.torso_idx = self.sys.body_idx['Torso']
     self.target_radius = 2
@@ -41,10 +37,10 @@ class Fetch(env.Env):
     qp = self.sys.default_qp()
     rng, target = self._random_target(rng)
     pos = jax.ops.index_update(qp.pos, jax.ops.index[self.target_idx], target)
-    qp = dataclasses.replace(qp, pos=pos)
+    qp = qp.replace(pos=pos)
     info = self.sys.info(qp)
     obs = self._get_obs(qp, info)
-    reward, done, steps, zero = jnp.zeros(4)
+    reward, done, zero = jnp.zeros(3)
     metrics = {
         'hits': zero,
         'weightedHits': zero,
@@ -52,10 +48,10 @@ class Fetch(env.Env):
         'torsoIsUp': zero,
         'torsoHeight': zero
     }
-    return env.State(rng, qp, info, obs, reward, done, steps, metrics)
+    info = {'rng': rng}
+    return env.State(qp, obs, reward, done, metrics, info)
 
   def step(self, state: env.State, action: jnp.ndarray) -> env.State:
-    rng = state.rng
     qp, info = self.sys.step(state.qp, action)
     obs = self._get_obs(qp, info)
 
@@ -83,22 +79,20 @@ class Fetch(env.Env):
 
     reward = torso_height + moving_to_target + torso_is_up + weighted_hit
 
-    steps = state.steps + self.action_repeat
-    done = jnp.where(steps >= self.episode_length, 1.0, 0.0)
-    metrics = {
-        'hits': target_hit,
-        'weightedHits': weighted_hit,
-        'movingToTarget': moving_to_target,
-        'torsoIsUp': torso_is_up,
-        'torsoHeight': torso_height
-    }
+    state.metrics.update(
+        hits=target_hit,
+        weightedHits=weighted_hit,
+        movingToTarget=moving_to_target,
+        torsoIsUp=torso_is_up,
+        torsoHeight=torso_height)
 
     # teleport any hit targets
-    rng, target = self._random_target(rng)
+    rng, target = self._random_target(state.info['rng'])
     target = jnp.where(target_hit, target, qp.pos[self.target_idx])
     pos = jax.ops.index_update(qp.pos, jax.ops.index[self.target_idx], target)
-    qp = dataclasses.replace(qp, pos=pos)
-    return env.State(rng, qp, info, obs, reward, done, steps, metrics)
+    qp = qp.replace(pos=pos)
+    state.info.update(rng=rng)
+    return state.replace(qp=qp, obs=obs, reward=reward)
 
   def _get_obs(self, qp: brax.QP, info: brax.Info) -> jnp.ndarray:
     """Egocentric observation of target and the dog's body."""

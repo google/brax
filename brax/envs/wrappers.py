@@ -12,16 +12,85 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Brax Gym wrapper for single and batched environments."""
+"""Wrappers for Brax and Gym env."""
 
 from typing import ClassVar, Optional
 
+from brax.envs import env as brax_env
 import gym
 from gym import spaces
 from gym.vector import utils
 import jax
+from jax import numpy as jnp
 import numpy as np
-from brax.envs import env
+
+
+class VectorWrapper(brax_env.Wrapper):
+  """Vectorizes Brax env."""
+
+  def __init__(self, env: brax_env.Env, batch_size: int):
+    super().__init__(env)
+    self.batch_size = batch_size
+
+  def reset(self, rng: jnp.ndarray) -> brax_env.State:
+    rng = jax.random.split(rng, self.batch_size)
+    return jax.vmap(self.env.reset)(rng)
+
+  def step(self, state: brax_env.State, action: jnp.ndarray) -> brax_env.State:
+    return jax.vmap(self.env.step)(state, action)
+
+
+class EpisodeWrapper(brax_env.Wrapper):
+  """Maintains episode step count and sets done at episode end."""
+
+  def __init__(self, env: brax_env.Env, episode_length: int,
+               action_repeat: int):
+    super().__init__(env)
+    if hasattr(self.unwrapped, 'sys'):
+      self.unwrapped.sys.config.dt *= action_repeat
+      self.unwrapped.sys.config.substeps *= action_repeat
+    self.episode_length = episode_length
+    self.action_repeat = action_repeat
+
+  def reset(self, rng: jnp.ndarray) -> brax_env.State:
+    state = self.env.reset(rng)
+    state.info['steps'] = jnp.zeros(())
+    return state
+
+  def step(self, state: brax_env.State, action: jnp.ndarray) -> brax_env.State:
+    state = self.env.step(state, action)
+    steps = state.info['steps'] + self.action_repeat
+    one = jnp.ones_like(state.done)
+    done = jnp.where(steps >= self.episode_length, one, state.done)
+    state.info['steps'] = steps
+    return state.replace(done=done)
+
+
+class AutoResetWrapper(brax_env.Wrapper):
+  """Automatically resets Brax envs that are done."""
+
+  def reset(self, rng: jnp.ndarray) -> brax_env.State:
+    state = self.env.reset(rng)
+    state.info['first_qp'] = state.qp
+    state.info['first_obs'] = state.obs
+    return state
+
+  def step(self, state: brax_env.State, action: jnp.ndarray) -> brax_env.State:
+    steps = state.info['steps']
+    steps = jnp.where(state.done, jnp.zeros_like(steps), steps)
+    state.info.update(steps=steps)
+    state = state.replace(done=jnp.zeros_like(state.done))
+    state = self.env.step(state, action)
+
+    def where_done(x, y):
+      done = state.done
+      if done.shape:
+        done = jnp.reshape(done, [x.shape[0]] + [1] * (len(x.shape) - 1))  # type: ignore
+      return jnp.where(done, x, y)
+
+    qp = jax.tree_map(where_done, state.info['first_qp'], state.qp)
+    obs = where_done(state.info['first_obs'], state.obs)
+    return state.replace(qp=qp, obs=obs)
 
 
 class GymWrapper(gym.Env):
@@ -32,30 +101,32 @@ class GymWrapper(gym.Env):
   _gym_disable_underscore_compat: ClassVar[bool] = True
 
   def __init__(self,
-               environment: env.Env,
+               env: brax_env.Env,
                seed: int = 0,
                backend: Optional[str] = None):
-    self._environment = environment
+    self._env = env
     self.seed(seed)
     self.backend = backend
     self._state = None
 
-    obs_high = (np.inf * np.ones(self._environment.observation_size)).astype(
+    obs_high = (np.inf * np.ones(self._env.observation_size)).astype(
         np.float32)
     self.observation_space = spaces.Box(-obs_high, obs_high, dtype=np.float32)
 
-    action_high = np.ones(self._environment.action_size, dtype=np.float32)
+    action_high = np.ones(self._env.action_size, dtype=np.float32)
     self.action_space = spaces.Box(-action_high, action_high, dtype=np.float32)
 
     def reset(key):
       key1, key2 = jax.random.split(key)
-      state = self._environment.reset(key2)
+      state = self._env.reset(key2)
       return state, state.obs, key1
+
     self._reset = jax.jit(reset, backend=self.backend)
 
     def step(state, action):
-      state = self._environment.step(state, action)
+      state = self._env.step(state, action)
       return state, state.obs, state.reward, state.done
+
     self._step = jax.jit(step, backend=self.backend)
 
   def reset(self):
@@ -78,41 +149,41 @@ class VectorGymWrapper(gym.vector.VectorEnv):
   _gym_disable_underscore_compat: ClassVar[bool] = True
 
   def __init__(self,
-               environment: env.Env,
+               env: brax_env.Env,
                seed: int = 0,
                backend: Optional[str] = None):
-    self._environment = environment
-    if not self._environment.batch_size:
-      raise ValueError('underlying environment must be batched')
+    self._env = env
+    if not hasattr(self._env, 'batch_size'):
+      raise ValueError('underlying env must be batched')
 
-    self.num_envs = self._environment.batch_size
-    self._key_size = self.num_envs + 1
+    self.num_envs = self._env.batch_size
     self.seed(seed)
     self.backend = backend
     self._state = None
 
-    obs_high = (np.inf * np.ones(self._environment.observation_size)).astype(
-        np.float32)
+    obs_high = (np.inf * np.ones(self._env.observation_size)).astype(np.float32)
     self.single_observation_space = spaces.Box(
         -obs_high, obs_high, dtype=np.float32)
     self.observation_space = utils.batch_space(self.single_observation_space,
                                                self.num_envs)
 
-    action_high = np.ones(self._environment.action_size, dtype=np.float32)
+    action_high = np.ones(self._env.action_size, dtype=np.float32)
     self.single_action_space = spaces.Box(
         -action_high, action_high, dtype=np.float32)
     self.action_space = utils.batch_space(self.single_action_space,
                                           self.num_envs)
 
     def reset(key):
-      keys = jax.random.split(key, self._key_size)
-      state = self._environment.reset(keys[1:])
-      return state, state.obs, keys[0]
+      key1, key2 = jax.random.split(key)
+      state = self._env.reset(key2)
+      return state, state.obs, key1
+
     self._reset = jax.jit(reset, backend=self.backend)
 
     def step(state, action):
-      state = self._environment.step(state, action)
+      state = self._env.step(state, action)
       return state, state.obs, state.reward, state.done
+
     self._step = jax.jit(step, backend=self.backend)
 
   def reset(self):

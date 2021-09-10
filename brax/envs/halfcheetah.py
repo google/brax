@@ -14,33 +14,27 @@
 
 """Trains a halfcheetah to run in the +x direction."""
 
-import jax.numpy as jnp
-
 import brax
 from brax.envs import env
-
-from google.protobuf import text_format
+import jax.numpy as jnp
 
 
 class Halfcheetah(env.Env):
   """Trains a halfcheetah to run in the +x direction."""
 
   def __init__(self, **kwargs):
-    config = text_format.Parse(_SYSTEM_CONFIG, brax.Config())
-    super().__init__(config, **kwargs)
+    super().__init__(_SYSTEM_CONFIG, **kwargs)
 
   def reset(self, rng: jnp.ndarray) -> env.State:
     """Resets the environment to an initial state."""
     qp = self.sys.default_qp()
     info = self.sys.info(qp)
     obs = self._get_obs(qp, info)
-    reward, done, steps = jnp.zeros(3)
-    metrics = {}
-    return env.State(rng, qp, info, obs, reward, done, steps, metrics)
+    reward, done = jnp.zeros(2)
+    return env.State(qp, obs, reward, done)
 
   def step(self, state: env.State, action: jnp.ndarray) -> env.State:
     """Run one timestep of the environment's dynamics."""
-    rng = state.rng
     qp, info = self.sys.step(state.qp, action)
     obs = self._get_obs(qp, info)
 
@@ -50,11 +44,7 @@ class Halfcheetah(env.Env):
     ctrl_cost = -.1 * jnp.sum(jnp.square(action))
     reward = forward_reward + ctrl_cost
 
-    steps = state.steps + self.action_repeat
-    done = jnp.where(steps >= self.episode_length, x=1.0, y=0.0)
-    metrics = {}
-
-    return env.State(rng, qp, info, obs, reward, done, steps, metrics)
+    return state.replace(qp=qp, obs=obs, reward=reward)
 
   def _get_obs(self, qp: brax.QP, info: brax.Info) -> jnp.ndarray:
     """Observe halfcheetah body position and velocities."""
@@ -430,7 +420,7 @@ gravity {
   z: -9.8100004196167
 }
 angular_damping: -0.009999999776482582
-baumgarte_erp: 0.10000000149011612
+baumgarte_erp: 0.20000000149011612
 collide_include {
   first: "floor"
   second: "torso"
@@ -442,6 +432,14 @@ collide_include {
 collide_include {
   first: "floor"
   second: "ffoot"
+}
+collide_include {
+  first: "floor"
+  second: "bthigh"
+}
+collide_include {
+  first: "floor"
+  second: "fthigh"
 }
 dt: 0.05
 substeps: 16

@@ -24,7 +24,7 @@ def bcast_local_devices(value, local_devices_to_use=1):
   """Broadcasts an object to all local devices."""
   devices = jax.local_devices()[:local_devices_to_use]
   return jax.tree_map(
-      lambda v: jax.api.device_put_sharded(len(devices) * [v], devices), value)
+      lambda v: jax.device_put_sharded(len(devices) * [v], devices), value)
 
 
 def create_observation_normalizer(obs_size, normalize_observations=True,
@@ -35,17 +35,24 @@ def create_observation_normalizer(obs_size, normalize_observations=True,
   """Observation normalization based on running statistics."""
   assert num_leading_batch_dims == 1 or num_leading_batch_dims == 2
   if normalize_observations:
-    def update_fn(params, obs):
+    def update_fn(params, obs, weights=None):
       normalization_steps, running_mean, running_variance = params
 
-      step_increment = obs.shape[0] * (
-          obs.shape[1] if num_leading_batch_dims == 2 else 1)
+      if weights is not None:
+        weights = jnp.expand_dims(
+            weights, axis=-1)  # for shape matching during multiplication
+        step_increment = jnp.sum(weights)
+      else:
+        step_increment = obs.shape[0] * (
+            obs.shape[1] if num_leading_batch_dims == 2 else 1)
       if pmap_to_devices:
         step_increment = jax.lax.psum(step_increment, axis_name=pmap_axis_name)
       total_new_steps = normalization_steps + step_increment
 
       # Compute the incremental update and divide by the number of new steps.
       input_to_old_mean = obs - running_mean
+      if weights is not None:
+        input_to_old_mean = input_to_old_mean * weights
       mean_diff = jnp.sum(input_to_old_mean / total_new_steps,
                           axis=((0, 1) if num_leading_batch_dims == 2 else 0))
       if pmap_to_devices:
@@ -54,6 +61,8 @@ def create_observation_normalizer(obs_size, normalize_observations=True,
 
       # Compute difference of input to the new mean for Welford update.
       input_to_new_mean = obs - new_mean
+      if weights is not None:
+        input_to_new_mean = input_to_new_mean * weights
       var_diff = jnp.sum(input_to_new_mean * input_to_old_mean,
                          axis=((0, 1) if num_leading_batch_dims == 2 else 0))
       if pmap_to_devices:
@@ -62,9 +71,12 @@ def create_observation_normalizer(obs_size, normalize_observations=True,
       return (total_new_steps, new_mean, running_variance + var_diff)
 
   else:
-    def update_fn(params, obs):
-      step_increment = obs.shape[0] * (
-          obs.shape[1] if num_leading_batch_dims == 2 else 1)
+    def update_fn(params, obs, weights=None):
+      if weights is not None:
+        step_increment = jnp.sum(weights)
+      else:
+        step_increment = obs.shape[0] * (
+            obs.shape[1] if num_leading_batch_dims == 2 else 1)
       if pmap_to_devices:
         step_increment = jax.lax.psum(step_increment, axis_name=pmap_axis_name)
       return (params[0] + step_increment, params[1], params[2])
@@ -96,4 +108,3 @@ def make_data_and_apply_fn(obs_size, normalize_observations=True,
       del params
       return obs
   return data, apply_fn
-

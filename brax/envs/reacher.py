@@ -19,42 +19,37 @@ Based on the OpenAI Gym MuJoCo Reacher environment.
 
 from typing import Tuple
 
-import dataclasses
-import jax
-import jax.numpy as jnp
 import brax
 from brax.envs import env
 from brax.physics import math
 from brax.physics.base import take
-
-from google.protobuf import text_format
+import jax
+import jax.numpy as jnp
 
 
 class Reacher(env.Env):
   """Trains a reacher arm to touch a sequence of random targets."""
 
   def __init__(self, **kwargs):
-    config = text_format.Parse(_SYSTEM_CONFIG, brax.Config())
-    super().__init__(config, **kwargs)
+    super().__init__(_SYSTEM_CONFIG, **kwargs)
     self.target_idx = self.sys.body_idx['target']
     self.arm_idx = self.sys.body_idx['body1']
 
   def reset(self, rng: jnp.ndarray) -> env.State:
     qp = self.sys.default_qp()
-    rng, target = self._random_target(rng)
+    _, target = self._random_target(rng)
     pos = jax.ops.index_update(qp.pos, jax.ops.index[self.target_idx], target)
-    qp = dataclasses.replace(qp, pos=pos)
+    qp = qp.replace(pos=pos)
     info = self.sys.info(qp)
     obs = self._get_obs(qp, info)
-    reward, done, steps, zero = jnp.zeros(4)
+    reward, done, zero = jnp.zeros(3)
     metrics = {
         'rewardDist': zero,
         'rewardCtrl': zero,
     }
-    return env.State(rng, qp, info, obs, reward, done, steps, metrics)
+    return env.State(qp, obs, reward, done, metrics)
 
   def step(self, state: env.State, action: jnp.ndarray) -> env.State:
-    rng = state.rng
     qp, info = self.sys.step(state.qp, action)
     obs = self._get_obs(qp, info)
 
@@ -63,14 +58,12 @@ class Reacher(env.Env):
     reward_ctrl = -jnp.square(action).sum()
     reward = reward_dist + reward_ctrl
 
-    steps = state.steps + self.action_repeat
-    done = jnp.where(steps >= self.episode_length, 1.0, 0.0)
-    metrics = {
-        'rewardDist': reward_dist,
-        'rewardCtrl': reward_ctrl,
-    }
+    state.metrics.update(
+        rewardDist=reward_dist,
+        rewardCtrl=reward_ctrl,
+    )
 
-    return env.State(rng, qp, info, obs, reward, done, steps, metrics)
+    return state.replace(qp=qp, obs=obs, reward=reward)
 
   def _get_obs(self, qp: brax.QP, info: brax.Info) -> jnp.ndarray:
     """Egocentric observation of target and arm body."""
@@ -104,6 +97,7 @@ class Reacher(env.Env):
     target_z = .01
     target = jnp.array([target_x, target_y, target_z]).transpose()
     return rng, target
+
 
 _SYSTEM_CONFIG = """
 bodies {

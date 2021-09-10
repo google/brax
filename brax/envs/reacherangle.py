@@ -19,53 +19,45 @@ Based on the OpenAI Gym MuJoCo Reacher environment.
 
 from typing import Tuple
 
-import dataclasses
-import jax
-import jax.numpy as jnp
 import brax
 from brax.envs import env
 from brax.physics import math
 from brax.physics.base import take
-
-from google.protobuf import text_format
+import jax
+import jax.numpy as jnp
 
 
 class ReacherAngle(env.Env):
   """Trains a reacher arm to touch a random target via angle actuators."""
 
   def __init__(self, **kwargs):
-    config = text_format.Parse(_SYSTEM_CONFIG, brax.Config())
-    super().__init__(config, **kwargs)
+    super().__init__(_SYSTEM_CONFIG, **kwargs)
     self.target_idx = self.sys.body_idx['target']
     self.arm_idx = self.sys.body_idx['body1']
 
     # map the [-1, 1] action space into a valid angle for the actuators
-    limits = [[(jj.min, jj.max)
-               for jj in j.angle_limit]
-              for j in self.sys.config.joints]
-    limits = [item for sublist in limits for item in sublist]
-    mins = [l[0] for l in limits]
-    ranges = [l[1] - l[0] for l in limits]
-    self._min_act = jnp.array(mins)
-    self._range_act = jnp.array(ranges)
+    limits = []
+    for j in self.sys.config.joints:
+      for l in j.angle_limit:
+        limits.append((l.min, l.max))
+    self._min_act = jnp.array([l[0] for l in limits])
+    self._range_act = jnp.array([l[1] - l[0] for l in limits])
 
   def reset(self, rng: jnp.ndarray) -> env.State:
     qp = self.sys.default_qp()
     rng, target = self._random_target(rng)
     pos = jax.ops.index_update(qp.pos, jax.ops.index[self.target_idx], target)
-    qp = dataclasses.replace(qp, pos=pos)
+    qp = qp.replace(pos=pos)
     info = self.sys.info(qp)
     obs = self._get_obs(qp, info)
-    reward, done, steps, zero = jnp.zeros(4)
+    reward, done, zero = jnp.zeros(3)
     metrics = {
         'rewardDist': zero,
         'rewardCtrl': zero,
     }
-    return env.State(rng, qp, info, obs, reward, done, steps, metrics)
+    return env.State(qp, obs, reward, done, metrics)
 
   def step(self, state: env.State, action: jnp.ndarray) -> env.State:
-    rng = state.rng
-
     action = self._min_act + self._range_act * ((action + 1) / 2.)
 
     qp, info = self.sys.step(state.qp, action)
@@ -76,14 +68,12 @@ class ReacherAngle(env.Env):
 
     reward = reward_dist
 
-    steps = state.steps + self.action_repeat
-    done = jnp.where(steps >= self.episode_length, 1.0, 0.0)
     metrics = {
         'rewardDist': reward_dist,
         'rewardCtrl': 0.,
     }
 
-    return env.State(rng, qp, info, obs, reward, done, steps, metrics)
+    return state.replace(qp=qp, obs=obs, reward=reward, metrics=metrics)
 
   def _get_obs(self, qp: brax.QP, info: brax.Info) -> jnp.ndarray:
     """Egocentric observation of target and arm body."""
@@ -119,6 +109,7 @@ class ReacherAngle(env.Env):
     target_z = .01
     target = jnp.array([target_x, target_y, target_z]).transpose()
     return rng, target
+
 
 _SYSTEM_CONFIG = """
 bodies {

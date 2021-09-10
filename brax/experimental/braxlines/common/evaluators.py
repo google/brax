@@ -83,8 +83,6 @@ def rollout_env(
   """Visualize environment."""
   rng = jax.random.PRNGKey(seed=seed)
   rng, reset_key = jax.random.split(rng)
-  if batch_size:
-    reset_key = jnp.stack(jax.random.split(reset_key, batch_size))
   env = env_fn(batch_size=batch_size)
   inference_fn = inference_fn or functools.partial(
       training_utils.zero_fn, action_size=env.action_size)

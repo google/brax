@@ -23,11 +23,22 @@ from brax.training import distribution
 from brax.training import env
 from brax.training import networks
 from brax.training import normalization
+from brax.training.types import Params
+from brax.training.types import PRNGKey
 import flax
 from flax import linen
 import jax
 import jax.numpy as jnp
 import optax
+
+
+@flax.struct.dataclass
+class TrainingState:
+  """Contains training state for the learner."""
+  key: PRNGKey
+  normalizer_params: Params
+  optimizer_state: optax.OptState
+  policy_params: Params
 
 
 def train(
@@ -70,18 +81,15 @@ def train(
       batch_size=num_envs // local_devices_to_use // process_count,
       episode_length=episode_length)
   key_envs = jax.random.split(key_env, local_devices_to_use)
-  tmp_env_states = []
-  for key in key_envs:
-    first_state, step_fn = env.wrap(core_env, key)
-    tmp_env_states.append(first_state)
+  step_fn = core_env.step
   first_state = jax.tree_multimap(lambda *args: jnp.stack(args),
-                                  *tmp_env_states)
+                                  *[core_env.reset(key) for key in key_envs])
 
   core_eval_env = environment_fn(
       action_repeat=action_repeat,
       batch_size=num_eval_envs,
       episode_length=episode_length)
-  eval_first_state, eval_step_fn = env.wrap(core_eval_env, key_env)
+  eval_first_state, eval_step_fn = env.wrap_for_eval(core_eval_env, key_env)
 
   parametric_action_distribution = distribution.NormalTanhDistribution(
       event_size=core_env.action_size)
@@ -89,9 +97,11 @@ def train(
   policy_model = make_direct_optimization_model(parametric_action_distribution,
                                                 core_env.observation_size)
 
-  optimizer_def = flax.optim.Adam(learning_rate=learning_rate)
-  optimizer = optimizer_def.create(policy_model.init(key_models))
-  optimizer = normalization.bcast_local_devices(optimizer, local_devices_to_use)
+  policy_params = policy_model.init(key_models)
+  optimizer = optax.adam(learning_rate=learning_rate)
+  optimizer_state = optimizer.init(policy_params)
+  optimizer_state, policy_params = normalization.bcast_local_devices(
+      (optimizer_state, policy_params), local_devices_to_use)
 
   normalizer_params, obs_normalizer_update_fn, obs_normalizer_apply_fn = (
       normalization.create_observation_normalizer(
@@ -108,6 +118,8 @@ def train(
     # TODO: Make this nicer ([0] comes from pmapping).
     obs = obs_normalizer_apply_fn(
         jax.tree_map(lambda x: x[0], normalizer_params), state.core.obs)
+    print(obs.shape)
+    print(jax.tree_map(lambda x: x.shape, params))
     logits = policy_model.apply(params, obs)
     actions = parametric_action_distribution.sample(logits, key_sample)
     nstate = eval_step_fn(state, actions)
@@ -115,7 +127,7 @@ def train(
 
   @jax.jit
   def run_eval(params, state, normalizer_params,
-               key) -> Tuple[env.EnvState, env.PRNGKey]:
+               key) -> Tuple[env.EvalEnvState, PRNGKey]:
     params = jax.tree_map(lambda x: x[0], params)
     (state, _, _, key), _ = jax.lax.scan(
         do_one_step_eval, (state, params, normalizer_params, key), (),
@@ -125,17 +137,17 @@ def train(
   def do_one_step(carry, step_index):
     state, params, normalizer_params, key = carry
     key, key_sample = jax.random.split(key)
-    normalized_obs = obs_normalizer_apply_fn(normalizer_params, state.core.obs)
+    normalized_obs = obs_normalizer_apply_fn(normalizer_params, state.obs)
     logits = policy_model.apply(params, normalized_obs)
     actions = parametric_action_distribution.sample(logits, key_sample)
     nstate = step_fn(state, actions)
     if truncation_length is not None and truncation_length > 0:
       nstate = jax.lax.cond(
           jnp.mod(step_index + 1, truncation_length) == 0.,
-          lambda x: jax.lax.stop_gradient(x), lambda x: x, nstate)
+          jax.lax.stop_gradient, lambda x: x, nstate)
 
-    return (nstate, params, normalizer_params, key), (nstate.core.reward,
-                                                      state.core.obs)
+    return (nstate, params, normalizer_params, key), (nstate.reward,
+                                                      state.obs)
 
   def loss(params, normalizer_params, state, key):
     _, (rewards, obs) = jax.lax.scan(
@@ -155,17 +167,27 @@ def train(
         updates)
     return updates
 
-  def _minimize(optimizer, normalizer_params, state, key):
-    grad, normalizer_params = loss_grad(optimizer.target, normalizer_params,
-                                        state, key)
+  def _minimize(training_state: TrainingState, state: envs.State):
+    key, key_grad = jax.random.split(training_state.key)
+    grad, normalizer_params = loss_grad(training_state.policy_params,
+                                        training_state.normalizer_params,
+                                        state, key_grad)
     grad = clip_by_global_norm(grad)
     grad = jax.lax.pmean(grad, axis_name='i')
-    optimizer = optimizer.apply_gradient(grad)
+    params_update, optimizer_state = optimizer.update(
+        grad, training_state.optimizer_state)
+    policy_params = optax.apply_updates(training_state.policy_params,
+                                        params_update)
+
     metrics = {
         'grad_norm': optax.global_norm(grad),
-        'params_norm': optax.global_norm(optimizer.target)
+        'params_norm': optax.global_norm(policy_params)
     }
-    return optimizer, normalizer_params, key, metrics
+    return TrainingState(
+        key=key,
+        optimizer_state=optimizer_state,
+        normalizer_params=normalizer_params,
+        policy_params=policy_params), metrics
 
   minimize = jax.pmap(_minimize, axis_name='i')
 
@@ -175,17 +197,23 @@ def train(
   eval_sps = 0
   summary = {
       'params_norm':
-          optax.global_norm(jax.tree_map(lambda x: x[0], optimizer.target))
+          optax.global_norm(jax.tree_map(lambda x: x[0], policy_params))
   }
   key = jnp.stack(jax.random.split(key, local_devices_to_use))
+  training_state = TrainingState(key=key,
+                                 optimizer_state=optimizer_state,
+                                 normalizer_params=normalizer_params,
+                                 policy_params=policy_params)
 
   for it in range(log_frequency + 1):
     logging.info('starting iteration %s %s', it, time.time() - xt)
     t = time.time()
 
     if process_id == 0:
-      eval_state, key_debug = run_eval(optimizer.target, eval_first_state,
-                                       normalizer_params, key_debug)
+      eval_state, key_debug = run_eval(training_state.policy_params,
+                                       eval_first_state,
+                                       training_state.normalizer_params,
+                                       key_debug)
       eval_state.completed_episodes.block_until_ready()
       eval_sps = (
           episode_length * eval_first_state.core.reward.shape[0] /
@@ -217,15 +245,14 @@ def train(
 
     t = time.time()
     # optimization
-    optimizer, normalizer_params, key, summary = minimize(
-        optimizer, normalizer_params, first_state, key)
+    training_state, summary = minimize(training_state, first_state)
     jax.tree_map(lambda x: x.block_until_ready(), summary)
     sps = (episode_length * num_envs) / (time.time() - t)
     training_walltime += time.time() - t
 
-  params = optimizer.target
-  params = jax.tree_map(lambda x: x[0], params)
-  normalizer_params = jax.tree_map(lambda x: x[0], normalizer_params)
+  params = jax.tree_map(lambda x: x[0], training_state.policy_params)
+  normalizer_params = jax.tree_map(lambda x: x[0],
+                                   training_state.normalizer_params)
   params = normalizer_params, params
   _, inference = make_params_and_inference_fn(core_env.observation_size,
                                               core_env.action_size,

@@ -23,8 +23,8 @@ import jax.numpy as jnp
 
 
 @flax.struct.dataclass
-class EnvState:
-  """Contains training state for the learner."""
+class EvalEnvState:
+  """Env state + eval metrics."""
   core: envs.State
   current_episode_metrics: Dict[str, jnp.ndarray]
   completed_episodes_metrics: Dict[str, jnp.ndarray]
@@ -32,31 +32,23 @@ class EnvState:
   completed_episodes_steps: jnp.ndarray
 
 
-PRNGKey = jnp.ndarray
 Action = jnp.ndarray
-StepFn = Callable[[EnvState, Action], EnvState]
+EvalStepFn = Callable[[EvalEnvState, Action], EvalEnvState]
 
 
-def wrap(core_env: envs.Env, rng: jnp.ndarray) -> Tuple[EnvState, StepFn]:
+def wrap_for_eval(core_env: envs.Env,
+                  rng: jnp.ndarray) -> Tuple[EvalEnvState, EvalStepFn]:
   """Returns a wrapped state and step function for training."""
-  rng = jax.random.split(rng, core_env.batch_size)
-
   first_core = core_env.reset(rng)
   first_core.metrics['reward'] = first_core.reward
 
-  def step(state: EnvState, action: Action) -> EnvState:
+  def step(state: EvalEnvState, action: Action) -> EvalEnvState:
     core = core_env.step(state.core, action)
     core.metrics['reward'] = core.reward
-    # This must be run before test_done in order not to override .steps.
+    # steps stores the highest step reached when done = True, and then
+    # the next steps becomes action_repeat
     completed_episodes_steps = state.completed_episodes_steps + jnp.sum(
-        core.steps * core.done)
-    def test_done(a, b):
-      if a is first_core.done or a is first_core.metrics or a is first_core.reward:
-        return b
-      test_shape = [a.shape[0],] + [1 for _ in range(len(a.shape) - 1)]
-      return jnp.where(jnp.reshape(core.done, test_shape), a, b)
-    core = jax.tree_multimap(test_done, first_core, core)
-
+        core.info['steps'] * core.done)
     current_episode_metrics = jax.tree_multimap(lambda a, b: a + b,
                                                 state.current_episode_metrics,
                                                 core.metrics)
@@ -68,14 +60,14 @@ def wrap(core_env: envs.Env, rng: jnp.ndarray) -> Tuple[EnvState, StepFn]:
         lambda a, b: a * (1 - core.done) + b * core.done,
         current_episode_metrics, core.metrics)
 
-    return EnvState(
+    return EvalEnvState(
         core=core,
         current_episode_metrics=current_episode_metrics,
         completed_episodes_metrics=completed_episodes_metrics,
         completed_episodes=completed_episodes,
         completed_episodes_steps=completed_episodes_steps)
 
-  first_state = EnvState(
+  first_state = EvalEnvState(
       core=first_core,
       current_episode_metrics=jax.tree_map(jnp.zeros_like, first_core.metrics),
       completed_episodes_metrics=jax.tree_map(

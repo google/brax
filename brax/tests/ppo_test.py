@@ -16,10 +16,10 @@
 
 from absl.testing import absltest
 from absl.testing import parameterized
-from flax import serialization
-import jax
 from brax import envs
 from brax.training import ppo
+from flax import serialization
+import jax
 
 
 class PPOTest(parameterized.TestCase):

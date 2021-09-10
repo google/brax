@@ -27,9 +27,12 @@ from brax.training import distribution
 from brax.training import env
 from brax.training import networks
 from brax.training import normalization
+from brax.training.types import Params
+from brax.training.types import PRNGKey
 import flax
 import jax
 import jax.numpy as jnp
+import optax
 
 
 def compute_gae(truncation: jnp.ndarray,
@@ -100,13 +103,14 @@ class StepData:
 @flax.struct.dataclass
 class TrainingState:
   """Contains training state for the learner."""
-  optimizer: flax.optim.Optimizer
-  key: env.PRNGKey
-  normalizer_params: Any
+  optimizer_state: optax.OptState
+  params: Params
+  key: PRNGKey
+  normalizer_params: Params
 
 
 def compute_ppo_loss(
-    models: Dict[str, Any],
+    models: Dict[str, Params],
     data: StepData,
     rng: jnp.ndarray,
     parametric_action_distribution: distribution.ParametricDistribution,
@@ -225,18 +229,15 @@ def train(
       batch_size=num_envs // local_devices_to_use // process_count,
       episode_length=episode_length)
   key_envs = jax.random.split(key_env, local_devices_to_use)
-  tmp_env_states = []
-  for key in key_envs:
-    first_state, step_fn = env.wrap(core_env, key)
-    tmp_env_states.append(first_state)
+  step_fn = core_env.step
   first_state = jax.tree_multimap(lambda *args: jnp.stack(args),
-                                  *tmp_env_states)
+                                  *[core_env.reset(key) for key in key_envs])
 
   core_eval_env = environment_fn(
       action_repeat=action_repeat,
       batch_size=num_eval_envs,
       episode_length=episode_length)
-  eval_first_state, eval_step_fn = env.wrap(core_eval_env, key_eval)
+  eval_first_state, eval_step_fn = env.wrap_for_eval(core_eval_env, key_eval)
 
   parametric_action_distribution = distribution.NormalTanhDistribution(
       event_size=core_env.action_size)
@@ -246,11 +247,12 @@ def train(
       core_env.observation_size)
   key_policy, key_value = jax.random.split(key_models)
 
-  optimizer_def = flax.optim.Adam(learning_rate=learning_rate)
-  optimizer = optimizer_def.create({'policy': policy_model.init(key_policy),
-                                    'value': value_model.init(key_value)})
-  optimizer = normalization.bcast_local_devices(
-      optimizer, local_devices_to_use)
+  optimizer = optax.adam(learning_rate=learning_rate)
+  init_params = {'policy': policy_model.init(key_policy),
+                 'value': value_model.init(key_value)}
+  optimizer_state = optimizer.init(init_params)
+  optimizer_state, init_params = normalization.bcast_local_devices(
+      (optimizer_state, init_params), local_devices_to_use)
 
   normalizer_params, obs_normalizer_update_fn, obs_normalizer_apply_fn = (
       normalization.create_observation_normalizer(
@@ -283,7 +285,7 @@ def train(
 
   @jax.jit
   def run_eval(state, key, policy_params,
-               normalizer_params) -> Tuple[env.EnvState, env.PRNGKey]:
+               normalizer_params) -> Tuple[env.EvalEnvState, PRNGKey]:
     policy_params = jax.tree_map(lambda x: x[0], policy_params)
     (state, _, _, key), _ = jax.lax.scan(
         do_one_step_eval, (state, policy_params, normalizer_params, key), (),
@@ -293,16 +295,16 @@ def train(
   def do_one_step(carry, unused_target_t):
     state, normalizer_params, policy_params, key = carry
     key, key_sample = jax.random.split(key)
-    normalized_obs = obs_normalizer_apply_fn(normalizer_params, state.core.obs)
+    normalized_obs = obs_normalizer_apply_fn(normalizer_params, state.obs)
     logits = policy_model.apply(policy_params, normalized_obs)
     actions = parametric_action_distribution.sample_no_postprocessing(
         logits, key_sample)
     postprocessed_actions = parametric_action_distribution.postprocess(actions)
     nstate = step_fn(state, postprocessed_actions)
     return (nstate, normalizer_params, policy_params, key), StepData(
-        obs=state.core.obs,
-        rewards=state.core.reward,
-        dones=state.core.done,
+        obs=state.obs,
+        rewards=state.reward,
+        dones=state.done,
         actions=actions,
         logits=logits)
 
@@ -313,23 +315,27 @@ def train(
         length=unroll_length)
     data = data.replace(
         obs=jnp.concatenate(
-            [data.obs, jnp.expand_dims(state.core.obs, axis=0)]),
+            [data.obs, jnp.expand_dims(state.obs, axis=0)]),
         rewards=jnp.concatenate(
-            [data.rewards, jnp.expand_dims(state.core.reward, axis=0)]),
+            [data.rewards, jnp.expand_dims(state.reward, axis=0)]),
         dones=jnp.concatenate(
-            [data.dones, jnp.expand_dims(state.core.done, axis=0)]))
+            [data.dones, jnp.expand_dims(state.done, axis=0)]))
     return (state, normalizer_params, policy_params, key), data
 
   def update_model(carry, data):
-    optimizer, key = carry
+    optimizer_state, params, key = carry
     key, key_loss = jax.random.split(key)
-    loss_grad, metrics = grad_loss(optimizer.target, data, key_loss)
+    loss_grad, metrics = grad_loss(params, data, key_loss)
     loss_grad = jax.lax.pmean(loss_grad, axis_name='i')
-    optimizer = optimizer.apply_gradient(loss_grad)
-    return (optimizer, key), metrics
+
+    params_update, optimizer_state = optimizer.update(loss_grad,
+                                                      optimizer_state)
+    params = optax.apply_updates(params, params_update)
+
+    return (optimizer_state, params, key), metrics
 
   def minimize_epoch(carry, unused_t):
-    optimizer, data, key = carry
+    optimizer_state, params, data, key = carry
     key, key_perm, key_grad = jax.random.split(key, 3)
     permutation = jax.random.permutation(key_perm, data.obs.shape[1])
     def convert_data(data, permutation):
@@ -339,17 +345,19 @@ def train(
       data = jnp.swapaxes(data, 0, 1)
       return data
     ndata = jax.tree_map(lambda x: convert_data(x, permutation), data)
-    (optimizer, _), metrics = jax.lax.scan(
-        update_model, (optimizer, key_grad), ndata, length=num_minibatches)
-    return (optimizer, data, key), metrics
+    (optimizer_state, params, _), metrics = jax.lax.scan(
+        update_model, (optimizer_state, params, key_grad),
+        ndata,
+        length=num_minibatches)
+    return (optimizer_state, params, data, key), metrics
 
-  def run_epoch(carry, unused_t):
+  def run_epoch(carry: Tuple[TrainingState, envs.State], unused_t):
     training_state, state = carry
     key_minimize, key_generate_unroll, new_key = jax.random.split(
         training_state.key, 3)
     (state, _, _, _), data = jax.lax.scan(
         generate_unroll, (state, training_state.normalizer_params,
-                          training_state.optimizer.target['policy'],
+                          training_state.params['policy'],
                           key_generate_unroll), (),
         length=batch_size * num_minibatches // num_envs)
     # make unroll first
@@ -363,13 +371,16 @@ def train(
     data = data.replace(
         obs=obs_normalizer_apply_fn(normalizer_params, data.obs))
 
-    (optimizer, _, _), metrics = jax.lax.scan(
-        minimize_epoch, (training_state.optimizer, data, key_minimize),
-        (), length=num_update_epochs)
+    (optimizer_state, params, _, _), metrics = jax.lax.scan(
+        minimize_epoch, (training_state.optimizer_state, training_state.params,
+                         data, key_minimize), (),
+        length=num_update_epochs)
 
-    new_training_state = TrainingState(optimizer=optimizer,
-                                       normalizer_params=normalizer_params,
-                                       key=new_key)
+    new_training_state = TrainingState(
+        optimizer_state=optimizer_state,
+        params=params,
+        normalizer_params=normalizer_params,
+        key=new_key)
     return (new_training_state, state), metrics
 
   num_epochs = num_timesteps // (
@@ -385,7 +396,8 @@ def train(
   minimize_loop = jax.pmap(_minimize_loop, axis_name='i')
 
   training_state = TrainingState(
-      optimizer=optimizer,
+      optimizer_state=optimizer_state,
+      params=init_params,
       key=jnp.stack(jax.random.split(key, local_devices_to_use)),
       normalizer_params=normalizer_params)
   training_walltime = 0
@@ -403,7 +415,7 @@ def train(
     if process_id == 0:
       eval_state, key_debug = (
           run_eval(eval_first_state, key_debug,
-                   training_state.optimizer.target['policy'],
+                   training_state.params['policy'],
                    training_state.normalizer_params))
       eval_state.completed_episodes.block_until_ready()
       eval_walltime += time.time() - t
@@ -450,7 +462,7 @@ def train(
   normalizer_params = jax.tree_map(lambda x: x[0],
                                    training_state.normalizer_params)
   policy_params = jax.tree_map(lambda x: x[0],
-                               training_state.optimizer.target['policy'])
+                               training_state.params['policy'])
 
   logging.info('total steps: %s', normalizer_params[0] * action_repeat)
 

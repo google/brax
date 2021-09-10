@@ -12,11 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Import top-level classes and functions here for encapsulation/clarity."""
+"""Common types used throughout Brax training code."""
 
-__version__ = '0.0.5'
+from typing import Any
+import jax.numpy as jnp
 
-from brax.physics.base import Info
-from brax.physics.base import QP
-from brax.physics.config_pb2 import Config
-from brax.physics.system import System
+Params = Any
+PRNGKey = jnp.ndarray

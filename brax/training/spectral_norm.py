@@ -22,14 +22,13 @@ Reference:
 """
 from typing import Any, Callable, Tuple
 
+from brax.training.types import PRNGKey
+from flax import linen
+from flax.linen.initializers import lecun_normal, normal, zeros
 from jax import lax
 import jax.numpy as jnp
 
-from flax import linen
-from flax.linen.initializers import lecun_normal, normal, zeros
 
-
-PRNGKey = Any
 Array = Any
 Shape = Tuple[int]
 Dtype = Any

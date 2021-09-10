@@ -27,14 +27,16 @@ from brax.training import distribution
 from brax.training import env
 from brax.training import networks
 from brax.training import normalization
+from brax.training.types import Params
+from brax.training.types import PRNGKey
 import flax
 from flax import linen
 import jax
 import jax.numpy as jnp
 import numpy as onp
+import optax
 
-Params = Mapping[str, Mapping[str, jnp.ndarray]]
-PRNGKey = jnp.ndarray
+
 Metrics = Mapping[str, jnp.ndarray]
 
 
@@ -67,13 +69,16 @@ class ReplayBuffer:
 @flax.struct.dataclass
 class TrainingState:
   """Contains training state for the learner."""
-  policy_optimizer: flax.optim.Optimizer
-  q_optimizer: flax.optim.Optimizer
+  policy_optimizer_state: optax.OptState
+  policy_params: Params
+  q_optimizer_state: optax.OptState
+  q_params: Params
   target_q_params: Params
   key: PRNGKey
   steps: jnp.ndarray
-  alpha_optimizer: flax.optim.Optimizer
-  normalizer_params: Any
+  alpha_optimizer_state: optax.OptState
+  alpha_params: Params
+  normalizer_params: Params
   # The is passed to the rewarder to update the reward.
   rewarder_state: Any
 
@@ -176,18 +181,15 @@ def train(
       batch_size=num_envs // local_devices_to_use // process_count,
       episode_length=episode_length)
   key_envs = jax.random.split(key_env, local_devices_to_use)
-  tmp_env_states = []
-  for key in key_envs:
-    first_state, step_fn = env.wrap(core_env, key)
-    tmp_env_states.append(first_state)
+  step_fn = core_env.step
   first_state = jax.tree_multimap(lambda *args: jnp.stack(args),
-                                  *tmp_env_states)
+                                  *[core_env.reset(key) for key in key_envs])
 
   core_eval_env = environment_fn(
       action_repeat=action_repeat,
       batch_size=num_eval_envs,
       episode_length=episode_length)
-  eval_first_state, eval_step_fn = env.wrap(core_eval_env, key_eval)
+  eval_first_state, eval_step_fn = env.wrap_for_eval(core_eval_env, key_eval)
 
   parametric_action_distribution = distribution.NormalTanhDistribution(
       event_size=core_env.action_size)
@@ -198,21 +200,23 @@ def train(
       parametric_action_distribution.param_size, obs_size, core_env.action_size)
 
   log_alpha = jnp.asarray(0., dtype=jnp.float32)
-  alpha_optimizer_def = flax.optim.Adam(learning_rate=3e-4)
-  alpha_optimizer = alpha_optimizer_def.create(log_alpha)
+  alpha_optimizer = optax.adam(learning_rate=3e-4)
+  alpha_optimizer_state = alpha_optimizer.init(log_alpha)
 
-  policy_optimizer_def = flax.optim.Adam(learning_rate=learning_rate)
-  q_optimizer_def = flax.optim.Adam(learning_rate=learning_rate)
+  policy_optimizer = optax.adam(learning_rate=learning_rate)
+  q_optimizer = optax.adam(learning_rate=learning_rate)
   key_policy, key_q = jax.random.split(key_models)
-  policy_optimizer = policy_optimizer_def.create(policy_model.init(key_policy))
-  q_optimizer = q_optimizer_def.create(value_model.init(key_q))
+  policy_params = policy_model.init(key_policy)
+  policy_optimizer_state = policy_optimizer.init(policy_params)
+  q_params = value_model.init(key_q)
+  q_optimizer_state = q_optimizer.init(q_params)
 
-  policy_optimizer = normalization.bcast_local_devices(policy_optimizer,
-                                                       local_devices_to_use)
-  q_optimizer = normalization.bcast_local_devices(q_optimizer,
-                                                  local_devices_to_use)
-  alpha_optimizer = normalization.bcast_local_devices(alpha_optimizer,
-                                                      local_devices_to_use)
+  policy_optimizer_state, policy_params = normalization.bcast_local_devices(
+      (policy_optimizer_state, policy_params), local_devices_to_use)
+  q_optimizer_state, q_params = normalization.bcast_local_devices(
+      (q_optimizer_state, q_params), local_devices_to_use)
+  alpha_optimizer_state, log_alpha = normalization.bcast_local_devices(
+      (alpha_optimizer_state, log_alpha), local_devices_to_use)
 
   normalizer_params, obs_normalizer_update_fn, obs_normalizer_apply_fn = (
       normalization.create_observation_normalizer(
@@ -243,7 +247,7 @@ def train(
 
   @jax.jit
   def run_eval(state, key, policy_params,
-               normalizer_params) -> Tuple[env.EnvState, env.PRNGKey]:
+               normalizer_params) -> Tuple[env.EvalEnvState, PRNGKey]:
     policy_params, normalizer_params = jax.tree_map(
         lambda x: x[0], (policy_params, normalizer_params))
     (state, _, _, key), _ = jax.lax.scan(
@@ -287,8 +291,9 @@ def train(
     q_loss = 0.5 * jnp.mean(jnp.square(q_error))
     return q_loss
 
-  def actor_loss(policy_params: Params, q_params: Params, alpha: jnp.ndarray,
-                 transitions: Transition, key: PRNGKey) -> jnp.ndarray:
+  def actor_loss(policy_params: Params, q_params: Params,
+                 alpha: jnp.ndarray, transitions: Transition,
+                 key: PRNGKey) -> jnp.ndarray:
     dist_params = policy_model.apply(policy_params, transitions.o_tm1)
     action = parametric_action_distribution.sample_no_postprocessing(
         dist_params, key)
@@ -330,59 +335,67 @@ def train(
       new_rewarder_state = state.rewarder_state
       rewarder_metrics = {}
 
-    alpha = jnp.exp(state.alpha_optimizer.target)
-    alpha_loss, alpha_grads = alpha_grad(alpha, state.policy_optimizer.target,
+    alpha = jnp.exp(state.alpha_params)
+    alpha_loss, alpha_grads = alpha_grad(alpha, state.policy_params,
                                          normalized_transitions, key_alpha)
-    critic_loss, critic_grads = critic_grad(state.q_optimizer.target,
-                                            state.policy_optimizer.target,
+    critic_loss, critic_grads = critic_grad(state.q_params,
+                                            state.policy_params,
                                             state.target_q_params, alpha,
                                             normalized_transitions, key_critic)
-    actor_loss, actor_grads = actor_grad(state.policy_optimizer.target,
-                                         state.q_optimizer.target, alpha,
+    actor_loss, actor_grads = actor_grad(state.policy_params,
+                                         state.q_params, alpha,
                                          normalized_transitions, key_actor)
     alpha_grads = jax.lax.pmean(alpha_grads, axis_name='i')
     critic_grads = jax.lax.pmean(critic_grads, axis_name='i')
     actor_grads = jax.lax.pmean(actor_grads, axis_name='i')
 
-    policy_optimizer = state.policy_optimizer.apply_gradient(actor_grads)
-    q_optimizer = state.q_optimizer.apply_gradient(critic_grads)
+    policy_params_update, policy_optimizer_state = policy_optimizer.update(
+        actor_grads, state.policy_optimizer_state)
+    policy_params = optax.apply_updates(state.policy_params,
+                                        policy_params_update)
+    q_params_update, q_optimizer_state = q_optimizer.update(
+        critic_grads, state.q_optimizer_state)
+    q_params = optax.apply_updates(state.q_params, q_params_update)
+    alpha_params_update, alpha_optimizer_state = alpha_optimizer.update(
+        alpha_grads, state.alpha_optimizer_state)
+    alpha_params = optax.apply_updates(state.alpha_params, alpha_params_update)
     new_target_q_params = jax.tree_multimap(
-        lambda x, y: x * (1 - tau) + y * tau, state.target_q_params,
-        q_optimizer.target)
-    alpha_optimizer = state.alpha_optimizer.apply_gradient(alpha_grads)
+        lambda x, y: x * (1 - tau) + y * tau, state.target_q_params, q_params)
 
     metrics = {
         'critic_loss': critic_loss,
         'actor_loss': actor_loss,
         'alpha_loss': alpha_loss,
-        'alpha': jnp.exp(alpha_optimizer.target),
+        'alpha': jnp.exp(alpha_params),
         **rewarder_metrics
     }
 
     new_state = TrainingState(
-        policy_optimizer=policy_optimizer,
-        q_optimizer=q_optimizer,
+        policy_optimizer_state=policy_optimizer_state,
+        policy_params=policy_params,
+        q_optimizer_state=q_optimizer_state,
+        q_params=q_params,
         target_q_params=new_target_q_params,
         key=key,
         steps=state.steps + 1,
-        alpha_optimizer=alpha_optimizer,
+        alpha_optimizer_state=alpha_optimizer_state,
+        alpha_params=alpha_params,
         normalizer_params=state.normalizer_params,
         rewarder_state=new_rewarder_state)
     return new_state, metrics
 
-  def collect_data(training_state, state):
+  def collect_data(training_state: TrainingState, state):
     key, key_sample = jax.random.split(training_state.key)
     normalized_obs = obs_normalizer_apply_fn(training_state.normalizer_params,
-                                             state.core.obs)
-    logits = policy_model.apply(training_state.policy_optimizer.target,
-                                normalized_obs)
+                                             state.obs)
+    logits = policy_model.apply(training_state.policy_params, normalized_obs)
     actions = parametric_action_distribution.sample_no_postprocessing(
         logits, key_sample)
     postprocessed_actions = parametric_action_distribution.postprocess(actions)
     nstate = step_fn(state, postprocessed_actions)
 
     normalizer_params = obs_normalizer_update_fn(
-        training_state.normalizer_params, state.core.obs)
+        training_state.normalizer_params, state.obs)
 
     training_state = training_state.replace(
         key=key, normalizer_params=normalizer_params)
@@ -390,11 +403,11 @@ def train(
     # Concatenating data into a single data blob performs faster than 5
     # separate tensors.
     concatenated_data = jnp.concatenate([
-        state.core.obs,
-        nstate.core.obs,
+        state.obs,
+        nstate.obs,
         postprocessed_actions,
-        jnp.expand_dims(nstate.core.reward, axis=-1),
-        jnp.expand_dims(1 - nstate.core.done, axis=-1),
+        jnp.expand_dims(nstate.reward, axis=-1),
+        jnp.expand_dims(1 - nstate.done, axis=-1),
     ],
                                         axis=-1)
 
@@ -467,12 +480,15 @@ def train(
   run_sac_training = jax.pmap(run_sac_training, axis_name='i')
 
   training_state = TrainingState(
-      policy_optimizer=policy_optimizer,
-      q_optimizer=q_optimizer,
-      target_q_params=q_optimizer.target,
+      policy_optimizer_state=policy_optimizer_state,
+      policy_params=policy_params,
+      q_optimizer_state=q_optimizer_state,
+      q_params=q_params,
+      target_q_params=q_params,
       key=jnp.stack(jax.random.split(key, local_devices_to_use)),
       steps=jnp.zeros((local_devices_to_use,)),
-      alpha_optimizer=alpha_optimizer,
+      alpha_optimizer_state=alpha_optimizer_state,
+      alpha_params=log_alpha,
       normalizer_params=normalizer_params,
       rewarder_state=rewarder_state)
 
@@ -491,7 +507,7 @@ def train(
     t = time.time()
     eval_state, key_debug = (
         run_eval(eval_first_state, key_debug,
-                 training_state.policy_optimizer.target,
+                 training_state.policy_params,
                  training_state.normalizer_params))
     eval_state.completed_episodes.block_until_ready()
     eval_walltime += time.time() - t
@@ -528,7 +544,7 @@ def train(
       normalizer_params = jax.tree_map(lambda x: x[0],
                                        training_state.normalizer_params)
       policy_params = jax.tree_map(lambda x: x[0],
-                                   training_state.policy_optimizer.target)
+                                   training_state.policy_params)
       params = normalizer_params, policy_params
       path = f'{checkpoint_logdir}_sac_{current_step}.flax'
       model.save_params(path, params)
@@ -562,7 +578,7 @@ def train(
   normalizer_params = jax.tree_map(lambda x: x[0],
                                    training_state.normalizer_params)
   policy_params = jax.tree_map(lambda x: x[0],
-                               training_state.policy_optimizer.target)
+                               training_state.policy_params)
 
   logging.info('total steps: %s', normalizer_params[0] * action_repeat)
 

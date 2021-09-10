@@ -232,3 +232,11 @@ def train(train_job_params: Dict[str, Any],
       save_video=True)
 
   return return_dict
+
+
+def train_dummy(train_job_params: Dict[str, Any],
+                output_dir: str,
+                return_dict: Dict[str, float] = None,
+                progress_dict: Dict[str, float] = None,
+                env_tag: str = None):
+  return_dict['test'] = 'ok'

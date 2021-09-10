@@ -12,15 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# pylint:disable=g-multiple-import
 """Some example environments to help get started quickly with brax."""
 
 import functools
 from typing import Callable, Optional, Union, overload
 
-import gym
 import brax
 from brax.envs import ant
-from brax.envs import env
 from brax.envs import fast
 from brax.envs import fetch
 from brax.envs import grasp
@@ -30,6 +29,8 @@ from brax.envs import reacher
 from brax.envs import reacherangle
 from brax.envs import ur5e
 from brax.envs import wrappers
+from brax.envs.env import Env, State, Wrapper
+import gym
 
 _envs = {
     'ant': ant.Ant,
@@ -43,13 +44,23 @@ _envs = {
     'ur5e': ur5e.Ur5e,
 }
 
-State = env.State
-Env = env.Env
 
-
-def create(env_name: str, **kwargs) -> Env:
+def create(env_name: str,
+           episode_length: int = 1000,
+           action_repeat: int = 1,
+           auto_reset: bool = True,
+           batch_size: Optional[int] = None,
+           **kwargs) -> Env:
   """Creates an Env with a specified brax system."""
-  return _envs[env_name](**kwargs)  # type: ignore
+  env = _envs[env_name](**kwargs)
+  if episode_length is not None:
+    env = wrappers.EpisodeWrapper(env, episode_length, action_repeat)
+  if batch_size:
+    env = wrappers.VectorWrapper(env, batch_size)
+  if auto_reset:
+    env = wrappers.AutoResetWrapper(env)
+
+  return env  # type: ignore
 
 
 def create_fn(env_name: str, **kwargs) -> Callable[..., Env]:

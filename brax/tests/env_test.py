@@ -19,10 +19,11 @@ import time
 
 from absl.testing import absltest
 from absl.testing import parameterized
+from brax import envs
 import jax
 import jax.numpy as np
-from brax import envs
 
+_EARLY_TERMINATION = ('ant', 'humanoid')
 _EXPECTED_SPS = {'ant': 1000, 'fetch': 1000}
 
 
@@ -32,8 +33,13 @@ class EnvTest(parameterized.TestCase):
   def testSpeed(self, env_name, expected_sps):
     batch_size = 128
     episode_length = 1000
+    auto_reset = (env_name not in _EARLY_TERMINATION)
 
-    env = envs.create(env_name, batch_size=batch_size)
+    env = envs.create(
+        env_name,
+        episode_length=episode_length,
+        auto_reset=auto_reset,
+        batch_size=batch_size)
     zero_action = np.zeros((batch_size, env.action_size))
 
     @jax.jit
@@ -48,14 +54,14 @@ class EnvTest(parameterized.TestCase):
       return state
 
     # warmup
-    rng = jax.random.split(jax.random.PRNGKey(0), batch_size)
+    rng = jax.random.PRNGKey(0)
     state = env.reset(rng)
     state = run_env(state)
     state.done.block_until_ready()
 
     sps = []
     for seed in range(5):
-      rng = jax.random.split(jax.random.PRNGKey(seed), batch_size)
+      rng = jax.random.PRNGKey(seed)
       state = env.reset(rng)
       jax.device_put(state)
       t = time.time()

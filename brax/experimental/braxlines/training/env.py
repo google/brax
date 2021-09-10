@@ -37,8 +37,6 @@ StepFn = Callable[[EnvState, Action], EnvState]
 
 def wrap(core_env: envs.Env, rng: jnp.ndarray) -> Tuple[EnvState, StepFn]:
   """Returns a wrapped state and step function for training."""
-  rng = jax.random.split(rng, core_env.batch_size)
-
   first_core = core_env.reset(rng)
   first_core.metrics['reward'] = first_core.reward
   first_total_metrics = jax.tree_map(jnp.sum, first_core.metrics)
@@ -56,12 +54,6 @@ def wrap(core_env: envs.Env, rng: jnp.ndarray) -> Tuple[EnvState, StepFn]:
       extra_params: Dict[str, Dict[str, jnp.ndarray]] = None) -> EnvState:
     core = core_env.step(state.core, action, normalizer_params, extra_params)
     core.metrics['reward'] = core.reward
-    def test_done(a, b):
-      if a is first_core.done or a is first_core.metrics or a is first_core.reward:
-        return b
-      test_shape = [a.shape[0],] + [1 for _ in range(len(a.shape) - 1)]
-      return jnp.where(jnp.reshape(core.done, test_shape), a, b)
-    core = jax.tree_multimap(test_done, first_state.core, core)
     total_metrics = jax.tree_multimap(lambda a, b: a + jnp.sum(b),
                                       state.total_metrics, core.metrics)
     total_episodes = state.total_episodes + jnp.sum(core.done)

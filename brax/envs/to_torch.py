@@ -18,12 +18,11 @@ This conversion happens directly on-device, without moving values to the CPU.
 """
 from typing import Optional, Union
 
-import gym
 from brax.envs import wrappers
-
 # NOTE: The following line will emit a warning and raise ImportError if `torch`
 # isn't available.
 from brax.io import torch
+import gym
 
 
 class JaxToTorchWrapper(gym.Wrapper):
