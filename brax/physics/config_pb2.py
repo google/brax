@@ -19,7 +19,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto3',
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\x19\x62rax/physics/config.proto\x12\x04\x62rax\"*\n\x07Vector3\x12\t\n\x01x\x18\x01 \x01(\x02\x12\t\n\x01y\x18\x02 \x01(\x02\x12\t\n\x01z\x18\x03 \x01(\x02\"W\n\x06\x46rozen\x12\x1f\n\x08position\x18\x01 \x01(\x0b\x32\r.brax.Vector3\x12\x1f\n\x08rotation\x18\x02 \x01(\x0b\x32\r.brax.Vector3\x12\x0b\n\x03\x61ll\x18\x03 \x01(\x08\"\x83\x01\n\x04\x42ody\x12\x0c\n\x04name\x18\x01 \x01(\t\x12!\n\tcolliders\x18\x02 \x03(\x0b\x32\x0e.brax.Collider\x12\x1e\n\x07inertia\x18\x03 \x01(\x0b\x32\r.brax.Vector3\x12\x0c\n\x04mass\x18\x04 \x01(\x02\x12\x1c\n\x06\x66rozen\x18\x05 \x01(\x0b\x32\x0c.brax.Frozen\"\xcd\x03\n\x08\x43ollider\x12\x1f\n\x08position\x18\x01 \x01(\x0b\x32\r.brax.Vector3\x12\x1f\n\x08rotation\x18\x02 \x01(\x0b\x32\r.brax.Vector3\x12!\n\x03\x62ox\x18\x03 \x01(\x0b\x32\x12.brax.Collider.BoxH\x00\x12%\n\x05plane\x18\x04 \x01(\x0b\x32\x14.brax.Collider.PlaneH\x00\x12\'\n\x06sphere\x18\x05 \x01(\x0b\x32\x15.brax.Collider.SphereH\x00\x12)\n\x07\x63\x61psule\x18\x06 \x01(\x0b\x32\x16.brax.Collider.CapsuleH\x00\x12-\n\theightMap\x18\x07 \x01(\x0b\x32\x18.brax.Collider.HeightMapH\x00\x1a&\n\x03\x42ox\x12\x1f\n\x08halfsize\x18\x01 \x01(\x0b\x32\r.brax.Vector3\x1a\x07\n\x05Plane\x1a\x18\n\x06Sphere\x12\x0e\n\x06radius\x18\x01 \x01(\x02\x1a\x36\n\x07\x43\x61psule\x12\x0e\n\x06radius\x18\x01 \x01(\x02\x12\x0e\n\x06length\x18\x02 \x01(\x02\x12\x0b\n\x03\x65nd\x18\x03 \x01(\x05\x1a\'\n\tHeightMap\x12\x0c\n\x04size\x18\x01 \x01(\x02\x12\x0c\n\x04\x64\x61ta\x18\x02 \x03(\x02\x42\x06\n\x04type\"\xf7\x02\n\x05Joint\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x11\n\tstiffness\x18\x02 \x01(\x02\x12\x0e\n\x06parent\x18\x03 \x01(\t\x12\r\n\x05\x63hild\x18\x04 \x01(\t\x12$\n\rparent_offset\x18\x05 \x01(\x0b\x32\r.brax.Vector3\x12#\n\x0c\x63hild_offset\x18\x06 \x01(\x0b\x32\r.brax.Vector3\x12\x1f\n\x08rotation\x18\x07 \x01(\x0b\x32\r.brax.Vector3\x12\x17\n\x0f\x61ngular_damping\x18\x08 \x01(\x02\x12&\n\x0b\x61ngle_limit\x18\t \x03(\x0b\x32\x11.brax.Joint.Range\x12\x1b\n\x0elimit_strength\x18\n \x01(\x02H\x00\x88\x01\x01\x12\x1b\n\x0espring_damping\x18\x0b \x01(\x02H\x01\x88\x01\x01\x1a!\n\x05Range\x12\x0b\n\x03min\x18\x01 \x01(\x02\x12\x0b\n\x03max\x18\x02 \x01(\x02\x42\x11\n\x0f_limit_strengthB\x11\n\x0f_spring_damping\"\xa4\x01\n\x08\x41\x63tuator\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05joint\x18\x02 \x01(\t\x12\x10\n\x08strength\x18\x03 \x01(\x02\x12\'\n\x06torque\x18\x04 \x01(\x0b\x32\x15.brax.Actuator.TorqueH\x00\x12%\n\x05\x61ngle\x18\x05 \x01(\x0b\x32\x14.brax.Actuator.AngleH\x00\x1a\x08\n\x06Torque\x1a\x07\n\x05\x41ngleB\x06\n\x04type\"\xa0\x02\n\x0c\x44\x65\x66\x61ultState\x12-\n\x06\x61ngles\x18\x01 \x03(\x0b\x32\x1d.brax.DefaultState.JointAngle\x12\"\n\x03qps\x18\x02 \x03(\x0b\x32\x15.brax.DefaultState.QP\x1a\x38\n\nJointAngle\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x1c\n\x05\x61ngle\x18\x02 \x01(\x0b\x32\r.brax.Vector3\x1a\x82\x01\n\x02QP\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x1a\n\x03pos\x18\x02 \x01(\x0b\x32\r.brax.Vector3\x12\x1a\n\x03rot\x18\x03 \x01(\x0b\x32\r.brax.Vector3\x12\x1a\n\x03vel\x18\x04 \x01(\x0b\x32\r.brax.Vector3\x12\x1a\n\x03\x61ng\x18\x05 \x01(\x0b\x32\r.brax.Vector3\"\xb1\x03\n\x06\x43onfig\x12\x1a\n\x06\x62odies\x18\x01 \x03(\x0b\x32\n.brax.Body\x12\x1b\n\x06joints\x18\x02 \x03(\x0b\x32\x0b.brax.Joint\x12!\n\tactuators\x18\x03 \x03(\x0b\x32\x0e.brax.Actuator\x12\x12\n\nelasticity\x18\x04 \x01(\x02\x12\x10\n\x08\x66riction\x18\x05 \x01(\x02\x12\x1e\n\x07gravity\x18\x06 \x01(\x0b\x32\r.brax.Vector3\x12\x18\n\x10velocity_damping\x18\x07 \x01(\x02\x12\x17\n\x0f\x61ngular_damping\x18\x08 \x01(\x02\x12\x15\n\rbaumgarte_erp\x18\t \x01(\x02\x12.\n\x0f\x63ollide_include\x18\n \x03(\x0b\x32\x15.brax.Config.NamePair\x12\n\n\x02\x64t\x18\x0b \x01(\x02\x12\x10\n\x08substeps\x18\x0c \x01(\x05\x12\x1c\n\x06\x66rozen\x18\r \x01(\x0b\x32\x0c.brax.Frozen\x12$\n\x08\x64\x65\x66\x61ults\x18\x0e \x03(\x0b\x32\x12.brax.DefaultState\x1a)\n\x08NamePair\x12\r\n\x05\x66irst\x18\x01 \x01(\t\x12\x0e\n\x06second\x18\x02 \x01(\tb\x06proto3'
+  serialized_pb=b'\n\x19\x62rax/physics/config.proto\x12\x04\x62rax\"*\n\x07Vector3\x12\t\n\x01x\x18\x01 \x01(\x02\x12\t\n\x01y\x18\x02 \x01(\x02\x12\t\n\x01z\x18\x03 \x01(\x02\"W\n\x06\x46rozen\x12\x1f\n\x08position\x18\x01 \x01(\x0b\x32\r.brax.Vector3\x12\x1f\n\x08rotation\x18\x02 \x01(\x0b\x32\r.brax.Vector3\x12\x0b\n\x03\x61ll\x18\x03 \x01(\x08\"\x83\x01\n\x04\x42ody\x12\x0c\n\x04name\x18\x01 \x01(\t\x12!\n\tcolliders\x18\x02 \x03(\x0b\x32\x0e.brax.Collider\x12\x1e\n\x07inertia\x18\x03 \x01(\x0b\x32\r.brax.Vector3\x12\x0c\n\x04mass\x18\x04 \x01(\x02\x12\x1c\n\x06\x66rozen\x18\x05 \x01(\x0b\x32\x0c.brax.Frozen\"\xf1\x03\n\x08\x43ollider\x12\x1f\n\x08position\x18\x01 \x01(\x0b\x32\r.brax.Vector3\x12\x1f\n\x08rotation\x18\x02 \x01(\x0b\x32\r.brax.Vector3\x12\x15\n\x08\x66riction\x18\x03 \x01(\x02H\x01\x88\x01\x01\x12!\n\x03\x62ox\x18\x04 \x01(\x0b\x32\x12.brax.Collider.BoxH\x00\x12%\n\x05plane\x18\x05 \x01(\x0b\x32\x14.brax.Collider.PlaneH\x00\x12\'\n\x06sphere\x18\x06 \x01(\x0b\x32\x15.brax.Collider.SphereH\x00\x12)\n\x07\x63\x61psule\x18\x07 \x01(\x0b\x32\x16.brax.Collider.CapsuleH\x00\x12-\n\theightMap\x18\x08 \x01(\x0b\x32\x18.brax.Collider.HeightMapH\x00\x1a&\n\x03\x42ox\x12\x1f\n\x08halfsize\x18\x01 \x01(\x0b\x32\r.brax.Vector3\x1a\x07\n\x05Plane\x1a\x18\n\x06Sphere\x12\x0e\n\x06radius\x18\x01 \x01(\x02\x1a\x36\n\x07\x43\x61psule\x12\x0e\n\x06radius\x18\x01 \x01(\x02\x12\x0e\n\x06length\x18\x02 \x01(\x02\x12\x0b\n\x03\x65nd\x18\x03 \x01(\x05\x1a\'\n\tHeightMap\x12\x0c\n\x04size\x18\x01 \x01(\x02\x12\x0c\n\x04\x64\x61ta\x18\x02 \x03(\x02\x42\x06\n\x04typeB\x0b\n\t_friction\"\xf7\x02\n\x05Joint\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x11\n\tstiffness\x18\x02 \x01(\x02\x12\x0e\n\x06parent\x18\x03 \x01(\t\x12\r\n\x05\x63hild\x18\x04 \x01(\t\x12$\n\rparent_offset\x18\x05 \x01(\x0b\x32\r.brax.Vector3\x12#\n\x0c\x63hild_offset\x18\x06 \x01(\x0b\x32\r.brax.Vector3\x12\x1f\n\x08rotation\x18\x07 \x01(\x0b\x32\r.brax.Vector3\x12\x17\n\x0f\x61ngular_damping\x18\x08 \x01(\x02\x12&\n\x0b\x61ngle_limit\x18\t \x03(\x0b\x32\x11.brax.Joint.Range\x12\x1b\n\x0elimit_strength\x18\n \x01(\x02H\x00\x88\x01\x01\x12\x1b\n\x0espring_damping\x18\x0b \x01(\x02H\x01\x88\x01\x01\x1a!\n\x05Range\x12\x0b\n\x03min\x18\x01 \x01(\x02\x12\x0b\n\x03max\x18\x02 \x01(\x02\x42\x11\n\x0f_limit_strengthB\x11\n\x0f_spring_damping\"\xa4\x01\n\x08\x41\x63tuator\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05joint\x18\x02 \x01(\t\x12\x10\n\x08strength\x18\x03 \x01(\x02\x12\'\n\x06torque\x18\x04 \x01(\x0b\x32\x15.brax.Actuator.TorqueH\x00\x12%\n\x05\x61ngle\x18\x05 \x01(\x0b\x32\x14.brax.Actuator.AngleH\x00\x1a\x08\n\x06Torque\x1a\x07\n\x05\x41ngleB\x06\n\x04type\"\xa0\x02\n\x0c\x44\x65\x66\x61ultState\x12-\n\x06\x61ngles\x18\x01 \x03(\x0b\x32\x1d.brax.DefaultState.JointAngle\x12\"\n\x03qps\x18\x02 \x03(\x0b\x32\x15.brax.DefaultState.QP\x1a\x38\n\nJointAngle\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x1c\n\x05\x61ngle\x18\x02 \x01(\x0b\x32\r.brax.Vector3\x1a\x82\x01\n\x02QP\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x1a\n\x03pos\x18\x02 \x01(\x0b\x32\r.brax.Vector3\x12\x1a\n\x03rot\x18\x03 \x01(\x0b\x32\r.brax.Vector3\x12\x1a\n\x03vel\x18\x04 \x01(\x0b\x32\r.brax.Vector3\x12\x1a\n\x03\x61ng\x18\x05 \x01(\x0b\x32\r.brax.Vector3\"\xb1\x03\n\x06\x43onfig\x12\x1a\n\x06\x62odies\x18\x01 \x03(\x0b\x32\n.brax.Body\x12\x1b\n\x06joints\x18\x02 \x03(\x0b\x32\x0b.brax.Joint\x12!\n\tactuators\x18\x03 \x03(\x0b\x32\x0e.brax.Actuator\x12\x12\n\nelasticity\x18\x04 \x01(\x02\x12\x10\n\x08\x66riction\x18\x05 \x01(\x02\x12\x1e\n\x07gravity\x18\x06 \x01(\x0b\x32\r.brax.Vector3\x12\x18\n\x10velocity_damping\x18\x07 \x01(\x02\x12\x17\n\x0f\x61ngular_damping\x18\x08 \x01(\x02\x12\x15\n\rbaumgarte_erp\x18\t \x01(\x02\x12.\n\x0f\x63ollide_include\x18\n \x03(\x0b\x32\x15.brax.Config.NamePair\x12\n\n\x02\x64t\x18\x0b \x01(\x02\x12\x10\n\x08substeps\x18\x0c \x01(\x05\x12\x1c\n\x06\x66rozen\x18\r \x01(\x0b\x32\x0c.brax.Frozen\x12$\n\x08\x64\x65\x66\x61ults\x18\x0e \x03(\x0b\x32\x12.brax.DefaultState\x1a)\n\x08NamePair\x12\r\n\x05\x66irst\x18\x01 \x01(\t\x12\x0e\n\x06second\x18\x02 \x01(\tb\x06proto3'
 )
 
 
@@ -204,8 +204,8 @@ _COLLIDER_BOX = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=586,
-  serialized_end=624,
+  serialized_start=609,
+  serialized_end=647,
 )
 
 _COLLIDER_PLANE = _descriptor.Descriptor(
@@ -228,8 +228,8 @@ _COLLIDER_PLANE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=626,
-  serialized_end=633,
+  serialized_start=649,
+  serialized_end=656,
 )
 
 _COLLIDER_SPHERE = _descriptor.Descriptor(
@@ -259,8 +259,8 @@ _COLLIDER_SPHERE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=635,
-  serialized_end=659,
+  serialized_start=658,
+  serialized_end=682,
 )
 
 _COLLIDER_CAPSULE = _descriptor.Descriptor(
@@ -304,8 +304,8 @@ _COLLIDER_CAPSULE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=661,
-  serialized_end=715,
+  serialized_start=684,
+  serialized_end=738,
 )
 
 _COLLIDER_HEIGHTMAP = _descriptor.Descriptor(
@@ -342,8 +342,8 @@ _COLLIDER_HEIGHTMAP = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=717,
-  serialized_end=756,
+  serialized_start=740,
+  serialized_end=779,
 )
 
 _COLLIDER = _descriptor.Descriptor(
@@ -369,36 +369,43 @@ _COLLIDER = _descriptor.Descriptor(
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='box', full_name='brax.Collider.box', index=2,
-      number=3, type=11, cpp_type=10, label=1,
-      has_default_value=False, default_value=None,
+      name='friction', full_name='brax.Collider.friction', index=2,
+      number=3, type=2, cpp_type=6, label=1,
+      has_default_value=False, default_value=float(0),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='plane', full_name='brax.Collider.plane', index=3,
+      name='box', full_name='brax.Collider.box', index=3,
       number=4, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='sphere', full_name='brax.Collider.sphere', index=4,
+      name='plane', full_name='brax.Collider.plane', index=4,
       number=5, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='capsule', full_name='brax.Collider.capsule', index=5,
+      name='sphere', full_name='brax.Collider.sphere', index=5,
       number=6, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='heightMap', full_name='brax.Collider.heightMap', index=6,
+      name='capsule', full_name='brax.Collider.capsule', index=6,
       number=7, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='heightMap', full_name='brax.Collider.heightMap', index=7,
+      number=8, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -419,9 +426,14 @@ _COLLIDER = _descriptor.Descriptor(
       index=0, containing_type=None,
       create_key=_descriptor._internal_create_key,
     fields=[]),
+    _descriptor.OneofDescriptor(
+      name='_friction', full_name='brax.Collider._friction',
+      index=1, containing_type=None,
+      create_key=_descriptor._internal_create_key,
+    fields=[]),
   ],
   serialized_start=303,
-  serialized_end=764,
+  serialized_end=800,
 )
 
 
@@ -459,8 +471,8 @@ _JOINT_RANGE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1071,
-  serialized_end=1104,
+  serialized_start=1107,
+  serialized_end=1140,
 )
 
 _JOINT = _descriptor.Descriptor(
@@ -570,8 +582,8 @@ _JOINT = _descriptor.Descriptor(
       create_key=_descriptor._internal_create_key,
     fields=[]),
   ],
-  serialized_start=767,
-  serialized_end=1142,
+  serialized_start=803,
+  serialized_end=1178,
 )
 
 
@@ -595,8 +607,8 @@ _ACTUATOR_TORQUE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1284,
-  serialized_end=1292,
+  serialized_start=1320,
+  serialized_end=1328,
 )
 
 _ACTUATOR_ANGLE = _descriptor.Descriptor(
@@ -619,8 +631,8 @@ _ACTUATOR_ANGLE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1294,
-  serialized_end=1301,
+  serialized_start=1330,
+  serialized_end=1337,
 )
 
 _ACTUATOR = _descriptor.Descriptor(
@@ -683,8 +695,8 @@ _ACTUATOR = _descriptor.Descriptor(
       create_key=_descriptor._internal_create_key,
     fields=[]),
   ],
-  serialized_start=1145,
-  serialized_end=1309,
+  serialized_start=1181,
+  serialized_end=1345,
 )
 
 
@@ -722,8 +734,8 @@ _DEFAULTSTATE_JOINTANGLE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1411,
-  serialized_end=1467,
+  serialized_start=1447,
+  serialized_end=1503,
 )
 
 _DEFAULTSTATE_QP = _descriptor.Descriptor(
@@ -781,8 +793,8 @@ _DEFAULTSTATE_QP = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1470,
-  serialized_end=1600,
+  serialized_start=1506,
+  serialized_end=1636,
 )
 
 _DEFAULTSTATE = _descriptor.Descriptor(
@@ -819,8 +831,8 @@ _DEFAULTSTATE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1312,
-  serialized_end=1600,
+  serialized_start=1348,
+  serialized_end=1636,
 )
 
 
@@ -858,8 +870,8 @@ _CONFIG_NAMEPAIR = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1995,
-  serialized_end=2036,
+  serialized_start=2031,
+  serialized_end=2072,
 )
 
 _CONFIG = _descriptor.Descriptor(
@@ -980,8 +992,8 @@ _CONFIG = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1603,
-  serialized_end=2036,
+  serialized_start=1639,
+  serialized_end=2072,
 )
 
 _FROZEN.fields_by_name['position'].message_type = _VECTOR3
@@ -1017,6 +1029,9 @@ _COLLIDER.fields_by_name['capsule'].containing_oneof = _COLLIDER.oneofs_by_name[
 _COLLIDER.oneofs_by_name['type'].fields.append(
   _COLLIDER.fields_by_name['heightMap'])
 _COLLIDER.fields_by_name['heightMap'].containing_oneof = _COLLIDER.oneofs_by_name['type']
+_COLLIDER.oneofs_by_name['_friction'].fields.append(
+  _COLLIDER.fields_by_name['friction'])
+_COLLIDER.fields_by_name['friction'].containing_oneof = _COLLIDER.oneofs_by_name['_friction']
 _JOINT_RANGE.containing_type = _JOINT
 _JOINT.fields_by_name['parent_offset'].message_type = _VECTOR3
 _JOINT.fields_by_name['child_offset'].message_type = _VECTOR3

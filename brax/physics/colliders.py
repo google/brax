@@ -30,6 +30,28 @@ from brax.physics.base import P, QP, euler_to_quat, vec_to_np, take
 from brax.physics.math import safe_norm
 
 
+@struct.dataclass
+class Collider:
+  """
+  A Collider contains information pertaining to collision such as friction and elasticity.
+  """
+  idx: jnp.ndarray
+  friction: jnp.ndarray
+
+  @classmethod
+  def from_config(cls, config: config_pb2.Config) -> 'Collider':
+    """Returns Collider from a brax config."""
+    colliders = []
+    for idx, body in enumerate(config.bodies):
+      for col in body.colliders:
+        colliders.append(
+          cls(
+            idx=jnp.array(idx),
+            friction=col.friction if col.HasField("friction") else config.friction
+          ))
+    return jax.tree_multimap((lambda *args: jnp.stack(args)), *colliders)
+
+
 class BoxPlane:
   """A collision between a box corner and a static plane."""
 
@@ -60,8 +82,11 @@ class BoxPlane:
         corners.append(corner)
 
     body = bodies.Body.from_config(config)
+    col = Collider.from_config(config)
     self.box = take(body, jnp.array(box_idxs))
+    self.box_col = take(col, jnp.array(box_idxs))
     self.plane = take(body, jnp.array(plane_idxs))
+    self.plane_col = take(col, jnp.array(plane_idxs))
     self.corner = jnp.array(corners)
 
   def apply(self, qp: QP, dt: float) -> P:
@@ -83,17 +108,17 @@ class BoxPlane:
       return P(jnp.zeros_like(qp.vel), jnp.zeros_like(qp.ang))
 
     @jax.vmap
-    def apply(box, corner, qp_box, qp_plane):
+    def apply(box, col, corner, qp_box, qp_plane):
       pos, vel = math.to_world(qp_box, corner)
       normal = math.rotate(jnp.array([0.0, 0.0, 1.0]), qp_plane.rot)
       penetration = jnp.dot(pos - qp_plane.pos, normal)
-      dp = _collide(self.config, box, qp_box, pos, vel, normal, penetration, dt)
+      dp = _collide(self.config, box, col, qp_box, pos, vel, normal, penetration, dt)
       collided = jnp.where(penetration < 0., 1., 0.)
       return dp, collided
 
     qp_box = take(qp, self.box.idx)
     qp_plane = take(qp, self.plane.idx)
-    dp, colliding = apply(self.box, self.corner, qp_box, qp_plane)
+    dp, colliding = apply(self.box, self.box_col, self.corner, qp_box, qp_plane)
 
     # collapse/sum across all corners
     num_bodies = len(self.config.bodies)
@@ -154,8 +179,11 @@ class BoxHeightMap:
         meshSizes.append(meshSize)
 
     body = bodies.Body.from_config(config)
+    col = Collider.from_config(config)
     self.box = take(body, jnp.array(box_idxs))
+    self.box_col = take(col, jnp.array(box_idxs))
     self.heightMap = take(body, jnp.array(heightMap_idxs))
+    self.heightMap_col = take(col, jnp.array(heightMap_idxs))
     self.corner = jnp.array(corners)
     self.size = jnp.array(sizes)
     self.meshSize = jnp.array(meshSizes)
@@ -179,7 +207,7 @@ class BoxHeightMap:
       return P(jnp.zeros_like(qp.vel), jnp.zeros_like(qp.ang))
 
     @jax.vmap
-    def apply(box, corner, qp_box, qp_heightMap, size, meshSize, heights):
+    def apply(box, col, corner, qp_box, qp_heightMap, size, meshSize, heights):
       world_pos, vel = math.to_world(qp_box, corner)
 
       pos = math.inv_rotate(world_pos - qp_heightMap.pos, qp_heightMap.rot)
@@ -220,14 +248,14 @@ class BoxHeightMap:
       ])
       penetration = jnp.dot(pos - pos_0, normal)
 
-      dp = _collide(self.config, box, qp_box, pos, vel, rotated_normal,
+      dp = _collide(self.config, box, col, qp_box, pos, vel, rotated_normal,
                     penetration, dt)
       collided = jnp.where(penetration < 0., 1., 0.)
       return dp, collided
 
     qp_box = take(qp, self.box.idx)
     qp_heightMap = take(qp, self.heightMap.idx)
-    dp, colliding = apply(self.box, self.corner, qp_box, qp_heightMap,
+    dp, colliding = apply(self.box, self.box_col, self.corner, qp_box, qp_heightMap,
                           self.size, self.meshSize, self.heights)
 
     # collapse/sum across all corners
@@ -282,8 +310,11 @@ class CapsulePlane:
         cap_radius.append(capsule.radius)
 
     body = bodies.Body.from_config(config)
+    col = Collider.from_config(config)
     self.cap = take(body, jnp.array(cap_idx))
+    self.cap_col = take(col, jnp.array(cap_idx))
     self.plane = take(body, jnp.array(plane_idx))
+    self.plane_col = take(col, jnp.array(plane_idx))
     self.cap_end = jnp.array(cap_end)
     self.cap_radius = jnp.array(cap_radius)
 
@@ -306,7 +337,7 @@ class CapsulePlane:
       return P(jnp.zeros_like(qp.vel), jnp.zeros_like(qp.ang))
 
     @jax.vmap
-    def apply(cap, cap_end, radius, qp_cap, qp_plane):
+    def apply(cap, col, cap_end, radius, qp_cap, qp_plane):
       cap_end_world = qp_cap.pos + math.rotate(cap_end, qp_cap.rot)
       normal = math.rotate(jnp.array([0.0, 0.0, 1.0]), qp_plane.rot)
       pos = cap_end_world - normal * radius
@@ -315,13 +346,13 @@ class CapsulePlane:
       vel = qp_cap.vel + rvel
 
       penetration = jnp.dot(pos - qp_plane.pos, normal)
-      dp = _collide(self.config, cap, qp_cap, pos, vel, normal, penetration, dt)
+      dp = _collide(self.config, cap, col, qp_cap, pos, vel, normal, penetration, dt)
       colliding = jnp.where(penetration < 0., 1., 0.)
       return dp, colliding
 
     qp_cap = take(qp, self.cap.idx)
     qp_plane = take(qp, self.plane.idx)
-    dp, colliding = apply(self.cap, self.cap_end, self.cap_radius, qp_cap,
+    dp, colliding = apply(self.cap, self.cap_col, self.cap_end, self.cap_radius, qp_cap,
                           qp_plane)
 
     # sum across both contact points
@@ -343,6 +374,7 @@ class CapsuleCapsule:
   @struct.dataclass
   class Capsule:
     body: bodies.Body
+    col: Collider
     radius: jnp.ndarray
     end: jnp.ndarray
 
@@ -368,12 +400,17 @@ class CapsuleCapsule:
       ends.append((cap_end(col_a), cap_end(col_b)))
 
     body = bodies.Body.from_config(config)
+    col = Collider.from_config(config)
+    cap_a_idxs = jnp.array([a for a, _ in body_idxs])
+    cap_b_idxs = jnp.array([b for _, b in body_idxs])
     self.cap_a = CapsuleCapsule.Capsule(
-        body=take(body, jnp.array([a for a, _ in body_idxs])),
+        body=take(body, cap_a_idxs),
+        col=take(col, cap_a_idxs),
         radius=jnp.array([a for a, _ in radii]),
         end=jnp.array([a for a, _ in ends]))
     self.cap_b = CapsuleCapsule.Capsule(
-        body=take(body, jnp.array([b for _, b in body_idxs])),
+        body=take(body, cap_b_idxs),
+        col=take(col, cap_b_idxs),
         radius=jnp.array([b for _, b in radii]),
         end=jnp.array([b for _, b in ends]))
 
@@ -427,8 +464,8 @@ class CapsuleCapsule:
       penetration = dist - cap_a.radius - cap_b.radius
       pos_c = (bestA + bestB) / 2.
 
-      dp_a, dp_b = _collide_pair(self.config, cap_a.body, cap_b.body, qp_a,
-                                 qp_b, pos_c, collision_normal, penetration, dt)
+      dp_a, dp_b = _collide_pair(self.config, cap_a.body, cap_b.body, cap_a.col, cap_b.col, qp_a, qp_b, pos_c,
+                                 collision_normal, penetration, dt)
       return dp_a, dp_b
 
     qp_a = take(qp, self.cap_a.body.idx)
@@ -485,7 +522,7 @@ def _find_body_pairs(
   return ret
 
 
-def _collide(config: config_pb2.Config, body: bodies.Body, qp: QP,
+def _collide(config: config_pb2.Config, body: bodies.Body, col: Collider, qp: QP,
              pos_c: jnp.ndarray, vel_c: jnp.ndarray, normal_c: jnp.ndarray,
              penetration: float, dt: float) -> P:
   """Calculates velocity change due to a collision.
@@ -518,10 +555,10 @@ def _collide(config: config_pb2.Config, body: bodies.Body, qp: QP,
 
   # apply drag due to friction acting parallel to the surface contact
   rel_vel_d = vel_c - normal_rel_vel * normal_c
-  impulse_d = math.safe_norm(rel_vel_d) / ((1. / (body.mass)) + ang)
+  impulse_d = math.safe_norm(rel_vel_d) / ((1. / body.mass) + ang)
   # drag magnitude cannot exceed max friction
-  impulse_d = jnp.where(impulse_d < config.friction * impulse, impulse_d,
-                        config.friction * impulse)
+  impulse_d = jnp.where(impulse_d < col.friction * impulse, impulse_d,
+                        col.friction * impulse)
   dir_d = rel_vel_d / (1e-6 + math.safe_norm(rel_vel_d))
   dp_d = body.impulse(qp, -impulse_d * dir_d, pos_c)
 
@@ -539,10 +576,9 @@ def _collide(config: config_pb2.Config, body: bodies.Body, qp: QP,
   return dp_n * colliding_n + dp_d * colliding_d * 2.0
 
 
-def _collide_pair(config: config_pb2.Config, body_a: bodies.Body,
-                  body_b: bodies.Body, qp_a: QP, qp_b: QP, pos_c: jnp.ndarray,
-                  normal_c: jnp.ndarray, penetration: float,
-                  dt: float) -> Tuple[P, P]:
+def _collide_pair(config: config_pb2.Config, body_a: bodies.Body, body_b: bodies.Body,
+                  col_a: Collider, col_b: Collider, qp_a: QP, qp_b: QP,
+                  pos_c: jnp.ndarray, normal_c: jnp.ndarray, penetration: float, dt: float) -> Tuple[P, P]:
   """Calculates velocity change due to a collision.
 
   Args:
@@ -558,6 +594,8 @@ def _collide_pair(config: config_pb2.Config, body_a: bodies.Body,
 
   Returns:
     dP: The impulse on this body result from the collision.
+    :param col_a:
+    :param col_b:
   """
   # TODO: possibly refactor into single collide fn?
   rel_pos_a = pos_c - qp_a.pos
@@ -588,11 +626,13 @@ def _collide_pair(config: config_pb2.Config, body_a: bodies.Body,
   impulse_d = math.safe_norm(rel_vel_d) / ((1. / body_a.mass) +
                                            (1. / body_b.mass) + ang)
   # drag magnitude cannot exceed max friction
-  impulse_d = jnp.where(impulse_d < config.friction * impulse, impulse_d,
-                        config.friction * impulse)
+  impulse_d_a = jnp.where(impulse_d < col_a.friction * impulse, impulse_d,
+                        col_a.friction * impulse)
+  impulse_d_b = jnp.where(impulse_d < col_b.friction * impulse, impulse_d,
+                        col_b.friction * impulse)
   dir_d = rel_vel_d / (1e-6 + math.safe_norm(rel_vel_d))
-  dp_d_a = body_a.impulse(qp_a, impulse_d * dir_d, pos_c)
-  dp_d_b = body_b.impulse(qp_b, -impulse_d * dir_d, pos_c)
+  dp_d_a = body_a.impulse(qp_a, impulse_d_a * dir_d, pos_c)
+  dp_d_b = body_b.impulse(qp_b, -impulse_d_b * dir_d, pos_c)
 
   # apply collision normal if penetrating, approaching, and oriented correctly
   colliding_n = jnp.where(penetration < 0., 1., 0.)

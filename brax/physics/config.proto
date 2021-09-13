@@ -65,13 +65,15 @@ message Collider {
   Vector3 position = 1;
   // Rotation relative to parent body
   Vector3 rotation = 2;
+  // Friction coefficient
+  optional float friction = 3;
   // A collider may only be one type
   oneof type {
-    Box box = 3;
-    Plane plane = 4;
-    Sphere sphere = 5;
-    Capsule capsule = 6;
-    HeightMap heightMap = 7;
+    Box box = 4;
+    Plane plane = 5;
+    Sphere sphere = 6;
+    Capsule capsule = 7;
+    HeightMap heightMap = 8;
   }
 }
 
