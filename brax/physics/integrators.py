@@ -40,10 +40,8 @@ def kinetic(_, qp: QP, dt: float, active_pos: jnp.ndarray,
   def op(qp: QP, active_pos: jnp.ndarray,
          active_rot: jnp.ndarray) -> QP:
     pos = qp.pos + qp.vel * dt * active_pos
-    rot_at_ang_quat = math.ang_to_quat(qp.ang * active_rot)
-    rot = jnp.matmul(
-        jnp.matmul(jnp.eye(4) + .5 * dt * rot_at_ang_quat, qp.rot),
-        jnp.eye(4) - .5 * dt * rot_at_ang_quat)
+    rot_at_ang_quat = math.ang_to_quat(qp.ang * active_rot)*0.5*dt
+    rot = qp.rot+math.qmult(rot_at_ang_quat,qp.rot)
     rot = rot / jnp.linalg.norm(rot)
     return QP(pos=pos, rot=rot, vel=qp.vel, ang=qp.ang)
 
