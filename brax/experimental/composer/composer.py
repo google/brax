@@ -49,7 +49,7 @@ import collections
 import copy
 import functools
 import itertools
-from typing import Dict, Any, Callable
+from typing import Dict, Any, Callable, Tuple
 
 import brax
 from brax import envs
@@ -62,9 +62,10 @@ from brax.experimental.composer import observers
 import jax
 from jax import numpy as jnp
 
-MetaData = collections.namedtuple(
-    'MetaData',
-    ['components', 'edges', 'global_options', 'config_str', 'config_json'])
+MetaData = collections.namedtuple('MetaData', [
+    'components', 'edges', 'global_options', 'config_str', 'config_json',
+    'extra_observers'
+])
 
 
 class Composer(object):
@@ -73,6 +74,7 @@ class Composer(object):
   def __init__(self,
                components: Dict[str, Dict[str, Any]],
                edges: Dict[str, Dict[str, Any]] = None,
+               extra_observers: Tuple[observers.Observer] = (),
                add_ground: bool = True,
                global_options: Dict[str, Any] = None):
     components = copy.deepcopy(components)
@@ -170,6 +172,7 @@ class Composer(object):
         global_options=global_options_,
         config_str=config_str,
         config_json=config_json,
+        extra_observers=extra_observers,
     )
     config = component_editor.message_str2message(message_str)
     self.config, self.metadata = config, metadata
@@ -179,8 +182,7 @@ class Composer(object):
     # apply translations and rotations
     for _, v in sorted(self.metadata.components.items()):
       if v['transform']:
-        _, _, mask = sim_utils.names2indices(sys.config, v['bodies'],
-                                             'body')
+        _, _, mask = sim_utils.names2indices(sys.config, v['bodies'], 'body')
         qp = sim_utils.transform_qp(qp, mask[..., None], v['quat'],
                                     v['quat_origin'], v['pos'])
     return qp
@@ -195,12 +197,19 @@ class Composer(object):
 
   def obs_fn(self, sys, qp: brax.QP, info: brax.Info):
     """Return observation as OrderedDict."""
+    cached_obs_dict = {}
     obs_dict = collections.OrderedDict()
     for _, v in self.metadata.components.items():
       for observer in v['observers']:
-        obs_dict_ = observers.get_obs_dict(sys, qp, info, observer, v)
+        obs_dict_ = observers.get_obs_dict(sys, qp, info, observer,
+                                           cached_obs_dict, v)
         obs_dict = collections.OrderedDict(
             list(obs_dict.items()) + list(obs_dict_.items()))
+    for observer in self.metadata.extra_observers:
+      obs_dict_ = observers.get_obs_dict(sys, qp, info, observer,
+                                         cached_obs_dict, None)
+      obs_dict = collections.OrderedDict(
+          list(obs_dict.items()) + list(obs_dict_.items()))
     return obs_dict
 
 
@@ -210,7 +219,8 @@ class ComponentEnv(Env):
   def __init__(self, composer: Composer, *args, **kwargs):
     self.observer_shapes = None
     self.composer = composer
-    super().__init__(*args, config=self.composer.config, **kwargs)
+    super().__init__(
+        *args, config=self.composer.metadata.config_str, **kwargs)
 
   def reset(self, rng: jnp.ndarray) -> State:
     """Resets the environment to an initial state."""
@@ -218,21 +228,19 @@ class ComponentEnv(Env):
     qp = self.composer.reset_fn(self.sys, qp)
     info = self.sys.info(qp)
     obs = self._get_obs(qp, info)
-    reward, done, steps = jnp.zeros(3)
+    reward, done = jnp.zeros(2)
     metrics = {}
-    return State(rng, qp, info, obs, reward, done, steps, metrics)
+    return State(qp, obs, reward, done, metrics, info)
 
   def step(self, state: State, action: jnp.ndarray) -> State:
     """Run one timestep of the environment's dynamics."""
-    rng = state.rng
     qp, info = self.sys.step(state.qp, action)
     obs = self._get_obs(qp, info)
     reward = 0.0
-    steps = state.steps + self.action_repeat
-    done = jnp.where(steps >= self.episode_length, x=1.0, y=0.0)
+    done = False
     done = self.composer.term_fn(done, self.sys, qp, info)
     metrics = {}
-    return State(rng, qp, info, obs, reward, done, steps, metrics)
+    return State(qp, obs, reward, done, metrics, info)
 
   def _get_obs(
       self,
@@ -244,6 +252,15 @@ class ComponentEnv(Env):
     if self.observer_shapes is None:
       self.observer_shapes = observers.get_obs_dict_shape(obs_dict)
     return jnp.concatenate(list(obs_dict.values()))
+
+
+def get_env_obs_dict_shape(env: Env):
+  """Gets an Env's observation shape(s)."""
+  if isinstance(env, ComponentEnv):
+    assert env.observation_size  # ensure env.observer_shapes is set
+    return env.observer_shapes
+  else:
+    return (env.observation_size,)
 
 
 def create(env_name: str = None,

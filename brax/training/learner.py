@@ -138,6 +138,7 @@ def main(unused_argv):
           l2coeff=FLAGS.l2coeff,
           learning_rate=FLAGS.learning_rate,
           seed=FLAGS.seed,
+          max_devices_per_host=FLAGS.max_devices_per_host,
           episode_length=FLAGS.episode_length,
           progress_fn=writer.write_scalars)
     if FLAGS.learner == 'apg':

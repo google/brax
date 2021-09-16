@@ -55,13 +55,17 @@ class EpisodeWrapper(brax_env.Wrapper):
   def reset(self, rng: jnp.ndarray) -> brax_env.State:
     state = self.env.reset(rng)
     state.info['steps'] = jnp.zeros(())
+    state.info['truncation'] = jnp.zeros(())
     return state
 
   def step(self, state: brax_env.State, action: jnp.ndarray) -> brax_env.State:
     state = self.env.step(state, action)
     steps = state.info['steps'] + self.action_repeat
     one = jnp.ones_like(state.done)
+    zero = jnp.zeros_like(state.done)
     done = jnp.where(steps >= self.episode_length, one, state.done)
+    state.info['truncation'] = jnp.where(steps >= self.episode_length,
+                                         1 - state.done, zero)
     state.info['steps'] = steps
     return state.replace(done=done)
 

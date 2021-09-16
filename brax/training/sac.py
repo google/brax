@@ -48,6 +48,7 @@ class Transition:
   r_t: jnp.ndarray
   o_t: jnp.ndarray
   d_t: jnp.ndarray  # discount (1-done)
+  truncation_t: jnp.ndarray
 
 
 # The rewarder allows to change the reward of before the learner trains.
@@ -286,7 +287,7 @@ def train(
     q_error = q_old_action - jnp.expand_dims(target_q, -1)
 
     # Better bootstrapping for truncated episodes.
-    q_error *= jnp.expand_dims(transitions.d_t, -1)
+    q_error *= jnp.expand_dims(1 - transitions.truncation_t, -1)
 
     q_loss = 0.5 * jnp.mean(jnp.square(q_error))
     return q_loss
@@ -319,8 +320,9 @@ def train(
         o_t=obs_normalizer_apply_fn(state.normalizer_params,
                                     transitions[:, obs_size:2 * obs_size]),
         a_tm1=transitions[:, 2 * obs_size:2 * obs_size + core_env.action_size],
-        r_t=transitions[:, -2],
-        d_t=transitions[:, -1])
+        r_t=transitions[:, -3],
+        d_t=transitions[:, -2],
+        truncation_t=transitions[:, -1])
 
     (key, key_alpha, key_critic, key_actor,
      key_rewarder) = jax.random.split(state.key, 5)
@@ -408,6 +410,7 @@ def train(
         postprocessed_actions,
         jnp.expand_dims(nstate.reward, axis=-1),
         jnp.expand_dims(1 - nstate.done, axis=-1),
+        jnp.expand_dims(nstate.info['truncation'], axis=-1),
     ],
                                         axis=-1)
 
@@ -558,7 +561,7 @@ def train(
 
       replay_buffer = ReplayBuffer(
           data=jnp.zeros((local_devices_to_use, max_replay_size,
-                          obs_size * 2 + core_env.action_size + 1 + 1)),
+                          obs_size * 2 + core_env.action_size + 1 + 1 + 1)),
           current_size=jnp.zeros((local_devices_to_use,), dtype=jnp.int32),
           current_position=jnp.zeros((local_devices_to_use,), dtype=jnp.int32))
 

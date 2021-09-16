@@ -23,11 +23,13 @@ from brax.experimental.braxlines.training import ppo
 from brax.experimental.braxlines.vgcrl import evaluators as vgcrl_evaluators
 from brax.experimental.braxlines.vgcrl import utils as vgcrl_utils
 from brax.experimental.composer import composer
+from brax.experimental.composer import register_default_components
 from brax.experimental.composer.obs_descs import OBS_INDICES
 from brax.io import file
 import jax
 import matplotlib.pyplot as plt
 import tensorflow_probability as tfp
+register_default_components()
 
 tfp = tfp.substrates.jax
 tfd = tfp.distributions
@@ -105,6 +107,7 @@ def train(train_job_params: Dict[str, Any],
       env_name=env_name,
       wrapper_params=dict(
           env_reward_multiplier=env_reward_multiplier, disc=disc))
+  eval_env_fn = functools.partial(env_fn, auto_reset=False)
 
   # make inference function and test goals
   core_env = env_fn()
@@ -160,7 +163,7 @@ def train(train_job_params: Dict[str, Any],
   def progress(num_steps, metrics, params):
     if evaluate_mi:
       mi_metrics = vgcrl_evaluators.estimate_empowerment_metric(
-          env_fn=env_fn,
+          env_fn=eval_env_fn,
           disc=disc,
           inference_fn=inference_fn,
           params=params,
@@ -177,7 +180,7 @@ def train(train_job_params: Dict[str, Any],
     if evaluate_lgr:
       lgr_metrics = vgcrl_evaluators.estimate_latent_goal_reaching_metric(
           params=params,
-          env_fn=env_fn,
+          env_fn=eval_env_fn,
           disc=disc,
           inference_fn=inference_fn,
           goals=goals,
@@ -218,7 +221,7 @@ def train(train_job_params: Dict[str, Any],
   print(f'time to train: {times[-1] - times[1]}')
 
   vgcrl_evaluators.visualize_skills(
-      env_fn=env_fn,
+      env_fn=eval_env_fn,
       inference_fn=inference_fn,
       disc=disc,
       params=params,
@@ -232,11 +235,3 @@ def train(train_job_params: Dict[str, Any],
       save_video=True)
 
   return return_dict
-
-
-def train_dummy(train_job_params: Dict[str, Any],
-                output_dir: str,
-                return_dict: Dict[str, float] = None,
-                progress_dict: Dict[str, float] = None,
-                env_tag: str = None):
-  return_dict['test'] = 'ok'

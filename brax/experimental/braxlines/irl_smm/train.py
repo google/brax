@@ -24,10 +24,12 @@ from brax.experimental.braxlines.irl_smm import evaluators as irl_evaluators
 from brax.experimental.braxlines.irl_smm import utils as irl_utils
 from brax.experimental.braxlines.training import ppo
 from brax.experimental.composer import composer
+from brax.experimental.composer import register_default_components
 from brax.experimental.composer.obs_descs import OBS_INDICES
 from brax.io import file
 import jax
 import matplotlib.pyplot as plt
+register_default_components()
 
 TASK_KEYS = (
     ('env_name',),
@@ -68,6 +70,7 @@ def train(train_job_params: Dict[str, Any],
   seed = config.pop('seed', 0)
   evaluate_dist = config.pop('evaluate_dist', False)
   spectral_norm = config.pop('spectral_norm', False)
+  gradient_penalty_weight = config.pop('gradient_penalty_weight', 0.0)
   ppo_params = dict(
       num_timesteps=int(5e7),
       reward_scaling=10,
@@ -109,6 +112,7 @@ def train(train_job_params: Dict[str, Any],
       arch=(32, 32),
       logits_clip_range=logits_clip_range,
       spectral_norm=spectral_norm,
+      gradient_penalty_weight=gradient_penalty_weight,
       reward_type=reward_type,
       normalize_obs=normalize_obs_for_disc,
       balance_data=balance_data_for_disc,
@@ -122,6 +126,7 @@ def train(train_job_params: Dict[str, Any],
           disc=disc,
           env_reward_multiplier=env_reward_multiplier,
       ))
+  eval_env_fn = functools.partial(env_fn, auto_reset=False)
   # make inference functions and goals for evaluation
   core_env = env_fn()
   _, inference_fn = ppo.make_params_and_inference_fn(
@@ -178,7 +183,7 @@ def train(train_job_params: Dict[str, Any],
           params=params,
           disc=disc,
           target_data=target_data,
-          env_fn=env_fn,
+          env_fn=eval_env_fn,
           inference_fn=inference_fn,
           num_samples=10,
           time_subsampling=10,
@@ -215,7 +220,7 @@ def train(train_job_params: Dict[str, Any],
 
   for i in range(3):
     evaluators.visualize_env(
-        env_fn=env_fn,
+        env_fn=eval_env_fn,
         inference_fn=inference_fn,
         params=params,
         batch_size=0,
@@ -228,7 +233,7 @@ def train(train_job_params: Dict[str, Any],
       params=params,
       disc=disc,
       target_data=target_data,
-      env_fn=env_fn,
+      env_fn=eval_env_fn,
       inference_fn=inference_fn,
       num_samples=10,
       time_subsampling=10,

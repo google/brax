@@ -51,18 +51,17 @@ class Discriminator(object):
                dist_p_params=None,
                dist_q='FixedSigma',
                dist_q_params=None,
-               ll_q_offset='auto',
                z_size=0,
                obs_indices: Optional[List[Any]] = None,
                obs_scale: Optional[List[float]] = None,
-               logits_clip_range=None,
+               nonnegative_reward: bool = True,
+               logits_clip_range: float = 10.0,
                param_name: str = DISC_PARAM_NAME,
                normalize_obs: bool = False,
-               spectral_norm: bool = False):
+               spectral_norm: bool = True):
     assert obs_scale is not None
     self.z_size = z_size
     self.env_obs_size = env.observation_size
-    self.ll_q_offset = ll_q_offset
     self.model = None
     self.param_name = param_name
     self.q_fn_str = q_fn
@@ -76,6 +75,9 @@ class Discriminator(object):
     self.normalize_fn = normalization.make_data_and_apply_fn(
         [self.env_obs_size + self.z_size], self.normalize_obs)[1]
     self.spectral_norm = spectral_norm
+    self.logits_clip_range = logits_clip_range
+    self.nonnegative_reward = nonnegative_reward
+    self.ll_q_offset = 0.0
 
     # define dist_params_to_dist for q_z_o
     dist_q_params = copy.deepcopy(dist_q_params) or {}
@@ -86,7 +88,7 @@ class Discriminator(object):
       self.dist_q_fn = lambda x: tfd.MultivariateNormalDiag(x, q_scale)
       # if an environment terminates, it's useful to ensure reward is positive,
       #  this ensures that within 3*std the log likelihood is positive.
-      if self.ll_q_offset == 'auto':
+      if self.nonnegative_reward:
         self.ll_q_offset = -tfd.MultivariateNormalDiag(
             jnp.zeros(self.z_size),
             jnp.ones(self.z_size) * q_scale).log_prob(
@@ -94,8 +96,8 @@ class Discriminator(object):
     elif dist_q == 'Categorial':
       self.dist_q_fn = lambda x: dist_utils.clipped_onehot_categorical(
           logits=x, clip_range=logits_clip_range)
-      if self.ll_q_offset == 'auto':
-        self.ll_q_offset = 0.
+      if self.nonnegative_reward:
+        self.ll_q_offset = self.logits_clip_range
     else:
       raise NotImplementedError(dist_q)
     assert not dist_q_params, f'unused dist_q_params: {dist_q_params}'
@@ -235,6 +237,7 @@ class ParameterizeWrapper(Env):
   def __init__(self,
                environment: Env,
                disc: Discriminator,
+               obs_norm_reward_multiplier: float = 0.0,
                env_reward_multiplier: float = 0.0):
     self._environment = environment
     self.action_repeat = self._environment.action_repeat
@@ -247,6 +250,7 @@ class ParameterizeWrapper(Env):
     self.z_size = disc.z_size
     self.env_obs_size = self._environment.observation_size
     self.env_reward_multiplier = env_reward_multiplier
+    self.obs_norm_reward_multiplier = obs_norm_reward_multiplier
 
   def concat(
       self,
@@ -264,6 +268,9 @@ class ParameterizeWrapper(Env):
       env_obs, z = self.disc.split_obs(new_obs)
       new_reward = self.disc.ll_q_z_o(
           z, env_obs, params=params, add_offset=True)
+      if self.obs_norm_reward_multiplier:
+        new_reward += self.obs_norm_reward_multiplier * jnp.linalg.norm(
+            self.disc.index_obs(env_obs), axis=-1)
       new_reward = jax.lax.stop_gradient(new_reward)
       state = state.replace(reward=new_reward +
                             self.env_reward_multiplier * state.reward)

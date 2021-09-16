@@ -13,6 +13,9 @@
 # limitations under the License.
 
 """Environment descriptions."""
+from brax.experimental.composer.components import ant
+from brax.experimental.composer.observers import LambdaObserver as lo
+from brax.experimental.composer.observers import SimObserver as so
 
 ENV_DESCS = {
     'uni_ant':
@@ -23,7 +26,21 @@ ENV_DESCS = {
                 ant1=dict(component='ant', pos=(0, 1, 0)),
                 ant2=dict(component='ant', pos=(0, -1, 0)),
             ),
-            edges=dict(ant1__ant2=dict(collide_type='full'),)),
+            extra_observers=[
+                lo(name='delta_pos',
+                   fn='-',
+                   observers=[
+                       so('body', 'pos', ant.ROOT, 'ant1'),
+                       so('body', 'pos', ant.ROOT, 'ant2')
+                   ]),
+                lo(name='delta_vel',
+                   fn='-',
+                   observers=[
+                       so('body', 'vel', ant.ROOT, 'ant1'),
+                       so('body', 'vel', ant.ROOT, 'ant2')
+                   ]),
+            ],
+            edges=dict(ant1__ant2=dict(collide_type=None),)),
     'tri_ant':
         dict(
             components=dict(

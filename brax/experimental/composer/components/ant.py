@@ -13,16 +13,16 @@
 # limitations under the License.
 
 """Ant."""
-from jax import numpy as jnp
 import brax
 from brax.experimental.braxlines.common import sim_utils
 from brax.experimental.composer import component_editor
+from jax import numpy as jnp
 
 COLLIDES = ('torso', '$ Body 4', '$ Body 7', '$ Body 10', '$ Body 13')
 
 ROOT = 'torso'
 
-DEFAULT_OBSERVERS = ['root_z_joints', 'cfrc']
+DEFAULT_OBSERVERS = ('root_z_joints', 'cfrc')
 
 
 def term_fn(done, sys, qp: brax.QP, info: brax.Info, suffix: str):
@@ -295,3 +295,12 @@ actuators {
   torque {}
 }
 """
+
+
+def get_specs():
+  return dict(
+      message_str=SYSTEM_CONFIG,
+      collides=COLLIDES,
+      root=ROOT,
+      term_fn=TERM_FN,
+      observers=DEFAULT_OBSERVERS)

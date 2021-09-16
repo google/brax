@@ -17,7 +17,8 @@ to minutes:
 
 *   Baseline learning algorithms such as
     [PPO](https://github.com/google/brax/blob/main/brax/training/ppo.py),
-    [SAC](https://github.com/google/brax/blob/main/brax/training/sac.py), and
+    [SAC](https://github.com/google/brax/blob/main/brax/training/sac.py),
+    [ARS](https://github.com/google/brax/blob/main/brax/training/ars.py), and
     [evolutionary strategies](https://github.com/google/brax/blob/main/brax/training/es.py).
 *   Learning algorithms that leverage the differentiability of the simulator, such as [analytic policy gradients](https://github.com/google/brax/blob/main/brax/training/apg.py).
 

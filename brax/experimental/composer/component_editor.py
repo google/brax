@@ -16,21 +16,20 @@
 # pylint:disable=protected-access
 # pylint:disable=g-complex-comprehension
 import copy
-# import importlib
+import importlib
 import itertools
 import json
-from typing import Any, Tuple, Dict, List
+from typing import Any, Tuple, Dict
 
 import brax
-from brax.experimental.composer.components import ant
-from brax.experimental.composer.components import ground
-from brax.experimental.composer.components import halfcheetah
 from google.protobuf import text_format
 from google.protobuf.json_format import MessageToJson
 from google.protobuf.json_format import Parse
 
+DEFAULT_REGISTER_COMPONENTS = ('ant', 'ground', 'halfcheetah')
+
 DEFAULT_GLOBAL_OPTIONS_STR = """
-friction: 0.6
+friction: 1.0
 gravity { z: -9.8 }
 angular_damping: -0.05
 baumgarte_erp: 0.1
@@ -70,28 +69,40 @@ NAME_FIELDS = {
 COMPONENT_MAPPING = {}
 
 
+def register_component(component: str,
+                       component_params: Dict[str, Any] = None,
+                       component_specs: Any = None,
+                       override: bool = False):
+  """Register component config information."""
+  global COMPONENT_MAPPING
+  if not override and component in COMPONENT_MAPPING:
+    specs = COMPONENT_MAPPING[component]
+    return copy.deepcopy(specs)
+  if component_specs is None:
+    if '.' not in component:
+      load_path = f'brax.experimental.composer.components.{component}'
+    else:
+      load_path = component
+    component_lib = importlib.import_module(load_path)
+    component_specs = component_lib.get_specs(**(component_params or {}))
+  COMPONENT_MAPPING[component] = component_specs
+  return copy.deepcopy(component_specs)
+
+
+def register_default_components():
+  """Register all default components."""
+  for component in DEFAULT_REGISTER_COMPONENTS:
+    register_component(component)
+
+
 def load_component(component: str,
-                   observers: List[str] = None,
-                   **kwargs) -> Dict[str, Any]:
+                   component_specs: Dict[str, Any] = None,
+                   **override_specs) -> Dict[str, Any]:
   """Load component config information."""
-  if component == 'ant':
-    lib = ant
-  elif component == 'ground':
-    lib = ground
-  elif component == 'halfcheetah':
-    lib = halfcheetah
-  else:
-    raise NotImplementedError(component)
-  # load_path = COMPONENT_MAPPING.get(
-  #     component, f'brax.experimental.composer.components.{component}')
-  # lib = importlib.import_module(load_path)
-  return dict(
-      message_str=lib.SYSTEM_CONFIG,
-      collides=lib.COLLIDES,
-      root=lib.ROOT,
-      term_fn=lib.TERM_FN,
-      observers=observers or lib.DEFAULT_OBSERVERS,
-      **kwargs)
+  default_specs = register_component(
+      component=component, component_specs=component_specs)
+  default_specs.update(override_specs)
+  return default_specs
 
 
 def message_str2message(message_str: str) -> brax.Config:
@@ -128,7 +139,10 @@ def json_collides(first_collides: Tuple[str],
 
 def add_suffix(name: str, suffix: str):
   """Add suffix to string."""
-  return f'{name}_{suffix}'
+  if suffix:
+    return f'{name}_{suffix}'
+  else:
+    return name
 
 
 def json_add_suffix(

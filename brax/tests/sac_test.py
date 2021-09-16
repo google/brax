@@ -16,14 +16,15 @@
 
 from absl.testing import absltest
 from absl.testing import parameterized
-from flax import serialization
-import jax
 from brax import envs
 from brax.training import sac
+from flax import serialization
+import jax
 
 
 class SACTest(parameterized.TestCase):
   """Tests for SAC module."""
+
 
   def testTrain(self):
     """Test SAC with a simple env."""

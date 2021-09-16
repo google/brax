@@ -52,7 +52,8 @@ class IRLDiscriminator(object):
                act_indices: Optional[List[int]] = None,
                obs_scale: Optional[List[float]] = None,
                include_action: bool = False,
-               logits_clip_range: float = None,
+               logits_clip_range: float = 10.0,
+               nonnegative_reward: bool = True,
                param_name: str = DISC_PARAM_NAME,
                target_data: jnp.ndarray = None,
                target_dist_fn=None,
@@ -85,6 +86,10 @@ class IRLDiscriminator(object):
     self.initialized = False
     self.target_data = target_data
     self.target_dist_fn = target_dist_fn
+    self.logits_clip_range = logits_clip_range
+    self.nonnegative_reward = nonnegative_reward
+    if self.nonnegative_reward:
+      assert self.logits_clip_range
     self.balance_data = balance_data
     self.normalize_obs = normalize_obs
     self.normalize_fn = normalization.make_data_and_apply_fn(
@@ -145,16 +150,23 @@ class IRLDiscriminator(object):
     elif self.reward_type == "gail2":
       # https://arxiv.org/abs/2106.00672
       r = dist.log_prob(jnp.ones_like(dist.logits))
+      if self.nonnegative_reward:
+        r += self.logits_clip_range
       r = jnp.sum(r, axis=-1)
     elif self.reward_type == "airl":
       r = dist.logits
+      if self.nonnegative_reward:
+        r += self.logits_clip_range
       r = jnp.sum(r, axis=-1)
     elif self.reward_type == "fairl":
       r = dist.logits
       r = jnp.exp(r) * -r
+      if self.nonnegative_reward:
+        r += self.logits_clip_range
       r = jnp.sum(r, axis=-1)
     elif self.reward_type == "mle":  # for debugging
       assert not self.normalize_obs
+      assert not self.nonnegative_reward
       target_dist = self.target_dist_fn()
       r = target_dist.log_prob(data)
     else:
@@ -203,7 +215,10 @@ class IRLWrapper(Env):
   ):
     self._environment = environment
     self.action_repeat = self._environment.action_repeat
-    self.batch_size = self._environment.batch_size
+    if hasattr(self._environment, "batch_size"):
+      self.batch_size = self._environment.batch_size
+    else:
+      self.batch_size = None
     self.sys = self._environment.sys
     self.disc = disc
     self.env_reward_multiplier = env_reward_multiplier
@@ -268,8 +283,9 @@ def disc_loss_fn(data: StepData,
       disc.ll(target_d, jnp.ones(target_d.shape[:-1] + (1,)), params=params))
 
   if gradient_penalty_weight > 0.:
-    assert d.shape == target_d.shape, \
-        f'd shape {d.shape} does not match target_d shape {target_d.shape}!'
+    assert (
+        d.shape == target_d.shape
+    ), f"d shape {d.shape} does not match target_d shape {target_d.shape}!"
     rng, sub_key = jax.random.split(rng)
     w_shape = [d.shape[0], 1]
     w = jax.random.uniform(sub_key, shape=w_shape, minval=0., maxval=1.)

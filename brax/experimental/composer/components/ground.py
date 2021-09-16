@@ -18,7 +18,7 @@ COLLIDES = ('Ground',)
 
 ROOT = 'Ground'
 
-DEFAULT_OBSERVERS = []
+DEFAULT_OBSERVERS = ()
 
 TERM_FN = None
 
@@ -33,3 +33,12 @@ bodies {
   frozen { all: true }
 }
 """
+
+
+def get_specs():
+  return dict(
+      message_str=SYSTEM_CONFIG,
+      collides=COLLIDES,
+      root=ROOT,
+      term_fn=TERM_FN,
+      observers=DEFAULT_OBSERVERS)

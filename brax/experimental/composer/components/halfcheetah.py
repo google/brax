@@ -18,7 +18,7 @@ COLLIDES = ('torso', 'bfoot', 'ffoot')
 
 ROOT = 'torso'
 
-DEFAULT_OBSERVERS = ['root_z_joints']
+DEFAULT_OBSERVERS = ('root_z_joints',)
 
 TERM_FN = None
 
@@ -357,3 +357,12 @@ actuators {
   }
 }
 """
+
+
+def get_specs():
+  return dict(
+      message_str=SYSTEM_CONFIG,
+      collides=COLLIDES,
+      root=ROOT,
+      term_fn=TERM_FN,
+      observers=DEFAULT_OBSERVERS)

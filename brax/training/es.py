@@ -85,7 +85,7 @@ def train(
       action_repeat=action_repeat,
       batch_size=num_envs // local_devices_to_use // process_count,
       episode_length=episode_length)
-  key_envs = jax.random.split(key_env, local_devices_to_use // 2)
+  key_envs = jax.random.split(key_env, local_devices_to_use)
   step_fn = core_env.step
   first_state = jax.tree_multimap(lambda *args: jnp.stack(args),
                                   *[core_env.reset(key) for key in key_envs])
@@ -179,7 +179,6 @@ def train(
     params_with_noise, params_with_anti_noise, noise = add_noise(
         params, key_petr)
 
-    pstate = jax.tree_map(lambda x: jnp.concatenate([x, x], axis=0), state)
     pparams = jax.tree_multimap(lambda a, b: jnp.concatenate([a, b], axis=0),
                                 params_with_noise, params_with_anti_noise)
 
@@ -189,10 +188,8 @@ def train(
 
     prun_es_eval = jax.pmap(run_es_eval, in_axes=(0, 0, None, None))
     eval_scores, obs, obs_weights, state = prun_es_eval(
-        pstate, pparams, key_es_eval,
+        state, pparams, key_es_eval,
         training_state.normalizer_params)
-
-    state = jax.tree_map(lambda x: jnp.split(x, 2, axis=0)[0], state)
 
     obs = jnp.reshape(obs, [-1] + list(obs.shape[2:]))
     obs_weights = jnp.reshape(obs_weights, [-1] + list(obs_weights.shape[2:]))
@@ -254,8 +251,7 @@ def train(
         'eval_scores_std': jnp.std(eval_scores),
         'weights': jnp.mean(weights),
     }
-    return (state,
-            TrainingState(
+    return (TrainingState(
                 key=key,
                 normalizer_params=normalizer_params,
                 optimizer_state=optimizer_state,
@@ -322,9 +318,8 @@ def train(
 
     t = time.time()
     # optimization
-    new_state, training_state, summary = es_one_epoch(state, training_state)
-    del new_state
-    # Don't override state with new_state. For environments with variable
+    training_state, summary = es_one_epoch(state, training_state)
+    # Don't override state with new state. For environments with variable
     # episode length we still want to start from a 'reset', not from where the
     # last run finished.
     jax.tree_map(lambda x: x.block_until_ready(), training_state)

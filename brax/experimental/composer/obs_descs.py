@@ -19,6 +19,6 @@ OBS_INDICES = dict(
         ant=(13, 14),
         humanoid=(22, 23),
         halfcheetah=(11,),
-        uni_ant=(('vel:torso_ant1', 0), ('vel:torso_ant1', 1)),
-        bi_ant=(('vel:torso_ant1', 0), ('vel:torso_ant2', 0)),
+        uni_ant=(('body_vel:torso_ant1', 0), ('body_vel:torso_ant1', 1)),
+        bi_ant=(('body_vel:torso_ant1', 0), ('body_vel:torso_ant2', 0)),
     ),)
