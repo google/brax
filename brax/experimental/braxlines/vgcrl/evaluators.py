@@ -212,7 +212,6 @@ def rollout_skills(
       zs = jax.nn.one_hot(jnp.arange(0, disc.z_size), disc.z_size)  # D=Z
     else:
       rng, z_key = jax.random.split(rng)
-      z_key = jnp.array(jax.random.split(z_key, 5))
       zs = disc.sample_p_z(num_z, z_key)  # D=num_z
   D = zs.shape[0]
 
