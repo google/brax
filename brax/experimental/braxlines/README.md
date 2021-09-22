@@ -50,4 +50,11 @@ If you would like to reference Braxlines in a publication, please use:
   author={Gu, Shixiang Shane and Diaz, Manfred and Freeman, C Daniel and Furuta, Hiroki and Ghasemipour, Seyed Kamyar Seyed and Raichuk, Anton and David, Byron and Frey, Erik and Coumans, Erwin and Bachem, Olivier},
   year={2021}
 }
+@software{brax2021github,
+  author = {C. Daniel Freeman and Erik Frey and Anton Raichuk and Sertan Girgin and Igor Mordatch and Olivier Bachem},
+  title = {Brax - A Differentiable Physics Engine for Large Scale Rigid Body Simulation},
+  url = {http://github.com/google/brax},
+  version = {0.0.5},
+  year = {2021},
+}
 ```

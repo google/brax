@@ -34,6 +34,7 @@ index_obs() allows indexing with a list of indices
 """
 import abc
 import collections
+import functools
 from typing import Any, Dict, List, Tuple, Union
 import brax
 from brax.envs import Env
@@ -152,8 +153,7 @@ class SimObserver(Observer):
                component: Dict[str, Any] = None):
     """Get observation."""
     if self.sdtype == 'body':
-      assert self.sdcomp in ('pos', 'rot', 'ang',
-                                   'vel'), self.sdcomp
+      assert self.sdcomp in ('pos', 'rot', 'ang', 'vel'), self.sdcomp
       obs = getattr(qp, self.sdcomp)[self.sim_indices]
     elif self.sdtype == 'joint':
       joint_obs_dict = sim_utils.get_joint_value(sys, qp, self.sim_info)
@@ -205,7 +205,11 @@ def initialize_observers(observers: List[Union[Observer, str]], sys):
       o.initialize(sys)
 
 
-def get_obs_dict(sys, qp: brax.QP, info: brax.Info, observer: str,
+STRING_OBSERVERS = ('qp', 'root_joints', 'root_z_joints', 'cfrc')
+
+
+def get_obs_dict(sys, qp: brax.QP, info: brax.Info, observer: Union[str,
+                                                                    Observer],
                  cached_obs_dict: Dict[str, jnp.ndarray], component: Dict[str,
                                                                           Any]):
   """Observe."""
@@ -255,13 +259,44 @@ def get_obs_dict(sys, qp: brax.QP, info: brax.Info, observer: str,
   return obs_dict
 
 
-def get_obs_dict_shape(obs_dict: Union[Dict[str, jnp.ndarray], jnp.ndarray]):
+def get_obs_dict_shape(obs_dict: Union[Dict[str, jnp.ndarray], jnp.ndarray],
+                       batch_shape: Tuple[int] = ()):
+  """Get observation dict shape information."""
   if isinstance(obs_dict, jnp.ndarray):
     return obs_dict.shape
   observer_shapes = collections.OrderedDict()
   i = 0
   for k, v in obs_dict.items():
-    assert v.ndim == 1, v.shape
-    observer_shapes[k] = dict(shape=v.shape, start=i, end=i + v.shape[0])
-    i += v.shape[0]
+    v_shape = v.shape[len(batch_shape):]
+    size = functools.reduce(lambda x, y: x * y, v_shape)
+    observer_shapes[k] = dict(shape=v_shape, size=size, start=i, end=i + size)
+    i += size
   return observer_shapes
+
+
+def get_component_observers(component: Dict[str, Any],
+                            observer_type: str = 'qp',
+                            **observer_kwargs):
+  """Get component-based Observers."""
+  del component, observer_kwargs
+  raise NotImplementedError(observer_type)
+
+
+def get_edge_observers(component1: Dict[str, Any],
+                       component2: Dict[str, Any],
+                       observer_type: str = 'root_vec',
+                       **observer_kwargs):
+  """Get edge-based Observers."""
+  if observer_type == 'root_vec':
+    root1 = component1['root']
+    root2 = component2['root']
+    return LambdaObserver(
+        name=f'dist__{root1}__{root2}',
+        fn='-',
+        observers=[
+            SimObserver(sdname=component1['root'], **observer_kwargs),
+            SimObserver(sdname=component2['root'], **observer_kwargs)
+        ],
+    )
+  else:
+    raise NotImplementedError(observer_type)

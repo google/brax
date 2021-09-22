@@ -102,6 +102,7 @@ def rollout_env(
 def visualize_env(batch_size: int = 0,
                   output_path: str = None,
                   output_name: str = 'video',
+                  verbose: bool = False,
                   **kwargs):
   """Visualize env."""
   env, states = rollout_env(batch_size=batch_size, **kwargs)
@@ -111,16 +112,21 @@ def visualize_env(batch_size: int = 0,
     if batch_size:
 
       for i in range(batch_size):
+        filename = f'{output_path}/{output_name}_eps{i:02}.html'
         html.save_html(
-            f'{output_path}/{output_name}_eps{i:02}.html',
+            filename,
             env.sys, [
                 jax.tree_map(functools.partial(jnp.take, indices=i), state.qp)
                 for state in states
             ],
             make_dir=True)
+        if verbose:
+          print(f'Saved {filename}')
     else:
+      filename = f'{output_path}/{output_name}.html'
       html.save_html(
-          f'{output_path}/{output_name}.html',
-          env.sys, [state.qp for state in states],
-          make_dir=True)
+          filename, env.sys, [state.qp for state in states], make_dir=True)
+      if verbose:
+        print(f'Saved {filename}')
+
   return env, states

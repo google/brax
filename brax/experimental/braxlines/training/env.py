@@ -31,14 +31,19 @@ class EnvState:
   total_metrics: Dict[str, jnp.ndarray]
   total_episodes: jnp.ndarray
 
+
 Action = jnp.ndarray
 StepFn = Callable[[EnvState, Action], EnvState]
 
 
-def wrap(core_env: envs.Env, rng: jnp.ndarray) -> Tuple[EnvState, StepFn]:
+def wrap(core_env: envs.Env,
+         rng: jnp.ndarray,
+         extra_step_kwargs: bool = True) -> Tuple[EnvState, StepFn]:
   """Returns a wrapped state and step function for training."""
   first_core = core_env.reset(rng)
   first_core.metrics['reward'] = first_core.reward
+  first_core.metrics.update(
+      {f'reward/{k}': v for k, v in first_core.info.get('rewards', {}).items()})
   first_total_metrics = jax.tree_map(jnp.sum, first_core.metrics)
   first_total_episodes = jnp.zeros(())
 
@@ -47,19 +52,25 @@ def wrap(core_env: envs.Env, rng: jnp.ndarray) -> Tuple[EnvState, StepFn]:
       total_metrics=first_total_metrics,
       total_episodes=first_total_episodes)
 
-  def step(
-      state: EnvState,
-      action: Action,
-      normalizer_params: Dict[str, jnp.ndarray] = None,
-      extra_params: Dict[str, Dict[str, jnp.ndarray]] = None) -> EnvState:
-    core = core_env.step(state.core, action, normalizer_params, extra_params)
+  def step(state: EnvState,
+           action: Action,
+           normalizer_params: Dict[str, jnp.ndarray] = None,
+           extra_params: Dict[str, Dict[str, jnp.ndarray]] = None) -> EnvState:
+    if extra_step_kwargs:
+      core = core_env.step(
+          state.core,
+          action,
+          normalizer_params=normalizer_params,
+          extra_params=extra_params)
+    else:
+      core = core_env.step(state.core, action)
     core.metrics['reward'] = core.reward
+    core.metrics.update(
+        {f'reward/{k}': v for k, v in core.info.get('rewards', {}).items()})
     total_metrics = jax.tree_multimap(lambda a, b: a + jnp.sum(b),
                                       state.total_metrics, core.metrics)
     total_episodes = state.total_episodes + jnp.sum(core.done)
     return EnvState(
-        core=core,
-        total_metrics=total_metrics,
-        total_episodes=total_episodes)
+        core=core, total_metrics=total_metrics, total_episodes=total_episodes)
 
   return first_state, jax.jit(step)

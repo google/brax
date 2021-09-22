@@ -396,7 +396,7 @@ class CapsuleCapsule:
 
       def closest_segment_point(a, b, pt):
         ab = b - a
-        t = jnp.dot(pt - a, ab) / jnp.dot(ab, ab)
+        t = jnp.dot(pt - a, ab) / (jnp.dot(ab, ab) + 1e-10)
         return a + jnp.clip(t, 0., 1.) * ab
 
       a_A, a_B = endpoints(cap_a, qp_a)

@@ -14,14 +14,14 @@
 
 """Mujoco XML model loader for Brax."""
 
+import dataclasses
 from typing import Any, AnyStr, Dict, List, Optional
 
 from absl import logging
-import dataclasses
+from brax.physics import config_pb2
 from dm_control import mjcf
 from dm_control.mjcf import constants
 import numpy as np
-from brax.physics import config_pb2
 from transforms3d import euler
 from transforms3d import quaternions
 from transforms3d import utils as transform_utils
@@ -68,6 +68,11 @@ def _vec(v: Vector3d) -> config_pb2.Vector3:
   """Converts (numpy) array to Vector3."""
   x, y, z = v
   return config_pb2.Vector3(x=x, y=y, z=z)
+
+
+def _np_vec(v: config_pb2.Vector3) -> Vector3d:
+  """Converts a Vector3 to a numpy array."""
+  return np.array([v.x, v.y, v.z])
 
 
 def _euler(q: Optional[Quaternion]) -> config_pb2.Vector3:
@@ -147,7 +152,10 @@ def _create_fixed_joint(name: str,
 class MujocoConverter(object):
   """Converts a Mujoco model to a Brax config."""
 
-  def __init__(self, xml_string: AnyStr, add_collision_pairs: bool = False):
+  def __init__(self,
+               xml_string: AnyStr,
+               add_collision_pairs: bool = False,
+               ignore_unsupported_joints: bool = False):
     """Creates a MujocoConverter.
 
     Args:
@@ -156,11 +164,14 @@ class MujocoConverter(object):
         be added automatically based on the structure of the model and Mujoco
         collision mask settings. See
         http://www.mujoco.org/book/computation.html#Collision.
+      ignore_unsupported_joints: If true, then unsupported joints, e.g. slide,
+        will be ignored, otherwise they raise an exception.
     """
     mjcf_model = mjcf.from_xml_string(xml_string, escape_separators=True)
     self._mjcf_model = mjcf_model
     config = config_pb2.Config()
     self._config = config
+    self._ignore_unsupported_joints = ignore_unsupported_joints
     # Brax uses local coordinates. If global coordinates are used in the
     # Mujoco model, we convert them to local ones.
     self._uses_global = mjcf_model.compiler.coordinate == 'global'
@@ -216,11 +227,18 @@ class MujocoConverter(object):
 
   def _get_rotation(self, elem: MjcfElement) -> Quaternion:
     """Returns the rotation quaternion of the Mujoco element."""
-    if _is_worldbody(elem) or elem.axisangle is None:
+    if _is_worldbody(elem):
       return quaternions.qeye()
-    axisangle = elem.axisangle
-    return quaternions.axangle2quat(axisangle[0:3],
-                                    self._maybe_to_radian(axisangle[3]))
+    if elem.euler is not None:
+      return euler.euler2quat(
+          self._maybe_to_radian(elem.euler[0]),
+          self._maybe_to_radian(elem.euler[1]),
+          self._maybe_to_radian(elem.euler[2]))
+    if elem.axisangle is not None:
+      axisangle = elem.axisangle
+      return quaternions.axangle2quat(axisangle[0:3],
+                                      self._maybe_to_radian(axisangle[3]))
+    return quaternions.qeye()
 
   def _get_mass(self, geom: MjcfElement, volume: float) -> float:
     """Returns the mass of the geometry based on its volume."""
@@ -334,8 +352,13 @@ class MujocoConverter(object):
       body.name = mujoco_body.name if mujoco_body.name else f'$body{body_idx}'
     logging.info('Body %s', body.name)
     geoms = mujoco_body.geom if hasattr(mujoco_body, 'geom') else []
-    # We add the first geometry to the body itself.
-    geom = geoms[0]
+    if not geoms:
+      # Except worldbody, we expect the bodies to have a geometry. We add a
+      # dummy one if that is not the case.
+      geom = mujoco_body.add('geom', pos=[0, 0, 0], type='sphere', size=[0.01])
+    else:
+      # We add the first geometry to the body itself.
+      geom = geoms[0]
     if geom.name and body.name == constants.WORLDBODY:
       # Using the name of the geometry is less confusing for worldbody. It won't
       # use referred to in joints or actuators.
@@ -400,6 +423,8 @@ class MujocoConverter(object):
       if joint.type == 'free':
         continue
       if joint.type != 'hinge':
+        if self._ignore_unsupported_joints:
+          return
         raise ValueError(
             f'Unsupported joint type {joint.type} for {joint.name}')
       # When a body has multiple geometries, all except the first one to are
@@ -410,9 +435,11 @@ class MujocoConverter(object):
       min_d = None
       local_joint_pos = self._get_position(joint)
       for i, geom_collider in enumerate(geom_colliders):
-        d = np.linalg.norm(local_joint_pos)
+        d = np.linalg.norm(local_joint_pos -
+                           _np_vec(geom_collider.collider.position))
         if min_d is None or min_d > d:
           min_i, min_d = i, d
+          logging.info('Distance to %s is %g.', geom_bodies[min_i].name, min_d)
       attachment_body = geom_bodies[min_i]
       logging.info('Joint %s connects %s to %s.', joint.name, parent_body.name,
                    attachment_body.name)

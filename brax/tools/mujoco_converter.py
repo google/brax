@@ -19,8 +19,8 @@ from typing import Sequence
 from absl import app
 from absl import flags
 from absl import logging
-from brax.tools import mujoco
 from brax.io import file
+from brax.tools import mujoco
 
 from google.protobuf import text_format
 
@@ -42,6 +42,8 @@ flags.DEFINE_float('friction', 0.6,
                    'How much surfaces in contact resist translation.')
 flags.DEFINE_integer('substeps', 4,
                      'Substeps to perform to maintain numerical stability.')
+flags.DEFINE_bool('ignore_unsupported_joints', False,
+                  'Ignores unsupported joints.')
 
 
 def main(argv: Sequence[str]) -> None:
@@ -56,7 +58,9 @@ def main(argv: Sequence[str]) -> None:
 
   # Convert the model.
   m = mujoco.MujocoConverter(
-      xml_string, add_collision_pairs=FLAGS.add_collision_pairs)
+      xml_string,
+      add_collision_pairs=FLAGS.add_collision_pairs,
+      ignore_unsupported_joints=FLAGS.ignore_unsupported_joints)
   config = m.config
 
   # Add the default options.
