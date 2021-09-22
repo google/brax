@@ -55,7 +55,7 @@ class Ant(env.Env):
   def _get_obs(self, qp: brax.QP, info: brax.Info) -> jnp.ndarray:
     """Observe ant body position and velocities."""
     # some pre-processing to pull joint angles and velocities
-    (joint_angle,), (joint_vel,) = self.sys.joint_revolute.angle_vel(qp)
+    (joint_angle,), (joint_vel,) = self.sys.joints[0].angle_vel(qp)
 
     # qpos:
     # Z of the torso (1,)

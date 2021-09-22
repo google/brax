@@ -28,8 +28,8 @@ class Fetch(env.Env):
 
   def __init__(self, **kwargs):
     super().__init__(_SYSTEM_CONFIG, **kwargs)
-    self.target_idx = self.sys.body_idx['Target']
-    self.torso_idx = self.sys.body_idx['Torso']
+    self.target_idx = self.sys.body.index['Target']
+    self.torso_idx = self.sys.body.index['Torso']
     self.target_radius = 2
     self.target_distance = 15
 

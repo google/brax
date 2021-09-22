@@ -32,10 +32,10 @@ class Grasp(env.Env):
 
   def __init__(self, **kwargs):
     super().__init__(_SYSTEM_CONFIG, **kwargs)
-    self.object_idx = self.sys.body_idx['Object']
-    self.target_idx = self.sys.body_idx['Target']
-    self.hand_idx = self.sys.body_idx['HandThumbProximal']
-    self.palm_idx = self.sys.body_idx['HandPalm']
+    self.object_idx = self.sys.body.index['Object']
+    self.target_idx = self.sys.body.index['Target']
+    self.hand_idx = self.sys.body.index['HandThumbProximal']
+    self.palm_idx = self.sys.body.index['HandPalm']
     self.target_radius = 1.1
     self.target_distance = 10.
     self.target_height = 8.

@@ -67,11 +67,12 @@ from brax.experimental.composer import component_editor
 from brax.experimental.composer import env_descs
 from brax.experimental.composer import observers
 from brax.experimental.composer import reward_functions
+from brax.experimental.composer.component_editor import add_suffix
 from jax import numpy as jnp
 
 MetaData = collections.namedtuple('MetaData', [
     'components', 'edges', 'global_options', 'config_str', 'config_json',
-    'extra_observers', 'reward_features', 'reward_fns'
+    'extra_observers', 'reward_features', 'reward_fns', 'score_fns'
 ])
 
 
@@ -89,6 +90,7 @@ class Composer(object):
     extra_observers = copy.deepcopy(extra_observers)
     reward_features = []
     reward_fns = collections.OrderedDict()
+    score_fns = collections.OrderedDict()
 
     # load components
     if add_ground:
@@ -138,12 +140,23 @@ class Composer(object):
       # add reward functions
       component_reward_fns = v.pop('reward_fns', {})
       for name, reward_kwargs in sorted(component_reward_fns.items()):
+        name = add_suffix(name, suffix)
         assert name not in reward_fns, f'duplicate reward_fns {name}'
         reward_fn = reward_functions.get_component_reward_fns(
             v, **reward_kwargs)
         reward_fns[name] = reward_fn
         reward_features += reward_functions.get_observers_from_reward_fns(
             reward_fn)
+
+      # add score functions
+      component_score_fns = v.pop('score_fns', {})
+      for name, score_kwargs in sorted(component_score_fns.items()):
+        name = add_suffix(name, suffix)
+        assert name not in score_fns, f'duplicate score_fns {name}'
+        score_fn = reward_functions.get_component_reward_fns(v, **score_kwargs)
+        score_fns[name] = score_fn
+        reward_features += reward_functions.get_observers_from_reward_fns(
+            score_fn)
 
       component_observers = v.pop('extra_observers', ())
       for observer_kwargs in component_observers:
@@ -162,12 +175,23 @@ class Composer(object):
       # add reward functions
       edge_reward_fns = v.pop('reward_fns', {})
       for name, reward_kwargs in sorted(edge_reward_fns.items()):
+        name = add_suffix(name, edge_name)
         assert name not in reward_fns, f'duplicate reward_fns {name}'
         reward_fn = reward_functions.get_edge_reward_fns(
             v1, v2, **reward_kwargs)
         reward_fns[name] = reward_fn
         reward_features += reward_functions.get_observers_from_reward_fns(
             reward_fn)
+
+      # add score functions
+      edge_score_fns = v.pop('score_fns', {})
+      for name, score_kwargs in sorted(edge_score_fns.items()):
+        name = add_suffix(name, edge_name)
+        assert name not in score_fns, f'duplicate score_fns {name}'
+        score_fn = reward_functions.get_edge_reward_fns(v1, v2, **score_kwargs)
+        score_fns[name] = score_fn
+        reward_features += reward_functions.get_observers_from_reward_fns(
+            score_fn)
 
       # add observers
       edge_observers = v.pop('extra_observers', ())
@@ -216,6 +240,7 @@ class Composer(object):
         extra_observers=extra_observers,
         reward_features=reward_features,
         reward_fns=reward_fns,
+        score_fns=score_fns,
     )
     config = component_editor.message_str2message(message_str)
     self.config, self.metadata = config, metadata
@@ -281,6 +306,10 @@ class ComponentEnv(Env):
     state_info = {}
     state_info['rewards'] = collections.OrderedDict([(k, jnp.zeros(
         ())) for k, _ in self.composer.metadata.reward_fns.items()])
+    state_info['scores'] = collections.OrderedDict([
+        (k, jnp.zeros(())) for k, _ in self.composer.metadata.score_fns.items()
+    ])
+    state_info['score'] = jnp.zeros(())
     return State(qp=qp, obs=obs, reward=reward, done=done, info=state_info)
 
   def step(self,
@@ -302,10 +331,21 @@ class ComponentEnv(Env):
     for r, d in reward_done_dict.values():
       reward += r
       done = jnp.logical_or(done, d)
+    score = jnp.zeros(())
+    score_dict = collections.OrderedDict([
+        (k, fn(action, reward_features)[0])
+        for k, fn in self.composer.metadata.score_fns.items()
+    ])
+    for r in score_dict.values():
+      score += r
     done = self.composer.term_fn(done, self.sys, qp, info)
     state.info['rewards'] = collections.OrderedDict([
         (k, v[0]) for k, v in reward_done_dict.items()
     ])
+    state.info['scores'] = collections.OrderedDict([
+        (k, v) for k, v in score_dict.items()
+    ])
+    state.info['score'] = score
     return state.replace(qp=qp, obs=obs, reward=reward, done=done)
 
   def _get_obs(self, qp: brax.QP, info: brax.Info) -> jnp.ndarray:
@@ -347,8 +387,24 @@ def get_env_obs_dict_shape(env: Env):
     return (env.observation_size,)
 
 
+def edit_desc(env_desc: Dict[str, Any], desc_edits: Dict[str, Any]):
+  """Edit desc dictionary."""
+  env_desc = copy.deepcopy(env_desc)
+  for key_str, value in desc_edits.items():
+    # `key_str` is in a form '{key1}.{key2}.{key3}'
+    #   for indexing env_desc[key1][key2][key3]
+    keys = key_str.split('.')
+    d = env_desc
+    for _, key in enumerate(keys[:-1]):
+      assert key in d, f'{key} not in {list(d.keys())}'
+      d = d[key]
+    d[keys[-1]] = value
+  return env_desc
+
+
 def create(env_name: str = None,
            env_desc: Dict[str, Any] = None,
+           desc_edits: Dict[str, Any] = None,
            episode_length: int = 1000,
            action_repeat: int = 1,
            auto_reset: bool = True,
@@ -357,10 +413,14 @@ def create(env_name: str = None,
   """Creates an Env with a specified brax system."""
   assert env_name or env_desc, 'env_name or env_desc must be supplied'
   env_desc = env_desc or {}
+  desc_edits = desc_edits or {}
   if env_name in env_descs.ENV_DESCS:
-    composer = Composer(**env_desc, **env_descs.ENV_DESCS[env_name])
+    env_desc = dict(**env_desc, **env_descs.ENV_DESCS[env_name])
+    env_desc = edit_desc(env_desc, desc_edits)
+    composer = Composer(**env_desc)
     env = ComponentEnv(composer=composer, **kwargs)
   elif env_desc:
+    env_desc = edit_desc(env_desc, desc_edits)
     composer = Composer(**env_desc)
     env = ComponentEnv(composer=composer, **kwargs)
   else:
@@ -379,6 +439,7 @@ def create(env_name: str = None,
 
 def create_fn(env_name: str = None,
               env_desc: Dict[str, Any] = None,
+              desc_edits: Dict[str, Any] = None,
               episode_length: int = 1000,
               action_repeat: int = 1,
               auto_reset: bool = True,
@@ -389,6 +450,7 @@ def create_fn(env_name: str = None,
       create,
       env_name=env_name,
       env_desc=env_desc,
+      desc_edits=desc_edits,
       episode_length=episode_length,
       action_repeat=action_repeat,
       auto_reset=auto_reset,

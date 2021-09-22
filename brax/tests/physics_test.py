@@ -16,10 +16,10 @@
 
 from absl.testing import absltest
 from absl.testing import parameterized
-import jax
-from jax import numpy as jnp
 import brax
 from brax.physics.base import take
+from jax import numpy as jnp
+
 from google.protobuf import text_format
 
 
@@ -100,7 +100,7 @@ class HeightMapTest(absltest.TestCase):
     defaults { qps { name: "box" pos: {x: 5 y: 5 z: 1}}}
   """
 
-  def test_box_stays_on_heightMap (self):
+  def test_box_stays_on_heightmap(self):
     """A box falls onto the height map and stops."""
     sys = brax.System(text_format.Parse(HeightMapTest._CONFIG, brax.Config()))
     qp = sys.default_qp()
@@ -271,7 +271,7 @@ class Actuator1DTest(parameterized.TestCase):
     qp, _ = sys.step(qp, jnp.array([target_angle]))
     qp_p = take(qp, 0)
     qp_c = take(qp, 1)
-    joint = take(sys.joint_revolute, 0)
+    joint = take(sys.joints[0], 0)
     _, (angle,) = joint.axis_angle(qp_p, qp_c)
 
     self.assertAlmostEqual(target_angle * jnp.pi / 180, angle, 2)
@@ -323,7 +323,7 @@ class Actuator2DTest(parameterized.TestCase):
     qp, _ = sys.step(qp, jnp.array([target_angle_1, target_angle_2]))
     qp_p = take(qp, 0)
     qp_c = take(qp, 1)
-    joint = take(sys.joint_universal, 0)
+    joint = take(sys.joints[0], 0)
     _, angles = joint.axis_angle(qp_p, qp_c)
 
     self.assertAlmostEqual(target_angle_1 * jnp.pi / 180, angles[0], 2)
@@ -389,7 +389,7 @@ class Actuator3DTest(parameterized.TestCase):
 
       qp_p = take(qp, 0)
       qp_c = take(qp, 1)
-      joint = take(sys.joint_spherical, 0)
+      joint = take(sys.joints[0], 0)
       _, angles = joint.axis_angle(qp_p, qp_c)
       angles = [a * 180 / jnp.pi for a in angles]
       for angle, limit, torque in zip(angles, limits, t):

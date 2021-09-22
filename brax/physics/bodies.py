@@ -15,16 +15,16 @@
 # pylint:disable=g-multiple-import
 """Functionality for brax bodies."""
 
-from flax import struct
-import jax
-import jax.numpy as jnp
-
 from brax.physics import config_pb2
 from brax.physics import math
+from brax.physics import pytree
 from brax.physics.base import P, QP, euler_to_quat, vec_to_np
 
-@struct.dataclass
-class Body(object):
+import jax.numpy as jnp
+
+
+@pytree.register
+class Body:
   """A body is a solid, non-deformable object with some mass and shape.
 
   Attributes:
@@ -32,27 +32,18 @@ class Body(object):
     inertia: (3, 3) Inverse Inertia matrix represented in body frame.
     mass: Mass of the body.
     active: whether the body is effected by physics calculations
+    index: name->index dict for looking up body names
   """
-  idx: jnp.ndarray
-  inertia: jnp.ndarray
-  mass: jnp.ndarray
-  active: jnp.ndarray
+  __pytree_ignore__ = ('index', 'count')
 
-  @classmethod
-  def from_config(cls, config: config_pb2.Config) -> 'Body':
-    """Returns Body from a brax config."""
-    bodies = []
-    for idx, body in enumerate(config.bodies):
-      frozen = jnp.sum(
-          vec_to_np(body.frozen.position) + vec_to_np(body.frozen.rotation))
-      bodies.append(
-          cls(
-              idx=jnp.array(idx),
-              inertia=jnp.linalg.inv(jnp.diag(vec_to_np(body.inertia))),
-              mass=jnp.array(body.mass),
-              active=jnp.array(jnp.sum(frozen) != 6),
-          ))
-    return jax.tree_multimap((lambda *args: jnp.stack(args)), *bodies)
+  def __init__(self, config: config_pb2.Body):
+    self.idx = jnp.arange(len(config.bodies))
+    self.inertia = jnp.array(
+        [jnp.linalg.inv(jnp.diag(vec_to_np(b.inertia))) for b in config.bodies])
+    self.mass = jnp.array([b.mass for b in config.bodies])
+    self.active = jnp.array(
+        [0.0 if b.frozen.all else 1.0 for b in config.bodies])
+    self.index = {b.name: i for i, b in enumerate(config.bodies)}
 
   def impulse(self, qp: QP, impulse: jnp.ndarray, pos: jnp.ndarray) -> P:
     """Calculates updates to state information based on an impulse.
@@ -69,6 +60,7 @@ class Body(object):
     dang = jnp.matmul(self.inertia, jnp.cross(pos - qp.pos, impulse))
     return P(vel=dvel, ang=dang)
 
+
 def min_z(qp: QP, body: config_pb2.Body) -> float:
   """Returns the lowest z of all the colliders in a body."""
   result = float('inf')
@@ -76,16 +68,16 @@ def min_z(qp: QP, body: config_pb2.Body) -> float:
   for col in body.colliders:
     if col.HasField('sphere'):
       sphere_pos = math.rotate(vec_to_np(col.position), qp.rot)
-      min_z = qp.pos[2] + sphere_pos[2] - col.sphere.radius
-      result = jnp.min(jnp.array([result, min_z]))
+      z = qp.pos[2] + sphere_pos[2] - col.sphere.radius
+      result = jnp.min(jnp.array([result, z]))
     elif col.HasField('capsule'):
       axis = math.rotate(jnp.array([0., 0., 1.]), euler_to_quat(col.rotation))
       length = col.capsule.length / 2 - col.capsule.radius
       for end in (-1, 1):
         sphere_pos = vec_to_np(col.position) + end * axis * length
         sphere_pos = math.rotate(sphere_pos, qp.rot)
-        min_z = qp.pos[2] + sphere_pos[2] - col.capsule.radius
-        result = jnp.min(jnp.array([result, min_z]))
+        z = qp.pos[2] + sphere_pos[2] - col.capsule.radius
+        result = jnp.min(jnp.array([result, z]))
     elif col.HasField('box'):
       corners = [(i % 2 * 2 - 1, 2 * (i // 4) - 1, i // 2 % 2 * 2 - 1)
                  for i in range(8)]

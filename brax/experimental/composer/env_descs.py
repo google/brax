@@ -31,6 +31,12 @@ ENV_DESCS = {
                             indices=(0, 1),
                             offset=5,
                             target_goal=(4, 0))),
+                    score_fns=dict(
+                        goal=dict(
+                            reward_type='root_goal',
+                            sdcomp='vel',
+                            indices=(0, 1),
+                            target_goal=(4, 0))),
                 ),)),
     'ant_chase':
         dict(
@@ -46,7 +52,14 @@ ENV_DESCS = {
                             indices=(0, 1),
                             offset=5,
                             scale=1,
-                            target_goal=(4, 0)))),
+                            target_goal=(4, 0)),),
+                    score_fns=dict(
+                        goal=dict(
+                            reward_type='root_goal',
+                            sdcomp='vel',
+                            indices=(0, 1),
+                            target_goal=(4, 0)),),
+                ),
             ),
             edges=dict(
                 ant1__ant2=dict(
@@ -55,7 +68,10 @@ ENV_DESCS = {
                     ],
                     reward_fns=dict(
                         dist=dict(
-                            reward_type='root_dist', min_dist=1, offset=5))),)),
+                            reward_type='root_dist', min_dist=1, offset=5)),
+                    score_fns=dict(
+                        dist=dict(reward_type='root_dist', min_dist=1)),
+                ),)),
     'ant_push':
         dict(
             components=dict(
@@ -75,7 +91,14 @@ ENV_DESCS = {
                             indices=(0, 1),
                             offset=5,
                             scale=1,
-                            target_goal=(4, 0)))),
+                            target_goal=(4, 0))),
+                    score_fns=dict(
+                        goal=dict(
+                            reward_type='root_goal',
+                            sdcomp='vel',
+                            indices=(0, 1),
+                            target_goal=(4, 0))),
+                ),
             ),
             edges=dict(
                 ant1__cap1=dict(
@@ -83,7 +106,9 @@ ENV_DESCS = {
                         dict(observer_type='root_vec', indices=(0, 1)),
                     ],
                     reward_fns=dict(
-                        dist=dict(reward_type='root_dist', offset=5))),)),
+                        dist=dict(reward_type='root_dist', offset=5)),
+                    score_fns=dict(dist=dict(reward_type='root_dist')),
+                ),)),
     'uni_ant':
         dict(components=dict(ant1=dict(component='ant', pos=(0, 0, 0)),),),
     'bi_ant':

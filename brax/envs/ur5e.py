@@ -35,8 +35,8 @@ class Ur5e(env.Env):
 
   def __init__(self, **kwargs):
     super().__init__(_SYSTEM_CONFIG, **kwargs)
-    self.target_idx = self.sys.body_idx['Target']
-    self.torso_idx = self.sys.body_idx['wrist_3_link']
+    self.target_idx = self.sys.body.index['Target']
+    self.torso_idx = self.sys.body.index['wrist_3_link']
     self.target_radius = .02
     self.target_distance = .5
 
@@ -139,16 +139,6 @@ bodies {
   }
   mass: 1.0
   frozen {
-    position {
-      x: 1.0
-      y: 1.0
-      z: 1.0
-    }
-    rotation {
-      x: 1.0
-      y: 1.0
-      z: 1.0
-    }
     all: true
   }
 }
@@ -289,16 +279,6 @@ bodies {
   }
   mass: 1.0
   frozen {
-    position {
-      x: 1.0
-      y: 1.0
-      z: 1.0
-    }
-    rotation {
-      x: 1.0
-      y: 1.0
-      z: 1.0
-    }
     all: true
   }
 }
@@ -463,6 +443,7 @@ friction: 0.6
 gravity {
   z: -9.81
 }
+collide_include {}
 angular_damping: -0.05
 baumgarte_erp: 0.1
 dt: 0.02

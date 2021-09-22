@@ -13,128 +13,60 @@
 # limitations under the License.
 
 # pylint:disable=g-multiple-import
-"""Constraints of joints on body pairs."""
+"""Joints connect bodies and constrain their movement."""
 
-from typing import Any, Tuple
-
-from flax import struct
-import jax
-import jax.numpy as jnp
+import abc
+from typing import Any, List, Tuple
 
 from brax.physics import bodies
 from brax.physics import config_pb2
 from brax.physics import math
+from brax.physics import pytree
 from brax.physics.base import P, QP, euler_to_quat, take, vec_to_np
+import jax
+import jax.numpy as jnp
 
-type_to_dof = {"revolute": 1, "universal": 2, "spherical": 3}
-lim_to_dof = {0: 1, 1: 1, 2: 2, 3: 3}
 
+class Joint(abc.ABC):
+  """A joint connects two bodies and constrains their movement.
 
-@struct.dataclass
-class Joint:
-  """Connects to bodies together with some axes of rotation."""
-  stiffness: jnp.ndarray
-  angular_damping: jnp.ndarray
-  spring_damping: jnp.ndarray
-  limit_strength: jnp.ndarray
-  limit: jnp.ndarray
-  body_p: bodies.Body
-  body_c: bodies.Body
-  axis_1: jnp.ndarray
-  axis_2: jnp.ndarray
-  axis_3: jnp.ndarray
-  off_p: jnp.ndarray
-  off_c: jnp.ndarray
-  ref: jnp.ndarray
-  config: config_pb2.Config = struct.field(pytree_node=False)
+  This constraint is determined by axes that define how to bodies may move in
+  relation to one-another.
+  """
 
-  @classmethod
-  def from_config(cls, config: config_pb2.Config) -> "Joint":
-    """Creates a joint from a config."""
-    joint_type = cls.__name__.lower()
+  __pytree_ignore__ = ('index', 'dof')
 
-    joints = [
-        j for j in config.joints
-        if type_to_dof[joint_type] == lim_to_dof[len(j.angle_limit)]
-    ]
-    if not joints:
-      return cls(*[None] * 14)
+  def __init__(self, joints: List[config_pb2.Joint], body: bodies.Body,
+               spring_damping_coeff: float = 2.0):
+    """Creates a Joint that connects two bodies and constrains their movement.
 
-    stiffness = jnp.array([j.stiffness for j in joints])
-    angular_damping = jnp.array([j.angular_damping for j in joints])
-
-    spring_damping = []
-    limit_strength = []
-    # these values are empirically determined to be stable defaults
-    spring_damping_coeff = {
-        "revolute": .5,
-        "universal": 2.0,
-        "spherical": 2.0
-    }[joint_type]
-
-    for j in joints:
-      if j.HasField("spring_damping"):
-        spring_damping.append(j.spring_damping)
-      else:
-        spring_damping.append(spring_damping_coeff * jnp.sqrt(j.stiffness))
-
-      if j.HasField("limit_strength"):
-        limit_strength.append(j.limit_strength)
-      else:
-        limit_strength.append(j.stiffness)
-
-    spring_damping = jnp.array(spring_damping)
-    limit_strength = jnp.array(limit_strength)
-
-    limits = []
-    for j in joints:
-      limits.append([[i.min, i.max] for i in j.angle_limit])
-    limit = jnp.array(limits) / 180.0 * jnp.pi
-
-    # joint bodies
-    body_map = {b.name: i for i, b in enumerate(config.bodies)}
-    body = bodies.Body.from_config(config)
-    body_p = take(body, jnp.array([body_map[j.parent] for j in joints]))
-    body_c = take(body, jnp.array([body_map[j.child] for j in joints]))
-
-    # joint axes
-    v_rot = jax.vmap(math.rotate, in_axes=[0, None])
-    joint_axes = jnp.round(
-        jnp.array(
-            [v_rot(jnp.eye(3), euler_to_quat(j.rotation)) for j in joints]),
-        decimals=5)
-    axis_1 = joint_axes[:, 0]
-    axis_2 = joint_axes[:, 1]
-    axis_3 = joint_axes[:, 2]
-    if joint_type not in ("revolute", "universal", "spherical"):
-      raise RuntimeError(f"joint type not implemented { joint_type }")
-
-    # joint offsets
-    off_p = jnp.array([vec_to_np(j.parent_offset) for j in joints])
-    off_c = jnp.array([vec_to_np(j.child_offset) for j in joints])
-
-    # vector orthogonal to joint axis
-    ref_axes = [jnp.array([-a[1], a[0], 0.]) for a in axis_1]
-    # one of these two vectors is guaranteed to be orthogonal to axis
-    for i, (ax1, ref_axis, ax2) in enumerate(zip(axis_1, ref_axes, axis_2)):
-      if joint_type == "universal":
-        ref_axes[i] = jnp.cross(ax2, ax1)
-      elif jnp.abs(jnp.dot(ax1, ref_axis)) > 1e-4 or jnp.allclose(
-          ref_axis, 0, atol=1e-3):
-        ref_axes[i] = jnp.array([-ax1[2], 0., ax1[0]])
-    ref = jnp.array([r / (1e-6 + jnp.linalg.norm(r)) for r in ref_axes])
-
-    return cls(stiffness, angular_damping, spring_damping, limit_strength,
-               limit, body_p, body_c, axis_1, axis_2, axis_3, off_p, off_c, ref,
-               config)
-
-  @jax.vmap
-  def _apply(self, qp_p: QP, qp_c: QP) -> Tuple[P, P]:
-    """Returns calculated impulses in compressed joint space."""
-    raise NotImplementedError()  # child must override
+    Args:
+      joints: list of joints (all of the same type) to batch together
+      body: batched body that contain the parents and children of each joint
+      spring_damping_coeff: coefficient for setting default spring damping
+    """
+    self.stiffness = jnp.array([j.stiffness for j in joints])
+    self.angular_damping = jnp.array([j.angular_damping for j in joints])
+    self.spring_damping = jnp.array([
+        j.spring_damping if j.HasField('spring_damping') else
+        spring_damping_coeff * jnp.sqrt(j.stiffness) for j in joints
+    ])
+    self.limit_strength = jnp.array([
+        j.limit_strength if j.HasField('limit_strength') else j.stiffness
+        for j in joints
+    ])
+    self.limit = jnp.array([[[i.min, i.max]
+                             for i in j.angle_limit]
+                            for j in joints]) / 180.0 * jnp.pi
+    self.body_p = take(body, jnp.array([body.index[j.parent] for j in joints]))
+    self.body_c = take(body, jnp.array([body.index[j.child] for j in joints]))
+    self.off_p = jnp.array([vec_to_np(j.parent_offset) for j in joints])
+    self.off_c = jnp.array([vec_to_np(j.child_offset) for j in joints])
+    self.index = {j.name: i for i, j in enumerate(joints)}
+    self.dof = len(joints[0].angle_limit)
 
   def apply(self, qp: QP) -> P:
-    """Constrains and aligns bodies connected by a joint.
+    """Returns impulses to constrain and align bodies connected by a joint.
 
     Args:
       qp: State data for system
@@ -142,22 +74,57 @@ class Joint:
     Returns:
       dP: Impulses on all bodies to maintain joint constraints
     """
-    if not self.config:
-      return P(jnp.zeros_like(qp.vel), jnp.zeros_like(qp.ang))
-
     qp_p = take(qp, self.body_p.idx)
     qp_c = take(qp, self.body_c.idx)
-    dp_p, dp_c = self._apply(qp_p, qp_c)
+    dp_p, dp_c = self.apply_reduced(qp_p, qp_c)
 
     # sum together all impulse contributions across parents and children
     body_idx = jnp.concatenate((self.body_p.idx, self.body_c.idx))
     dp_vel = jnp.concatenate((dp_p.vel, dp_c.vel))
     dp_ang = jnp.concatenate((dp_p.ang, dp_c.ang))
-    dp_vel = jax.ops.segment_sum(dp_vel, body_idx, len(self.config.bodies))
-    dp_ang = jax.ops.segment_sum(dp_ang, body_idx, len(self.config.bodies))
+    dp_vel = jax.ops.segment_sum(dp_vel, body_idx, qp.pos.shape[0])
+    dp_ang = jax.ops.segment_sum(dp_ang, body_idx, qp.pos.shape[0])
 
     return P(vel=dp_vel, ang=dp_ang)
 
+  def angle_vel(self, qp: QP) -> Tuple[Any, Any]:
+    """Returns joint angle and velocity.
+
+    Args:
+      qp: State data for system
+
+    Returns:
+      angle: n-tuple of joint angles where n = # DoF of the joint
+      vel: n-tuple of joint velocities where n = # DoF of the joint
+    """
+    @jax.vmap
+    def op(joint, qp_p, qp_c):
+      axes, angles = joint.axis_angle(qp_p, qp_c)
+      vels = tuple([jnp.dot(qp_p.ang - qp_c.ang, axis) for axis in axes])
+      return angles, vels
+
+    qp_p = take(qp, self.body_p.idx)
+    qp_c = take(qp, self.body_c.idx)
+    angles, vels = op(self, qp_p, qp_c)
+
+    return angles, vels
+
+  @abc.abstractmethod
+  def apply_reduced(self, qp_p: QP, qp_c: QP) -> Tuple[P, P]:
+    """Returns impulses to constrain and align bodies connected by a joint.
+
+    Operates in reduced joint space.
+
+    Args:
+      qp_p: Joint parent state data
+      qp_c: Joint child state data
+
+    Returns:
+      dp_p: Joint parent impulse
+      dp_c: Joint child impulse
+    """
+
+  @abc.abstractmethod
   def axis_angle(self, qp_p: QP, qp_c: QP) -> Tuple[Any, Any]:
     """Returns axes and angles of a single joint.
 
@@ -171,40 +138,30 @@ class Joint:
       axis: n-tuple of joint axes where n = # DoF of the joint
       angle: n-tuple of joint angles where n = # DoF of the joint
     """
-    raise NotImplementedError()  # child must override
-
-  def angle_vel(self, qp: QP) -> Tuple[Any, Any]:
-    """Returns joint angle and velocity.
-
-    Args:
-      qp: State data for system
-
-    Returns:
-      angle: n-tuple of joint angles where n = # DoF of the joint
-      vel: n-tuple of joint velocities where n = # DoF of the joint
-    """
-    if not self.config:
-      return None, None
-
-    @jax.vmap
-    def op(joint, qp_p, qp_c):
-      axes, angles = joint.axis_angle(qp_p, qp_c)
-      vels = tuple([jnp.dot(qp_p.ang - qp_c.ang, axis) for axis in axes])
-      return angles, vels
-
-    qp_p = take(qp, self.body_p.idx)
-    qp_c = take(qp, self.body_c.idx)
-    angles, vels = op(self, qp_p, qp_c)
-
-    return angles, vels
 
 
-@struct.dataclass
+@pytree.register
 class Revolute(Joint):
-  """Connects to bodies together with a single axis of rotation."""
+  """A revolute joint constrains two bodies around a single axis."""
+
+  def __init__(self, joints: List[config_pb2.Joint], body: bodies.Body):
+    if not joints:
+      return
+    super().__init__(joints, body, .5)
+    rot = jnp.array([euler_to_quat(j.rotation) for j in joints])
+    vrotate = jax.vmap(math.rotate, in_axes=(None, 0))
+    self.axis = vrotate(jnp.array([1., 0., 0.]), rot)
+
+    ref_axes = [jnp.array([-a[1], a[0], 0.]) for a in self.axis]
+    # one of these two vectors is guaranteed to be orthogonal to axis
+    for i, (axis, ref_axis) in enumerate(zip(self.axis, ref_axes)):
+      if jnp.abs(jnp.dot(axis, ref_axis)) > 1e-4 or jnp.allclose(
+          ref_axis, 0, atol=1e-3):
+        ref_axes[i] = jnp.array([-axis[2], 0., axis[0]])
+    self.ref = jnp.array([r / (1e-6 + jnp.linalg.norm(r)) for r in ref_axes])
 
   @jax.vmap
-  def _apply(self, qp_p: QP, qp_c: QP) -> Tuple[P, P]:
+  def apply_reduced(self, qp_p: QP, qp_c: QP) -> Tuple[P, P]:
     """Returns calculated impulses in compressed joint space."""
     pos_p, vel_p = math.to_world(qp_p, self.off_p)
     pos_c, vel_c = math.to_world(qp_c, self.off_c)
@@ -218,7 +175,7 @@ class Revolute(Joint):
 
     # torque the bodies to align their axes
     (axis,), (angle,) = self.axis_angle(qp_p, qp_c)
-    axis_c = math.rotate(self.axis_1, qp_c.rot)
+    axis_c = math.rotate(self.axis, qp_c.rot)
     torque = self.stiffness * jnp.cross(axis, axis_c)
 
     # torque the bodies to stay within angle limits
@@ -238,17 +195,27 @@ class Revolute(Joint):
 
   def axis_angle(self, qp_p: QP, qp_c: QP) -> Tuple[Any, Any]:
     """Returns axes and angles of a single joint."""
-    axis_p = math.rotate(self.axis_1, qp_p.rot)
+    axis_p = math.rotate(self.axis, qp_p.rot)
     angle = math.signed_angle(qp_p, qp_c, axis_p, self.ref)
     return (axis_p,), (angle,)
 
 
-@struct.dataclass
+@pytree.register
 class Universal(Joint):
-  """Connects to bodies together with two axes of rotation."""
+  """A revolute joint constrains two bodies around two axes."""
+
+  def __init__(self, joints: List[config_pb2.Joint], body: bodies.Body):
+    if not joints:
+      return
+    super().__init__(joints, body)
+    rot = jnp.array([euler_to_quat(j.rotation) for j in joints])
+    vrotate = jax.vmap(math.rotate, in_axes=(None, 0))
+    self.axis_1 = vrotate(jnp.array([1., 0., 0.]), rot)
+    self.axis_2 = vrotate(jnp.array([0., 1., 0.]), rot)
+    self.ref = jax.vmap(jnp.cross)(self.axis_2, self.axis_1)
 
   @jax.vmap
-  def _apply(self, qp_p: QP, qp_c: QP) -> Tuple[P, P]:
+  def apply_reduced(self, qp_p: QP, qp_c: QP) -> Tuple[P, P]:
     """Returns calculated impulses in compressed joint space."""
     pos_p, vel_p = math.to_world(qp_p, self.off_p)
     pos_c, vel_c = math.to_world(qp_c, self.off_c)
@@ -297,12 +264,22 @@ class Universal(Joint):
     return (axis_2_p, axis_1_c), (angle_1, angle_2)
 
 
-@struct.dataclass
+@pytree.register
 class Spherical(Joint):
-  """Connects to bodies together with three axes of rotation."""
+  """A spherical joint constrains two bodies around three axes."""
+
+  def __init__(self, joints: List[config_pb2.Joint], body: bodies.Body):
+    if not joints:
+      return
+    super().__init__(joints, body)
+    rot = jnp.array([euler_to_quat(j.rotation) for j in joints])
+    vrotate = jax.vmap(math.rotate, in_axes=(None, 0))
+    self.axis_1 = vrotate(jnp.array([1., 0., 0.]), rot)
+    self.axis_2 = vrotate(jnp.array([0., 1., 0.]), rot)
+    self.axis_3 = vrotate(jnp.array([0., 0., 1.]), rot)
 
   @jax.vmap
-  def _apply(self, qp_p: QP, qp_c: QP) -> Tuple[P, P]:
+  def apply_reduced(self, qp_p: QP, qp_c: QP) -> Tuple[P, P]:
     """Returns calculated impulses in compressed joint space."""
     pos_p, vel_p = math.to_world(qp_p, self.off_p)
     pos_c, vel_c = math.to_world(qp_c, self.off_c)
@@ -375,3 +352,28 @@ class Spherical(Joint):
     angle = (angle_x, angle_y, angle_z)
 
     return axis, angle
+
+
+def get(config: config_pb2.Config, body: bodies.Body) -> List[Joint]:
+  """Creates all joints given a config."""
+  joints = {}
+  for joint in config.joints:
+    dof = len(joint.angle_limit)
+    if dof not in joints:
+      joints[dof] = []
+    joints[dof].append(joint)
+
+  # ensure stable order for joint application: dof
+  joints = sorted(joints.items(), key=lambda kv: kv[0])
+  ret = []
+  for k, v in joints:
+    if k == 1:
+      ret.append(Revolute(v, body))
+    elif k == 2:
+      ret.append(Universal(v, body))
+    elif k == 3:
+      ret.append(Spherical(v, body))
+    else:
+      raise RuntimeError(f'invalid number of joint limits: {k}')
+
+  return ret

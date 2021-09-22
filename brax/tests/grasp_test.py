@@ -38,7 +38,7 @@ class GraspTest(absltest.TestCase):
     for _ in range(500):
       state = jit_env_step(state, grasp_action)
 
-    self.assertGreater(state.qp.pos[1, 2], 1.47)  # ball lifted off ground
+    self.assertGreater(state.qp.pos[1, 2], 1.36)  # ball lifted off ground
     self.assertLess(state.qp.ang[1, 2], .01)  # ball not rolling
 
 

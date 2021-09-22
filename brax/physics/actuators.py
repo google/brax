@@ -15,92 +15,75 @@
 # pylint:disable=g-multiple-import
 """Actuation of joints."""
 
-from typing import Tuple
-
-from flax import struct
-import jax
-import jax.numpy as jnp
+import abc
+from typing import List, Tuple
 
 from brax.physics import config_pb2
 from brax.physics import joints
+from brax.physics import pytree
 from brax.physics.base import P, QP, take
 
+import jax
+import jax.numpy as jnp
 
-@struct.dataclass
-class Actuator:
+
+class Actuator(abc.ABC):
   """Applies a torque to a joint."""
-  joint: joints.Joint
-  strength: jnp.ndarray
-  act_idx: jnp.ndarray
-  config: config_pb2.Config = struct.field(pytree_node=False)
 
-  @classmethod
-  def from_config(cls, config: config_pb2.Config,
-                  joint: joints.Joint) -> "Actuator":
-    """Creates an actuator from a config."""
-    joint_type = type(joint).__name__.lower()
-    act_type = cls.__name__.lower()
-    joints_filtered = [
-        j for j in config.joints if joints.type_to_dof[joint_type] ==
-        joints.lim_to_dof[len(j.angle_limit)]
-    ]
-    joint_map = {j.name: i for i, j in enumerate(joints_filtered)}
-    actuators = [
-        a for a in config.actuators
-        if a.HasField(act_type) and a.joint in joint_map
-    ]
-    if not actuators:
-      return cls(*[None] * 4)
-    joint_idx = jnp.array([joint_map[a.joint] for a in actuators])
-    joint = take(joint, joint_idx)  # ensure joints are in the right order
-    strength = jnp.array([a.strength for a in actuators])
-    act_idx = jnp.array([_act_idx(config, a.name) for a in actuators])
-    return cls(joint, strength, act_idx, config)
+  def __init__(self, joint: joints.Joint, actuators: List[config_pb2.Actuator],
+               act_index: List[Tuple[int, int]]):
+    """Creates an actuator that applies torque to a joint given an act array.
 
-  @jax.vmap
-  def _apply(self, target: jnp.ndarray, qp_p: QP, qp_c: QP) -> Tuple[P, P]:
-    """Returns calculated impulses in compressed joint space."""
-    raise NotImplementedError()  # child must override
+    Args:
+      joint: (batched) joint for this actuator to act upon
+      actuators: list of actuators (all of the same type) to batch together
+      act_index: indices from the act array that drive this Actuator
+    """
+    joint_idx = jnp.array([joint.index[a.joint] for a in actuators])
+    self.joint = take(joint, joint_idx)
+    self.strength = jnp.array([a.strength for a in actuators])
+    self.act_index = jnp.array(act_index)
 
-  def apply(self, qp: QP, target: jnp.ndarray) -> P:
-    """Applies torque to satisfy a target angle on a revolute joint.
+  @abc.abstractmethod
+  def apply_reduced(self, act: jnp.ndarray, qp_p: QP, qp_c: QP) -> Tuple[P, P]:
+    """Returns calculated impulses in reduced joint space."""
+
+  def apply(self, qp: QP, act: jnp.ndarray) -> P:
+    """Applies torque to a joint.
 
     Args:
       qp: State data for system
-      target: User-defined target angle for the actuator in degrees
+      act: User-defined target for the actuator
 
     Returns:
-      dP: The impulses that drive a parent and child towards a target angle
+      dP: The impulses that drive a joint
     """
-    if not self.config:
-      return P(jnp.zeros_like(qp.vel), jnp.zeros_like(qp.ang))
-
     qp_p = take(qp, self.joint.body_p.idx)
     qp_c = take(qp, self.joint.body_c.idx)
-    target = take(target, self.act_idx)
-    dang_p, dang_c = self._apply(target, qp_p, qp_c)
+    act = take(act, self.act_index)
+    dang_p, dang_c = self.apply_reduced(act, qp_p, qp_c)
 
     # sum together all impulse contributions across parents and children
     body_idx = jnp.concatenate((self.joint.body_p.idx, self.joint.body_c.idx))
     dp_ang = jnp.concatenate((dang_p, dang_c))
-    dp_ang = jax.ops.segment_sum(dp_ang, body_idx, len(self.config.bodies))
+    dp_ang = jax.ops.segment_sum(dp_ang, body_idx, qp.pos.shape[0])
 
     return P(vel=jnp.zeros_like(qp.vel), ang=dp_ang)
 
 
-@struct.dataclass
+@pytree.register
 class Angle(Actuator):
   """Applies torque to satisfy a target angle of a joint."""
 
   @jax.vmap
-  def _apply(self, target: jnp.ndarray, qp_p: QP, qp_c: QP) -> Tuple[P, P]:
+  def apply_reduced(self, act: jnp.ndarray, qp_p: QP, qp_c: QP) -> Tuple[P, P]:
     axis, angle = self.joint.axis_angle(qp_p, qp_c)
     axis, angle = jnp.array(axis), jnp.array(angle)
 
     # torque grows as target angle diverges from current angle
-    target *= jnp.pi / 180.
-    target = jnp.clip(target, self.joint.limit[:, 0], self.joint.limit[:, 1])
-    torque = (target - angle) * self.strength
+    act *= jnp.pi / 180.
+    act = jnp.clip(act, self.joint.limit[:, 0], self.joint.limit[:, 1])
+    torque = (act - angle) * self.strength
     torque = jnp.sum(jax.vmap(jnp.multiply)(axis, torque), axis=0)
 
     dang_p = jnp.matmul(self.joint.body_p.inertia, -torque)
@@ -109,17 +92,17 @@ class Angle(Actuator):
     return dang_p, dang_c
 
 
-@struct.dataclass
+@pytree.register
 class Torque(Actuator):
-  """Applies a target torque to a joint."""
+  """Applies a direct torque to a joint."""
 
   @jax.vmap
-  def _apply(self, target: jnp.ndarray, qp_p: QP, qp_c: QP) -> Tuple[P, P]:
+  def apply_reduced(self, act: jnp.ndarray, qp_p: QP, qp_c: QP) -> Tuple[P, P]:
     axis, angle = self.joint.axis_angle(qp_p, qp_c)
     axis, angle = jnp.array(axis), jnp.array(angle)
 
     # clip torque if outside joint angle limits
-    torque = target * self.strength
+    torque = act * self.strength
     torque = jnp.where(angle < self.joint.limit[:, 0], 0, torque)
     torque = jnp.where(angle > self.joint.limit[:, 1], 0, torque)
     torque = jnp.sum(jax.vmap(jnp.multiply)(axis, torque), axis=0)
@@ -130,23 +113,33 @@ class Torque(Actuator):
     return dang_p, dang_c
 
 
-def _find_joint(config, name):
-  for j in config.joints:
-    if j.name == name:
-      return j
-  raise ValueError(f"Joint [{name}] does not exist.")
-
-
-def _act_idx(config, name):
-  """Returns the indices that an actuator occupies in an array."""
-  current_idx = 0
+def get(config: config_pb2.Config,
+        all_joints: List[joints.Joint]) -> List[Actuator]:
+  """Creates all actuators given a config and joints."""
+  actuators = {}
+  current_index = 0
   for actuator in config.actuators:
-    joint = _find_joint(config, actuator.joint)
-    dof = len(joint.angle_limit)
-    if actuator.name == name:
-      if dof == 1:
-        return current_idx
-      else:
-        return tuple(range(current_idx, current_idx + dof))
-    current_idx += dof
-  raise ValueError(f"Actuator [{name}] does not exist.")
+    joint = [j for j in all_joints if actuator.joint in j.index]
+    if not joint:
+      raise RuntimeError(f'joint not found: {actuator.joint}')
+    joint = joint[0]
+    act_index = tuple(range(current_index, current_index + joint.dof))
+    current_index += joint.dof
+    key = (actuator.WhichOneof('type'), joint.dof, joint)
+    if key not in actuators:
+      actuators[key] = []
+    actuators[key].append((actuator, act_index))
+
+  # ensure stable order for actuator application: actuator type, then dof
+  actuators = sorted(actuators.items(), key=lambda kv: kv[0])
+  ret = []
+  for (actuator, _, joint), act_config_index in actuators:
+    act_config = [c for c, _ in act_config_index]
+    act_index = [a for _, a in act_config_index]
+    if actuator == 'torque':
+      ret.append(Torque(joint, act_config, act_index))
+    elif actuator == 'angle':
+      ret.append(Angle(joint, act_config, act_index))
+    else:
+      raise RuntimeError(f'unknown actuator type: {actuator}')
+  return ret

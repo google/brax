@@ -18,9 +18,10 @@ import collections
 import functools
 from typing import List
 import brax
-from brax.physics.joints import lim_to_dof
 import jax
 from jax import numpy as jnp
+
+lim_to_dof = {0: 1, 1: 1, 2: 2, 3: 3}
 
 
 @functools.partial(jax.vmap, in_axes=[0, 0, None, None, None])
@@ -88,15 +89,16 @@ def names2indices(config, names: List[str], datatype: str = 'body'):
   }[datatype]
   joint_counters = [0, 0, 0]
   for i, b in enumerate(objs):
-    if b.name in names:
-      indices[b.name] = i
-      if datatype == 'actuator':
-        info[b.name] = brax.physics.actuators._act_idx(config, b.name)
-      if datatype == 'joint':
-        dof = lim_to_dof[len(b.angle_limit)]
-        info[b.name] = dict(dof=dof, index=joint_counters[dof - 1])
     if datatype == 'joint':
       dof = lim_to_dof[len(b.angle_limit)]
+    elif datatype == 'actuator':
+      joint = [j for j in config.joints if j.name == b.joint][0]
+      dof = lim_to_dof[len(joint.angle_limit)]
+    if b.name in names:
+      indices[b.name] = i
+      if datatype in ('actuator', 'joint'):
+        info[b.name] = dict(dof=dof, index=joint_counters[dof - 1])
+    if datatype in ('actuator', 'joint'):
       joint_counters[dof - 1] += 1
 
   indices = [indices[n] for n in names]

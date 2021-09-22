@@ -23,6 +23,9 @@ from jax.config import config
 config.update("jax_debug_nans", True)
 ```
 
+* [Experiment Sweep](https://colab.research.google.com/github/google/brax/blob/main/notebooks/braxlines/experiment_sweep.ipynb) provides a basic example for running a hyperparameter sweep. Set `agent_module`=`composer`.
+* [Experiment Viewer](https://colab.research.google.com/github/google/brax/blob/main/notebooks/braxlines/experiment_viewer.ipynb) provides a basic example for visualizing results from a hyperparameter sweep.
+
 ## Learn More
 
 For a deep dive into Composer, please see

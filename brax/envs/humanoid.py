@@ -27,7 +27,7 @@ class Humanoid(env.Env):
 
   def __init__(self, **kwargs):
     super().__init__(_SYSTEM_CONFIG, **kwargs)
-    body = bodies.Body.from_config(self.sys.config)
+    body = bodies.Body(self.sys.config)
     body = take(body, body.idx[:-1])  # skip the floor body
     self.mass = body.mass.reshape(-1, 1)
     self.inertia = body.inertia
@@ -77,9 +77,9 @@ class Humanoid(env.Env):
                action: jnp.ndarray) -> jnp.ndarray:
     """Observe humanoid body position, velocities, and angles."""
     # some pre-processing to pull joint angles and velocities
-    joint_1d_angle, joint_1d_vel = self.sys.joint_revolute.angle_vel(qp)
-    joint_2d_angle, joint_2d_vel = self.sys.joint_universal.angle_vel(qp)
-    joint_3d_angle, joint_3d_vel = self.sys.joint_spherical.angle_vel(qp)
+    joint_1d_angle, joint_1d_vel = self.sys.joints[0].angle_vel(qp)
+    joint_2d_angle, joint_2d_vel = self.sys.joints[1].angle_vel(qp)
+    joint_3d_angle, joint_3d_vel = self.sys.joints[2].angle_vel(qp)
 
     # qpos:
     # Z of the torso (1,)
@@ -101,15 +101,12 @@ class Humanoid(env.Env):
     ]
 
     # actuator forces
-    torque_1d = take(action, self.sys.torque_1d.act_idx)
-    torque_1d *= self.sys.torque_1d.strength
-    torque_2d = take(action, self.sys.torque_2d.act_idx)
-    torque_2d = torque_2d.reshape(torque_2d.shape[:-2] + (-1,))
-    torque_2d *= jnp.repeat(self.sys.torque_2d.strength, 2)
-    torque_3d = take(action, self.sys.torque_3d.act_idx)
-    torque_3d = torque_3d.reshape(torque_3d.shape[:-2] + (-1,))
-    torque_3d *= jnp.repeat(self.sys.torque_3d.strength, 3)
-    qfrc_actuator = [torque_1d, torque_2d, torque_3d]
+    qfrc_actuator = []
+    for act in self.sys.actuators:
+      torque = take(action, act.act_index)
+      torque = torque.reshape(torque.shape[:-2] + (-1,))
+      torque *= jnp.repeat(act.strength, act.act_index.shape[-1])
+      qfrc_actuator.append(torque)
 
     # external contact forces:
     # delta velocity (3,), delta ang (3,) * num bodies in the system

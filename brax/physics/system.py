@@ -18,8 +18,6 @@
 import functools
 from typing import Tuple
 
-import jax
-import jax.numpy as jnp
 from brax.physics import actuators
 from brax.physics import bodies
 from brax.physics import colliders
@@ -27,44 +25,40 @@ from brax.physics import config_pb2
 from brax.physics import integrators
 from brax.physics import joints
 from brax.physics import math
+from brax.physics import pytree
 from brax.physics import tree
-from brax.physics.base import Info, P, Q, QP, euler_to_quat, validate_config, vec_to_np
+from brax.physics.base import Info, P, QP, euler_to_quat, validate_config, vec_to_np
+import jax
+import jax.numpy as jnp
 
 
+@pytree.register
 class System:
   """A brax system."""
+
+  __pytree_ignore__ = ('config', 'num_bodies', 'num_joints', 'num_joint_dof',
+                       'num_actuators')
 
   def __init__(self, config: config_pb2.Config):
     self.config = validate_config(config)
 
     self.num_bodies = len(config.bodies)
-    self.body_idx = {b.name: i for i, b in enumerate(config.bodies)}
+    self.body = bodies.Body(config)
 
     self.active_pos = 1. * jnp.logical_not(
         jnp.array([vec_to_np(b.frozen.position) for b in config.bodies]))
     self.active_rot = 1. * jnp.logical_not(
         jnp.array([vec_to_np(b.frozen.rotation) for b in config.bodies]))
 
-    self.box_plane = colliders.BoxPlane(config)
-    # TODO: add capsule <> heightmap
-    self.box_heightMap = colliders.BoxHeightMap(config)
-    self.capsule_plane = colliders.CapsulePlane(config)
-    self.capsule_capsule = colliders.CapsuleCapsule(config)
+    self.colliders = colliders.get(self.config, self.body)
 
     self.num_joints = len(config.joints)
-    self.joint_revolute = joints.Revolute.from_config(config)
-    self.joint_universal = joints.Universal.from_config(config)
-    self.joint_spherical = joints.Spherical.from_config(config)
+    self.joints = joints.get(self.config, self.body)
 
     self.num_actuators = len(config.actuators)
     self.num_joint_dof = sum(len(j.angle_limit) for j in config.joints)
 
-    self.angle_1d = actuators.Angle.from_config(config, self.joint_revolute)
-    self.angle_2d = actuators.Angle.from_config(config, self.joint_universal)
-    self.angle_3d = actuators.Angle.from_config(config, self.joint_spherical)
-    self.torque_1d = actuators.Torque.from_config(config, self.joint_revolute)
-    self.torque_2d = actuators.Torque.from_config(config, self.joint_universal)
-    self.torque_3d = actuators.Torque.from_config(config, self.joint_spherical)
+    self.actuators = actuators.get(self.config, self.joints)
 
   @functools.partial(jax.jit, static_argnums=(0, 1))
   def default_qp(self, default_index: int = 0) -> QP:
@@ -142,18 +136,11 @@ class System:
   @functools.partial(jax.jit, static_argnums=(0,))
   def info(self, qp: QP) -> Info:
     """Return info about a system state."""
-    dp_c = self.box_plane.apply(qp, 1.)
-    dp_c += self.box_heightMap.apply(qp, 1.)
-    dp_c += self.capsule_plane.apply(qp, 1.)
-    dp_c += self.capsule_capsule.apply(qp, 1.)
+    zero = P(jnp.zeros((self.num_bodies, 3)), jnp.zeros((self.num_bodies, 3)))
 
-    dp_j = self.joint_revolute.apply(qp)
-    dp_j += self.joint_universal.apply(qp)
-    dp_j += self.joint_spherical.apply(qp)
-
-    dp_a = P(jnp.zeros((self.num_bodies, 3)), jnp.zeros((self.num_bodies, 3)))
-
-    info = Info(contact=dp_c, joint=dp_j, actuator=dp_a)
+    dp_c = sum([c.apply(qp) for c in self.colliders], zero)
+    dp_j = sum([j.apply(qp) for j in self.joints], zero)
+    info = Info(dp_c, dp_j, zero)
     return info
 
   @functools.partial(jax.jit, static_argnums=(0,))
@@ -169,30 +156,18 @@ class System:
                                self.active_rot)
 
       # apply impulses arising from joints and actuators
-      dp_j = self.joint_revolute.apply(qp)
-      dp_j += self.joint_universal.apply(qp)
-      dp_j += self.joint_spherical.apply(qp)
-      dp_a = self.angle_1d.apply(qp, act)
-      dp_a += self.angle_2d.apply(qp, act)
-      dp_a += self.angle_3d.apply(qp, act)
-      dp_a += self.torque_1d.apply(qp, act)
-      dp_a += self.torque_2d.apply(qp, act)
-      dp_a += self.torque_3d.apply(qp, act)
+      zero = P(jnp.zeros((self.num_bodies, 3)), jnp.zeros((self.num_bodies, 3)))
+      dp_j = sum([j.apply(qp) for j in self.joints], zero)
+      dp_a = sum([a.apply(qp, act) for a in self.actuators], zero)
       qp = integrators.potential(self.config, qp, dp_j + dp_a, dt,
                                  self.active_pos, self.active_rot)
 
       # apply collision velocity updates
-      dp_c = self.box_plane.apply(qp, dt)
-      dp_c += self.box_heightMap.apply(qp, dt)
-      dp_c += self.capsule_plane.apply(qp, dt)
-      dp_c += self.capsule_capsule.apply(qp, dt)
+      dp_c = sum([c.apply(qp) for c in self.colliders], zero)
       qp = integrators.potential_collision(self.config, qp, dp_c,
                                            self.active_pos, self.active_rot)
 
-      info = Info(
-          contact=info.contact + dp_c,
-          joint=info.joint + dp_j,
-          actuator=info.actuator + dp_a)
+      info = Info(info.contact + dp_c, info.joint + dp_j, info.actuator + dp_a)
 
       return (qp, info), ()
 
