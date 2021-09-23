@@ -46,9 +46,7 @@ setup(
         "jaxlib",
         "numpy",
         "optax",
-        # TODO: restore this once tfp-nightly and tensorflow are compatible
-        # breakage caused by https://github.com/tensorflow/probability/commit/fdbdece116a98e101420ce38e8a45aa1e7e5656f
-        "tfp-nightly[jax]<=0.13.0.dev20210422",
+        "tensorflow_probability[jax]",
     ],
     extras_require={
         "develop": ["pytest", "transforms3d"],

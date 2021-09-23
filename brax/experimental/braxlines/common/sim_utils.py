@@ -61,11 +61,7 @@ def get_names(config, datatype: str = 'body'):
 def get_joint_value(sys, qp, info: collections.OrderedDict):
   """Get joint values."""
   values = collections.OrderedDict()
-  angles_vels = {
-      1: sys.joint_revolute.angle_vel(qp),
-      2: sys.joint_universal.angle_vel(qp),
-      3: sys.joint_spherical.angle_vel(qp)
-  }
+  angles_vels = {j.dof: j.angle_vel(qp) for j in sys.joints}
   for k, v in info.items():
     for i, type_ in zip((0, 1), ('pos', 'vel')):
       vvv = jnp.array([vv[v['index']] for vv in angles_vels[v['dof']][i]])
