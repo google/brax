@@ -12,9 +12,12 @@ for examples of environment composition configs.
 ## Colab Notebooks
 
 Explore Composer easily and quickly through:
-* [Composer Basics](https://colab.research.google.com/github/google/brax/blob/main/notebooks/braxlines/composer.ipynb) dynamically composes an environment and trains it using PPO within a few minutes.
+* [Composer Basics](https://colab.research.google.com/github/google/brax/blob/main/notebooks/composer/composer.ipynb) dynamically composes an environment and trains it using PPO within a few minutes.
 
 <img src="https://github.com/google/brax/raw/main/docs/img/composer/ant_push.gif" width="150" height="107"/><img src="https://github.com/google/brax/raw/main/docs/img/composer/ant_chase.gif" width="150" height="107"/>
+
+* [Experiment Sweep](https://colab.research.google.com/github/google/brax/blob/main/notebooks/braxlines/experiment_sweep.ipynb) provides a basic example for running a hyperparameter sweep. Set `agent_module`=`composer`.
+* [Experiment Viewer](https://colab.research.google.com/github/google/brax/blob/main/notebooks/braxlines/experiment_viewer.ipynb) provides a basic example for visualizing results from a hyperparameter sweep.
 
 Tips:
 * for debugging, use:
@@ -23,10 +26,9 @@ from jax.config import config
 config.update("jax_debug_nans", True)
 ```
 
-* [Experiment Sweep](https://colab.research.google.com/github/google/brax/blob/main/notebooks/braxlines/experiment_sweep.ipynb) provides a basic example for running a hyperparameter sweep. Set `agent_module`=`composer`.
-* [Experiment Viewer](https://colab.research.google.com/github/google/brax/blob/main/notebooks/braxlines/experiment_viewer.ipynb) provides a basic example for visualizing results from a hyperparameter sweep.
-
 ## Learn More
+
+<img src="https://github.com/google/brax/raw/main/docs/img/braxlines/sketches.png" width="270" height="110"/>
 
 For a deep dive into Composer, please see
 our paper, [Braxlines: Fast and Interactive Toolkit for RL-driven Behavior Generation Beyond Reward Maximization](https://openreview.net/forum?id=-W0LCm8wE2S).

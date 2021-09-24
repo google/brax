@@ -109,6 +109,10 @@ message Joint {
   // Damps the spring connecting the parent to the child
   // If not set, defaults to a joint-dependent fraction of `sqrt(stiffness)`.
   optional float spring_damping = 11;
+  // The initial rotation between the parent and child, defined in terms of
+  // an intrinsic euler rotation about parent's local axes.  This sets the
+  // reference "zero" of the joint's rotation axes.
+  Vector3 reference_rotation = 12;
 }
 
 // Actuators provide interactive control of a system via the step function.

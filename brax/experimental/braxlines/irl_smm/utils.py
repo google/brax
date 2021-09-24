@@ -43,24 +43,26 @@ DISC_PARAM_NAME = "irl_disc_params"
 class IRLDiscriminator(object):
   """Discriminator for target data versus on-policy data."""
 
-  def __init__(self,
-               env: Env,
-               input_size: int,
-               reward_type: str = "gail",
-               arch: Tuple[int] = (32, 32),
-               obs_indices: Optional[List[Any]] = None,
-               act_indices: Optional[List[int]] = None,
-               obs_scale: Optional[List[float]] = None,
-               include_action: bool = False,
-               logits_clip_range: float = 10.0,
-               nonnegative_reward: bool = True,
-               param_name: str = DISC_PARAM_NAME,
-               target_data: jnp.ndarray = None,
-               target_dist_fn=None,
-               balance_data: bool = True,
-               normalize_obs: bool = False,
-               spectral_norm: bool = False,
-               gradient_penalty_weight: float = 0.,):
+  def __init__(
+      self,
+      env: Env,
+      input_size: int,
+      reward_type: str = "gail",
+      arch: Tuple[int] = (32, 32),
+      obs_indices: Optional[List[Any]] = None,
+      act_indices: Optional[List[int]] = None,
+      obs_scale: Optional[List[float]] = None,
+      include_action: bool = False,
+      logits_clip_range: float = 10.0,
+      nonnegative_reward: bool = True,
+      param_name: str = DISC_PARAM_NAME,
+      target_data: jnp.ndarray = None,
+      target_dist_fn=None,
+      balance_data: bool = True,
+      normalize_obs: bool = False,
+      spectral_norm: bool = False,
+      gradient_penalty_weight: float = 0.,
+  ):
     assert obs_scale is not None
     self.env_obs_size = env.observation_size
     self.arch = arch
@@ -116,6 +118,7 @@ class IRLDiscriminator(object):
 
     def mean_fn(params, x):
       return jnp.mean(self.fn(params, x))
+
     self.dmean_fn_dx = jax.grad(mean_fn, argnums=1)
 
     self.model = model
@@ -201,11 +204,12 @@ class IRLDiscriminator(object):
         normalize_obs=self.normalize_obs,
         target_data=self.target_data,
         balance_data=self.balance_data,
-        gradient_penalty_weight=self.gradient_penalty_weight,)
+        gradient_penalty_weight=self.gradient_penalty_weight,
+    )
 
 
 class IRLWrapper(Env):
-  """A wrapper that adds an IRL reward to a Physax Env."""
+  """A wrapper that adds an IRL reward to a Brax Env."""
 
   def __init__(
       self,
@@ -232,10 +236,11 @@ class IRLWrapper(Env):
            state: State,
            action: jnp.ndarray,
            normalizer_params: Dict[str, jnp.ndarray] = None,
-           params: Dict[str, Dict[str, jnp.ndarray]] = None) -> State:
+           extra_params: Dict[str, Dict[str, jnp.ndarray]] = None) -> State:
     """Run one timestep of the environment's dynamics."""
     obs = self.disc.normalize_fn(normalizer_params, state.obs)
-    new_reward = disc_reward_fn(obs, action, params=params, disc=self.disc)
+    new_reward = disc_reward_fn(
+        obs, action, params=extra_params, disc=self.disc)
     state = self._environment.step(state, action)
     return state.replace(reward=new_reward +
                          self.env_reward_multiplier * state.reward)
@@ -252,15 +257,17 @@ def disc_reward_fn(
   return jax.lax.stop_gradient(new_reward)
 
 
-def disc_loss_fn(data: StepData,
-                 udata: StepData,
-                 rng: jnp.ndarray,
-                 params: Dict[str, Dict[str, jnp.ndarray]],
-                 disc: IRLDiscriminator,
-                 target_data: jnp.ndarray,
-                 balance_data: bool = True,
-                 normalize_obs: bool = False,
-                 gradient_penalty_weight: float = 0.,):
+def disc_loss_fn(
+    data: StepData,
+    udata: StepData,
+    rng: jnp.ndarray,
+    params: Dict[str, Dict[str, jnp.ndarray]],
+    disc: IRLDiscriminator,
+    target_data: jnp.ndarray,
+    balance_data: bool = True,
+    normalize_obs: bool = False,
+    gradient_penalty_weight: float = 0.,
+):
   """Discriminator loss function."""
   d = data if normalize_obs else udata
   target_d = target_data  # TODO: add normalize option for target_data

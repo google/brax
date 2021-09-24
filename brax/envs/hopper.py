@@ -14,7 +14,7 @@
 
 """Trains a hopper to run in the +x direction."""
 
-from typing import Tuple
+from typing import Optional, Tuple
 
 import brax
 from brax.envs import env as brax_env
@@ -38,6 +38,7 @@ class Hopper(brax_env.Env):
                terminate_when_unhealthy: bool = True,
                healthy_z_range: Tuple[float, float] = (0.7, float('inf')),
                exclude_current_positions_from_observation: bool = True,
+               system_config: Optional[str] = None,
                **kwargs):
     """Creates a Hopper environment.
 
@@ -51,6 +52,8 @@ class Hopper(brax_env.Env):
       healthy_z_range: Range of the z-position for being healthy.
       exclude_current_positions_from_observation: x-position will not be exposed
         in the observations if true.
+      system_config: System config to use. If None, then _SYSTEM_CONFIG defined
+        in this file will be used.
       **kwargs: Arguments that are passed to the base class.
     """
     self._forward_reward_weight = forward_reward_weight
@@ -61,7 +64,7 @@ class Hopper(brax_env.Env):
     self._exclude_current_positions_from_observation = (
         exclude_current_positions_from_observation)
 
-    super().__init__(_SYSTEM_CONFIG, **kwargs)
+    super().__init__(system_config or _SYSTEM_CONFIG, **kwargs)
 
     config = self.sys.config
     body = bodies.Body(config)

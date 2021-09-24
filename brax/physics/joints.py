@@ -64,6 +64,13 @@ class Joint(abc.ABC):
     self.off_c = jnp.array([vec_to_np(j.child_offset) for j in joints])
     self.index = {j.name: i for i, j in enumerate(joints)}
     self.dof = len(joints[0].angle_limit)
+    v_rot = jax.vmap(math.rotate, in_axes=[0, None])
+    relative_quats = jnp.array(
+        [euler_to_quat(j.reference_rotation) for j in joints])
+    self.axis_c = jnp.array(
+        [v_rot(jnp.eye(3), euler_to_quat(j.rotation)) for j in joints])
+    self.axis_p = jnp.array(
+        [v_rot(j, r) for j, r in zip(self.axis_c, relative_quats)])
 
   def apply(self, qp: QP) -> P:
     """Returns impulses to constrain and align bodies connected by a joint.
@@ -145,20 +152,7 @@ class Revolute(Joint):
   """A revolute joint constrains two bodies around a single axis."""
 
   def __init__(self, joints: List[config_pb2.Joint], body: bodies.Body):
-    if not joints:
-      return
     super().__init__(joints, body, .5)
-    rot = jnp.array([euler_to_quat(j.rotation) for j in joints])
-    vrotate = jax.vmap(math.rotate, in_axes=(None, 0))
-    self.axis = vrotate(jnp.array([1., 0., 0.]), rot)
-
-    ref_axes = [jnp.array([-a[1], a[0], 0.]) for a in self.axis]
-    # one of these two vectors is guaranteed to be orthogonal to axis
-    for i, (axis, ref_axis) in enumerate(zip(self.axis, ref_axes)):
-      if jnp.abs(jnp.dot(axis, ref_axis)) > 1e-4 or jnp.allclose(
-          ref_axis, 0, atol=1e-3):
-        ref_axes[i] = jnp.array([-axis[2], 0., axis[0]])
-    self.ref = jnp.array([r / (1e-6 + jnp.linalg.norm(r)) for r in ref_axes])
 
   @jax.vmap
   def apply_reduced(self, qp_p: QP, qp_c: QP) -> Tuple[P, P]:
@@ -175,7 +169,7 @@ class Revolute(Joint):
 
     # torque the bodies to align their axes
     (axis,), (angle,) = self.axis_angle(qp_p, qp_c)
-    axis_c = math.rotate(self.axis, qp_c.rot)
+    axis_c = math.rotate(self.axis_c[0], qp_c.rot)
     torque = self.stiffness * jnp.cross(axis, axis_c)
 
     # torque the bodies to stay within angle limits
@@ -195,24 +189,16 @@ class Revolute(Joint):
 
   def axis_angle(self, qp_p: QP, qp_c: QP) -> Tuple[Any, Any]:
     """Returns axes and angles of a single joint."""
-    axis_p = math.rotate(self.axis, qp_p.rot)
-    angle = math.signed_angle(qp_p, qp_c, axis_p, self.ref)
+    axis_p = math.rotate(self.axis_p[0], qp_p.rot)
+    ref_p = math.rotate(self.axis_p[2], qp_p.rot)
+    ref_c = math.rotate(self.axis_c[2], qp_c.rot)
+    angle = math.signed_angle(axis_p, ref_p, ref_c)
     return (axis_p,), (angle,)
 
 
 @pytree.register
 class Universal(Joint):
   """A revolute joint constrains two bodies around two axes."""
-
-  def __init__(self, joints: List[config_pb2.Joint], body: bodies.Body):
-    if not joints:
-      return
-    super().__init__(joints, body)
-    rot = jnp.array([euler_to_quat(j.rotation) for j in joints])
-    vrotate = jax.vmap(math.rotate, in_axes=(None, 0))
-    self.axis_1 = vrotate(jnp.array([1., 0., 0.]), rot)
-    self.axis_2 = vrotate(jnp.array([0., 1., 0.]), rot)
-    self.ref = jax.vmap(jnp.cross)(self.axis_2, self.axis_1)
 
   @jax.vmap
   def apply_reduced(self, qp_p: QP, qp_c: QP) -> Tuple[P, P]:
@@ -229,9 +215,9 @@ class Universal(Joint):
 
     # torque the bodies to align to a joint plane
     (axis_1, axis_2), (angle_1, angle_2) = self.axis_angle(qp_p, qp_c)
-    axis_c_proj = axis_2 - jnp.dot(axis_2, axis_1) * axis_1
+    axis_c_proj = axis_1 - jnp.dot(axis_2, axis_1) * axis_2
     axis_c_proj = axis_c_proj / math.safe_norm(axis_c_proj)
-    torque = (self.limit_strength / 5.) * jnp.cross(axis_c_proj, axis_2)
+    torque = (self.limit_strength / 5.) * jnp.cross(axis_c_proj, axis_1)
 
     # torque the bodies to stay within angle limits
     limit_1, limit_2 = self.limit
@@ -253,30 +239,22 @@ class Universal(Joint):
 
   def axis_angle(self, qp_p: QP, qp_c: QP) -> Tuple[Any, Any]:
     """Returns axes and angles of a single joint."""
-    axis_1_c = math.rotate(self.axis_1, qp_c.rot)
-    axis_2_p = math.rotate(self.axis_2, qp_p.rot)
+    v_rot = jax.vmap(math.rotate, in_axes=[0, None])
+    axis_p_rotated = v_rot(self.axis_p, qp_p.rot)
+    axis_c_rotated = v_rot(self.axis_c, qp_c.rot)
+    axis_1_c = axis_c_rotated[0]
+    axis_2_p = axis_p_rotated[1]
     child_in_plane = jnp.cross(axis_2_p, axis_1_c)
-    ref_c = math.rotate(self.ref, qp_c.rot)
-    angle_1 = math.signed_angle(qp_p, qp_c, axis_2_p, self.ref)
-    angle_2 = jnp.arctan2(
-        jnp.dot(jnp.cross(child_in_plane, ref_c), axis_1_c),
-        jnp.dot(child_in_plane, ref_c))
-    return (axis_2_p, axis_1_c), (angle_1, angle_2)
+    ref_p = axis_p_rotated[2]
+    ref_c = axis_c_rotated[2]
+    angle_2 = math.signed_angle(axis_2_p, ref_p, ref_c)
+    angle_1 = math.signed_angle(axis_1_c, child_in_plane, -1.*ref_c)
+    return (axis_1_c, axis_2_p), (angle_1, angle_2)
 
 
 @pytree.register
 class Spherical(Joint):
   """A spherical joint constrains two bodies around three axes."""
-
-  def __init__(self, joints: List[config_pb2.Joint], body: bodies.Body):
-    if not joints:
-      return
-    super().__init__(joints, body)
-    rot = jnp.array([euler_to_quat(j.rotation) for j in joints])
-    vrotate = jax.vmap(math.rotate, in_axes=(None, 0))
-    self.axis_1 = vrotate(jnp.array([1., 0., 0.]), rot)
-    self.axis_2 = vrotate(jnp.array([0., 1., 0.]), rot)
-    self.axis_3 = vrotate(jnp.array([0., 0., 1.]), rot)
 
   @jax.vmap
   def apply_reduced(self, qp_p: QP, qp_c: QP) -> Tuple[P, P]:
@@ -304,7 +282,7 @@ class Spherical(Joint):
 
     # TODO: fully decouple different torque axes
     torque = axis[0] * dang_1 + axis[1] * dang_2 + axis[2] * dang_3
-    torque *= self.limit_strength
+    torque *= self.limit_strength * -1.
 
     # damp the angular motion
     torque -= self.angular_damping * (qp_p.ang - qp_c.ang)
@@ -318,12 +296,15 @@ class Spherical(Joint):
 
   def axis_angle(self, qp_p: QP, qp_c: QP) -> Tuple[Any, Any]:
     """Returns axes and angles of a single joint."""
-    axis_1_p = math.rotate(self.axis_1, qp_p.rot)
-    axis_2_p = math.rotate(self.axis_2, qp_p.rot)
-    axis_3_p = math.rotate(self.axis_3, qp_p.rot)
-    axis_1_c = math.rotate(self.axis_1, qp_c.rot)
-    axis_2_c = math.rotate(self.axis_2, qp_c.rot)
-    axis_3_c = math.rotate(self.axis_3, qp_c.rot)
+    v_rot = jax.vmap(math.rotate, in_axes=[0, None])
+    axis_p_rotated = v_rot(self.axis_p, qp_p.rot)
+    axis_c_rotated = v_rot(self.axis_c, qp_c.rot)
+    axis_1_p = axis_p_rotated[0]
+    axis_2_p = axis_p_rotated[1]
+    axis_3_p = axis_p_rotated[2]
+    axis_1_c = axis_c_rotated[0]
+    axis_2_c = axis_c_rotated[1]
+    axis_3_c = axis_c_rotated[2]
 
     axis_2_in_plane = axis_2_c - jnp.dot(axis_2_c, axis_3_p) * axis_3_p
     axis_2_in_projected_length = jnp.linalg.norm(axis_2_in_plane)
@@ -349,7 +330,7 @@ class Spherical(Joint):
             axis_3_c))  # child y torque
 
     axis = (axis_1_c, axis_2_c, axis_3_p,)
-    angle = (angle_x, angle_y, angle_z)
+    angle = (-1.*angle_x, -1.*angle_y, -1.*angle_z)
 
     return axis, angle
 

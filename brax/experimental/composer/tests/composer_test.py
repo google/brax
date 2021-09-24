@@ -30,6 +30,15 @@ class ComposerTest(parameterized.TestCase):
   def testEnvCreation(self, env_name):
     composer.create(env_name=env_name)
 
+  def testActionConcatSplit(self):
+    env = composer.create(env_name='humanoid')
+    action_shapes = composer.get_action_shapes(env.sys)
+    leading_dims = (5,)
+    actions = jnp.zeros(leading_dims + (env.action_size,))
+    actions_dict = composer.split_array(actions, action_shapes)
+    actions2 = composer.concat_array(actions_dict, action_shapes)
+    assert actions.shape == actions2.shape, f'{actions.shape} != {actions2.shape}'
+
   def testObservationConcatSplit(self):
     leading_dims = (5, 4)
     obs_shapes = ((3, 4), (12,), (2, 2))
@@ -47,12 +56,12 @@ class ComposerTest(parameterized.TestCase):
       self.assertEqual(s1, s2, f'{s1} != {s2}')
 
     # concat
-    obs = composer.concat_obs(obs_dict, obs_shapes_from_data)
+    obs = composer.concat_array(obs_dict, obs_shapes_from_data)
     self.assertEqual(obs.shape, leading_dims + (obs_vec_size,),
                      f'{obs.shape} != {leading_dims} + ({obs_vec_size},)')
 
     # split again
-    obs_dict_2 = composer.split_obs(obs, obs_shapes_from_data)
+    obs_dict_2 = composer.split_array(obs, obs_shapes_from_data)
     for s1, s2 in zip(obs_dict_2.values(), obs_shapes_from_data.values()):
       s1 = s1.shape
       s2 = s2['shape']

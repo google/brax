@@ -37,6 +37,8 @@ Since each experiment runs under a few minutes, a reasonable amount of hyperpara
 
 ## Learn More
 
+<img src="https://github.com/google/brax/raw/main/docs/img/braxlines/sketches.png" width="270" height="110"/>
+
 For a deep dive into Braxlines, please see
 our paper, [Braxlines: Fast and Interactive Toolkit for RL-driven Behavior Generation Beyond Reward Maximization](https://openreview.net/forum?id=-W0LCm8wE2S).
 

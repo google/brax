@@ -16,7 +16,7 @@
 
 from absl.testing import absltest
 import jax
-import jax.numpy as np
+import jax.numpy as jnp
 from brax import envs
 
 
@@ -24,12 +24,12 @@ class GraspTest(absltest.TestCase):
 
   def testGrasp(self):
     env = envs.create('grasp')
-    grasp_action = np.array([
-        -.4, -.35, -0., -1,  # gripper arm 1
-        .4, .35, 0., 1,  # gripper arm 2
-        .4, .35, 0., 1,  # gripper arm 3
-        .4, .35, 0., 1,  # gripper arm 4
-        0., 0., -.9  # position action
+    grasp_action = jnp.array([
+      -.4, -.35, -1., -0.,  # gripper arm 1
+      .4, .35, 1., 0,  # gripper arm 2
+      .4, .35, 1., 0,  # gripper arm 3
+      .4, .35, 1., 0,  # gripper arm 4
+      0., 0., -.9  # position action
     ])
 
     jit_env_step = jax.jit(env.step)

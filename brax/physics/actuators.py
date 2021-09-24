@@ -102,7 +102,8 @@ class Torque(Actuator):
     axis, angle = jnp.array(axis), jnp.array(angle)
 
     # clip torque if outside joint angle limits
-    torque = act * self.strength
+    # * -1. so that positive actuation increases angle between parent and child
+    torque = act * self.strength * -1.
     torque = jnp.where(angle < self.joint.limit[:, 0], 0, torque)
     torque = jnp.where(angle > self.joint.limit[:, 1], 0, torque)
     torque = jnp.sum(jax.vmap(jnp.multiply)(axis, torque), axis=0)

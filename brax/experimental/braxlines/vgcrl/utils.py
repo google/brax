@@ -232,7 +232,7 @@ class Discriminator(object):
 
 
 class ParameterizeWrapper(Env):
-  """A wrapper that parameterizes Physax Env."""
+  """A wrapper that parameterizes Brax Env."""
 
   def __init__(self,
                environment: Env,
@@ -289,11 +289,12 @@ class ParameterizeWrapper(Env):
            state: State,
            action: jnp.ndarray,
            normalizer_params: Dict[str, jnp.ndarray] = None,
-           params: Dict[str, Dict[str, jnp.ndarray]] = None) -> State:
+           extra_params: Dict[str, Dict[str, jnp.ndarray]] = None) -> State:
     """Run one timestep of the environment's dynamics."""
     _, z = self.disc.split_obs(state.obs)
     state = self._environment.step(state, action)
-    return self.concat(state, z, normalizer_params, params, replace_reward=True)
+    return self.concat(
+        state, z, normalizer_params, extra_params, replace_reward=True)
 
   def step2(self, state: State, action: jnp.ndarray) -> State:
     """Run one timestep of the environment's dynamics."""

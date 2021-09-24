@@ -138,27 +138,20 @@ def world_velocity(qp: QP, pos: jnp.ndarray) -> jnp.ndarray:
   return qp.vel + jnp.cross(qp.ang, pos - qp.pos)
 
 
-def signed_angle(qp_p: QP, qp_c: QP, normal_axis: jnp.ndarray,
-                 ref_vector) -> float:
-  """Calculates the signed angle between two parts.
-
-  This calculation works by checking how much a parent and child part's quats
-  rotate a reference vector.
+def signed_angle(normal_axis: jnp.ndarray, ref_p, ref_c) -> float:
+  """Calculates the signed angle between two vectors along an axis.
 
   Args:
-    qp_p: State data for the parent part
-    qp_c: State data for the child part
     normal_axis: Common axis around which to calculate change in angle
-    ref_vector: A reference vector pointing at 0-degrees offset
+    ref_p: A reference vector pointing at 0-degrees offset in the parent's frame
+    ref_c: A reference vector pointing at 0-degrees offset in the child's frame
 
   Returns:
     The signed angle between two parts.
   """
-  ref_vector_p = rotate(ref_vector, qp_p.rot)
-  ref_vector_c = rotate(ref_vector, qp_c.rot)
   angle = jnp.arctan2(
-      jnp.dot(jnp.cross(ref_vector_p, ref_vector_c), normal_axis),
-      jnp.dot(ref_vector_p, ref_vector_c))
+      jnp.dot(jnp.cross(ref_p, ref_c), normal_axis),
+      jnp.dot(ref_p, ref_c))
   return angle
 
 

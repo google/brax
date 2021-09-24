@@ -84,6 +84,7 @@ def names2indices(config, names: List[str], datatype: str = 'body'):
       'actuator': config.actuators,
   }[datatype]
   joint_counters = [0, 0, 0]
+  actuator_counter = 0
   for i, b in enumerate(objs):
     if datatype == 'joint':
       dof = lim_to_dof[len(b.angle_limit)]
@@ -92,10 +93,14 @@ def names2indices(config, names: List[str], datatype: str = 'body'):
       dof = lim_to_dof[len(joint.angle_limit)]
     if b.name in names:
       indices[b.name] = i
-      if datatype in ('actuator', 'joint'):
+      if datatype in ('joint',):
         info[b.name] = dict(dof=dof, index=joint_counters[dof - 1])
-    if datatype in ('actuator', 'joint'):
+      if datatype in ('actuator',):
+        info[b.name] = tuple(range(actuator_counter, actuator_counter+dof))
+    if datatype in ('joint',):
       joint_counters[dof - 1] += 1
+    if datatype in ('actuator',):
+      actuator_counter += dof
 
   indices = [indices[n] for n in names]
   mask = jnp.array([b.name in names for b in objs])

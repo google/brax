@@ -14,6 +14,9 @@
 
 """Tests for brax.physics."""
 
+import copy
+import itertools
+
 from absl.testing import absltest
 from absl.testing import parameterized
 import brax
@@ -193,12 +196,13 @@ class JointTest(parameterized.TestCase):
 
   _CONFIG = """
     substeps: 100000
+    dt: .01
     gravity { z: -9.8 }
     bodies {
       name: "Anchor" frozen: { all: true } mass: 1
       inertia { x: 1 y: 1 z: 1 }
     }
-    bodies { name: "Bob" }
+    bodies { name: "Bob" mass: 1 inertia { x: 1 y: 1 z: 1 }}
     joints {
       name: "Joint" parent: "Anchor" child: "Bob" stiffness: 10000
       child_offset { z: 1 }
@@ -233,6 +237,60 @@ class JointTest(parameterized.TestCase):
         ang=jnp.array([[.5 * vel, 0., 0.], [0., 0., 0.]]))
     qp, _ = sys.step(qp, jnp.array([]))
     self.assertAlmostEqual(qp.pos[0, 1], 0., 3)  # returned to the origin
+
+  offsets = [-15, 15, -45, 45, -75, 75]
+  axes = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+
+  @parameterized.parameters(itertools.product(offsets, axes))
+  def test_reference_offset(self, offset, axis):
+    """Construct joint and check that default_qp generates offsets correctly."""
+    config = text_format.Parse(JointTest._CONFIG, brax.Config())
+
+    # loop over different types of joints
+    for l in range(3):
+      # construct appropriate number of angle_limits for this joint
+      if l == 0:
+        a_l = config.joints[0].angle_limit[0]
+      else:
+        a_l = config.joints[0].angle_limit.add()
+      # zero out limits so that default_qp places them at local 0
+      a_l.min = 0
+      a_l.max = 0
+
+      sys_default = brax.System(config)
+
+      this_offset = offset * jnp.array(axis)
+
+      # duplicate config deeply
+      rotated_config = copy.deepcopy(config)
+
+      rotated_config.joints[0].reference_rotation.x = this_offset[0]
+      rotated_config.joints[0].reference_rotation.y = this_offset[1]
+      rotated_config.joints[0].reference_rotation.z = this_offset[2]
+
+      # construct a new config with this reference offset applied
+      sys_offset = brax.System(rotated_config)
+      offset_qp = sys_offset.default_qp()
+
+      # construct joint functions for default and offset systems
+      qp_p = take(offset_qp, 0)
+      qp_c = take(offset_qp, 1)
+      joint_offset = take(sys_offset.joints[0], 0)
+      joint_default = take(sys_default.joints[0], 0)
+
+      # calculate joint angles as seen by the default or offset system
+      _, angle_offset = joint_offset.axis_angle(qp_p, qp_c)
+      _, angle_default = joint_default.axis_angle(qp_p, qp_c)
+      angle_offset = (jnp.array(angle_offset) / jnp.pi) * 180
+      angle_default = (jnp.array(angle_default) / jnp.pi) * 180
+      num_offsets = angle_offset.shape[0]
+
+      for a_o, a_d, t_o in zip(angle_offset, angle_default,
+                               this_offset[:num_offsets]):
+        # default system sees part rotated by offset degrees
+        self.assertAlmostEqual(a_d, t_o, 3)
+        # offset system sees part at local 0
+        self.assertAlmostEqual(a_o, 0.0, 3)
 
 
 class Actuator1DTest(parameterized.TestCase):
@@ -359,6 +417,7 @@ class Actuator3DTest(parameterized.TestCase):
         max: 100
       }
       angular_damping: 120.0
+      limit_strength: 2000.0
     }
     actuators {
       name: "Joint"

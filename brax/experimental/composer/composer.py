@@ -68,6 +68,7 @@ from brax.experimental.composer import env_descs
 from brax.experimental.composer import observers
 from brax.experimental.composer import reward_functions
 from brax.experimental.composer.component_editor import add_suffix
+from brax.experimental.composer.components import load_component
 from jax import numpy as jnp
 
 MetaData = collections.namedtuple('MetaData', [
@@ -96,7 +97,7 @@ class Composer(object):
     if add_ground:
       components['ground'] = dict(component='ground')
     components = {
-        name: component_editor.load_component(**value)
+        name: load_component(**value)
         for name, value in components.items()
     }
     component_keys = sorted(components.keys())
@@ -123,6 +124,7 @@ class Composer(object):
         v['root'] = rename_fn(v['root'], force_add=True)
       v['bodies'] = [b['name'] for b in v['json'].get('bodies', [])]
       v['joints'] = [b['name'] for b in v['json'].get('joints', [])]
+      v['actuators'] = [b['name'] for b in v['json'].get('actuators', [])]
       v['suffix'] = suffix
       # convert back to str
       v['message_str'] = component_editor.json2message_str(v['json'])
@@ -294,6 +296,7 @@ class ComponentEnv(Env):
     self.observer_shapes = None
     self.composer = composer
     super().__init__(*args, config=self.composer.metadata.config_str, **kwargs)
+    self.action_shapes = get_action_shapes(self.sys)
 
   def reset(self, rng: jnp.ndarray) -> State:
     """Resets the environment to an initial state."""
@@ -301,7 +304,7 @@ class ComponentEnv(Env):
     qp = self.composer.reset_fn(self.sys, qp)
     info = self.sys.info(qp)
     obs_dict, _ = self._get_obs(qp, info)
-    obs = concat_obs(obs_dict, self.observer_shapes)
+    obs = concat_array(obs_dict, self.observer_shapes)
     reward, done = jnp.zeros(2)
     state_info = {}
     state_info['rewards'] = collections.OrderedDict([(k, jnp.zeros(
@@ -321,7 +324,7 @@ class ComponentEnv(Env):
     del normalizer_params, extra_params
     qp, info = self.sys.step(state.qp, action)
     obs_dict, reward_features = self._get_obs(qp, info)
-    obs = concat_obs(obs_dict, self.observer_shapes)
+    obs = concat_array(obs_dict, self.observer_shapes)
     reward = jnp.zeros(())
     done = jnp.array(False)
     reward_done_dict = collections.OrderedDict([
@@ -357,24 +360,37 @@ class ComponentEnv(Env):
     return obs_dict, reward_features
 
 
-def concat_obs(obs_dict: Dict[str, jnp.ndarray],
-               observer_shapes: Dict[str, Dict[str, Any]]) -> jnp.ndarray:
-  """Concatenate observation dictionary to a vector."""
+def get_action_shapes(sys):
+  """Get action shapes."""
+  names = sim_utils.get_names(sys.config, 'actuator')
+  action_shapes = sim_utils.names2indices(
+      sys.config, names=names, datatype='actuator')[1]
+  action_shapes = collections.OrderedDict([
+      (k, dict(start=v[0], end=v[-1] + 1, size=len(v), shape=(len(v),)))
+      for k, v in action_shapes.items()
+  ])
+  return action_shapes
+
+
+def concat_array(array_dict: Dict[str, jnp.ndarray],
+                 array_shapes: Dict[str, Dict[str, Any]]) -> jnp.ndarray:
+  """Concatenate array dictionary to a vector."""
   return jnp.concatenate([
-      o.reshape(o.shape[:-len(s['shape'])] + (s['size'],))
-      for o, s in zip(obs_dict.values(), observer_shapes.values())
+      arr.reshape(arr.shape[:-len(s['shape'])] + (s['size'],))
+      for arr, s in zip(array_dict.values(), array_shapes.values())
   ],
                          axis=-1)
 
 
-def split_obs(
-    obs: jnp.ndarray,
-    observer_shapes: Dict[str, Dict[str, Any]]) -> Dict[str, jnp.ndarray]:
-  """Split observation vector to a dictionary."""
-  obs_leading_dims = obs.shape[:-1]
+def split_array(
+    array: jnp.ndarray,
+    array_shapes: Dict[str, Dict[str, Any]]) -> Dict[str, jnp.ndarray]:
+  """Split array vector to a dictionary."""
+  array_leading_dims = array.shape[:-1]
   return collections.OrderedDict([
-      (k, obs[..., v['start']:v['end']].reshape(obs_leading_dims + v['shape']))
-      for k, v in observer_shapes.items()
+      (k, array[...,
+                v['start']:v['end']].reshape(array_leading_dims + v['shape']))
+      for k, v in array_shapes.items()
   ])
 
 
