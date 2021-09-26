@@ -13,6 +13,7 @@
 # limitations under the License.
 
 """Environment descriptions."""
+from brax.experimental.composer import composer_utils
 from brax.experimental.composer.components import ant
 from brax.experimental.composer.observers import LambdaObserver as lo
 from brax.experimental.composer.observers import SimObserver as so
@@ -142,3 +143,14 @@ ENV_DESCS = {
             edges=dict(),
         ),
 }
+
+VARIANTS = (('ant_run', 'pro_ant_run', {
+    'components.ant1.component': 'pro_ant',
+    'components.ant1.component_params': dict(num_legs=10),
+    'global_options.dt': 0.02,
+    'global_options.substeps': 16,
+}),)
+
+for base_desc_name, new_desc_name, desc_edits in VARIANTS:
+  ENV_DESCS[new_desc_name] = composer_utils.edit_desc(ENV_DESCS[base_desc_name],
+                                                      desc_edits)

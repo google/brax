@@ -19,8 +19,8 @@ See:
   https://arxiv.org/abs/1911.02256
 """
 
-
 import functools
+import itertools
 from typing import Any, Callable, List, Tuple, Optional, Dict
 from brax.envs.env import Env
 from brax.envs.env import State
@@ -88,10 +88,24 @@ class IRLDiscriminator(object):
     self.initialized = False
     self.target_data = target_data
     self.target_dist_fn = target_dist_fn
+    if self.reward_type == "mle":
+      assert self.target_dist_fn
     self.logits_clip_range = logits_clip_range
     self.nonnegative_reward = nonnegative_reward
     if self.nonnegative_reward:
-      assert self.logits_clip_range
+      if self.reward_type == "mle":
+        # approximately find the global min
+        edges_mesh = itertools.product(*([(-1, 0, 1)] * self.indexed_obs_size))
+        edges_mesh = jnp.stack([jnp.array(x) for x in edges_mesh])
+        x_edges = edges_mesh * self.obs_scale[None]
+        x_target_dist = target_dist_fn()
+        x_samples = x_target_dist.sample(
+            seed=jax.random.PRNGKey(0), sample_shape=(1000,))
+        x = jnp.concatenate([x_edges, x_samples], axis=0)
+        r = target_dist_fn().log_prob(x)
+        self.target_dist_log_offset = -r.min()
+      else:
+        assert self.logits_clip_range
     self.balance_data = balance_data
     self.normalize_obs = normalize_obs
     self.normalize_fn = normalization.make_data_and_apply_fn(
@@ -169,9 +183,10 @@ class IRLDiscriminator(object):
       r = jnp.sum(r, axis=-1)
     elif self.reward_type == "mle":  # for debugging
       assert not self.normalize_obs
-      assert not self.nonnegative_reward
       target_dist = self.target_dist_fn()
       r = target_dist.log_prob(data)
+      if self.nonnegative_reward:
+        r += self.target_dist_log_offset
     else:
       raise NotImplementedError(self.reward_type)
     return r
@@ -319,6 +334,39 @@ def create_fn(env_name: str, wrapper_params: Dict[str, Any],
   """Returns a function that when called, creates an Env."""
   return functools.partial(
       create, env_name=env_name, wrapper_params=wrapper_params, **kwargs)
+
+
+def make_2d(data):
+  """Make data to be 2D in last dimension."""
+  if data.shape[-1] == 1:
+    return jnp.concatenate([data, jnp.zeros_like(data)], axis=-1)
+  else:
+    return data[..., :2]
+
+
+def get_multimode_dist(num_modes: int = 1,
+                       scale: float = 1.0,
+                       indexed_obs_dim: int = 1):
+  """Get a multimodal distribution of Gaussians."""
+  if indexed_obs_dim == 1:
+    return get_multimode_1d_dist(num_modes=num_modes, scale=scale)
+  elif indexed_obs_dim == 2:
+    return get_multimode_2d_dist(num_modes=num_modes, scale=scale)
+  else:
+    raise NotImplementedError(indexed_obs_dim)
+
+
+def get_multimode_1d_dist(num_modes: int = 1, scale: float = 1.0):
+  """Get a multimodal distribution of Gaussians."""
+  scale = jnp.ones(1) * scale
+  loc = jnp.linspace(-scale, scale, num_modes + 2)
+  loc = loc[1:-1]
+  scale = jnp.ones((num_modes, 1)) * scale[None] / (num_modes + 1) / 5.
+  return tfd.MixtureSameFamily(
+      mixture_distribution=tfd.Categorical(
+          probs=jnp.ones((num_modes,)) / num_modes),
+      components_distribution=tfd.MultivariateNormalDiag(
+          loc=loc, scale_diag=scale))
 
 
 def get_multimode_2d_dist(num_modes: int = 1, scale: float = 1.0):

@@ -93,13 +93,13 @@ def train(train_job_params: Dict[str, Any],
   rng = jax.random.PRNGKey(seed=seed)
   jit_get_dist = jax.jit(
       functools.partial(
-          irl_utils.get_multimode_2d_dist,
+          irl_utils.get_multimode_dist,
+          indexed_obs_dim=len(obs_indices),
           num_modes=target_num_modes,
           scale=obs_scale))
   target_dist = jit_get_dist()
-  target_data_2d = target_dist.sample(
+  target_data = target_dist.sample(
       seed=rng, sample_shape=(target_num_samples,))
-  target_data = target_data_2d[..., :len(obs_indices)]
 
   # make env_fn
   base_env_fn = composer.create_fn(env_name=env_name)
@@ -206,6 +206,7 @@ def train(train_job_params: Dict[str, Any],
   extra_loss_fns = dict(disc_loss=disc.disc_loss_fn)
   inference_fn, params, _ = train_fn(
       environment_fn=env_fn,
+      seed=seed,
       progress_fn=progress,
       extra_params=extra_params,
       extra_loss_fns=extra_loss_fns)

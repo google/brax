@@ -64,6 +64,7 @@ from brax.envs import wrappers
 from brax.experimental.braxlines.common import sim_utils
 from brax.experimental.braxlines.envs import wrappers as braxlines_wrappers
 from brax.experimental.composer import component_editor
+from brax.experimental.composer import composer_utils
 from brax.experimental.composer import env_descs
 from brax.experimental.composer import observers
 from brax.experimental.composer import reward_functions
@@ -403,21 +404,6 @@ def get_env_obs_dict_shape(env: Env):
     return (env.observation_size,)
 
 
-def edit_desc(env_desc: Dict[str, Any], desc_edits: Dict[str, Any]):
-  """Edit desc dictionary."""
-  env_desc = copy.deepcopy(env_desc)
-  for key_str, value in desc_edits.items():
-    # `key_str` is in a form '{key1}.{key2}.{key3}'
-    #   for indexing env_desc[key1][key2][key3]
-    keys = key_str.split('.')
-    d = env_desc
-    for _, key in enumerate(keys[:-1]):
-      assert key in d, f'{key} not in {list(d.keys())}'
-      d = d[key]
-    d[keys[-1]] = value
-  return env_desc
-
-
 def create(env_name: str = None,
            env_desc: Dict[str, Any] = None,
            desc_edits: Dict[str, Any] = None,
@@ -432,11 +418,11 @@ def create(env_name: str = None,
   desc_edits = desc_edits or {}
   if env_name in env_descs.ENV_DESCS:
     env_desc = dict(**env_desc, **env_descs.ENV_DESCS[env_name])
-    env_desc = edit_desc(env_desc, desc_edits)
+    env_desc = composer_utils.edit_desc(env_desc, desc_edits)
     composer = Composer(**env_desc)
     env = ComponentEnv(composer=composer, **kwargs)
   elif env_desc:
-    env_desc = edit_desc(env_desc, desc_edits)
+    env_desc = composer_utils.edit_desc(env_desc, desc_edits)
     composer = Composer(**env_desc)
     env = ComponentEnv(composer=composer, **kwargs)
   else:

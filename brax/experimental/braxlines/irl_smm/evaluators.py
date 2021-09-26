@@ -106,10 +106,8 @@ def estimate_energy_distance_metric(
 
   # Plot
   if visualize:
-    if env_vars.shape[-1] == 1:
-      env_vars = jnp.concatenate([env_vars, jnp.zeros(env_vars.shape)], axis=-1)
-      target_vars = jnp.concatenate(
-          [target_vars, jnp.zeros(target_vars.shape)], axis=-1)
+    env_vars = irl_utils.make_2d(env_vars)
+    target_vars = irl_utils.make_2d(target_vars)
     fig, axs = plt.subplots(ncols=2, figsize=(figsize[0] * 2, figsize[1]))
     axs[0].set(title='agent policy')
     axs[0].set_xlim([-disc.obs_scale_2d[0], disc.obs_scale_2d[0]])

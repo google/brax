@@ -208,6 +208,7 @@ def train(train_job_params: Dict[str, Any],
       disc_loss=disc_update_ratio) if extra_params else None
   inference_fn, params, _ = train_fn(
       environment_fn=env_fn,
+      seed=seed,
       progress_fn=progress,
       extra_params=extra_params,
       extra_loss_fns=extra_loss_fns,

@@ -23,6 +23,7 @@ from brax.experimental.composer import composer
 from brax.experimental.composer import register_default_components
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
+
 register_default_components()
 
 TASK_KEYS = (('env_name',),)
@@ -45,6 +46,7 @@ def train(train_job_params: Dict[str, Any],
   # extra parameters
   env_name = config.pop('env_name', 'ant_run')
   desc_edits = config.pop('desc_edits', {})
+  seed = config.pop('seed', 0)
   eval_seed = config.pop('eval_seed', 0)
   ppo_params = dict(
       num_timesteps=int(5e7),
@@ -104,7 +106,7 @@ def train(train_job_params: Dict[str, Any],
     fig.tight_layout()
 
   inference_fn, params, _ = ppo.train(
-      environment_fn=env_fn, progress_fn=progress, **ppo_params)
+      environment_fn=env_fn, progress_fn=progress, seed=seed, **ppo_params)
   print(f'time to jit: {times[1] - times[0]}')
   print(f'time to train: {times[-1] - times[1]}')
   print(f'Saved logs to {log_path}')
