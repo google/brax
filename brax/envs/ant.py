@@ -42,8 +42,8 @@ class Ant(env.Env):
     x_after = qp.pos[0, 0]
     forward_reward = (x_after - x_before) / self.sys.config.dt
     ctrl_cost = .5 * jnp.sum(jnp.square(action))
-    # can ignore contact cost, see: https://github.com/openai/gym/issues/1541
-    contact_cost = 0
+    contact_cost = (0.5 * 1e-3 *
+                    jnp.sum(jnp.square(jnp.clip(info.contact.vel, -1, 1))))
     survive_reward = 1.0
     reward = forward_reward - ctrl_cost - contact_cost + survive_reward
 

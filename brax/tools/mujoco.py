@@ -101,15 +101,17 @@ def _rot_quat(u: Vector3d, v: Vector3d) -> Quaternion:
   return quaternions.axangle2quat(axis, angle)
 
 
-def _create_joint(name: str,
-                  parent_body_name: str,
-                  child_body_name: str,
-                  parent_offset: Optional[Vector3d] = None,
-                  child_offset: Optional[Vector3d] = None,
-                  axis: Optional[Vector3d] = None,
-                  stiffness: float = DEFAULT_STIFFNESS,
-                  joint_range: Optional[Vector] = None,
-                  rotation: Optional[Quaternion] = None) -> config_pb2.Joint:
+def _create_joint(
+    name: str,
+    parent_body_name: str,
+    child_body_name: str,
+    parent_offset: Optional[Vector3d] = None,
+    child_offset: Optional[Vector3d] = None,
+    axis: Optional[Vector3d] = None,
+    stiffness: float = DEFAULT_STIFFNESS,
+    joint_range: Optional[Vector] = None,
+    rotation: Optional[Quaternion] = None,
+    reference_rotation: Optional[Quaternion] = None) -> config_pb2.Joint:
   """Returns a (revolute) joint with the specified properties."""
   if axis is None:
     # Default axis of rotation.
@@ -129,14 +131,16 @@ def _create_joint(name: str,
       child_offset=_vec(child_offset) if child_offset is not None else None,
       stiffness=stiffness,
       rotation=_euler(rotation),
-      angle_limit=[angle_limit])
+      angle_limit=[angle_limit],
+      reference_rotation=_euler(reference_rotation))
 
 
 def _create_fixed_joint(name: str,
                         parent_body_name: str,
                         child_body_name: str,
                         parent_offset: Optional[Vector3d] = None,
-                        rotation: Optional[Quaternion] = None):
+                        rotation: Optional[Quaternion] = None,
+                        reference_rotation: Optional[Quaternion] = None):
   """Returns a fixed joint."""
   # Brax does not support such joints. Instead we use a revolute joint with a
   # high stiffness and zero angle range.
@@ -146,7 +150,8 @@ def _create_fixed_joint(name: str,
       child_body_name,
       stiffness=DEFAULT_STIFFNESS,
       parent_offset=parent_offset,
-      rotation=rotation)
+      rotation=rotation,
+      reference_rotation=reference_rotation)
 
 
 class MujocoConverter(object):
@@ -155,7 +160,8 @@ class MujocoConverter(object):
   def __init__(self,
                xml_string: AnyStr,
                add_collision_pairs: bool = False,
-               ignore_unsupported_joints: bool = False):
+               ignore_unsupported_joints: bool = False,
+               add_joint_to_nearest_body: bool = False):
     """Creates a MujocoConverter.
 
     Args:
@@ -166,12 +172,15 @@ class MujocoConverter(object):
         http://www.mujoco.org/book/computation.html#Collision.
       ignore_unsupported_joints: If true, then unsupported joints, e.g. slide,
         will be ignored, otherwise they raise an exception.
+      add_joint_to_nearest_body: Adds a joint to the nearest (child)body when
+        multiple geometries of a Mujoco body are represented as separate bodies.
     """
     mjcf_model = mjcf.from_xml_string(xml_string, escape_separators=True)
     self._mjcf_model = mjcf_model
     config = config_pb2.Config()
     self._config = config
     self._ignore_unsupported_joints = ignore_unsupported_joints
+    self._add_joint_to_nearest_body = add_joint_to_nearest_body
     # Brax uses local coordinates. If global coordinates are used in the
     # Mujoco model, we convert them to local ones.
     self._uses_global = mjcf_model.compiler.coordinate == 'global'
@@ -363,6 +372,7 @@ class MujocoConverter(object):
       # Using the name of the geometry is less confusing for worldbody. It won't
       # use referred to in joints or actuators.
       body.name = geom.name
+    reference_rotation = self._get_rotation(mujoco_body)
     geom_collider = self._geom_to_collider(geom)
     body.mass = geom_collider.mass
     body.inertia.CopyFrom(_vec(DEFAULT_INERTIA))
@@ -382,7 +392,12 @@ class MujocoConverter(object):
               colliders=[child_geom_collider.collider],
               mass=child_geom_collider.mass,
               inertia=_vec(DEFAULT_INERTIA)))
-      config.joints.append(_create_fixed_joint(geom_name, body.name, geom_name))
+      config.joints.append(
+          _create_fixed_joint(
+              geom_name,
+              body.name,
+              geom_name,
+              reference_rotation=reference_rotation))
       geom_colliders.append(child_geom_collider)
       # We use the same parent body name to ensure that multiple geometries of a
       # body do not collide with each other.
@@ -409,7 +424,8 @@ class MujocoConverter(object):
               parent_body.name,
               body.name,
               parent_offset=parent_offset,
-              rotation=rotation))
+              rotation=rotation,
+              reference_rotation=reference_rotation))
 
     for child_mujoco_body in mujoco_body.body:
       self._add_body(child_mujoco_body, body)
@@ -418,6 +434,7 @@ class MujocoConverter(object):
                   geom_colliders: List[GeomCollider],
                   geom_bodies: List[config_pb2.Body]):
     """Adds the joints of the body to the config."""
+    reference_rotation = self._get_rotation(mujoco_body)
     local_mujoco_body_pos = self._get_position(mujoco_body)
     for joint in mujoco_body.joint:
       if joint.type == 'free':
@@ -427,19 +444,21 @@ class MujocoConverter(object):
           return
         raise ValueError(
             f'Unsupported joint type {joint.type} for {joint.name}')
-      # When a body has multiple geometries, all except the first one to are
-      # moved to auxiliary child bodies (above), therefore we need to find the
-      # one that the joint is actually connected with. For now, we use the
-      # distance as a proxy.
       min_i = 0
-      min_d = None
       local_joint_pos = self._get_position(joint)
-      for i, geom_collider in enumerate(geom_colliders):
-        d = np.linalg.norm(local_joint_pos -
-                           _np_vec(geom_collider.collider.position))
-        if min_d is None or min_d > d:
-          min_i, min_d = i, d
-          logging.info('Distance to %s is %g.', geom_bodies[min_i].name, min_d)
+      if self._add_joint_to_nearest_body:
+        # When a body has multiple geometries, all except the first one to are
+        # moved to auxiliary child bodies (above), therefore we need to find the
+        # one that the joint is actually connected with. For now, we use the
+        # distance as a proxy.
+        min_d = None
+        for i, geom_collider in enumerate(geom_colliders):
+          d = np.linalg.norm(local_joint_pos -
+                             _np_vec(geom_collider.collider.position))
+          if min_d is None or min_d > d:
+            min_i, min_d = i, d
+            logging.info('Distance to %s is %g.', geom_bodies[min_i].name,
+                         min_d)
       attachment_body = geom_bodies[min_i]
       logging.info('Joint %s connects %s to %s.', joint.name, parent_body.name,
                    attachment_body.name)
@@ -464,7 +483,8 @@ class MujocoConverter(object):
               child_offset,
               axis=joint.axis,
               stiffness=stiffness,
-              joint_range=joint.range))
+              joint_range=joint.range,
+              reference_rotation=reference_rotation))
 
   def _add_actuators(self):
     """Adds the actuators to the config."""

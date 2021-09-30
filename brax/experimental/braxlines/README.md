@@ -17,6 +17,7 @@ Explore Braxlines easily and quickly through a series of colab notebooks.
 ### Mutual Information Maximization (MI-Max) RL
 
 <img src="https://github.com/google/brax/raw/main/docs/img/braxlines/ant_diayn.png" width="150" height="107"/><img src="https://github.com/google/brax/raw/main/docs/img/braxlines/ant_diayn_skill1.gif" width="150" height="107"/><img src="https://github.com/google/brax/raw/main/docs/img/braxlines/ant_diayn_skill2.gif" width="150" height="107"/><img src="https://github.com/google/brax/raw/main/docs/img/braxlines/ant_diayn_skill4.gif" width="150" height="107"/>
+
 <img src="https://github.com/google/brax/raw/main/docs/img/braxlines/humanoid_diayn.png" width="150" height="107"/><img src="https://github.com/google/brax/raw/main/docs/img/braxlines/humanoid_diayn_skill1.gif" width="150" height="107"/><img src="https://github.com/google/brax/raw/main/docs/img/braxlines/humanoid_diayn_skill2.gif" width="150" height="107"/><img src="https://github.com/google/brax/raw/main/docs/img/braxlines/humanoid_diayn_skill3.gif" width="150" height="107"/>
 
 * [VGCRL Basics](https://colab.research.google.com/github/google/brax/blob/main/notebooks/braxlines/mimax.ipynb) implements [Variational GCRL](https://arxiv.org/abs/2106.01404) algorithms, which include [goal-conditioned RL](http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.51.3077) and [DIAYN](https://arxiv.org/abs/1802.06070) as special cases. These algorithms can all be considered as maximizing mutual information (MI) between latent intents and state marginal distribution.
@@ -37,7 +38,7 @@ Since each experiment runs under a few minutes, a reasonable amount of hyperpara
 
 ## Learn More
 
-<img src="https://github.com/google/brax/raw/main/docs/img/braxlines/sketches.png" width="270" height="110"/>
+<img src="https://github.com/google/brax/raw/main/docs/img/braxlines/sketches.png" width="540" height="220"/>
 
 For a deep dive into Braxlines, please see
 our paper, [Braxlines: Fast and Interactive Toolkit for RL-driven Behavior Generation Beyond Reward Maximization](https://openreview.net/forum?id=-W0LCm8wE2S).

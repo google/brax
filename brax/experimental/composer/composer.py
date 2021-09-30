@@ -260,10 +260,10 @@ class Composer(object):
 
   def term_fn(self, done: jnp.ndarray, sys, qp: brax.QP, info: brax.Info):
     """Termination."""
-    for k, v in self.metadata.components.items():
+    for _, v in self.metadata.components.items():
       term_fn = v['term_fn']
       if term_fn:
-        done = term_fn(done, sys, qp, info, k)
+        done = term_fn(done, sys, qp, info, v)
     return done
 
   def obs_fn(self, sys, qp: brax.QP, info: brax.Info):

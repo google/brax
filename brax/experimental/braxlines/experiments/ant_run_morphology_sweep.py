@@ -12,25 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""D-min Sweep."""
-# pylint:disable=g-complex-comprehension
+"""ant_push Sweep."""
 from brax.experimental.braxlines.experiments import defaults
 
-ENV_NAMES = ('ant', 'halfcheetah', 'humanoid')
-AGENT_MODULE = 'brax.experimental.braxlines.irl_smm.train'
+AGENT_MODULE = 'brax.experimental.composer.train'
 CONFIG = [
     dict(
-        env_name=[env_name],
-        obs_indices='vel',
-        target_num_modes=2,
-        obs_scale=8,
-        reward_type=['gail', 'fairl', 'gail2', 'mle', 'airl'],
+        env_name=['pro_ant_run'],
         seed=list(range(10)),
-        normalize_obs_for_disc=False,
-        evaluate_dist=True,
-        env_reward_multiplier=0.0,
-        spectral_norm=False,
-        gradient_penalty_weight=0.0,
-        ppo_params=defaults.get_ppo_params(env_name, 2))
-    for env_name in ENV_NAMES
+        desc_edits={
+            'components.agent1.component_params.num_legs': [2, 3, 4, 8, 10],
+        },
+        ppo_params=defaults.get_ppo_params('ant', 10))
 ]

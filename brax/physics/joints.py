@@ -36,7 +36,9 @@ class Joint(abc.ABC):
 
   __pytree_ignore__ = ('index', 'dof')
 
-  def __init__(self, joints: List[config_pb2.Joint], body: bodies.Body,
+  def __init__(self,
+               joints: List[config_pb2.Joint],
+               body: bodies.Body,
                spring_damping_coeff: float = 2.0):
     """Creates a Joint that connects two bodies and constrains their movement.
 
@@ -104,6 +106,7 @@ class Joint(abc.ABC):
       angle: n-tuple of joint angles where n = # DoF of the joint
       vel: n-tuple of joint velocities where n = # DoF of the joint
     """
+
     @jax.vmap
     def op(joint, qp_p, qp_c):
       axes, angles = joint.axis_angle(qp_p, qp_c)
@@ -149,7 +152,13 @@ class Joint(abc.ABC):
 
 @pytree.register
 class Revolute(Joint):
-  """A revolute joint constrains two bodies around a single axis."""
+  """A revolute joint constrains two bodies around a single axis.
+
+  Constructs a revolute joint where the parent's local x-axis is constrained
+  to point in the same direction as the child's local x-axis.  This construction
+  follows the line of nodes convention shared by the universal and spherical
+  joints for x-y'-z'' intrinsic euler angles.
+  """
 
   def __init__(self, joints: List[config_pb2.Joint], body: bodies.Body):
     super().__init__(joints, body, .5)
@@ -192,13 +201,19 @@ class Revolute(Joint):
     axis_p = math.rotate(self.axis_p[0], qp_p.rot)
     ref_p = math.rotate(self.axis_p[2], qp_p.rot)
     ref_c = math.rotate(self.axis_c[2], qp_c.rot)
-    angle = math.signed_angle(axis_p, ref_p, ref_c)
-    return (axis_p,), (angle,)
+    # algebraically the same as the calculation in `Spherical`, but simpler
+    # because child local-x and parent local-x are constrained to be the same
+    psi = math.signed_angle(axis_p, ref_p, ref_c)
+    return (axis_p,), (psi,)
 
 
 @pytree.register
 class Universal(Joint):
-  """A revolute joint constrains two bodies around two axes."""
+  """A revolute joint constrains two bodies around two axes.
+
+  Constructs a universal joint defined as the first two degrees of freedom
+  of a spherical joint.  See `Spherical` for details.
+  """
 
   @jax.vmap
   def apply_reduced(self, qp_p: QP, qp_c: QP) -> Tuple[P, P]:
@@ -215,9 +230,9 @@ class Universal(Joint):
 
     # torque the bodies to align to a joint plane
     (axis_1, axis_2), (angle_1, angle_2) = self.axis_angle(qp_p, qp_c)
-    axis_c_proj = axis_1 - jnp.dot(axis_2, axis_1) * axis_2
+    axis_c_proj = axis_2 - jnp.dot(axis_2, axis_1) * axis_1
     axis_c_proj = axis_c_proj / math.safe_norm(axis_c_proj)
-    torque = (self.limit_strength / 5.) * jnp.cross(axis_c_proj, axis_1)
+    torque = (self.limit_strength / 5.) * jnp.cross(axis_c_proj, axis_2)
 
     # torque the bodies to stay within angle limits
     limit_1, limit_2 = self.limit
@@ -242,19 +257,41 @@ class Universal(Joint):
     v_rot = jax.vmap(math.rotate, in_axes=[0, None])
     axis_p_rotated = v_rot(self.axis_p, qp_p.rot)
     axis_c_rotated = v_rot(self.axis_c, qp_c.rot)
-    axis_1_c = axis_c_rotated[0]
+    axis_1_p = axis_p_rotated[0]
     axis_2_p = axis_p_rotated[1]
-    child_in_plane = jnp.cross(axis_2_p, axis_1_c)
-    ref_p = axis_p_rotated[2]
-    ref_c = axis_c_rotated[2]
-    angle_2 = math.signed_angle(axis_2_p, ref_p, ref_c)
-    angle_1 = math.signed_angle(axis_1_c, child_in_plane, -1.*ref_c)
-    return (axis_1_c, axis_2_p), (angle_1, angle_2)
+    axis_1_c = axis_c_rotated[0]
+    axis_2_c = axis_c_rotated[1]
+    axis_3_c = axis_c_rotated[2]
+
+    line_of_nodes = jnp.cross(axis_3_c, axis_1_p)
+    line_of_nodes = line_of_nodes / (1e-10 + math.safe_norm(line_of_nodes))
+
+    y_N_normal = axis_1_p
+
+    psi = math.signed_angle(y_N_normal, axis_2_p, line_of_nodes)
+
+    axis_1_p_in_xz_c = jnp.dot(axis_1_p, axis_1_c) * axis_1_c + jnp.dot(
+        axis_1_p, axis_2_c) * axis_2_c
+    axis_1_p_in_xz_c = axis_1_p_in_xz_c / (1e-10 +
+                                           math.safe_norm(axis_1_p_in_xz_c))
+    theta = jnp.arccos(jnp.clip(jnp.dot(axis_1_p_in_xz_c, axis_1_p), -1,
+                                1)) * jnp.sign(jnp.dot(axis_1_p, axis_3_c))
+
+    axis = (axis_1_p, axis_2_c)
+    angle = (psi, theta)
+
+    return axis, angle
 
 
 @pytree.register
 class Spherical(Joint):
-  """A spherical joint constrains two bodies around three axes."""
+  """A spherical joint constrains two bodies around three axes.
+
+  Constructs a spherical joint which returns intrinsic euler angles in the
+    x-y'-z'' convention between the parent and child.  Uses the line of nodes
+    construction described in section 3.2.3.2 here:
+    https://www.sedris.org/wg8home/Documents/WG80485.pdf
+    """
 
   @jax.vmap
   def apply_reduced(self, qp_p: QP, qp_c: QP) -> Tuple[P, P]:
@@ -287,10 +324,8 @@ class Spherical(Joint):
     # damp the angular motion
     torque -= self.angular_damping * (qp_p.ang - qp_c.ang)
 
-    dp_p = dp_p.replace(ang=dp_p.ang +
-                        jnp.matmul(self.body_p.inertia, torque))
-    dp_c = dp_c.replace(ang=dp_c.ang +
-                        jnp.matmul(self.body_c.inertia, -torque))
+    dp_p = dp_p.replace(ang=dp_p.ang + jnp.matmul(self.body_p.inertia, torque))
+    dp_c = dp_c.replace(ang=dp_c.ang + jnp.matmul(self.body_c.inertia, -torque))
 
     return dp_p, dp_c
 
@@ -301,36 +336,31 @@ class Spherical(Joint):
     axis_c_rotated = v_rot(self.axis_c, qp_c.rot)
     axis_1_p = axis_p_rotated[0]
     axis_2_p = axis_p_rotated[1]
-    axis_3_p = axis_p_rotated[2]
     axis_1_c = axis_c_rotated[0]
     axis_2_c = axis_c_rotated[1]
     axis_3_c = axis_c_rotated[2]
 
-    axis_2_in_plane = axis_2_c - jnp.dot(axis_2_c, axis_3_p) * axis_3_p
-    axis_2_in_projected_length = jnp.linalg.norm(axis_2_in_plane)
-    axis_2_in_plane = axis_2_in_plane / (1e-7 +
-                                         jnp.linalg.norm(axis_2_in_plane))
+    line_of_nodes = jnp.cross(axis_3_c, axis_1_p)
+    line_of_nodes = line_of_nodes / (1e-10 + math.safe_norm(line_of_nodes))
 
-    angle_z = jnp.arctan2(
-        jnp.dot(axis_2_in_plane, axis_1_p),
-        jnp.dot(axis_2_in_plane, axis_2_p))  # parent z axis torque
-    angle_x = -1. * jnp.arctan2(
-        jnp.dot(axis_2_c, axis_3_p),
-        axis_2_in_projected_length)  # child x axis torque
-    axis_3_in_child_xz = axis_3_p - jnp.dot(axis_3_p, axis_2_c) * axis_2_c
-    axis_3_in_child_xz = axis_3_in_child_xz / (
-        1e-7 + jnp.linalg.norm(axis_3_in_child_xz))
-    angle_y = jnp.arctan2(
-        jnp.dot(
-            axis_3_in_child_xz -
-            jnp.dot(axis_3_in_child_xz, axis_3_c) * axis_3_c, axis_1_c),
-        jnp.dot(
-            axis_3_in_child_xz -
-            jnp.dot(axis_3_in_child_xz, axis_1_c) * axis_1_c,
-            axis_3_c))  # child y torque
+    y_N_normal = axis_1_p
 
-    axis = (axis_1_c, axis_2_c, axis_3_p,)
-    angle = (-1.*angle_x, -1.*angle_y, -1.*angle_z)
+    psi = math.signed_angle(y_N_normal, axis_2_p, line_of_nodes)
+
+    axis_1_p_in_xz_c = jnp.dot(axis_1_p, axis_1_c) * axis_1_c + jnp.dot(
+        axis_1_p, axis_2_c) * axis_2_c
+    axis_1_p_in_xz_c = axis_1_p_in_xz_c / (1e-10 +
+                                           math.safe_norm(axis_1_p_in_xz_c))
+
+    ang_between_1_p_xz_c = jnp.dot(axis_1_p_in_xz_c, axis_1_p)
+    theta = jnp.arccos(jnp.clip(ang_between_1_p_xz_c, -1, 1)) * jnp.sign(
+        jnp.dot(axis_1_p, axis_3_c))
+    yc_N_normal = -1. * axis_3_c
+
+    phi = math.signed_angle(yc_N_normal, axis_2_c, line_of_nodes)
+
+    axis = (axis_1_p, axis_2_c, axis_3_c)
+    angle = (psi, theta, phi)
 
     return axis, angle
 

@@ -15,7 +15,6 @@
 """Ant."""
 import brax
 from brax.experimental.braxlines.common import sim_utils
-from brax.experimental.composer import component_editor
 from jax import numpy as jnp
 
 COLLIDES = ('torso', '$ Body 4', '$ Body 7', '$ Body 10', '$ Body 13')
@@ -25,19 +24,19 @@ ROOT = 'torso'
 DEFAULT_OBSERVERS = ('root_z_joints', 'cfrc')
 
 
-def term_fn(done, sys, qp: brax.QP, info: brax.Info, suffix: str):
+def height_term_fn(done, sys, qp: brax.QP, info: brax.Info, component):
   """Terminate when it flips or jumps too high."""
   del info
-  index = sim_utils.names2indices(sys.config,
-                                  component_editor.add_suffix(ROOT, suffix),
-                                  'body')[0][0]
+  # height termination
+  z_offset = component.get('term_params', {}).get('z_offset', 0.0)
+  index = sim_utils.names2indices(sys.config, component['root'], 'body')[0][0]
   z = qp.pos[index][2]
-  done = jnp.where(z < 0.2, x=1.0, y=done)
-  done = jnp.where(z > 1.0, x=1.0, y=done)
+  done = jnp.where(z < 0.2 + z_offset, x=1.0, y=done)
+  done = jnp.where(z > 1.0 + z_offset, x=1.0, y=done)
   return done
 
 
-TERM_FN = term_fn
+TERM_FN = height_term_fn
 
 SYSTEM_CONFIG = """
 bodies {

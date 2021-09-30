@@ -22,7 +22,7 @@ ENV_DESCS = {
     'ant_run':
         dict(
             components=dict(
-                ant1=dict(
+                agent1=dict(
                     component='ant',
                     pos=(0, 0, 0),
                     reward_fns=dict(
@@ -42,8 +42,8 @@ ENV_DESCS = {
     'ant_chase':
         dict(
             components=dict(
-                ant1=dict(component='ant', pos=(0, 0, 0)),
-                ant2=dict(
+                agent1=dict(component='ant', pos=(0, 0, 0)),
+                agent2=dict(
                     component='ant',
                     pos=(0, 2, 0),
                     reward_fns=dict(
@@ -63,7 +63,7 @@ ENV_DESCS = {
                 ),
             ),
             edges=dict(
-                ant1__ant2=dict(
+                agent1__agent2=dict(
                     extra_observers=[
                         dict(observer_type='root_vec', indices=(0, 1)),
                     ],
@@ -76,7 +76,7 @@ ENV_DESCS = {
     'ant_push':
         dict(
             components=dict(
-                ant1=dict(
+                agent1=dict(
                     component='ant',
                     pos=(0, 0, 0),
                 ),
@@ -102,7 +102,7 @@ ENV_DESCS = {
                 ),
             ),
             edges=dict(
-                ant1__cap1=dict(
+                agent1__cap1=dict(
                     extra_observers=[
                         dict(observer_type='root_vec', indices=(0, 1)),
                     ],
@@ -111,45 +111,55 @@ ENV_DESCS = {
                     score_fns=dict(dist=dict(reward_type='root_dist')),
                 ),)),
     'uni_ant':
-        dict(components=dict(ant1=dict(component='ant', pos=(0, 0, 0)),),),
+        dict(components=dict(agent1=dict(component='ant', pos=(0, 0, 0)),),),
+    'uni_octopus':
+        dict(
+            components=dict(agent1=dict(component='octopus', pos=(0, 0, 0)),),),
     'bi_ant':
         dict(
             components=dict(
-                ant1=dict(component='ant', pos=(0, 1, 0)),
-                ant2=dict(component='ant', pos=(0, -1, 0)),
+                agent1=dict(component='ant', pos=(0, 1, 0)),
+                agent2=dict(component='ant', pos=(0, -1, 0)),
             ),
             extra_observers=[
                 lo(name='delta_pos',
                    fn='-',
                    observers=[
-                       so('body', 'pos', ant.ROOT, 'ant1'),
-                       so('body', 'pos', ant.ROOT, 'ant2')
+                       so('body', 'pos', ant.ROOT, 'agent1'),
+                       so('body', 'pos', ant.ROOT, 'agent2')
                    ]),
                 lo(name='delta_vel',
                    fn='-',
                    observers=[
-                       so('body', 'vel', ant.ROOT, 'ant1'),
-                       so('body', 'vel', ant.ROOT, 'ant2')
+                       so('body', 'vel', ant.ROOT, 'agent1'),
+                       so('body', 'vel', ant.ROOT, 'agent2')
                    ]),
             ],
-            edges=dict(ant1__ant2=dict(collide_type=None),)),
+            edges=dict(agent1__agent2=dict(collide_type=None),)),
     'tri_ant':
         dict(
             components=dict(
-                ant1=dict(component='ant', pos=(0, 1, 0)),
-                ant2=dict(component='ant', pos=(0, -1, 0)),
-                ant3=dict(component='ant', pos=(1, 0, 0)),
+                agent1=dict(component='ant', pos=(0, 1, 0)),
+                agent2=dict(component='ant', pos=(0, -1, 0)),
+                agent3=dict(component='ant', pos=(1, 0, 0)),
             ),
             edges=dict(),
         ),
 }
 
-VARIANTS = (('ant_run', 'pro_ant_run', {
-    'components.ant1.component': 'pro_ant',
-    'components.ant1.component_params': dict(num_legs=10),
-    'global_options.dt': 0.02,
-    'global_options.substeps': 16,
-}),)
+VARIANTS = (
+    ('ant_run', 'pro_ant_run', {
+        'components.agent1.component': 'pro_ant',
+        'components.agent1.component_params': dict(num_legs=10),
+        'global_options.dt': 0.02,
+        'global_options.substeps': 16,
+    }),
+    ('ant_run', 'octopus_run', {
+        'components.agent1.component': 'octopus',
+        'global_options.dt': 0.02,
+        'global_options.substeps': 16,
+    }),
+)
 
 for base_desc_name, new_desc_name, desc_edits in VARIANTS:
   ENV_DESCS[new_desc_name] = composer_utils.edit_desc(ENV_DESCS[base_desc_name],

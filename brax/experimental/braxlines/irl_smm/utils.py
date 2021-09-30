@@ -106,6 +106,8 @@ class IRLDiscriminator(object):
         self.target_dist_log_offset = -r.min()
       else:
         assert self.logits_clip_range
+    if gradient_penalty_weight:
+      balance_data = True
     self.balance_data = balance_data
     self.normalize_obs = normalize_obs
     self.normalize_fn = normalization.make_data_and_apply_fn(

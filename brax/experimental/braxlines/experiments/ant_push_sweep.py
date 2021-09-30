@@ -13,27 +13,16 @@
 # limitations under the License.
 
 """ant_push Sweep."""
+from brax.experimental.braxlines.experiments import defaults
+
 AGENT_MODULE = 'brax.experimental.composer.train'
 CONFIG = [
     dict(
         env_name=['ant_push'],
+        seed=list(range(10)),
         desc_edits={
             'components.cap1.reward_fns.goal.scale': [0.2, 1, 0.5],
             'components.cap1.reward_fns.goal.target_goal': 5,
         },
-        ppo_params=dict(
-            num_timesteps=int(2.5 * 1e8),
-            reward_scaling=10,
-            episode_length=1000,
-            normalize_observations=True,
-            action_repeat=1,
-            unroll_length=5,
-            num_minibatches=32,
-            num_update_epochs=4,
-            discounting=0.95,
-            learning_rate=3e-4,
-            entropy_cost=1e-2,
-            num_envs=2048,
-            batch_size=1024,
-        )),
+        ppo_params=defaults.get_ppo_params('ant'))
 ]

@@ -239,10 +239,17 @@ class JointTest(parameterized.TestCase):
     self.assertAlmostEqual(qp.pos[0, 1], 0., 3)  # returned to the origin
 
   offsets = [-15, 15, -45, 45, -75, 75]
-  axes = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+  axes = [[1, 0, 0],
+          [0, 1, 0],
+          [0, 0, 1],
+          [1, 1, 0],
+          [0, 1, 1],
+          [1, 0, 1],
+          [1, 1, 1],]
+  limits = [0, 1]
 
-  @parameterized.parameters(itertools.product(offsets, axes))
-  def test_reference_offset(self, offset, axis):
+  @parameterized.parameters(itertools.product(offsets, axes, limits))
+  def test_reference_offset(self, offset, axis, limit):
     """Construct joint and check that default_qp generates offsets correctly."""
     config = text_format.Parse(JointTest._CONFIG, brax.Config())
 
@@ -253,9 +260,9 @@ class JointTest(parameterized.TestCase):
         a_l = config.joints[0].angle_limit[0]
       else:
         a_l = config.joints[0].angle_limit.add()
-      # zero out limits so that default_qp places them at local 0
-      a_l.min = 0
-      a_l.max = 0
+      # set angle default to either 0 or the offset value
+      a_l.min = offset * limit
+      a_l.max = offset * limit
 
       sys_default = brax.System(config)
 
@@ -287,10 +294,19 @@ class JointTest(parameterized.TestCase):
 
       for a_o, a_d, t_o in zip(angle_offset, angle_default,
                                this_offset[:num_offsets]):
-        # default system sees part rotated by offset degrees
-        self.assertAlmostEqual(a_d, t_o, 3)
-        # offset system sees part at local 0
-        self.assertAlmostEqual(a_o, 0.0, 3)
+        if limit == 0:
+          # default system sees part rotated by offset degrees
+          self.assertAlmostEqual(a_d, t_o, 3)
+          # offset system sees part at local 0.0
+          self.assertAlmostEqual(a_o, 0.0, 3)
+        if limit == 1:
+          # when default angle is nonzero, there's not a clean relationship
+          # between the default and offset frames anymore, because the offset
+          # frame now has two rotations applied---1) the rotation that offsets
+          # it relative to the parent, and then 2) the rotation placing it at
+          # its default angle limit.  it should still be the case, though, that
+          # the offset angle agrees with the default angle limit.
+          self.assertAlmostEqual(a_o, offset, 3)
 
 
 class Actuator1DTest(parameterized.TestCase):
@@ -371,8 +387,7 @@ class Actuator2DTest(parameterized.TestCase):
     defaults { qps { name: "Anchor" pos {z: 2}} qps { name: "Bob" pos {z: 1}}}
   """
 
-  @parameterized.parameters((15., 30.), (45., 90.5), (-120, 60.), (30., -120.),
-                            (-150, -130), (130, 165))
+  @parameterized.parameters((15., 30.), (-45., 80), (120, -60.), (-35., -52.))
   def test_2d_angle_actuator(self, target_angle_1, target_angle_2):
     """A simple part actuates 2d-angle actuator to two target angles."""
     config = text_format.Parse(Actuator2DTest._CONFIG, brax.Config())
@@ -416,7 +431,7 @@ class Actuator3DTest(parameterized.TestCase):
         min: -100
         max: 100
       }
-      angular_damping: 120.0
+      angular_damping: 180.0
       limit_strength: 2000.0
     }
     actuators {

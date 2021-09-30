@@ -66,7 +66,7 @@ def train(train_job_params: Dict[str, Any],
   logits_clip_range = config.pop('logits_clip_range', 5.0)
   env_reward_multiplier = config.pop('env_reward_multiplier', 0.0)
   normalize_obs_for_disc = config.pop('normalize_obs_for_disc', False)
-  balance_data_for_disc = config.pop('balance_data_for_disc', False)
+  balance_data_for_disc = config.pop('balance_data_for_disc', True)
   seed = config.pop('seed', 0)
   evaluate_dist = config.pop('evaluate_dist', False)
   spectral_norm = config.pop('spectral_norm', False)

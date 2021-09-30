@@ -80,9 +80,10 @@ class AutoResetWrapper(brax_env.Wrapper):
     return state
 
   def step(self, state: brax_env.State, action: jnp.ndarray) -> brax_env.State:
-    steps = state.info['steps']
-    steps = jnp.where(state.done, jnp.zeros_like(steps), steps)
-    state.info.update(steps=steps)
+    if 'steps' in state.info:
+      steps = state.info['steps']
+      steps = jnp.where(state.done, jnp.zeros_like(steps), steps)
+      state.info.update(steps=steps)
     state = state.replace(done=jnp.zeros_like(state.done))
     state = self.env.step(state, action)
 

@@ -14,6 +14,7 @@
 
 """Experiment configuration loader and runner."""
 # pylint:disable=broad-except
+# pylint:disable=g-complex-comprehension
 import importlib
 import math
 import os
@@ -96,32 +97,64 @@ def load_data(csv_files: List[str], max_print: int = 5):
         k: np.array(v)
         for k, v in logger_utils.parse_csv(csv_file, verbose=verbose).items()
     }
+    data[key]['_csv_file'] = csv_file
   return data
+
+
+COMMON_TAG_VALUES = {
+    'an_diayn': 'DIAYN',
+    'an_cdiayn': 'cDIAYN',
+    'an_gcrl': 'GCRL',
+    'an_diayn_full': 'DIAYN_FULL',
+    'rt_gail': 'GAIL',
+    'rt_airl': 'AIRL',
+    'rt_gail2': 'GAIL2',
+    'rt_fairl': 'FARIL',
+    'rt_mle': 'MLE',
+}
+
+
+def split_tag(tag_str: str,
+              match_tags: Tuple[str] = (),
+              replace_common_tag_values: bool = False,
+              tag_splitter: str = '__',
+              tag_value_splitter: str = '_'):
+  """Split the tag_str into two strs based on matching tags."""
+  if replace_common_tag_values:
+    ctv = COMMON_TAG_VALUES
+  else:
+    ctv = {}  # replace none
+  tag_values = tag_str.split(tag_splitter)
+  tag_values = [vv.split(tag_value_splitter, 1) for vv in tag_values]
+  match_str = tag_splitter.join([
+      ctv.get(tag_value_splitter.join(vv), tag_value_splitter.join(vv))
+      for vv in tag_values
+      if vv[0] in match_tags
+  ])
+  rest_str = tag_splitter.join([
+      ctv.get(tag_value_splitter.join(vv), tag_value_splitter.join(vv))
+      for vv in tag_values
+      if vv[0] not in match_tags
+  ])
+  return match_str, rest_str
 
 
 def compute_statistics(data,
                        merge_tags: Tuple[str] = ('s',),
                        max_print: int = 5,
-                       tag_splitter: str = '__',
-                       tag_value_splitter: str = '_'):
+                       tag_splitter_kwargs: Dict[str, Any] = None):
   """Merge data to derive mean/std's."""
   statistics = {}
+  filepaths = {}
   n = len(data)
   for i, (k, v) in enumerate(data.items()):
-    tag_values = k.split(tag_splitter)
-    tag_values = [vv.split(tag_value_splitter, 1) for vv in tag_values]
-    data_key = tag_splitter.join([
-        tag_value_splitter.join(vv)
-        for vv in tag_values
-        if vv[0] not in merge_tags
-    ])
-    merge_key = tag_splitter.join([
-        tag_value_splitter.join(vv) for vv in tag_values if vv[0] in merge_tags
-    ])
+    merge_key, data_key = split_tag(k, merge_tags, **(tag_splitter_kwargs or
+                                                      {}))
     statistics[data_key] = statistics.get(data_key, {})
     c = len(statistics[data_key])
+    filepaths[data_key] = filepaths.get(data_key, []) + [v.pop('_csv_file')]
     statistics[data_key][merge_key] = v
-    if i < max_print or i == len(data) - 1:
+    if i < max_print or i == len(data) - 1 or c == 0:
       print(f'[{i+1}/{n}] {k} -> {data_key}[{c}], {merge_key}')
 
   for i, k in enumerate(statistics):
@@ -135,7 +168,7 @@ def compute_statistics(data,
       std = np.std(d, axis=0)
       new_v[stat_key] = dict(mean=mean, std=std)
     statistics[k] = new_v
-  return statistics
+  return statistics, filepaths
 
 
 def color_spec(n):
@@ -150,6 +183,9 @@ def plot_statistics(statistics: Dict[str, Any],
                     xlabel: str = '',
                     ylabel_re: str = '',
                     ncols: int = 5,
+                    legend_tags: Tuple[str] = None,
+                    replace_common_tag_values: bool = True,
+                    tag_splitter_kwargs: Dict[str, Any] = None,
                     output_path: str = '',
                     output_name: str = 'statistics'):
   """Plot statistics."""
@@ -164,6 +200,14 @@ def plot_statistics(statistics: Dict[str, Any],
       k: v for k, v in statistics.items() if re.match(include_re, k) and
       (not exclude_re or not re.match(exclude_re, k))
   }
+  if legend_tags is not None:
+    plot_data = {
+        split_tag(
+            k,
+            legend_tags,
+            replace_common_tag_values=replace_common_tag_values,
+            **(tag_splitter_kwargs or {}))[0]: v for k, v in plot_data.items()
+    }
   ylabels = sorted(list(plot_data.values())[0].keys())
   ylabels = [y for y in ylabels if re.match(ylabel_re, y)]
   nrows = int(math.ceil(len(ylabels) / ncols))
@@ -171,6 +215,7 @@ def plot_statistics(statistics: Dict[str, Any],
   fig, axs = plt.subplots(
       ncols=ncols, nrows=nrows, figsize=(4.5 * ncols, 4 * nrows))
   colors = color_spec(len(plot_data))
+  summaries = {}
   for i, y in enumerate(ylabels):
     axxmin = None
     axxmax = None
@@ -182,6 +227,7 @@ def plot_statistics(statistics: Dict[str, Any],
       ax = ax[row]
     if ncols > 1:
       ax = ax[col]
+    summary = {}
     for (k, v), c in zip(sorted(plot_data.items()), colors):
       if y in v:
         indices = v[xlabel]['mean'] <= xmax
@@ -192,6 +238,7 @@ def plot_statistics(statistics: Dict[str, Any],
           axxmax = xv.max()
         yv = v[y]['mean'][indices]
         yvstd = v[y]['std'][indices]
+        summary[k] = dict(x=xv[-1], ymean=yv[-1], ystd=yvstd[-1])
         ax.plot(xv, yv, label=k, c=c, alpha=0.8)
         ax.fill_between(xv, yv - yvstd, yv + yvstd, color=c, alpha=0.2)
         if axcolor:
@@ -201,8 +248,40 @@ def plot_statistics(statistics: Dict[str, Any],
     ax.set(xlim=(axxmin, axxmax))
     ax.set(xlabel=xlabel, ylabel=y)
     ax.legend()
+    summaries[y] = summary
   fig.tight_layout()
   if output_path:
     file.MakeDirs(output_path)
     with file.File(f'{output_path}/{output_name}.png', 'wb') as f:
       plt.savefig(f)
+  return summaries
+
+
+def print_summmary_to_latex_table(summaries,
+                                  summary_keys,
+                                  multipliers,
+                                  prefix: str = ''):
+  """Print summary to LaTeX-friendly format."""
+  tags = sorted(list(list(summaries.values())[0].keys()))
+  s = ''
+  for tag in tags:
+    # pylint:disable=anomalous-backslash-in-string
+    tag2 = tag.replace('_', '\_')
+    # pylint:enable=anomalous-backslash-in-string
+    s += f'{prefix}{tag2}'
+    for skey, mult in zip(summary_keys, multipliers):
+      s += ' & $ '
+      v = summaries[skey][tag]['ymean'] * mult
+      if abs(max([v['ymean'] * mult for v in summaries[skey].values()]) -
+             v) < 1e-6:
+        is_max = True
+      else:
+        is_max = False
+      if is_max:
+        s += '\\mathbf{'
+      s += f'{v:.3f} \\pm {summaries[skey][tag]["ystd"]:.3f}'
+      if is_max:
+        s += '}'
+      s += ' $'
+    s += '\\\\\n'
+  return s

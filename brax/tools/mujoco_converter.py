@@ -44,6 +44,8 @@ flags.DEFINE_integer('substeps', 4,
                      'Substeps to perform to maintain numerical stability.')
 flags.DEFINE_bool('ignore_unsupported_joints', False,
                   'Ignores unsupported joints.')
+flags.DEFINE_bool('add_joint_to_nearest_body', False,
+                  'Adds a joint to the nearest (child)body.')
 
 
 def main(argv: Sequence[str]) -> None:
@@ -60,7 +62,8 @@ def main(argv: Sequence[str]) -> None:
   m = mujoco.MujocoConverter(
       xml_string,
       add_collision_pairs=FLAGS.add_collision_pairs,
-      ignore_unsupported_joints=FLAGS.ignore_unsupported_joints)
+      ignore_unsupported_joints=FLAGS.ignore_unsupported_joints,
+      add_joint_to_nearest_body=FLAGS.add_joint_to_nearest_body)
   config = m.config
 
   # Add the default options.

@@ -104,7 +104,7 @@ class System:
           next_rot = math.quat_rot_axis(axis_rotated, angle)
           local_rot = math.qmult(next_rot, local_rot)
         base_rot = euler_to_quat(joint.reference_rotation)
-        local_rot = math.qmult(local_rot, base_rot)
+        local_rot = math.qmult(base_rot, local_rot)
 
         local_offset = math.rotate(vec_to_np(joint.child_offset), local_rot)
         local_pos = vec_to_np(joint.parent_offset) - local_offset
