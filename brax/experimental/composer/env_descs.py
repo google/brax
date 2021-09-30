@@ -145,6 +145,42 @@ ENV_DESCS = {
             ),
             edges=dict(),
         ),
+    'ant_on_ball':
+        dict(
+            global_options=dict(dt=0.02, substeps=16),
+            components=dict(
+                agent1=dict(
+                    component='pro_ant',
+                    component_params=dict(num_legs=4),
+                    pos=(0, 0, 6),
+                    term_params=dict(z_offset=6),
+                    reward_fns=dict(
+                        goal=dict(
+                            reward_type='root_goal',
+                            sdcomp='vel',
+                            indices=(0, 1),
+                            offset=4,
+                            target_goal=(3, 0))),
+                    score_fns=dict(
+                        goal=dict(
+                            reward_type='root_goal',
+                            sdcomp='vel',
+                            indices=(0, 1),
+                            target_goal=(3, 0))),
+                ),
+                cap1=dict(
+                    component='singleton',
+                    component_params=dict(size=3),
+                    pos=(0, 0, 0),
+                    observers=('root_z_joints',),
+                ),
+            ),
+            edges=dict(
+                agent1__cap1=dict(
+                    extra_observers=[
+                        dict(observer_type='root_vec', indices=(0, 1)),
+                    ],),),
+        )
 }
 
 VARIANTS = (

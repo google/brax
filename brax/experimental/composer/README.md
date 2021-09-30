@@ -14,7 +14,7 @@ The composed environment is compatible with training algorithms in
 
 ## API Example
 
-*This is an illustrative example. For full examples, see [env_descs.py]((https://github.com/google/brax/tree/main/brax/experimental/composer/env_descs.py)*
+*This is an illustrative example. For full examples, see [env_descs.py](https://github.com/google/brax/tree/main/brax/experimental/composer/env_descs.py).*
 
 ```python
 from brax.experimental.composer import composer
@@ -34,7 +34,7 @@ env_desc = dict(
                     sdcomp='vel',
                     target_goal=(4, 0, 0))))),
     edges=dict(  # edge information
-        agent1__cap1=dict(
+        agent1__cap1=dict(  # edge names use sorted component names
             extra_observers=[  # add agent-object position diff as an extra obs
                 dict(observer_type='root_vec')],
             reward_fns=dict(  # reward2: make the agent close to the object
