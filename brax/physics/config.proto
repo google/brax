@@ -193,8 +193,10 @@ message Config {
   float dt = 11;
   // How many substeps to perform to maintain numerical stability
   int32 substeps = 12;
-  // Prevents motion or rotation along specified axes for the entire system.
+  // Prevents motion or rotation along specified axes for the entire system
   Frozen frozen = 13;
-  // Default states of bodies in the system.
+  // Default states of bodies in the system
   repeated DefaultState defaults = 14;
+  // Limits the number of collision checks per collider pair
+  int32 collider_cutoff = 15;
 }

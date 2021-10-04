@@ -84,8 +84,8 @@ class Viewer {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enablePan = false;
     this.controls.enableDamping = true;
-    this.controls.addEventListener('start', () => {this.setDirty()});
-    this.controls.addEventListener('change', () => {this.setDirty()});
+    this.controls.addEventListener('start', () => {this.setDirty();});
+    this.controls.addEventListener('change', () => {this.setDirty();});
     this.controlTargetPos = this.controls.target.clone();
 
     /* set up gui */

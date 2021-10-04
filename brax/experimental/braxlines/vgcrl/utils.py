@@ -215,8 +215,7 @@ class Discriminator(object):
   def unindex_obs(self, indexed_obs: jnp.ndarray):
     if self.obs_indices:
       obs = jnp.zeros(indexed_obs.shape[:-1] + (self.env_obs_size,))
-      obs = jax.ops.index_add(obs, jax.ops.index[..., self.obs_indices],
-                              indexed_obs)
+      obs = obs.at[..., self.obs_indices].add(indexed_obs)
       return obs
     else:
       return indexed_obs

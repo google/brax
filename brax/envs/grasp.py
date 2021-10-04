@@ -80,7 +80,7 @@ class Grasp(env.Env):
     scale = jnp.where(norm > 2.0, 2. / norm, 1.0)
     palm_pos = palm_pos + scale * (target_pos - palm_pos) * .15
     pos = state.qp.pos
-    pos = jax.ops.index_update(pos, jax.ops.index[self.palm_idx], palm_pos)
+    pos = pos.at[self.palm_idx].set(palm_pos)
     qp = state.qp.replace(pos=pos)
 
     # do the rest of the physics update
@@ -130,7 +130,7 @@ class Grasp(env.Env):
     # teleport any hit targets
     rng, target = self._random_target(state.info['rng'])
     target = jnp.where(target_hit, target, qp.pos[self.target_idx])
-    pos = jax.ops.index_update(qp.pos, jax.ops.index[self.target_idx], target)
+    pos = qp.pos.at[self.target_idx].set(target)
     qp = qp.replace(pos=pos)
     state.info.update(rng=rng)
     return state.replace(qp=qp, obs=obs, reward=reward)

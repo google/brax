@@ -191,6 +191,16 @@ class CapsuleTest(absltest.TestCase):
     self.assertAlmostEqual(qp.pos[0, 2], 0.5, 2)  # standing up and down
     self.assertAlmostEqual(qp.pos[1, 2], 1.25, 2)  # lying on Capsule1
 
+  def test_cull(self):
+    """A capsule falls onto another capsule, with NN culling."""
+    config = text_format.Parse(CapsuleTest._CONFIG, brax.Config())
+    config.collider_cutoff = 1
+    sys = brax.System(config)
+    qp = sys.default_qp(1)
+    qp, _ = sys.step(qp, jnp.array([]))
+    self.assertAlmostEqual(qp.pos[0, 2], 0.5, 2)  # standing up and down
+    self.assertAlmostEqual(qp.pos[1, 2], 1.25, 2)  # lying on Capsule1
+
 
 class JointTest(parameterized.TestCase):
 

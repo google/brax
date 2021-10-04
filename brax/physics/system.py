@@ -173,6 +173,10 @@ class System:
 
       return (qp, info), ()
 
+    # update collider statistics for culling
+    for c in self.colliders:
+      c.cull.update(qp)
+
     zero = P(jnp.zeros((self.num_bodies, 3)), jnp.zeros((self.num_bodies, 3)))
     info = Info(contact=zero, joint=zero, actuator=zero)
     (qp, info), _ = jax.lax.scan(substep, (qp, info), (), self.config.substeps)

@@ -15,9 +15,9 @@
 """Tests for brax.envs.grasp."""
 
 from absl.testing import absltest
+from brax import envs
 import jax
 import jax.numpy as jnp
-from brax import envs
 
 
 class GraspTest(absltest.TestCase):
@@ -25,11 +25,11 @@ class GraspTest(absltest.TestCase):
   def testGrasp(self):
     env = envs.create('grasp')
     grasp_action = jnp.array([
-      -.4, -.35, -1., -0.,  # gripper arm 1
-      .4, .35, 1., 0,  # gripper arm 2
-      .4, .35, 1., 0,  # gripper arm 3
-      .4, .35, 1., 0,  # gripper arm 4
-      0., 0., -.9  # position action
+        -.4, -.35, -1., -0.,  # gripper arm 1
+        .4, .35, 1., 0,  # gripper arm 2
+        .4, .35, 1., 0,  # gripper arm 3
+        .4, .35, 1., 0,  # gripper arm 4
+        0., 0., -.9  # position action
     ])
 
     jit_env_step = jax.jit(env.step)

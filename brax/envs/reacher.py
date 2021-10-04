@@ -38,7 +38,7 @@ class Reacher(env.Env):
   def reset(self, rng: jnp.ndarray) -> env.State:
     qp = self.sys.default_qp()
     _, target = self._random_target(rng)
-    pos = jax.ops.index_update(qp.pos, jax.ops.index[self.target_idx], target)
+    pos = qp.pos.at[self.target_idx].set(target)
     qp = qp.replace(pos=pos)
     info = self.sys.info(qp)
     obs = self._get_obs(qp, info)
