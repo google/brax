@@ -295,7 +295,7 @@ def disc_loss_fn(
     rng, loss_key = jax.random.split(rng)
     if d.shape[0] > target_d.shape[0]:
       indices = jnp.arange(0, d.shape[0])
-      indices = jax.random.shuffle(loss_key, indices)
+      indices = jax.random.permutation(loss_key, indices)
       d = d[indices[:target_d.shape[0]]]
     else:
       indices = jnp.arange(0, target_d.shape[0])
