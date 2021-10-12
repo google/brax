@@ -112,6 +112,8 @@ COMMON_TAG_VALUES = {
     'rt_fairl': 'FARIL',
     'rt_mle': 'MLE',
 }
+COMMON_TAG_VALUES.update({f'de.cpl_{i}': f'num_legs={i}' for i in range(20)})
+COMMON_TAG_VALUES.update({f'de.cf_{i}': f'scale={i}' for i in (0.2, 0.5, 1)})
 
 
 def split_tag(tag_str: str,
@@ -182,6 +184,7 @@ def plot_statistics(statistics: Dict[str, Any],
                     xmax: int = 1e10,
                     xlabel: str = '',
                     ylabel_re: str = '',
+                    ylabels: Tuple[str] = (),
                     ncols: int = 5,
                     legend_tags: Tuple[str] = None,
                     replace_common_tag_values: bool = True,
@@ -208,8 +211,9 @@ def plot_statistics(statistics: Dict[str, Any],
             replace_common_tag_values=replace_common_tag_values,
             **(tag_splitter_kwargs or {}))[0]: v for k, v in plot_data.items()
     }
-  ylabels = sorted(list(plot_data.values())[0].keys())
-  ylabels = [y for y in ylabels if re.match(ylabel_re, y)]
+  if not ylabels:
+    ylabels = sorted(list(plot_data.values())[0].keys())
+    ylabels = [y for y in ylabels if re.match(ylabel_re, y)]
   nrows = int(math.ceil(len(ylabels) / ncols))
 
   fig, axs = plt.subplots(

@@ -136,7 +136,7 @@ class SphereTest(absltest.TestCase):
 class CapsuleTest(absltest.TestCase):
 
   _CONFIG = """
-    dt: 5 substeps: 5000 friction: 0.6 baumgarte_erp: 0.1
+    dt: 20.0 substeps: 10000 friction: 0.6 baumgarte_erp: 0.1
     gravity { z: -9.8 }
     bodies {
       name: "Capsule1" mass: 1
@@ -241,12 +241,12 @@ class JointTest(parameterized.TestCase):
     # initializing system to have a small initial velocity and ang velocity
     # so that small angle approximation is valid
     qp = brax.QP(
-        pos=jnp.array([[0., 0., -1.], [0., 0., 0.]]),
+        pos=jnp.array([[0., 0., 0.], [0., 0., -1.]]),
         rot=jnp.array([[1., 0., 0., 0.], [1., 0., 0., 0.]]),
-        vel=jnp.array([[0., vel, 0.], [0., 0., 0.]]),
-        ang=jnp.array([[.5 * vel, 0., 0.], [0., 0., 0.]]))
+        vel=jnp.array([[0., 0., 0.], [0., vel, 0.]]),
+        ang=jnp.array([[0., 0., 0.], [vel, 0., 0.]]))
     qp, _ = sys.step(qp, jnp.array([]))
-    self.assertAlmostEqual(qp.pos[0, 1], 0., 3)  # returned to the origin
+    self.assertAlmostEqual(qp.pos[1, 1], 0., 3)  # returned to the origin
 
   offsets = [-15, 15, -45, 45, -75, 75]
   axes = [[1, 0, 0],

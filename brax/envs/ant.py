@@ -30,8 +30,14 @@ class Ant(env.Env):
     qp = self.sys.default_qp()
     info = self.sys.info(qp)
     obs = self._get_obs(qp, info)
-    reward, done = jnp.zeros(2)
-    return env.State(qp, obs, reward, done)
+    reward, done, zero = jnp.zeros(3)
+    metrics = {
+        'reward_ctrl_cost': zero,
+        'reward_contact_cost': zero,
+        'reward_forward': zero,
+        'reward_survive': zero,
+    }
+    return env.State(qp, obs, reward, done, metrics)
 
   def step(self, state: env.State, action: jnp.ndarray) -> env.State:
     """Run one timestep of the environment's dynamics."""
@@ -49,6 +55,11 @@ class Ant(env.Env):
 
     done = jnp.where(qp.pos[0, 2] < 0.2, x=1.0, y=0.0)
     done = jnp.where(qp.pos[0, 2] > 1.0, x=1.0, y=done)
+    state.metrics.update(
+        reward_ctrl_cost=ctrl_cost,
+        reward_contact_cost=contact_cost,
+        reward_forward=forward_reward,
+        reward_survive=survive_reward)
 
     return state.replace(qp=qp, obs=obs, reward=reward, done=done)
 
@@ -301,49 +312,49 @@ joints {
 actuators {
   name: "$ Torso_Aux 1"
   joint: "$ Torso_Aux 1"
-  strength: 300.0
+  strength: 350.0
   torque {}
 }
 actuators {
   name: "Aux 1_$ Body 4"
   joint: "Aux 1_$ Body 4"
-  strength: 300.0
+  strength: 350.0
   torque {}
 }
 actuators {
   name: "$ Torso_Aux 2"
   joint: "$ Torso_Aux 2"
-  strength: 300.0
+  strength: 350.0
   torque {}
 }
 actuators {
   name: "Aux 2_$ Body 7"
   joint: "Aux 2_$ Body 7"
-  strength: 300.0
+  strength: 350.0
   torque {}
 }
 actuators {
   name: "$ Torso_Aux 3"
   joint: "$ Torso_Aux 3"
-  strength: 300.0
+  strength: 350.0
   torque {}
 }
 actuators {
   name: "Aux 3_$ Body 10"
   joint: "Aux 3_$ Body 10"
-  strength: 300.0
+  strength: 350.0
   torque {}
 }
 actuators {
   name: "$ Torso_Aux 4"
   joint: "$ Torso_Aux 4"
-  strength: 300.0
+  strength: 350.0
   torque {}
 }
 actuators {
   name: "Aux 4_$ Body 13"
   joint: "Aux 4_$ Body 13"
-  strength: 300.0
+  strength: 350.0
   torque {}
 }
 friction: 1.0

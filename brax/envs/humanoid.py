@@ -639,6 +639,7 @@ joints {
     min: -85.0
     max: 60.0
   }
+  limit_strength: 1000.0
 }
 joints {
   name: "right_elbow"
@@ -686,6 +687,7 @@ joints {
     min: -60.0
     max: 85.0
   }
+  limit_strength: 1000.0
 }
 joints {
   name: "left_elbow"
@@ -712,70 +714,70 @@ joints {
 actuators {
   name: "abdomen_z"
   joint: "abdomen_z"
-  strength: 300.0
+  strength: 350.0
   torque {
   }
 }
 actuators {
   name: "abdomen_x"
   joint: "abdomen_x"
-  strength: 300.0
+  strength: 350.0
   torque {
   }
 }
 actuators {
   name: "right_hip_x"
   joint: "right_hip_x"
-  strength: 300.0
+  strength: 350.0
   torque {
   }
 }
 actuators {
   name: "right_knee"
   joint: "right_knee"
-  strength: 300.0
+  strength: 350.0
   torque {
   }
 }
 actuators {
   name: "left_hip_x"
   joint: "left_hip_x"
-  strength: 300.0
+  strength: 350.0
   torque {
   }
 }
 actuators {
   name: "left_knee"
   joint: "left_knee"
-  strength: 300.0
+  strength: 350.0
   torque {
   }
 }
 actuators {
   name: "right_shoulder1"
   joint: "right_shoulder1"
-  strength: 75.0
+  strength: 100.0
   torque {
   }
 }
 actuators {
   name: "right_elbow"
   joint: "right_elbow"
-  strength: 75.0
+  strength: 100.0
   torque {
   }
 }
 actuators {
   name: "left_shoulder1"
   joint: "left_shoulder1"
-  strength: 75.0
+  strength: 100.0
   torque {
   }
 }
 actuators {
   name: "left_elbow"
   joint: "left_elbow"
-  strength: 75.0
+  strength: 100.0
   torque {
   }
 }

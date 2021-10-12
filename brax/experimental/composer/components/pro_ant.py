@@ -102,13 +102,13 @@ def generate_ant_config_with_n_legs(n):
     actuators {{
       name: "{ROOT}_Aux 1_{str(ind)}"
       joint: "{ROOT}_Aux 1_{str(ind)}"
-      strength: 300.0
+      strength: 350.0
       torque {{}}
     }}
     actuators {{
       name: "Aux 1_$ Body 4_{str(ind)}"
       joint: "Aux 1_$ Body 4_{str(ind)}"
-      strength: 300.0
+      strength: 350.0
       torque {{}}
     }}
     """

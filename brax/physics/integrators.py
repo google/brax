@@ -37,13 +37,10 @@ def kinetic(_, qp: QP, dt: float, active_pos: jnp.ndarray,
   """
 
   @jax.vmap
-  def op(qp: QP, active_pos: jnp.ndarray,
-         active_rot: jnp.ndarray) -> QP:
+  def op(qp: QP, active_pos: jnp.ndarray, active_rot: jnp.ndarray) -> QP:
     pos = qp.pos + qp.vel * dt * active_pos
-    rot_at_ang_quat = math.ang_to_quat(qp.ang * active_rot)
-    rot = jnp.matmul(
-        jnp.matmul(jnp.eye(4) + .5 * dt * rot_at_ang_quat, qp.rot),
-        jnp.eye(4) - .5 * dt * rot_at_ang_quat)
+    rot_at_ang_quat = math.ang_to_quat(qp.ang * active_rot) * 0.5 * dt
+    rot = qp.rot + math.qmult(rot_at_ang_quat, qp.rot)
     rot = rot / jnp.linalg.norm(rot)
     return QP(pos=pos, rot=rot, vel=qp.vel, ang=qp.ang)
 
@@ -67,8 +64,7 @@ def potential(config: config_pb2.Config, qp: QP, dp: P, dt: float,
   """
 
   @jax.vmap
-  def op(qp: QP, dp: P, active_pos: jnp.ndarray,
-         active_rot: jnp.ndarray) -> QP:
+  def op(qp: QP, dp: P, active_pos: jnp.ndarray, active_rot: jnp.ndarray) -> QP:
     vel = (jnp.exp(config.velocity_damping * dt) * qp.vel +
            (dp.vel + vec_to_np(config.gravity)) * dt) * active_pos
     ang = (jnp.exp(config.angular_damping * dt) * qp.ang +
@@ -89,11 +85,11 @@ def potential_collision(_, qp: QP, dp: P, active_pos: jnp.ndarray,
     active_rot: [# bodes, 3] mask for active rotational dofs
 
   Returns:
-    State data advanced by one velocity-level update."""
+    State data advanced by one velocity-level update.
+  """
 
   @jax.vmap
-  def op(qp: QP, dp: P, active_pos: jnp.ndarray,
-         active_rot: jnp.ndarray) -> QP:
+  def op(qp: QP, dp: P, active_pos: jnp.ndarray, active_rot: jnp.ndarray) -> QP:
     vel = (qp.vel + dp.vel) * active_pos
     ang = (qp.ang + dp.ang) * active_rot
     return QP(pos=qp.pos, rot=qp.rot, vel=vel, ang=ang)

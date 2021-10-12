@@ -30,8 +30,12 @@ class Halfcheetah(env.Env):
     qp = self.sys.default_qp()
     info = self.sys.info(qp)
     obs = self._get_obs(qp, info)
-    reward, done = jnp.zeros(2)
-    return env.State(qp, obs, reward, done)
+    reward, done, zero = jnp.zeros(3)
+    metrics = {
+        'reward_ctrl_cost': zero,
+        'reward_forward': zero,
+    }
+    return env.State(qp, obs, reward, done, metrics)
 
   def step(self, state: env.State, action: jnp.ndarray) -> env.State:
     """Run one timestep of the environment's dynamics."""
@@ -43,6 +47,8 @@ class Halfcheetah(env.Env):
     forward_reward = (x_after - x_before) / self.sys.config.dt
     ctrl_cost = -.1 * jnp.sum(jnp.square(action))
     reward = forward_reward + ctrl_cost
+    state.metrics.update(
+        reward_ctrl_cost=ctrl_cost, reward_forward=forward_reward)
 
     return state.replace(qp=qp, obs=obs, reward=reward)
 
@@ -415,7 +421,7 @@ actuators {
   torque {
   }
 }
-friction: 0.4000000059604645
+friction: 0.6000000059604645
 gravity {
   z: -9.8100004196167
 }
@@ -440,6 +446,18 @@ collide_include {
 collide_include {
   first: "floor"
   second: "fthigh"
+}
+collide_include {
+  first: "floor"
+  second: "bshin"
+}
+collide_include {
+  first: "floor"
+  second: "fshin"
+}
+collide_include {
+  first: "bfoot"
+  second: "ffoot"
 }
 dt: 0.05
 substeps: 16

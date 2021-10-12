@@ -85,9 +85,7 @@ def ang_to_quat(ang: jnp.ndarray):
   Returns:
     A rotation quaternion.
   """
-  return jnp.array([[0., -ang[0], -ang[1], -ang[2]],
-                    [ang[0], 0, -ang[2], ang[1]], [ang[1], ang[2], 0., -ang[0]],
-                    [ang[2], -ang[1], ang[0], 0.]])
+  return jnp.array([0., ang[0], ang[1], ang[2]])
 
 
 def quat_to_axis_angle(q: jnp.ndarray):

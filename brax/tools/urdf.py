@@ -56,6 +56,17 @@ def _rpy_to_quat(rpy):
   return np.array(rpy)
 
 
+def _srpy_to_rrpy(rpy):
+  if rpy:
+    rpy = rpy.split()
+    rpy = [float(a) for a in rpy]
+    rpy = euler.euler2quat(*rpy, axes='sxyz')
+    rpy = euler.quat2euler(rpy, 'rxyz')
+  else:
+    rpy = [0., 0., 0.]
+  return np.array(rpy) * 180 / np.pi
+
+
 def _xyz_to_vec(xyz):
   if xyz:
     xyz = xyz.split()
@@ -96,7 +107,7 @@ def _construct_box(geom, pos, rot):
   """Converts a box geometry to a collider."""
   size = _xyz_to_vec(geom.get('size'))
   return config_pb2.Collider(
-      box=config_pb2.Collider.Box(halfsize=_vec(size)),
+      box=config_pb2.Collider.Box(halfsize=_vec(size / 2)),
       rotation=_vec(euler.quat2euler(rot, 'rxyz'), scale=180 / np.pi),
       position=_vec(pos))
 
@@ -213,8 +224,9 @@ class UrdfConverter(object):
     if self.body_tree[node]['joints']:
       for j in self.body_tree[node]['joints']:
 
-        rotation = self.joints[j['joint']].find('origin').get('rpy')
-        rotation = _relative_quat_from_parent(rotation, cur_quat)
+        rpy_rotation = self.joints[j['joint']].find('origin').get('rpy')
+        relative_rotation = _srpy_to_rrpy(rpy_rotation)
+        rotation = np.array([1., 0., 0., 0.])
 
         offset = self.joints[j['joint']].find('origin').get('xyz')
         offset = _xyz_to_vec(offset)
@@ -238,6 +250,8 @@ class UrdfConverter(object):
           joint.limit_strength = 300.
           joint.spring_damping = 50.
           joint.angular_damping = 10.
+          joint.reference_rotation.x, joint.reference_rotation.y, joint.reference_rotation.z = relative_rotation[
+              0], relative_rotation[1], relative_rotation[2]
 
           # TODO: Load joint limit metadata
           if joint_type in _joint_type_to_limit:
@@ -246,8 +260,7 @@ class UrdfConverter(object):
               joint.angle_limit.add()
 
           self.expand_node(
-              j['child'],
-              cur_quat=quaternions.qmult(rotation, cur_quat))
+              j['child'], cur_quat=quaternions.qmult(rotation, cur_quat))
         else:
           self.expand_node(
               j['child'],

@@ -248,49 +248,49 @@ joints {
 actuators {
   name: "torso_Aux 1"
   joint: "torso_Aux 1"
-  strength: 300.0
+  strength: 350.0
   torque {}
 }
 actuators {
   name: "Aux 1_$ Body 4"
   joint: "Aux 1_$ Body 4"
-  strength: 300.0
+  strength: 350.0
   torque {}
 }
 actuators {
   name: "torso_Aux 2"
   joint: "torso_Aux 2"
-  strength: 300.0
+  strength: 350.0
   torque {}
 }
 actuators {
   name: "Aux 2_$ Body 7"
   joint: "Aux 2_$ Body 7"
-  strength: 300.0
+  strength: 350.0
   torque {}
 }
 actuators {
   name: "torso_Aux 3"
   joint: "torso_Aux 3"
-  strength: 300.0
+  strength: 350.0
   torque {}
 }
 actuators {
   name: "Aux 3_$ Body 10"
   joint: "Aux 3_$ Body 10"
-  strength: 300.0
+  strength: 350.0
   torque {}
 }
 actuators {
   name: "torso_Aux 4"
   joint: "torso_Aux 4"
-  strength: 300.0
+  strength: 350.0
   torque {}
 }
 actuators {
   name: "Aux 4_$ Body 13"
   joint: "Aux 4_$ Body 13"
-  strength: 300.0
+  strength: 350.0
   torque {}
 }
 """

@@ -46,6 +46,8 @@ setup(
         "jaxlib",
         "numpy",
         "optax",
+        "Pillow",
+        "pytinyrenderer",
         "tensorflow_probability[jax]",
     ],
     extras_require={
