@@ -18,6 +18,8 @@ import io
 from typing import List, Optional, Tuple
 
 import brax
+from brax.physics.base import vec_to_arr
+from brax import math
 import numpy as onp
 from PIL import Image
 from pytinyrenderer import TinyRenderCamera as Camera
@@ -48,53 +50,6 @@ _TARGET = TextureRGB888([255, 34, 34])
 _GROUND = Grid(100, [200, 200, 200])
 
 
-def _qmult(u, v):
-  """Multiplies two quaternions.
-
-  Args:
-    u: jnp.ndarray (4) (w,x,y,z)
-    v: jnp.ndarray (4) (w,x,y,z)
-
-  Returns:
-    A quaternion u*v.
-  """
-  return onp.array([
-      u[0] * v[0] - u[1] * v[1] - u[2] * v[2] - u[3] * v[3],
-      u[0] * v[1] + u[1] * v[0] + u[2] * v[3] - u[3] * v[2],
-      u[0] * v[2] - u[1] * v[3] + u[2] * v[0] + u[3] * v[1],
-      u[0] * v[3] + u[1] * v[2] - u[2] * v[1] + u[3] * v[0],
-  ])
-
-
-def _euler_to_quat(v):
-  """Converts euler rotations in degrees to quaternion."""
-  # this follows the Tait-Bryan intrinsic rotation formalism: x-y'-z''
-  c1, c2, c3 = onp.cos(onp.array([v.x, v.y, v.z]) * onp.pi / 360)
-  s1, s2, s3 = onp.sin(onp.array([v.x, v.y, v.z]) * onp.pi / 360)
-  w = c1 * c2 * c3 - s1 * s2 * s3
-  x = s1 * c2 * c3 + c1 * s2 * s3
-  y = c1 * s2 * c3 - s1 * c2 * s3
-  z = c1 * c2 * s3 + s1 * s2 * c3
-  return onp.array([w, x, y, z])
-
-
-def _rotate(vec: onp.ndarray, quat: onp.ndarray):
-  """Rotates a vector vec by a unit quaternion quat.
-
-  Args:
-    vec: jnp.ndarray (3)
-    quat: jnp.ndarray (4) (w,x,y,z)
-
-  Returns:
-    A jnp.ndarry(3) containing vec rotated by quat.
-  """
-
-  u = quat[1:]
-  s = quat[0]
-  return 2 * (onp.dot(u, vec) *
-              u) + (s * s - onp.dot(u, u)) * vec + 2 * s * onp.cross(u, vec)
-
-
 def _scene(sys: brax.System, qp: brax.QP) -> Tuple[Renderer, List[int]]:
   """Converts a brax System and qp to a pytinyrenderer scene and instances."""
   scene = Renderer()
@@ -123,8 +78,9 @@ def _scene(sys: brax.System, qp: brax.QP) -> Tuple[Renderer, List[int]]:
 
       instance = scene.create_object_instance(model)
       off = onp.array([col.position.x, col.position.y, col.position.z])
-      pos = onp.array(qp.pos[i]) + _rotate(off, qp.rot[i])
-      rot = _qmult(qp.rot[i], _euler_to_quat(col.rotation))
+      pos = onp.array(qp.pos[i]) + math.rotate(off, qp.rot[i])
+      rot = math.euler_to_quat(vec_to_arr(col.rotation))
+      rot = math.quat_mul(qp.rot[i], rot)
       scene.set_object_position(instance, list(pos))
       scene.set_object_orientation(instance, [rot[1], rot[2], rot[3], rot[0]])
       instances.append(instance)

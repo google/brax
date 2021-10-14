@@ -40,7 +40,7 @@ def wrap(core_env: envs.Env,
          rng: jnp.ndarray,
          extra_step_kwargs: bool = True) -> Tuple[EnvState, StepFn]:
   """Returns a wrapped state and step function for training."""
-  first_core = core_env.reset(rng)
+  first_core = jax.jit(core_env.reset)(rng)
   first_core.metrics['reward'] = first_core.reward
   first_core.metrics.update(
       {f'reward/{k}': v for k, v in first_core.info.get('rewards', {}).items()})

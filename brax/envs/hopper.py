@@ -17,11 +17,9 @@
 from typing import Optional, Tuple
 
 import brax
+from brax import jumpy as jp
 from brax.envs import env as brax_env
 from brax.physics import bodies
-from brax.physics.base import take
-import jax
-import jax.numpy as jnp
 
 
 class Hopper(brax_env.Env):
@@ -69,16 +67,16 @@ class Hopper(brax_env.Env):
     config = self.sys.config
     body = bodies.Body(config)
     assert config.bodies[-1].name == 'floor'
-    body = take(body, body.idx[:-1])  # Skip the floor body.
+    body = jp.take(body, body.idx[:-1])  # Skip the floor body.
     self.mass = body.mass.reshape(-1, 1)
     self.inertia = body.inertia
 
-  def reset(self, rng: jnp.ndarray) -> brax_env.State:
+  def reset(self, rng: jp.ndarray) -> brax_env.State:
     """Resets the environment to an initial state."""
     qp = self.sys.default_qp()
-    qp, _ = self.sys.step(qp, jax.random.uniform(rng, (self.action_size,)) * .5)
+    qp, _ = self.sys.step(qp, jp.random_uniform(rng, (self.action_size,)) * .5)
     obs = self._get_obs(qp)
-    reward, done, zero = jnp.zeros(3)
+    reward, done, zero = jp.zeros(3)
     metrics = {
         'reward_forward': zero,
         'reward_ctrl': zero,
@@ -86,7 +84,7 @@ class Hopper(brax_env.Env):
     }
     return brax_env.State(qp, obs, reward, done, metrics)
 
-  def step(self, state: brax_env.State, action: jnp.ndarray) -> brax_env.State:
+  def step(self, state: brax_env.State, action: jp.ndarray) -> brax_env.State:
     """Run one timestep of the environment's dynamics."""
     # Reverse torque improves performance over a range of hparams.
     qp, _ = self.sys.step(state.qp, -action)
@@ -95,14 +93,14 @@ class Hopper(brax_env.Env):
     # Ignore the floor at last index.
     pos_before = state.qp.pos[:-1]
     pos_after = qp.pos[:-1]
-    com_before = jnp.sum(pos_before * self.mass, axis=0) / jnp.sum(self.mass)
-    com_after = jnp.sum(pos_after * self.mass, axis=0) / jnp.sum(self.mass)
+    com_before = jp.sum(pos_before * self.mass, axis=0) / jp.sum(self.mass)
+    com_after = jp.sum(pos_after * self.mass, axis=0) / jp.sum(self.mass)
     x_velocity = (com_after[0] - com_before[0]) / self.sys.config.dt
     forward_reward = self._forward_reward_weight * x_velocity
 
     min_z, max_z = self._healthy_z_range
-    is_healthy = jnp.where(qp.pos[0, 2] < min_z, x=0.0, y=1.0)
-    is_healthy = jnp.where(qp.pos[0, 2] > max_z, x=0.0, y=is_healthy)
+    is_healthy = jp.where(qp.pos[0, 2] < min_z, x=0.0, y=1.0)
+    is_healthy = jp.where(qp.pos[0, 2] > max_z, x=0.0, y=is_healthy)
     if self._terminate_when_unhealthy:
       healthy_reward = self._healthy_reward
     else:
@@ -110,7 +108,7 @@ class Hopper(brax_env.Env):
 
     rewards = forward_reward + healthy_reward
 
-    ctrl_cost = self._ctrl_cost_weight * jnp.sum(jnp.square(action))
+    ctrl_cost = self._ctrl_cost_weight * jp.sum(jp.square(action))
     costs = ctrl_cost
 
     reward = rewards - costs
@@ -123,7 +121,7 @@ class Hopper(brax_env.Env):
         reward_healthy=healthy_reward)
     return state.replace(qp=qp, obs=obs, reward=reward, done=done)
 
-  def _get_obs(self, qp: brax.QP) -> jnp.ndarray:
+  def _get_obs(self, qp: brax.QP) -> jp.ndarray:
     """Returns the environment observations."""
     (joint_angle,), (joint_vel,) = self.sys.joints[0].angle_vel(qp)
     # qpos: position and orientation of the torso and the joint angles.
@@ -132,7 +130,7 @@ class Hopper(brax_env.Env):
     qpos += [qp.pos[0, 2:], qp.rot[0], joint_angle]
     # qvel: velocity of the torso and the joint angle velocities.
     qvel = [qp.vel[0], joint_vel]
-    return jnp.concatenate(qpos + qvel)
+    return jp.concatenate(qpos + qvel)
 
 
 _SYSTEM_CONFIG = """

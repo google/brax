@@ -42,7 +42,7 @@ setup(
         "flax",
         "gym",
         "grpcio",
-        "jax",
+        "jax<=0.2.21",  # tensorflow_probability breaks on jax 0.2.22
         "jaxlib",
         "numpy",
         "optax",

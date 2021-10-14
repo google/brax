@@ -18,13 +18,11 @@
 import abc
 from typing import List, Tuple
 
+from brax import jumpy as jp
+from brax import pytree
 from brax.physics import config_pb2
 from brax.physics import joints
-from brax.physics import pytree
-from brax.physics.base import P, QP, take
-
-import jax
-import jax.numpy as jnp
+from brax.physics.base import P, QP
 
 
 class Actuator(abc.ABC):
@@ -39,16 +37,15 @@ class Actuator(abc.ABC):
       actuators: list of actuators (all of the same type) to batch together
       act_index: indices from the act array that drive this Actuator
     """
-    joint_idx = jnp.array([joint.index[a.joint] for a in actuators])
-    self.joint = take(joint, joint_idx)
-    self.strength = jnp.array([a.strength for a in actuators])
-    self.act_index = jnp.array(act_index)
+    self.joint = jp.take(joint, [joint.index[a.joint] for a in actuators])
+    self.strength = jp.array([a.strength for a in actuators])
+    self.act_index = jp.array(act_index)
 
   @abc.abstractmethod
-  def apply_reduced(self, act: jnp.ndarray, qp_p: QP, qp_c: QP) -> Tuple[P, P]:
+  def apply_reduced(self, act: jp.ndarray, qp_p: QP, qp_c: QP) -> Tuple[P, P]:
     """Returns calculated impulses in reduced joint space."""
 
-  def apply(self, qp: QP, act: jnp.ndarray) -> P:
+  def apply(self, qp: QP, act: jp.ndarray) -> P:
     """Applies torque to a joint.
 
     Args:
@@ -58,36 +55,35 @@ class Actuator(abc.ABC):
     Returns:
       dP: The impulses that drive a joint
     """
-    qp_p = take(qp, self.joint.body_p.idx)
-    qp_c = take(qp, self.joint.body_c.idx)
-    act = take(act, self.act_index)
-    dang_p, dang_c = self.apply_reduced(act, qp_p, qp_c)
+    qp_p = jp.take(qp, self.joint.body_p.idx)
+    qp_c = jp.take(qp, self.joint.body_c.idx)
+    act = jp.take(act, self.act_index)
+    dang_p, dang_c = jp.vmap(type(self).apply_reduced)(self, act, qp_p, qp_c)
 
     # sum together all impulse contributions across parents and children
-    body_idx = jnp.concatenate((self.joint.body_p.idx, self.joint.body_c.idx))
-    dp_ang = jnp.concatenate((dang_p, dang_c))
-    dp_ang = jax.ops.segment_sum(dp_ang, body_idx, qp.pos.shape[0])
+    body_idx = jp.concatenate((self.joint.body_p.idx, self.joint.body_c.idx))
+    dp_ang = jp.concatenate((dang_p, dang_c))
+    dp_ang = jp.segment_sum(dp_ang, body_idx, qp.pos.shape[0])
 
-    return P(vel=jnp.zeros_like(qp.vel), ang=dp_ang)
+    return P(vel=jp.zeros_like(qp.vel), ang=dp_ang)
 
 
 @pytree.register
 class Angle(Actuator):
   """Applies torque to satisfy a target angle of a joint."""
 
-  @jax.vmap
-  def apply_reduced(self, act: jnp.ndarray, qp_p: QP, qp_c: QP) -> Tuple[P, P]:
+  def apply_reduced(self, act: jp.ndarray, qp_p: QP, qp_c: QP) -> Tuple[P, P]:
     axis, angle = self.joint.axis_angle(qp_p, qp_c)
-    axis, angle = jnp.array(axis), jnp.array(angle)
+    axis, angle = jp.array(axis), jp.array(angle)
 
     # torque grows as target angle diverges from current angle
-    act *= jnp.pi / 180.
-    act = jnp.clip(act, self.joint.limit[:, 0], self.joint.limit[:, 1])
+    limit_min, limit_max = self.joint.limit[:, 0], self.joint.limit[:, 1]
+    act = jp.clip(act * jp.pi / 180, limit_min, limit_max)
     torque = (act - angle) * self.strength
-    torque = jnp.sum(jax.vmap(jnp.multiply)(axis, torque), axis=0)
+    torque = jp.sum(jp.vmap(jp.multiply)(axis, torque), axis=0)
 
-    dang_p = jnp.matmul(self.joint.body_p.inertia, -torque)
-    dang_c = jnp.matmul(self.joint.body_c.inertia, torque)
+    dang_p = jp.matmul(self.joint.body_p.inertia, -torque)
+    dang_c = jp.matmul(self.joint.body_c.inertia, torque)
 
     return dang_p, dang_c
 
@@ -96,20 +92,19 @@ class Angle(Actuator):
 class Torque(Actuator):
   """Applies a direct torque to a joint."""
 
-  @jax.vmap
-  def apply_reduced(self, act: jnp.ndarray, qp_p: QP, qp_c: QP) -> Tuple[P, P]:
+  def apply_reduced(self, act: jp.ndarray, qp_p: QP, qp_c: QP) -> Tuple[P, P]:
     axis, angle = self.joint.axis_angle(qp_p, qp_c)
-    axis, angle = jnp.array(axis), jnp.array(angle)
+    axis, angle = jp.array(axis), jp.array(angle)
 
     # clip torque if outside joint angle limits
     # * -1. so that positive actuation increases angle between parent and child
     torque = act * self.strength * -1.
-    torque = jnp.where(angle < self.joint.limit[:, 0], 0, torque)
-    torque = jnp.where(angle > self.joint.limit[:, 1], 0, torque)
-    torque = jnp.sum(jax.vmap(jnp.multiply)(axis, torque), axis=0)
+    torque = jp.where(angle < self.joint.limit[:, 0], 0, torque)
+    torque = jp.where(angle > self.joint.limit[:, 1], 0, torque)
+    torque = jp.sum(jp.vmap(jp.multiply)(axis, torque), axis=0)
 
-    dang_p = jnp.matmul(self.joint.body_p.inertia, torque)
-    dang_c = jnp.matmul(self.joint.body_c.inertia, -torque)
+    dang_p = jp.matmul(self.joint.body_p.inertia, torque)
+    dang_c = jp.matmul(self.joint.body_c.inertia, -torque)
 
     return dang_p, dang_c
 

@@ -16,13 +16,12 @@
 
 from typing import ClassVar, Optional
 
+from brax import jumpy as jp
 from brax.envs import env as brax_env
 import gym
 from gym import spaces
 from gym.vector import utils
 import jax
-from jax import numpy as jnp
-import numpy as np
 
 
 class VectorWrapper(brax_env.Wrapper):
@@ -32,12 +31,12 @@ class VectorWrapper(brax_env.Wrapper):
     super().__init__(env)
     self.batch_size = batch_size
 
-  def reset(self, rng: jnp.ndarray) -> brax_env.State:
-    rng = jax.random.split(rng, self.batch_size)
-    return jax.vmap(self.env.reset)(rng)
+  def reset(self, rng: jp.ndarray) -> brax_env.State:
+    rng = jp.random_split(rng, self.batch_size)
+    return jp.vmap(self.env.reset)(rng)
 
-  def step(self, state: brax_env.State, action: jnp.ndarray) -> brax_env.State:
-    return jax.vmap(self.env.step)(state, action)
+  def step(self, state: brax_env.State, action: jp.ndarray) -> brax_env.State:
+    return jp.vmap(self.env.step)(state, action)
 
 
 class EpisodeWrapper(brax_env.Wrapper):
@@ -52,19 +51,19 @@ class EpisodeWrapper(brax_env.Wrapper):
     self.episode_length = episode_length
     self.action_repeat = action_repeat
 
-  def reset(self, rng: jnp.ndarray) -> brax_env.State:
+  def reset(self, rng: jp.ndarray) -> brax_env.State:
     state = self.env.reset(rng)
-    state.info['steps'] = jnp.zeros(())
-    state.info['truncation'] = jnp.zeros(())
+    state.info['steps'] = jp.zeros(())
+    state.info['truncation'] = jp.zeros(())
     return state
 
-  def step(self, state: brax_env.State, action: jnp.ndarray) -> brax_env.State:
+  def step(self, state: brax_env.State, action: jp.ndarray) -> brax_env.State:
     state = self.env.step(state, action)
     steps = state.info['steps'] + self.action_repeat
-    one = jnp.ones_like(state.done)
-    zero = jnp.zeros_like(state.done)
-    done = jnp.where(steps >= self.episode_length, one, state.done)
-    state.info['truncation'] = jnp.where(steps >= self.episode_length,
+    one = jp.ones_like(state.done)
+    zero = jp.zeros_like(state.done)
+    done = jp.where(steps >= self.episode_length, one, state.done)
+    state.info['truncation'] = jp.where(steps >= self.episode_length,
                                          1 - state.done, zero)
     state.info['steps'] = steps
     return state.replace(done=done)
@@ -73,27 +72,27 @@ class EpisodeWrapper(brax_env.Wrapper):
 class AutoResetWrapper(brax_env.Wrapper):
   """Automatically resets Brax envs that are done."""
 
-  def reset(self, rng: jnp.ndarray) -> brax_env.State:
+  def reset(self, rng: jp.ndarray) -> brax_env.State:
     state = self.env.reset(rng)
     state.info['first_qp'] = state.qp
     state.info['first_obs'] = state.obs
     return state
 
-  def step(self, state: brax_env.State, action: jnp.ndarray) -> brax_env.State:
+  def step(self, state: brax_env.State, action: jp.ndarray) -> brax_env.State:
     if 'steps' in state.info:
       steps = state.info['steps']
-      steps = jnp.where(state.done, jnp.zeros_like(steps), steps)
+      steps = jp.where(state.done, jp.zeros_like(steps), steps)
       state.info.update(steps=steps)
-    state = state.replace(done=jnp.zeros_like(state.done))
+    state = state.replace(done=jp.zeros_like(state.done))
     state = self.env.step(state, action)
 
     def where_done(x, y):
       done = state.done
       if done.shape:
-        done = jnp.reshape(done, [x.shape[0]] + [1] * (len(x.shape) - 1))  # type: ignore
-      return jnp.where(done, x, y)
+        done = jp.reshape(done, [x.shape[0]] + [1] * (len(x.shape) - 1))  # type: ignore
+      return jp.where(done, x, y)
 
-    qp = jax.tree_map(where_done, state.info['first_qp'], state.qp)
+    qp = jp.tree_map(where_done, state.info['first_qp'], state.qp)
     obs = where_done(state.info['first_obs'], state.obs)
     return state.replace(qp=qp, obs=obs)
 
@@ -114,15 +113,14 @@ class GymWrapper(gym.Env):
     self.backend = backend
     self._state = None
 
-    obs_high = (np.inf * np.ones(self._env.observation_size)).astype(
-        np.float32)
-    self.observation_space = spaces.Box(-obs_high, obs_high, dtype=np.float32)
+    obs_high = jp.inf * jp.ones(self._env.observation_size, dtype='float32')
+    self.observation_space = spaces.Box(-obs_high, obs_high, dtype='float32')
 
-    action_high = np.ones(self._env.action_size, dtype=np.float32)
-    self.action_space = spaces.Box(-action_high, action_high, dtype=np.float32)
+    action_high = jp.ones(self._env.action_size, dtype='float32')
+    self.action_space = spaces.Box(-action_high, action_high, dtype='float32')
 
     def reset(key):
-      key1, key2 = jax.random.split(key)
+      key1, key2 = jp.random_split(key)
       state = self._env.reset(key2)
       return state, state.obs, key1
 
@@ -166,20 +164,20 @@ class VectorGymWrapper(gym.vector.VectorEnv):
     self.backend = backend
     self._state = None
 
-    obs_high = (np.inf * np.ones(self._env.observation_size)).astype(np.float32)
+    obs_high = jp.inf * jp.ones(self._env.observation_size, dtype='float32')
     self.single_observation_space = spaces.Box(
-        -obs_high, obs_high, dtype=np.float32)
+        -obs_high, obs_high, dtype='float32')
     self.observation_space = utils.batch_space(self.single_observation_space,
                                                self.num_envs)
 
-    action_high = np.ones(self._env.action_size, dtype=np.float32)
+    action_high = jp.ones(self._env.action_size, dtype='float32')
     self.single_action_space = spaces.Box(
-        -action_high, action_high, dtype=np.float32)
+        -action_high, action_high, dtype='float32')
     self.action_space = utils.batch_space(self.single_action_space,
                                           self.num_envs)
 
     def reset(key):
-      key1, key2 = jax.random.split(key)
+      key1, key2 = jp.random_split(key)
       state = self._env.reset(key2)
       return state, state.obs, key1
 

@@ -81,9 +81,9 @@ def train(
       batch_size=num_envs // local_devices_to_use // process_count,
       episode_length=episode_length)
   key_envs = jax.random.split(key_env, local_devices_to_use)
-  step_fn = core_env.step
-  first_state = jax.tree_multimap(lambda *args: jnp.stack(args),
-                                  *[core_env.reset(key) for key in key_envs])
+  step_fn = jax.jit(core_env.step)
+  reset_fn = jax.jit(jax.vmap(core_env.reset))
+  first_state = reset_fn(key_envs)
 
   core_eval_env = environment_fn(
       action_repeat=action_repeat,

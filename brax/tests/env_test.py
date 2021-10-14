@@ -20,8 +20,8 @@ import time
 from absl.testing import absltest
 from absl.testing import parameterized
 from brax import envs
+from brax import jumpy as jp
 import jax
-import jax.numpy as np
 
 _EARLY_TERMINATION = ('ant', 'humanoid')
 _EXPECTED_SPS = {'ant': 1000, 'fetch': 1000}
@@ -40,7 +40,7 @@ class EnvTest(parameterized.TestCase):
         episode_length=episode_length,
         auto_reset=auto_reset,
         batch_size=batch_size)
-    zero_action = np.zeros((batch_size, env.action_size))
+    zero_action = jp.zeros((batch_size, env.action_size))
 
     @jax.jit
     def run_env(state):
@@ -54,23 +54,23 @@ class EnvTest(parameterized.TestCase):
       return state
 
     # warmup
-    rng = jax.random.PRNGKey(0)
-    state = env.reset(rng)
+    rng = jp.random_prngkey(0)
+    state = jax.jit(env.reset)(rng)
     state = run_env(state)
     state.done.block_until_ready()
 
     sps = []
     for seed in range(5):
-      rng = jax.random.PRNGKey(seed)
-      state = env.reset(rng)
+      rng = jp.random_prngkey(seed)
+      state = jax.jit(env.reset)(rng)
       jax.device_put(state)
       t = time.time()
       state = run_env(state)
       state.done.block_until_ready()
       sps.append((batch_size * episode_length) / (time.time() - t))
-      self.assertTrue(np.alltrue(state.done))
+      self.assertTrue(jp.all(state.done))
 
-    mean_sps = np.mean(np.array(sps))
+    mean_sps = jp.mean(jp.array(sps))
     logging.info('%s SPS %s %s', env_name, mean_sps, sps)
     self.assertGreater(mean_sps, expected_sps * 0.99)
 

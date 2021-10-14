@@ -20,13 +20,12 @@ import itertools
 from typing import Any, Callable, List, Tuple
 import warnings
 
+from brax import jumpy as jp
+from brax import math
+from brax import pytree
 from brax.physics import bodies
 from brax.physics import config_pb2
-from brax.physics import math
-from brax.physics import pytree
-from brax.physics.base import P, QP, euler_to_quat, take, vec_to_np
-import jax
-import jax.numpy as jnp
+from brax.physics.base import P, QP, vec_to_arr
 
 
 class Collidable:
@@ -37,23 +36,23 @@ class Collidable:
   """
 
   def __init__(self, collidables: List[config_pb2.Body], body: bodies.Body):
-    self.body = take(body, jnp.array([body.index[c.name] for c in collidables]))
-    self.pos = jnp.array(
-        [vec_to_np(c.colliders[0].position) for c in collidables])
+    self.body = jp.take(body, [body.index[c.name] for c in collidables])
+    self.pos = jp.array(
+        [vec_to_arr(c.colliders[0].position) for c in collidables])
 
-  def position(self, qp: QP) -> jnp.ndarray:
+  def position(self, qp: QP) -> jp.ndarray:
     """Returns the collidable's position in world space."""
-    pos = jnp.take(qp.pos, self.body.idx, axis=0, mode='clip')
-    rot = jnp.take(qp.rot, self.body.idx, axis=0, mode='clip')
-    return pos + jax.vmap(math.rotate)(self.pos, rot)
+    pos = jp.take(qp.pos, self.body.idx)
+    rot = jp.take(qp.rot, self.body.idx)
+    return pos + jp.vmap(math.rotate)(self.pos, rot)
 
 
 @pytree.register
 class Contact:
   """Stores information about contacts between two collidables."""
 
-  def __init__(self, pos: jnp.array, vel: jnp.array, normal: jnp.array,
-               penetration: jnp.array):
+  def __init__(self, pos: jp.ndarray, vel: jp.ndarray, normal: jp.ndarray,
+               penetration: jp.ndarray):
     """Creates a Contact.
 
     Args:
@@ -85,8 +84,8 @@ class AllPairs(Cull):
 
   def __init__(self, col_a: Collidable, col_b: Collidable,
                mask: List[Tuple[int, int]]):
-    self.col_a = take(col_a, jnp.array([a for a, _ in mask]))
-    self.col_b = take(col_b, jnp.array([b for _, b in mask]))
+    self.col_a = jp.take(col_a, [a for a, _ in mask])
+    self.col_b = jp.take(col_b, [b for _, b in mask])
 
   def get(self) -> Tuple[Collidable, Collidable]:
     return self.col_a, self.col_b
@@ -100,11 +99,11 @@ class NearNeighbors(Cull):
 
   def __init__(self, col_a: Collidable, col_b: Collidable,
                mask: List[Tuple[int, int]], cutoff: int):
-    dist_off = jnp.zeros(col_a.body.idx.shape + col_b.body.idx.shape)
+    dist_off = jp.zeros(col_a.body.idx.shape + col_b.body.idx.shape)
     # TODO: consider accounting for bounds/radius of a collidable
     dist_mask = dist_off + float('inf')
-    mask = (jnp.array([a for a, _ in mask]), jnp.array([b for _, b in mask]))
-    dist_off += dist_mask.at[mask].set(0)
+    mask = (jp.array([a for a, _ in mask]), jp.array([b for _, b in mask]))
+    dist_off += jp.index_update(dist_mask, mask, 0)
     self.dist_off = dist_off
     self.cutoff = cutoff
     self.candidate_a, self.candidate_b = col_a, col_b
@@ -113,17 +112,17 @@ class NearNeighbors(Cull):
   def update(self, qp: QP):
     if self.candidate_a is self.candidate_b:
       pos = self.candidate_a.position(qp)
-      dist = jax.vmap(lambda pt: jnp.linalg.norm(pos - pt, axis=-1))(pos)
+      dist = jp.vmap(lambda pt: jp.norm(pos - pt, axis=-1))(pos)
     else:
       pos_a = self.candidate_a.position(qp)
       pos_b = self.candidate_b.position(qp)
-      dist = jax.vmap(lambda pt: jnp.linalg.norm(pos_b - pt, axis=-1))(pos_a)
+      dist = jp.vmap(lambda pt: jp.norm(pos_b - pt, axis=-1))(pos_a)
     # add in offset and convert to closeness
     sim = -(dist + self.dist_off)
     # TODO: return a status if more valid candidates than cutoff
-    _, idx = jax.lax.top_k(sim.ravel(), self.cutoff)
-    self.col_a = take(self.candidate_a, idx // sim.shape[-1])
-    self.col_b = take(self.candidate_b, idx % sim.shape[-1])
+    _, idx = jp.top_k(sim.ravel(), self.cutoff)
+    self.col_a = jp.take(self.candidate_a, idx // sim.shape[-1])
+    self.col_b = jp.take(self.candidate_b, idx % sim.shape[-1])
 
   def get(self) -> Tuple[Collidable, Collidable]:
     return self.col_a, self.col_b
@@ -169,19 +168,19 @@ class OneWayCollider(Collider):
   def apply(self, qp: QP) -> P:
     """Returns impulse from any potential contacts between collidables."""
     col_a, col_b = self.cull.get()
-    qp_a = take(qp, col_a.body.idx)
-    qp_b = take(qp, col_b.body.idx)
-    contact = jax.vmap(self.contact_fn)(col_a, col_b, qp_a, qp_b)
-    dp = jax.vmap(self._contact)(qp_a, col_a, contact)
+    qp_a = jp.take(qp, col_a.body.idx)
+    qp_b = jp.take(qp, col_b.body.idx)
+    contact = jp.vmap(self.contact_fn)(col_a, col_b, qp_a, qp_b)
+    dp = jp.vmap(self._contact)(qp_a, col_a, contact)
 
-    contact = jnp.where(jnp.any(dp.vel, axis=-1), 1.0, 0.0)
-    contact = jax.ops.segment_sum(contact, col_a.body.idx, qp.pos.shape[0])
-    dp_vel = jax.ops.segment_sum(dp.vel, col_a.body.idx, qp.pos.shape[0])
-    dp_ang = jax.ops.segment_sum(dp.ang, col_a.body.idx, qp.pos.shape[0])
+    contact = jp.where(jp.any(dp.vel, axis=-1), 1.0, 0.0)
+    contact = jp.segment_sum(contact, col_a.body.idx, qp.pos.shape[0])
+    dp_vel = jp.segment_sum(dp.vel, col_a.body.idx, qp.pos.shape[0])
+    dp_ang = jp.segment_sum(dp.ang, col_a.body.idx, qp.pos.shape[0])
 
     # equally distribute impulse over possible contacts
-    dp_vel = dp_vel / jnp.reshape(1e-8 + contact, (dp_vel.shape[0], 1))
-    dp_ang = dp_ang / jnp.reshape(1e-8 + contact, (dp_ang.shape[0], 1))
+    dp_vel = dp_vel / jp.reshape(1e-8 + contact, (dp_vel.shape[0], 1))
+    dp_ang = dp_ang / jp.reshape(1e-8 + contact, (dp_ang.shape[0], 1))
 
     return P(vel=dp_vel, ang=dp_ang)
 
@@ -189,25 +188,25 @@ class OneWayCollider(Collider):
     """Calculates impulse on a body due to a contact."""
     rel_pos = contact.pos - qp.pos
     baumgarte_vel = self.baumgarte_erp * contact.penetration
-    normal_vel = jnp.dot(contact.normal, contact.vel)
-    temp1 = jnp.matmul(col.body.inertia, jnp.cross(rel_pos, contact.normal))
-    ang = jnp.dot(contact.normal, jnp.cross(temp1, rel_pos))
+    normal_vel = jp.dot(contact.normal, contact.vel)
+    temp1 = jp.matmul(col.body.inertia, jp.cross(rel_pos, contact.normal))
+    ang = jp.dot(contact.normal, jp.cross(temp1, rel_pos))
     impulse = (-1. * (1. + self.elasticity) * normal_vel + baumgarte_vel) / (
         (1. / col.body.mass) + ang)
     dp_n = col.body.impulse(qp, impulse * contact.normal, contact.pos)
 
     # apply drag due to friction acting parallel to the surface contact
     vel_d = contact.vel - normal_vel * contact.normal
-    impulse_d = math.safe_norm(vel_d) / ((1. / (col.body.mass)) + ang)
+    impulse_d = jp.safe_norm(vel_d) / ((1. / (col.body.mass)) + ang)
     # drag magnitude cannot exceed max friction
-    impulse_d = jnp.minimum(impulse_d, self.friction * impulse)
-    dir_d = vel_d / (1e-6 + math.safe_norm(vel_d))
+    impulse_d = jp.minimum(impulse_d, self.friction * impulse)
+    dir_d = vel_d / (1e-6 + jp.safe_norm(vel_d))
     dp_d = col.body.impulse(qp, -impulse_d * dir_d, contact.pos)
     # apply collision if penetrating, approaching, and oriented correctly
-    apply_n = jnp.where(
+    apply_n = jp.where(
         (contact.penetration > 0.) & (normal_vel < 0) & (impulse > 0.), 1., 0.)
     # apply drag if moving laterally above threshold
-    apply_d = apply_n * jnp.where(math.safe_norm(vel_d) > 0.01, 1., 0.)
+    apply_d = apply_n * jp.where(jp.safe_norm(vel_d) > 0.01, 1., 0.)
 
     return dp_n * apply_n + dp_d * apply_d
 
@@ -219,21 +218,21 @@ class TwoWayCollider(Collider):
   def apply(self, qp: QP) -> P:
     """Returns impulse from any potential contacts between collidables."""
     col_a, col_b = self.cull.get()
-    qp_a = take(qp, col_a.body.idx)
-    qp_b = take(qp, col_b.body.idx)
-    contact = jax.vmap(self.contact_fn)(col_a, col_b, qp_a, qp_b)
-    dp_a, dp_b = jax.vmap(self._contact)(col_a, col_b, qp_a, qp_b, contact)
+    qp_a = jp.take(qp, col_a.body.idx)
+    qp_b = jp.take(qp, col_b.body.idx)
+    contact = jp.vmap(self.contact_fn)(col_a, col_b, qp_a, qp_b)
+    dp_a, dp_b = jp.vmap(self._contact)(col_a, col_b, qp_a, qp_b, contact)
 
-    body_idx = jnp.concatenate((col_a.body.idx, col_b.body.idx))
-    dp_vel = jnp.concatenate((dp_a.vel, dp_b.vel))
-    dp_ang = jnp.concatenate((dp_a.ang, dp_b.ang))
-    contact = jnp.where(jnp.any(dp_vel, axis=-1), 1.0, 0.0)
-    contact = jax.ops.segment_sum(contact, body_idx, qp.pos.shape[0])
-    dp_vel = jax.ops.segment_sum(dp_vel, body_idx, qp.pos.shape[0])
-    dp_ang = jax.ops.segment_sum(dp_ang, body_idx, qp.pos.shape[0])
+    body_idx = jp.concatenate((col_a.body.idx, col_b.body.idx))
+    dp_vel = jp.concatenate((dp_a.vel, dp_b.vel))
+    dp_ang = jp.concatenate((dp_a.ang, dp_b.ang))
+    contact = jp.where(jp.any(dp_vel, axis=-1), 1.0, 0.0)
+    contact = jp.segment_sum(contact, body_idx, qp.pos.shape[0])
+    dp_vel = jp.segment_sum(dp_vel, body_idx, qp.pos.shape[0])
+    dp_ang = jp.segment_sum(dp_ang, body_idx, qp.pos.shape[0])
 
     # equally distribute impulse over possible contacts
-    contact = jnp.reshape(1e-8 + contact, (dp_vel.shape[0], 1))
+    contact = jp.reshape(1e-8 + contact, (dp_vel.shape[0], 1))
     dp_vel = dp_vel / contact
     dp_ang = dp_ang / contact
     return P(vel=dp_vel, ang=dp_ang)
@@ -244,11 +243,11 @@ class TwoWayCollider(Collider):
     rel_pos_a = contact.pos - qp_a.pos
     rel_pos_b = contact.pos - qp_b.pos
     baumgarte_vel = self.baumgarte_erp * contact.penetration
-    normal_vel = jnp.dot(contact.normal, contact.vel)
-    temp1 = jnp.matmul(col_a.body.inertia, jnp.cross(rel_pos_a, contact.normal))
-    temp2 = jnp.matmul(col_b.body.inertia, jnp.cross(rel_pos_b, contact.normal))
-    ang = jnp.dot(contact.normal,
-                  jnp.cross(temp1, rel_pos_a) + jnp.cross(temp2, rel_pos_b))
+    normal_vel = jp.dot(contact.normal, contact.vel)
+    temp1 = jp.matmul(col_a.body.inertia, jp.cross(rel_pos_a, contact.normal))
+    temp2 = jp.matmul(col_b.body.inertia, jp.cross(rel_pos_b, contact.normal))
+    ang = jp.dot(contact.normal,
+                 jp.cross(temp1, rel_pos_a) + jp.cross(temp2, rel_pos_b))
     impulse = (-1. * (1. + self.elasticity) * normal_vel + baumgarte_vel) / (
         (1. / col_a.body.mass) + (1. / col_b.body.mass) + ang)
     dp_n_a = col_a.body.impulse(qp_a, -impulse * contact.normal, contact.pos)
@@ -256,18 +255,18 @@ class TwoWayCollider(Collider):
 
     # apply drag due to friction acting parallel to the surface contact
     vel_d = contact.vel - normal_vel * contact.normal
-    impulse_d = math.safe_norm(vel_d) / ((1. / col_a.body.mass) +
-                                         (1. / col_b.body.mass) + ang)
+    impulse_d = jp.safe_norm(vel_d) / ((1. / col_a.body.mass) +
+                                       (1. / col_b.body.mass) + ang)
     # drag magnitude cannot exceed max friction
-    impulse_d = jnp.minimum(impulse_d, self.friction * impulse)
-    dir_d = vel_d / (1e-6 + math.safe_norm(vel_d))
+    impulse_d = jp.minimum(impulse_d, self.friction * impulse)
+    dir_d = vel_d / (1e-6 + jp.safe_norm(vel_d))
     dp_d_a = col_a.body.impulse(qp_a, impulse_d * dir_d, contact.pos)
     dp_d_b = col_a.body.impulse(qp_b, -impulse_d * dir_d, contact.pos)
     # apply collision normal if penetrating, approaching, and oriented correctly
-    apply_n = jnp.where(
+    apply_n = jp.where(
         (contact.penetration > 0.) & (normal_vel < 0) & (impulse > 0.), 1., 0.)
     # apply drag if moving laterally above threshold
-    apply_d = apply_n * jnp.where(math.safe_norm(vel_d) > 0.01, 1., 0.)
+    apply_d = apply_n * jp.where(jp.safe_norm(vel_d) > 0.01, 1., 0.)
 
     dp_a = dp_n_a * apply_n + dp_d_a * apply_d
     dp_b = dp_n_b * apply_n + dp_d_b * apply_d
@@ -280,16 +279,16 @@ class BoxCorner(Collidable):
 
   def __init__(self, boxes: List[config_pb2.Body], body: bodies.Body):
     super().__init__([boxes[i // 8] for i in range(len(boxes) * 8)], body)
-    coords = jnp.array(list(itertools.product((-1, 1), (-1, 1), (-1, 1))))
+    coords = jp.array(list(itertools.product((-1, 1), (-1, 1), (-1, 1))))
     corners = []
     for b in boxes:
       col = b.colliders[0]
-      rot = euler_to_quat(col.rotation)
-      box = coords * vec_to_np(col.box.halfsize)
-      box = jax.vmap(math.rotate, in_axes=(0, None))(box, rot)
-      box = box + vec_to_np(col.position)
+      rot = math.euler_to_quat(vec_to_arr(col.rotation))
+      box = coords * vec_to_arr(col.box.halfsize)
+      box = jp.vmap(math.rotate, include=(True, False))(box, rot)
+      box = box + vec_to_arr(col.position)
       corners.extend(box)
-    self.corner = jnp.array(corners)
+    self.corner = jp.array(corners)
 
 
 @pytree.register
@@ -307,12 +306,13 @@ class Capsule(Collidable):
     radii = []
     for c in capsules:
       col = c.colliders[0]
-      axis = math.rotate(jnp.array([0., 0., 1.]), euler_to_quat(col.rotation))
+      axis = math.rotate(
+          jp.array([0., 0., 1.]), math.euler_to_quat(vec_to_arr(col.rotation)))
       segment_length = col.capsule.length / 2. - col.capsule.radius
       ends.append(axis * segment_length)
       radii.append(col.capsule.radius)
-    self.end = jnp.array(ends)
-    self.radius = jnp.array(radii)
+    self.end = jp.array(ends)
+    self.radius = jp.array(radii)
 
 
 @pytree.register
@@ -326,13 +326,14 @@ class CapsuleEnd(Collidable):
     radii = []
     for c in capsules:
       col = c.colliders[0]
-      axis = math.rotate(jnp.array([0., 0., 1.]), euler_to_quat(col.rotation))
+      axis = math.rotate(
+          jp.array([0., 0., 1.]), math.euler_to_quat(vec_to_arr(col.rotation)))
       segment_length = col.capsule.length / 2. - col.capsule.radius
       for end in [col.capsule.end] if col.capsule.end else [-1, 1]:
-        ends.append(vec_to_np(col.position) + end * axis * segment_length)
+        ends.append(vec_to_arr(col.position) + end * axis * segment_length)
         radii.append(col.capsule.radius)
-    self.end = jnp.array(ends)
-    self.radius = jnp.array(radii)
+    self.end = jp.array(ends)
+    self.radius = jp.array(radii)
 
 
 @pytree.register
@@ -345,21 +346,21 @@ class HeightMap(Collidable):
     cell_sizes = []
     for h in heightmaps:
       col = h.colliders[0]
-      mesh_size = int(jnp.sqrt(len(col.heightMap.data)))
+      mesh_size = int(jp.sqrt(len(col.heightMap.data)))
       if len(col.heightMap.data) != mesh_size**2:
         raise ValueError('height map data length should be a perfect square.')
-      height = jnp.array(col.heightMap.data).reshape((mesh_size, mesh_size))
+      height = jp.array(col.heightMap.data).reshape((mesh_size, mesh_size))
       heights.append(height)
       cell_sizes.append(col.heightMap.size / (mesh_size - 1))
-    self.height = jnp.array(heights)
-    self.cell_size = jnp.array(cell_sizes)
+    self.height = jp.array(heights)
+    self.cell_size = jp.array(cell_sizes)
 
 
 def box_plane(box: BoxCorner, _: Plane, qp_a: QP, qp_b: QP) -> Contact:
   """Returns contact between a box corner and a plane."""
-  pos, vel = math.to_world(qp_a, box.corner)
-  normal = math.rotate(jnp.array([0., 0., 1.]), qp_b.rot)
-  penetration = jnp.dot(qp_b.pos - pos, normal)
+  pos, vel = qp_a.to_world(box.corner)
+  normal = math.rotate(jp.array([0., 0., 1.]), qp_b.rot)
+  penetration = jp.dot(qp_b.pos - pos, normal)
   return Contact(pos, vel, normal, penetration)
 
 
@@ -367,45 +368,45 @@ def box_heightmap(box: BoxCorner, hm: HeightMap, qp_a: QP, qp_b: QP) -> Contact:
   """Returns contact between a box corner and a height map."""
   # Note that this only checks box corners against height map surfaces, and is
   # missing box planes against height map points.
-  pos, vel = math.to_world(qp_a, box.corner)
+  pos, vel = qp_a.to_world(box.corner)
   pos = math.inv_rotate(pos - qp_b.pos, qp_b.rot)
   uv_pos = pos[:2] / hm.cell_size
   # find the square in the mesh that enclose the candidate point, with mesh
   # indices ux_idx, ux_udx_u, uv_idx_v, uv_idx_uv.
-  uv_idx = jnp.floor(uv_pos).astype(jnp.int32)
-  uv_idx_u = uv_idx + jnp.array([1, 0], dtype=jnp.int32)
-  uv_idx_v = uv_idx + jnp.array([0, 1], dtype=jnp.int32)
-  uv_idx_uv = uv_idx + jnp.array([1, 1], dtype=jnp.int32)
+  uv_idx = jp.floor(uv_pos).astype(int)
+  uv_idx_u = uv_idx + jp.array([1, 0])
+  uv_idx_v = uv_idx + jp.array([0, 1])
+  uv_idx_uv = uv_idx + jp.array([1, 1])
   # find the orientation of the triangle of this square that encloses the
   # candidate point
   delta_uv = uv_pos - uv_idx
   # whether the corner lies on the first or secound triangle:
-  mu = jnp.where(delta_uv[0] + delta_uv[1] < 1, 1, -1)
+  mu = jp.where(delta_uv[0] + delta_uv[1] < 1, 1, -1)
   # compute the mesh indices of the vertices of this triangle
-  p0 = jnp.where(delta_uv[0] + delta_uv[1] < 1, uv_idx, uv_idx_uv)
-  p1 = jnp.where(delta_uv[0] + delta_uv[1] < 1, uv_idx_u, uv_idx_v)
-  p2 = jnp.where(delta_uv[0] + delta_uv[1] < 1, uv_idx_v, uv_idx_u)
+  p0 = jp.where(delta_uv[0] + delta_uv[1] < 1, uv_idx, uv_idx_uv)
+  p1 = jp.where(delta_uv[0] + delta_uv[1] < 1, uv_idx_u, uv_idx_v)
+  p2 = jp.where(delta_uv[0] + delta_uv[1] < 1, uv_idx_v, uv_idx_u)
   h0 = hm.height[p0[0], p0[1]]
   h1 = hm.height[p1[0], p1[1]]
   h2 = hm.height[p2[0], p2[1]]
 
-  raw_normal = jnp.array(
+  raw_normal = jp.array(
       [-mu * (h1 - h0), -mu * (h2 - h0), hm.cell_size])
-  normal = raw_normal / jnp.linalg.norm(raw_normal)
+  normal = raw_normal / jp.norm(raw_normal)
   normal = math.rotate(normal, qp_b.rot)
-  height = jnp.array(
+  height = jp.array(
       [p0[0] * hm.cell_size, p0[1] * hm.cell_size, h0])
-  penetration = jnp.dot(height - pos, normal)
+  penetration = jp.dot(height - pos, normal)
   return Contact(pos, vel, normal, penetration)
 
 
 def capsule_plane(cap: CapsuleEnd, _: Plane, qp_a: QP, qp_b: QP) -> Contact:
   """Returns contact between a capsule and a plane."""
   cap_end_world = qp_a.pos + math.rotate(cap.end, qp_a.rot)
-  normal = math.rotate(jnp.array([0., 0., 1.]), qp_b.rot)
+  normal = math.rotate(jp.array([0., 0., 1.]), qp_b.rot)
   pos = cap_end_world - normal * cap.radius
-  vel = qp_a.vel + jnp.cross(qp_a.ang, pos - qp_a.pos)
-  penetration = jnp.dot(qp_b.pos - pos, normal)
+  vel = qp_a.vel + jp.cross(qp_a.ang, pos - qp_a.pos)
+  penetration = jp.dot(qp_b.pos - pos, normal)
   return Contact(pos, vel, normal, penetration)
 
 
@@ -419,24 +420,24 @@ def capsule_capsule(cap_a: Capsule, cap_b: Capsule, qp_a: QP,
 
   def closest_segment_point(a, b, pt):
     ab = b - a
-    t = jnp.dot(pt - a, ab) / (jnp.dot(ab, ab) + 1e-10)
-    return a + jnp.clip(t, 0., 1.) * ab
+    t = jp.dot(pt - a, ab) / (jp.dot(ab, ab) + 1e-10)
+    return a + jp.clip(t, 0., 1.) * ab
 
   a0, a1 = endpoints(cap_a.end, qp_a, cap_a.pos)
   b0, b1 = endpoints(cap_b.end, qp_b, cap_b.pos)
   v0, v1, v2, v3 = b0 - a0, b1 - a0, b0 - a1, b1 - a1
-  d0, d1 = jnp.dot(v0, v0), jnp.dot(v1, v1)
-  d2, d3 = jnp.dot(v2, v2), jnp.dot(v3, v3)
-  a_best = jnp.where((d2 < d0) | (d2 < d1) | (d3 < d0) | (d3 < d1), a1, a0)
+  d0, d1 = jp.dot(v0, v0), jp.dot(v1, v1)
+  d2, d3 = jp.dot(v2, v2), jp.dot(v3, v3)
+  a_best = jp.where((d2 < d0) | (d2 < d1) | (d3 < d0) | (d3 < d1), a1, a0)
   b_best = closest_segment_point(b0, b1, a_best)
   a_best = closest_segment_point(a0, a1, b_best)
 
   penetration_vec = b_best - a_best
-  dist = math.safe_norm(penetration_vec)
+  dist = jp.safe_norm(penetration_vec)
   normal = penetration_vec / (1e-6 + dist)
   penetration = cap_a.radius + cap_b.radius - dist
   pos = (a_best + b_best) / 2
-  vel = math.world_velocity(qp_b, pos) - math.world_velocity(qp_a, pos)
+  vel = qp_b.world_velocity(pos) - qp_a.world_velocity(pos)
   return Contact(pos, vel, normal, penetration)
 
 

@@ -14,10 +14,11 @@
 
 """Just some tree functions."""
 
+import dataclasses
 from typing import List, Optional
 
-import dataclasses
 import brax
+
 
 @dataclasses.dataclass
 class Node(object):
@@ -50,6 +51,7 @@ class Node(object):
 
   @classmethod
   def from_config(cls, config: brax.Config) -> 'Node':
+    """Creates a root node from a brax config."""
     root = Node()
 
     for joint in config.joints:

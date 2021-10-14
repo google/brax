@@ -346,7 +346,7 @@ class MujocoConverter(object):
       raise ValueError(f'Unsupported geom {geom.type}.')
     return geom_collider
 
-  def _add_body(self, mujoco_body: MjcfElement, parent_body: config_pb2.Body):
+  def _add_body(self, mujoco_body: MjcfElement, parent_body: Optional[config_pb2.Body]):
     """Adds the body, its children bodies and joints to the config."""
     config = self._config
     body_idx = len(config.bodies)

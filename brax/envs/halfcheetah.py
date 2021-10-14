@@ -15,8 +15,8 @@
 """Trains a halfcheetah to run in the +x direction."""
 
 import brax
+from brax import jumpy as jp
 from brax.envs import env
-import jax.numpy as jnp
 
 
 class Halfcheetah(env.Env):
@@ -25,19 +25,19 @@ class Halfcheetah(env.Env):
   def __init__(self, **kwargs):
     super().__init__(_SYSTEM_CONFIG, **kwargs)
 
-  def reset(self, rng: jnp.ndarray) -> env.State:
+  def reset(self, rng: jp.ndarray) -> env.State:
     """Resets the environment to an initial state."""
     qp = self.sys.default_qp()
     info = self.sys.info(qp)
     obs = self._get_obs(qp, info)
-    reward, done, zero = jnp.zeros(3)
+    reward, done, zero = jp.zeros(3)
     metrics = {
         'reward_ctrl_cost': zero,
         'reward_forward': zero,
     }
     return env.State(qp, obs, reward, done, metrics)
 
-  def step(self, state: env.State, action: jnp.ndarray) -> env.State:
+  def step(self, state: env.State, action: jp.ndarray) -> env.State:
     """Run one timestep of the environment's dynamics."""
     qp, info = self.sys.step(state.qp, action)
     obs = self._get_obs(qp, info)
@@ -45,14 +45,14 @@ class Halfcheetah(env.Env):
     x_before = state.qp.pos[0, 0]
     x_after = qp.pos[0, 0]
     forward_reward = (x_after - x_before) / self.sys.config.dt
-    ctrl_cost = -.1 * jnp.sum(jnp.square(action))
+    ctrl_cost = -.1 * jp.sum(jp.square(action))
     reward = forward_reward + ctrl_cost
     state.metrics.update(
         reward_ctrl_cost=ctrl_cost, reward_forward=forward_reward)
 
     return state.replace(qp=qp, obs=obs, reward=reward)
 
-  def _get_obs(self, qp: brax.QP, info: brax.Info) -> jnp.ndarray:
+  def _get_obs(self, qp: brax.QP, info: brax.Info) -> jp.ndarray:
     """Observe halfcheetah body position and velocities."""
     # some pre-processing to pull joint angles and velocities
     (joint_angle,), (joint_vel,) = self.sys.joints[0].angle_vel(qp)
@@ -69,7 +69,7 @@ class Halfcheetah(env.Env):
     # joint angle velocities (8,)
     qvel = [qp.vel[0], qp.ang[0], joint_vel]
 
-    return jnp.concatenate(qpos + qvel)
+    return jp.concatenate(qpos + qvel)
 
 _SYSTEM_CONFIG = """
 bodies {

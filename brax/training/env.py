@@ -39,7 +39,7 @@ EvalStepFn = Callable[[EvalEnvState, Action], EvalEnvState]
 def wrap_for_eval(core_env: envs.Env,
                   rng: jnp.ndarray) -> Tuple[EvalEnvState, EvalStepFn]:
   """Returns a wrapped state and step function for training."""
-  first_core = core_env.reset(rng)
+  first_core = jax.jit(core_env.reset)(rng)
   first_core.metrics['reward'] = first_core.reward
 
   def step(state: EvalEnvState, action: Action) -> EvalEnvState:

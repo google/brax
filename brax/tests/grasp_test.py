@@ -16,27 +16,23 @@
 
 from absl.testing import absltest
 from brax import envs
-import jax
-import jax.numpy as jnp
+from brax import jumpy as jp
 
 
 class GraspTest(absltest.TestCase):
 
   def testGrasp(self):
     env = envs.create('grasp')
-    grasp_action = jnp.array([
-        -.4, -.35, -1., -0.,  # gripper arm 1
-        .4, .35, 1., 0,  # gripper arm 2
-        .4, .35, 1., 0,  # gripper arm 3
-        .4, .35, 1., 0,  # gripper arm 4
-        0., 0., -.9  # position action
+    grasp_action = jp.array([
+        -.4, -.35, -1, -0,  # gripper arm 1
+        .4, .35, 1, 0,      # gripper arm 2
+        .4, .35, 1, 0,      # gripper arm 3
+        .4, .35, 1, 0,      # gripper arm 4
+        0, 0, -.9           # position action
     ])
-
-    jit_env_step = jax.jit(env.step)
-    state = env.reset(jax.random.PRNGKey(0))
-
+    state = env.reset(jp.random_prngkey(0))
     for _ in range(500):
-      state = jit_env_step(state, grasp_action)
+      state = env.step(state, grasp_action)
 
     self.assertGreater(state.qp.pos[1, 2], 1.36)  # ball lifted off ground
     self.assertLess(state.qp.ang[1, 2], .01)  # ball not rolling

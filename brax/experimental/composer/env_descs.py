@@ -32,12 +32,36 @@ ENV_DESCS = {
                             indices=(0, 1),
                             offset=5,
                             target_goal=(4, 0))),
-                    score_fns=dict(
+                ),)),
+    'ant_chase_ma':
+        dict(
+            agent_groups=dict(
+                agent1=dict(reward_names=('dist_agent1__agent2',)),
+                agent2=dict(reward_names=('goal_agent2',)),
+            ),
+            components=dict(
+                agent1=dict(component='ant', pos=(0, 0, 0)),
+                agent2=dict(
+                    component='ant',
+                    pos=(0, 2, 0),
+                    reward_fns=dict(
                         goal=dict(
                             reward_type='root_goal',
                             sdcomp='vel',
                             indices=(0, 1),
-                            target_goal=(4, 0))),
+                            offset=5,
+                            scale=1,
+                            target_goal=(4, 0)),),
+                ),
+            ),
+            edges=dict(
+                agent1__agent2=dict(
+                    extra_observers=[
+                        dict(observer_type='root_vec', indices=(0, 1)),
+                    ],
+                    reward_fns=dict(
+                        dist=dict(
+                            reward_type='root_dist', min_dist=1, offset=5)),
                 ),)),
     'ant_chase':
         dict(
@@ -54,12 +78,6 @@ ENV_DESCS = {
                             offset=5,
                             scale=1,
                             target_goal=(4, 0)),),
-                    score_fns=dict(
-                        goal=dict(
-                            reward_type='root_goal',
-                            sdcomp='vel',
-                            indices=(0, 1),
-                            target_goal=(4, 0)),),
                 ),
             ),
             edges=dict(
@@ -70,8 +88,6 @@ ENV_DESCS = {
                     reward_fns=dict(
                         dist=dict(
                             reward_type='root_dist', min_dist=1, offset=5)),
-                    score_fns=dict(
-                        dist=dict(reward_type='root_dist', min_dist=1)),
                 ),)),
     'ant_push':
         dict(
@@ -92,13 +108,7 @@ ENV_DESCS = {
                             indices=(0, 1),
                             offset=5,
                             scale=1,
-                            target_goal=(4, 0))),
-                    score_fns=dict(
-                        goal=dict(
-                            reward_type='root_goal',
-                            sdcomp='vel',
-                            indices=(0, 1),
-                            target_goal=(4, 0))),
+                            target_goal=5)),
                 ),
             ),
             edges=dict(
@@ -108,7 +118,6 @@ ENV_DESCS = {
                     ],
                     reward_fns=dict(
                         dist=dict(reward_type='root_dist', offset=5)),
-                    score_fns=dict(dist=dict(reward_type='root_dist')),
                 ),)),
     'uni_ant':
         dict(components=dict(agent1=dict(component='ant', pos=(0, 0, 0)),),),
@@ -160,12 +169,6 @@ ENV_DESCS = {
                             sdcomp='vel',
                             indices=(0, 1),
                             offset=4,
-                            target_goal=(3, 0))),
-                    score_fns=dict(
-                        goal=dict(
-                            reward_type='root_goal',
-                            sdcomp='vel',
-                            indices=(0, 1),
                             target_goal=(3, 0))),
                 ),
                 cap1=dict(

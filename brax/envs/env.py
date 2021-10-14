@@ -18,9 +18,8 @@ import abc
 from typing import Any, Dict, Optional
 
 import brax
+from brax import jumpy as jp
 from flax import struct
-import jax
-import jax.numpy as jnp
 
 from google.protobuf import text_format
 
@@ -29,10 +28,10 @@ from google.protobuf import text_format
 class State:
   """Environment state for training and inference."""
   qp: brax.QP
-  obs: jnp.ndarray
-  reward: jnp.ndarray
-  done: jnp.ndarray
-  metrics: Dict[str, jnp.ndarray] = struct.field(default_factory=dict)
+  obs: jp.ndarray
+  reward: jp.ndarray
+  done: jp.ndarray
+  metrics: Dict[str, jp.ndarray] = struct.field(default_factory=dict)
   info: Dict[str, Any] = struct.field(default_factory=dict)
 
 
@@ -45,18 +44,18 @@ class Env(abc.ABC):
       self.sys = brax.System(config)
 
   @abc.abstractmethod
-  def reset(self, rng: jnp.ndarray) -> State:
+  def reset(self, rng: jp.ndarray) -> State:
     """Resets the environment to an initial state."""
 
   @abc.abstractmethod
-  def step(self, state: State, action: jnp.ndarray) -> State:
+  def step(self, state: State, action: jp.ndarray) -> State:
     """Run one timestep of the environment's dynamics."""
 
   @property
   def observation_size(self) -> int:
     """The size of the observation vector returned in step and reset."""
-    rng = jax.random.PRNGKey(0)
-    reset_state = self.reset(rng)
+    rng = jp.random_prngkey(0)
+    reset_state = self.unwrapped.reset(rng)
     return reset_state.obs.shape[-1]
 
   @property
@@ -76,10 +75,10 @@ class Wrapper(Env):
     super().__init__(config=None)
     self.env = env
 
-  def reset(self, rng: jnp.ndarray) -> State:
+  def reset(self, rng: jp.ndarray) -> State:
     return self.env.reset(rng)
 
-  def step(self, state: State, action: jnp.ndarray) -> State:
+  def step(self, state: State, action: jp.ndarray) -> State:
     return self.env.step(state, action)
 
   @property

@@ -20,8 +20,8 @@ import itertools
 from absl.testing import absltest
 from absl.testing import parameterized
 import brax
-from brax.physics.base import take
-from jax import numpy as jnp
+from brax import jumpy as jp
+import jax
 
 from google.protobuf import text_format
 
@@ -39,7 +39,7 @@ class BodyTest(absltest.TestCase):
     defaults { qps { name: "Ball" vel {x: 1}}}
     """, brax.Config()))
     qp = sys.default_qp()
-    qp, _ = sys.step(qp, jnp.array([]))
+    qp, _ = sys.step(qp, jp.array([]))
     # v = v_0 + a * t
     self.assertAlmostEqual(qp.vel[0, 2], -9.8, 2)
     # x = x_0 + v_0 * t + 0.5 * a * t^2
@@ -63,17 +63,17 @@ class BoxTest(absltest.TestCase):
   """
 
   def test_box_hits_ground(self):
-    """A box falls onto the ground and stops."""
+    """A box falls onto the ground and stjp."""
     sys = brax.System(text_format.Parse(BoxTest._CONFIG, brax.Config()))
     qp = sys.default_qp(0)
-    qp, _ = sys.step(qp, jnp.array([]))
+    qp, _ = sys.step(qp, jp.array([]))
     self.assertAlmostEqual(qp.pos[0, 2], 0.5, 2)
 
   def test_box_slide(self):
     """A box slides across the ground and comes to a stop."""
     sys = brax.System(text_format.Parse(BoxTest._CONFIG, brax.Config()))
     qp = sys.default_qp(1)
-    qp, _ = sys.step(qp, jnp.array([]))
+    qp, _ = sys.step(qp, jp.array([]))
     self.assertAlmostEqual(qp.pos[0, 2], 0.5, 2)
     self.assertGreater(qp.pos[0, 0], 1)  # after sliding for a bit...
     self.assertAlmostEqual(qp.vel[0, 0], 0, 2)  # friction brings it to a stop
@@ -104,17 +104,17 @@ class HeightMapTest(absltest.TestCase):
   """
 
   def test_box_stays_on_heightmap(self):
-    """A box falls onto the height map and stops."""
+    """A box falls onto the height map and stjp."""
     sys = brax.System(text_format.Parse(HeightMapTest._CONFIG, brax.Config()))
     qp = sys.default_qp()
-    qp, _ = sys.step(qp, [])
+    qp, _ = jax.jit(sys.step)(qp, jp.array([]))
     self.assertAlmostEqual(qp.pos[0, 2], 0.3, 2)
 
 
 class SphereTest(absltest.TestCase):
 
   _CONFIG = """
-    dt: 5 substeps: 5000 friction: 0.6 baumgarte_erp: 0.1
+    dt: 5 substeps: 50 friction: 0.6 baumgarte_erp: 0.1
     gravity { z: -9.8 }
     bodies {
       name: "Sphere1" mass: 1
@@ -126,10 +126,10 @@ class SphereTest(absltest.TestCase):
   """
 
   def test_sphere_hits_ground(self):
-    """A sphere falls onto the ground and stops."""
+    """A sphere falls onto the ground and stjp."""
     sys = brax.System(text_format.Parse(SphereTest._CONFIG, brax.Config()))
     qp = sys.default_qp(0)
-    qp, _ = sys.step(qp, jnp.array([]))
+    qp, _ = sys.step(qp, jp.array([]))
     self.assertAlmostEqual(qp.pos[0, 2], 0.25, 2)
 
 
@@ -174,10 +174,10 @@ class CapsuleTest(absltest.TestCase):
   """
 
   def test_capsule_hits_ground(self):
-    """A capsule falls onto the ground and stops."""
+    """A capsule falls onto the ground and stjp."""
     sys = brax.System(text_format.Parse(CapsuleTest._CONFIG, brax.Config()))
     qp = sys.default_qp(0)
-    qp, _ = sys.step(qp, jnp.array([]))
+    qp, _ = jax.jit(sys.step)(qp, jp.array([]))
     self.assertAlmostEqual(qp.pos[0, 2], 0.5, 2)  # standing up and down
     self.assertAlmostEqual(qp.pos[1, 2], 0.25, 2)  # lying on its side
     self.assertAlmostEqual(qp.pos[2, 2], 0.25, 2)  # rolls to side from y rot
@@ -187,7 +187,7 @@ class CapsuleTest(absltest.TestCase):
     """A capsule falls onto another capsule and balances on it."""
     sys = brax.System(text_format.Parse(CapsuleTest._CONFIG, brax.Config()))
     qp = sys.default_qp(1)
-    qp, _ = sys.step(qp, jnp.array([]))
+    qp, _ = jax.jit(sys.step)(qp, jp.array([]))
     self.assertAlmostEqual(qp.pos[0, 2], 0.5, 2)  # standing up and down
     self.assertAlmostEqual(qp.pos[1, 2], 1.25, 2)  # lying on Capsule1
 
@@ -197,7 +197,7 @@ class CapsuleTest(absltest.TestCase):
     config.collider_cutoff = 1
     sys = brax.System(config)
     qp = sys.default_qp(1)
-    qp, _ = sys.step(qp, jnp.array([]))
+    qp, _ = jax.jit(sys.step)(qp, jp.array([]))
     self.assertAlmostEqual(qp.pos[0, 2], 0.5, 2)  # standing up and down
     self.assertAlmostEqual(qp.pos[1, 2], 1.25, 2)  # lying on Capsule1
 
@@ -231,7 +231,7 @@ class JointTest(parameterized.TestCase):
     # dist_to_anchor = 1.0
     # inertia_cm = 2/5 * mass * radius^2 (solid sphere)
     # T = 2 * pi * sqrt(inertia_about_anchor / (2 * mass * g * dist_to_anchor))
-    config.dt = float(2 * jnp.pi * jnp.sqrt((.4 * radius**2 + 1.) / 9.8))
+    config.dt = 2 * jp.pi * jp.sqrt((.4 * radius**2 + 1.) / 9.8)
     config.bodies[1].mass = mass
     config.bodies[1].inertia.x = .4 * mass * radius**2
     config.bodies[1].inertia.y = .4 * mass * radius**2
@@ -241,11 +241,11 @@ class JointTest(parameterized.TestCase):
     # initializing system to have a small initial velocity and ang velocity
     # so that small angle approximation is valid
     qp = brax.QP(
-        pos=jnp.array([[0., 0., 0.], [0., 0., -1.]]),
-        rot=jnp.array([[1., 0., 0., 0.], [1., 0., 0., 0.]]),
-        vel=jnp.array([[0., 0., 0.], [0., vel, 0.]]),
-        ang=jnp.array([[0., 0., 0.], [vel, 0., 0.]]))
-    qp, _ = sys.step(qp, jnp.array([]))
+        pos=jp.array([[0., 0., 0.], [0., 0., -1.]]),
+        rot=jp.array([[1., 0., 0., 0.], [1., 0., 0., 0.]]),
+        vel=jp.array([[0., 0., 0.], [0., vel, 0.]]),
+        ang=jp.array([[0., 0., 0.], [vel, 0., 0.]]))
+    qp, _ = jax.jit(sys.step)(qp, jp.array([]))
     self.assertAlmostEqual(qp.pos[1, 1], 0., 3)  # returned to the origin
 
   offsets = [-15, 15, -45, 45, -75, 75]
@@ -276,7 +276,7 @@ class JointTest(parameterized.TestCase):
 
       sys_default = brax.System(config)
 
-      this_offset = offset * jnp.array(axis)
+      this_offset = offset * jp.array(axis)
 
       # duplicate config deeply
       rotated_config = copy.deepcopy(config)
@@ -290,25 +290,25 @@ class JointTest(parameterized.TestCase):
       offset_qp = sys_offset.default_qp()
 
       # construct joint functions for default and offset systems
-      qp_p = take(offset_qp, 0)
-      qp_c = take(offset_qp, 1)
-      joint_offset = take(sys_offset.joints[0], 0)
-      joint_default = take(sys_default.joints[0], 0)
+      qp_p = jp.take(offset_qp, 0)
+      qp_c = jp.take(offset_qp, 1)
+      joint_offset = jp.take(sys_offset.joints[0], 0)
+      joint_default = jp.take(sys_default.joints[0], 0)
 
       # calculate joint angles as seen by the default or offset system
       _, angle_offset = joint_offset.axis_angle(qp_p, qp_c)
       _, angle_default = joint_default.axis_angle(qp_p, qp_c)
-      angle_offset = (jnp.array(angle_offset) / jnp.pi) * 180
-      angle_default = (jnp.array(angle_default) / jnp.pi) * 180
+      angle_offset = (jp.array(angle_offset) / jp.pi) * 180
+      angle_default = (jp.array(angle_default) / jp.pi) * 180
       num_offsets = angle_offset.shape[0]
 
       for a_o, a_d, t_o in zip(angle_offset, angle_default,
                                this_offset[:num_offsets]):
         if limit == 0:
           # default system sees part rotated by offset degrees
-          self.assertAlmostEqual(a_d, t_o, 3)
+          self.assertAlmostEqual(a_d, t_o, 2)
           # offset system sees part at local 0.0
-          self.assertAlmostEqual(a_o, 0.0, 3)
+          self.assertAlmostEqual(a_o, 0.0, 2)
         if limit == 1:
           # when default angle is nonzero, there's not a clean relationship
           # between the default and offset frames anymore, because the offset
@@ -316,13 +316,13 @@ class JointTest(parameterized.TestCase):
           # it relative to the parent, and then 2) the rotation placing it at
           # its default angle limit.  it should still be the case, though, that
           # the offset angle agrees with the default angle limit.
-          self.assertAlmostEqual(a_o, offset, 3)
+          self.assertAlmostEqual(a_o, offset, 2)
 
 
 class Actuator1DTest(parameterized.TestCase):
 
   _CONFIG = """
-    substeps: 1200
+    substeps: 80
     dt: 4.0
     gravity { z: -9.8 }
     bodies {
@@ -331,19 +331,18 @@ class Actuator1DTest(parameterized.TestCase):
     }
     bodies { name: "Bob" mass: 1 inertia { x: 1 y: 1 z: 1 }}
     joints {
-      name: "Joint" parent: "Anchor" child: "Bob" stiffness: 10000
+      name: "Joint" parent: "Anchor" child: "Bob" stiffness: 5000
       child_offset { z: 1 }
       angle_limit { min: -180 max: 180 }
-      angular_damping: 140.0
+      angular_damping: 20.0
     }
     actuators {
       name: "Joint"
       joint: "Joint"
-      strength: 15000.0
+      strength: 150.0
       angle {}
     }
     defaults { qps { name: "Anchor" pos {z: 2}} qps { name: "Bob" pos {z: 1}}}
-    defaults { angles { name: "Joint" angle: { x: 60 } } }
   """
 
   @parameterized.parameters(15., 30., 45., 90.)
@@ -352,19 +351,19 @@ class Actuator1DTest(parameterized.TestCase):
     config = text_format.Parse(Actuator1DTest._CONFIG, brax.Config())
     sys = brax.System(config=config)
     qp = sys.default_qp()
-    qp, _ = sys.step(qp, jnp.array([target_angle]))
-    qp_p = take(qp, 0)
-    qp_c = take(qp, 1)
-    joint = take(sys.joints[0], 0)
+    qp, _ = sys.step(qp, jp.array([target_angle]))
+    qp_p = jp.take(qp, 0)
+    qp_c = jp.take(qp, 1)
+    joint = jp.take(sys.joints[0], 0)
     _, (angle,) = joint.axis_angle(qp_p, qp_c)
 
-    self.assertAlmostEqual(target_angle * jnp.pi / 180, angle, 2)
+    self.assertAlmostEqual(target_angle * jp.pi / 180, angle, 2)
 
 
 class Actuator2DTest(parameterized.TestCase):
 
   _CONFIG = """
-  substeps: 2000
+    substeps: 2000
     dt: 2.0
     gravity { z: -9.8 }
     bodies {
@@ -373,19 +372,12 @@ class Actuator2DTest(parameterized.TestCase):
     }
     bodies {
       name: "Bob" mass: 1 inertia { x: 1 y: 1 z: 1 }
-      colliders { capsule { radius: 0.5 length: 2.0 }}
     }
     joints {
       name: "Joint" parent: "Anchor" child: "Bob" stiffness: 10000
       child_offset { z: 1 }
-      angle_limit {
-        min: -180
-        max: 180
-      }
-      angle_limit {
-        min: -180
-        max: 180
-      }
+      angle_limit { min: -180 max: 180 }
+      angle_limit { min: -180 max: 180 }
       angular_damping: 200.0
     }
     actuators {
@@ -403,21 +395,20 @@ class Actuator2DTest(parameterized.TestCase):
     config = text_format.Parse(Actuator2DTest._CONFIG, brax.Config())
     sys = brax.System(config=config)
     qp = sys.default_qp()
-    qp, _ = sys.step(qp, jnp.array([target_angle_1, target_angle_2]))
-    qp_p = take(qp, 0)
-    qp_c = take(qp, 1)
-    joint = take(sys.joints[0], 0)
+    qp, _ = jax.jit(sys.step)(qp, jp.array([target_angle_1, target_angle_2]))
+    qp_p = jp.take(qp, 0)
+    qp_c = jp.take(qp, 1)
+    joint = jp.take(sys.joints[0], 0)
     _, angles = joint.axis_angle(qp_p, qp_c)
-
-    self.assertAlmostEqual(target_angle_1 * jnp.pi / 180, angles[0], 2)
-    self.assertAlmostEqual(target_angle_2 * jnp.pi / 180, angles[1], 2)
+    self.assertAlmostEqual(target_angle_1 * jp.pi / 180, angles[0], 2)
+    self.assertAlmostEqual(target_angle_2 * jp.pi / 180, angles[1], 2)
 
 
 class Actuator3DTest(parameterized.TestCase):
 
   _CONFIG = """
-    substeps: 8
-    dt: .02
+    substeps: 8000
+    dt: 20
     bodies {
       name: "Anchor" frozen: { all: true } mass: 1
       inertia { x: 1 y: 1 z: 1 }
@@ -466,16 +457,12 @@ class Actuator3DTest(parameterized.TestCase):
 
       sys = brax.System(config=config)
       qp = sys.default_qp()
-
-      # cuts down compile time for test to only compile a short step
-      for _ in range(1000):
-        qp, _ = sys.step(qp, jnp.array(t))
-
-      qp_p = take(qp, 0)
-      qp_c = take(qp, 1)
-      joint = take(sys.joints[0], 0)
+      qp, _ = jax.jit(sys.step)(qp, jp.array(t))
+      qp_p = jp.take(qp, 0)
+      qp_c = jp.take(qp, 1)
+      joint = jp.take(sys.joints[0], 0)
       _, angles = joint.axis_angle(qp_p, qp_c)
-      angles = [a * 180 / jnp.pi for a in angles]
+      angles = [a * 180 / jp.pi for a in angles]
       for angle, limit, torque in zip(angles, limits, t):
         if torque != 0:
           self.assertAlmostEqual(angle, limit, 1)  # actuated to target angle

@@ -14,10 +14,12 @@
 
 """Core brax structs and some conversion and slicing functions."""
 
-from flax import struct
-import jax
-import jax.numpy as jnp
+from typing import Tuple
+
+from brax import jumpy as jp
+from brax import math
 from brax.physics import config_pb2
+from flax import struct
 
 
 @struct.dataclass
@@ -28,8 +30,8 @@ class Q(object):
     pos: Location of center of mass.
     rot: Rotation about center of mass, represented as a quaternion.
   """
-  pos: jnp.ndarray
-  rot: jnp.ndarray
+  pos: jp.ndarray
+  rot: jp.ndarray
 
   def __add__(self, o):
     if isinstance(o, P):
@@ -50,8 +52,8 @@ class P(object):
     vel: Velocity.
     ang: Angular velocity about center of mass.
   """
-  vel: jnp.ndarray
-  ang: jnp.ndarray
+  vel: jp.ndarray
+  ang: jp.ndarray
 
   def __add__(self, o):
     if isinstance(o, P):
@@ -77,10 +79,10 @@ class QP(object):
     vel: Velocity.
     ang: Angular velocity about center of mass.
   """
-  pos: jnp.ndarray
-  rot: jnp.ndarray
-  vel: jnp.ndarray
-  ang: jnp.ndarray
+  pos: jp.ndarray
+  rot: jp.ndarray
+  vel: jp.ndarray
+  ang: jp.ndarray
 
   def __add__(self, o):
     if isinstance(o, P):
@@ -99,10 +101,33 @@ class QP(object):
   @classmethod
   def zero(cls):
     return cls(
-        pos=jnp.zeros(3),
-        rot=jnp.array([1., 0., 0., 0]),
-        vel=jnp.zeros(3),
-        ang=jnp.zeros(3))
+        pos=jp.zeros(3),
+        rot=jp.array([1., 0., 0., 0]),
+        vel=jp.zeros(3),
+        ang=jp.zeros(3))
+
+  def to_world(self, rpos: jp.ndarray) -> Tuple[jp.ndarray, jp.ndarray]:
+    """Returns world information about a point relative to a part.
+
+    Args:
+      rpos: Point relative to center of mass of part.
+
+    Returns:
+      A 2-tuple containing:
+        * World-space coordinates of rpos
+        * World-space velocity of rpos
+    """
+    rpos_off = math.rotate(rpos, self.rot)
+    rvel = jp.cross(self.ang, rpos_off)
+    return (self.pos + rpos_off, self.vel + rvel)
+
+  def world_velocity(self, pos: jp.ndarray) -> jp.ndarray:
+    """Returns the velocity of the point on a rigidbody in world space.
+
+    Args:
+      pos: World space position which to use for velocity calculation.
+    """
+    return self.vel + jp.cross(self.ang, pos - self.pos)
 
 
 @struct.dataclass
@@ -119,37 +144,13 @@ class Info(object):
   actuator: P
 
 
-def vec_to_np(v):
-  return jnp.array([v.x, v.y, v.z])
-
-
-def quat_to_np(q):
-  return jnp.array([q.w, q.x, q.y, q.z])
-
-
-def euler_to_quat(v):
-  """Converts euler rotations in degrees to quaternion."""
-  # this follows the Tait-Bryan intrinsic rotation formalism: x-y'-z''
-  c1, c2, c3 = jnp.cos(jnp.array([v.x, v.y, v.z]) * jnp.pi / 360)
-  s1, s2, s3 = jnp.sin(jnp.array([v.x, v.y, v.z]) * jnp.pi / 360)
-  w = c1 * c2 * c3 - s1 * s2 * s3
-  x = s1 * c2 * c3 + c1 * s2 * s3
-  y = c1 * s2 * c3 - s1 * c2 * s3
-  z = c1 * c2 * s3 + s1 * s2 * c3
-  return jnp.array([w, x, y, z])
-
-
-def take(objects, i: jnp.ndarray, axis=0):
-  """Returns objects sliced by i."""
-  flat_data, py_tree_def = jax.tree_flatten(objects)
-  sliced_data = [jnp.take(k, i, axis=axis, mode="clip") for k in flat_data]
-  return jax.tree_unflatten(py_tree_def, sliced_data)
-
-
 def validate_config(config: config_pb2.Config) -> config_pb2.Config:
   """Validate and normalize config settings for use in systems."""
   if config.dt <= 0:
     raise RuntimeError("config.dt must be positive")
+
+  if config.substeps == 0:
+    config.substeps = 1
 
   def find_dupes(objs):
     names = set()
@@ -176,6 +177,10 @@ def validate_config(config: config_pb2.Config) -> config_pb2.Config:
   ]):
     config.frozen.all = True
   for b in config.bodies:
+    inertia = b.inertia
+    if inertia.x == 0 and inertia.y == 0 and inertia.z == 0:
+      b.inertia.x, b.inertia.y, b.inertia.z = 1, 1, 1
+
     b.frozen.position.x = b.frozen.position.x or frozen.position.x
     b.frozen.position.y = b.frozen.position.y or frozen.position.y
     b.frozen.position.z = b.frozen.position.z or frozen.position.z
@@ -193,3 +198,7 @@ def validate_config(config: config_pb2.Config) -> config_pb2.Config:
   frozen.all = all(b.frozen.all for b in config.bodies)
 
   return config
+
+
+def vec_to_arr(vec: config_pb2.Vector3) -> jp.ndarray:
+  return jp.array([vec.x, vec.y, vec.z])

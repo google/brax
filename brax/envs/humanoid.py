@@ -15,11 +15,9 @@
 """Trains a humanoid to run in the +x direction."""
 
 import brax
+from brax import jumpy as jp
 from brax.envs import env
 from brax.physics import bodies
-from brax.physics.base import take
-import jax
-import jax.numpy as jnp
 
 
 class Humanoid(env.Env):
@@ -28,17 +26,17 @@ class Humanoid(env.Env):
   def __init__(self, **kwargs):
     super().__init__(_SYSTEM_CONFIG, **kwargs)
     body = bodies.Body(self.sys.config)
-    body = take(body, body.idx[:-1])  # skip the floor body
+    body = jp.take(body, body.idx[:-1])  # skip the floor body
     self.mass = body.mass.reshape(-1, 1)
     self.inertia = body.inertia
 
-  def reset(self, rng: jnp.ndarray) -> env.State:
+  def reset(self, rng: jp.ndarray) -> env.State:
     """Resets the environment to an initial state."""
     qp = self.sys.default_qp()
-    qp, info = self.sys.step(qp,
-                             jax.random.uniform(rng, (self.action_size,)) * .5)
-    obs = self._get_obs(qp, info, jnp.zeros(self.action_size))
-    reward, done, zero = jnp.zeros(3)
+    random_action = jp.random_uniform(rng, (self.action_size,)) * .5
+    qp, info = self.sys.step(qp, random_action)
+    obs = self._get_obs(qp, info, jp.zeros(self.action_size))
+    reward, done, zero = jp.zeros(3)
     metrics = {
         'reward_linvel': zero,
         'reward_quadctrl': zero,
@@ -47,24 +45,24 @@ class Humanoid(env.Env):
     }
     return env.State(qp, obs, reward, done, metrics)
 
-  def step(self, state: env.State, action: jnp.ndarray) -> env.State:
+  def step(self, state: env.State, action: jp.ndarray) -> env.State:
     """Run one timestep of the environment's dynamics."""
     qp, info = self.sys.step(state.qp, action)
     obs = self._get_obs(qp, info, action)
 
     pos_before = state.qp.pos[:-1]  # ignore floor at last index
     pos_after = qp.pos[:-1]  # ignore floor at last index
-    com_before = jnp.sum(pos_before * self.mass, axis=0) / jnp.sum(self.mass)
-    com_after = jnp.sum(pos_after * self.mass, axis=0) / jnp.sum(self.mass)
+    com_before = jp.sum(pos_before * self.mass, axis=0) / jp.sum(self.mass)
+    com_after = jp.sum(pos_after * self.mass, axis=0) / jp.sum(self.mass)
     lin_vel_cost = 1.25 * (com_after[0] - com_before[0]) / self.sys.config.dt
-    quad_ctrl_cost = .01 * jnp.sum(jnp.square(action))
+    quad_ctrl_cost = .01 * jp.sum(jp.square(action))
     # can ignore contact cost, see: https://github.com/openai/gym/issues/1541
     quad_impact_cost = 0.0
     alive_bonus = 5.0
     reward = lin_vel_cost - quad_ctrl_cost - quad_impact_cost + alive_bonus
 
-    done = jnp.where(qp.pos[0, 2] < 0.65, x=1.0, y=0.0)
-    done = jnp.where(qp.pos[0, 2] > 2.1, x=1.0, y=done)
+    done = jp.where(qp.pos[0, 2] < 0.65, x=1.0, y=0.0)
+    done = jp.where(qp.pos[0, 2] > 2.1, x=1.0, y=done)
     state.metrics.update(
         reward_linvel=lin_vel_cost,
         reward_quadctrl=quad_ctrl_cost,
@@ -74,7 +72,7 @@ class Humanoid(env.Env):
     return state.replace(qp=qp, obs=obs, reward=reward, done=done)
 
   def _get_obs(self, qp: brax.QP, info: brax.Info,
-               action: jnp.ndarray) -> jnp.ndarray:
+               action: jp.ndarray) -> jp.ndarray:
     """Observe humanoid body position, velocities, and angles."""
     # some pre-processing to pull joint angles and velocities
     joint_1d_angle, joint_1d_vel = self.sys.joints[0].angle_vel(qp)
@@ -103,9 +101,9 @@ class Humanoid(env.Env):
     # actuator forces
     qfrc_actuator = []
     for act in self.sys.actuators:
-      torque = take(action, act.act_index)
+      torque = jp.take(action, act.act_index)
       torque = torque.reshape(torque.shape[:-2] + (-1,))
-      torque *= jnp.repeat(act.strength, act.act_index.shape[-1])
+      torque *= jp.repeat(act.strength, act.act_index.shape[-1])
       qfrc_actuator.append(torque)
 
     # external contact forces:
@@ -118,32 +116,25 @@ class Humanoid(env.Env):
     body_pos = qp.pos[:-1]  # ignore floor at last index
     body_vel = qp.vel[:-1]  # ignore floor at last index
 
-    com_vec = jnp.sum(body_pos * self.mass, axis=0) / jnp.sum(self.mass)
-    com_vel = body_vel * self.mass / jnp.sum(self.mass)
+    com_vec = jp.sum(body_pos * self.mass, axis=0) / jp.sum(self.mass)
+    com_vel = body_vel * self.mass / jp.sum(self.mass)
 
-    def v_outer(a):
-      return jnp.outer(a, a)
-
-    def v_cross(a, b):
-      return jnp.cross(a, b)
-
-    v_outer = jax.vmap(v_outer, in_axes=[0])
-    v_cross = jax.vmap(v_cross, in_axes=[0, 0])
+    v_outer = jp.vmap(lambda a: jp.outer(a, a))
+    v_cross = jp.vmap(jp.cross)
 
     disp_vec = body_pos - com_vec
     com_inert = self.inertia + self.mass.reshape(
-        (11, 1, 1)) * ((jnp.linalg.norm(disp_vec, axis=1)**2.).reshape(
-            (11, 1, 1)) * jnp.stack([jnp.eye(3)] * 11) - v_outer(disp_vec))
+        (11, 1, 1)) * ((jp.norm(disp_vec, axis=1)**2.).reshape(
+            (11, 1, 1)) * jp.stack([jp.eye(3)] * 11) - v_outer(disp_vec))
 
     cinert = [com_inert.reshape(-1)]
 
-    square_disp = (1e-7 + (jnp.linalg.norm(disp_vec, axis=1)**2.)).reshape(
-        (11, 1))
+    square_disp = (1e-7 + (jp.norm(disp_vec, axis=1)**2.)).reshape((11, 1))
     com_angular_vel = (v_cross(disp_vec, body_vel) / square_disp)
     cvel = [com_vel.reshape(-1), com_angular_vel.reshape(-1)]
 
-    return jnp.concatenate(qpos + qvel + cinert + cvel + qfrc_actuator +
-                           cfrc_ext)
+    return jp.concatenate(qpos + qvel + cinert + cvel + qfrc_actuator +
+                          cfrc_ext)
 
 
 _SYSTEM_CONFIG = """

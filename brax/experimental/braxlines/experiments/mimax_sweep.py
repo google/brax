@@ -16,7 +16,7 @@
 # pylint:disable=g-complex-comprehension
 from brax.experimental.braxlines.experiments import defaults
 
-ENV_NAMES = ('ant', 'halfcheetah', 'humanoid')
+ENV_NAMES = ('ant', 'halfcheetah', 'humanoid', 'hopper', 'walker2d')
 AGENT_MODULE = 'brax.experimental.braxlines.vgcrl.train'
 CONFIG = [
     dict(

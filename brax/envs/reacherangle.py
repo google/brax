@@ -20,11 +20,8 @@ Based on the OpenAI Gym MuJoCo Reacher environment.
 from typing import Tuple
 
 import brax
+from brax import jumpy as jp
 from brax.envs import env
-from brax.physics import math
-from brax.physics.base import take
-import jax
-import jax.numpy as jnp
 
 
 class ReacherAngle(env.Env):
@@ -40,31 +37,31 @@ class ReacherAngle(env.Env):
     for j in self.sys.config.joints:
       for l in j.angle_limit:
         limits.append((l.min, l.max))
-    self._min_act = jnp.array([l[0] for l in limits])
-    self._range_act = jnp.array([l[1] - l[0] for l in limits])
+    self._min_act = jp.array([l[0] for l in limits])
+    self._range_act = jp.array([l[1] - l[0] for l in limits])
 
-  def reset(self, rng: jnp.ndarray) -> env.State:
+  def reset(self, rng: jp.ndarray) -> env.State:
     qp = self.sys.default_qp()
     rng, target = self._random_target(rng)
-    pos = qp.pos.at[self.target_idx].set(target)
+    pos = jp.index_update(qp.pos, self.target_idx, target)
     qp = qp.replace(pos=pos)
     info = self.sys.info(qp)
     obs = self._get_obs(qp, info)
-    reward, done, zero = jnp.zeros(3)
+    reward, done, zero = jp.zeros(3)
     metrics = {
         'rewardDist': zero,
         'rewardCtrl': zero,
     }
     return env.State(qp, obs, reward, done, metrics)
 
-  def step(self, state: env.State, action: jnp.ndarray) -> env.State:
+  def step(self, state: env.State, action: jp.ndarray) -> env.State:
     action = self._min_act + self._range_act * ((action + 1) / 2.)
 
     qp, info = self.sys.step(state.qp, action)
     obs = self._get_obs(qp, info)
 
     # vector from tip to target is last 3 entries of obs vector
-    reward_dist = -jnp.linalg.norm(obs[-3:])
+    reward_dist = -jp.norm(obs[-3:])
 
     reward = reward_dist
 
@@ -75,7 +72,7 @@ class ReacherAngle(env.Env):
 
     return state.replace(qp=qp, obs=obs, reward=reward, metrics=metrics)
 
-  def _get_obs(self, qp: brax.QP, info: brax.Info) -> jnp.ndarray:
+  def _get_obs(self, qp: brax.QP, info: brax.Info) -> jp.ndarray:
     """Egocentric observation of target and arm body."""
 
     # some pre-processing to pull joint angles and velocities
@@ -86,28 +83,28 @@ class ReacherAngle(env.Env):
     qpos = [qp.pos[self.target_idx, :2]]
 
     # dist to target and speed of tip
-    arm_qps = take(qp, jnp.array(self.arm_idx))
-    tip_pos, tip_vel = math.to_world(arm_qps, jnp.array([0.11, 0., 0.]))
+    arm_qps = jp.take(qp, jp.array(self.arm_idx))
+    tip_pos, tip_vel = arm_qps.to_world(jp.array([0.11, 0., 0.]))
     tip_to_target = [tip_pos - qp.pos[self.target_idx]]
-    cos_sin_angle = [jnp.cos(joint_angle), jnp.sin(joint_angle)]
+    cos_sin_angle = [jp.cos(joint_angle), jp.sin(joint_angle)]
 
     # qvel:
     # velocity of tip
     qvel = [tip_vel[:2]]
 
-    return jnp.concatenate(cos_sin_angle + qpos + qvel + tip_to_target)
+    return jp.concatenate(cos_sin_angle + qpos + qvel + tip_to_target)
 
-  def _random_target(self, rng: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
+  def _random_target(self, rng: jp.ndarray) -> Tuple[jp.ndarray, jp.ndarray]:
     """Returns a target location in a random circle slightly above xy plane."""
-    rng, rng1, rng2 = jax.random.split(rng, 3)
+    rng, rng1, rng2 = jp.random_split(rng, 3)
     # we perform a sqrt here so that the final distribution of sampled targets
     # is uniformly random in 2D
-    dist = .2 * jnp.sqrt(jax.random.uniform(rng1))
-    ang = jnp.pi * 2. * jax.random.uniform(rng2)
-    target_x = dist * jnp.cos(ang)
-    target_y = dist * jnp.sin(ang)
+    dist = .2 * jp.sqrt(jp.random_uniform(rng1))
+    ang = jp.pi * 2. * jp.random_uniform(rng2)
+    target_x = dist * jp.cos(ang)
+    target_y = dist * jp.sin(ang)
     target_z = .01
-    target = jnp.array([target_x, target_y, target_z]).transpose()
+    target = jp.array([target_x, target_y, target_z]).transpose()
     return rng, target
 
 

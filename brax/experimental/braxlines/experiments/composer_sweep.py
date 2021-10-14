@@ -12,16 +12,32 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""ant_push Sweep."""
+"""composer Sweep."""
 from brax.experimental.braxlines.experiments import defaults
+
+seed = 0
 
 AGENT_MODULE = 'brax.experimental.composer.train'
 CONFIG = [
     dict(
         env_name=['pro_ant_run'],
-        seed=list(range(10)),
+        seed=seed,
         desc_edits={
             'components.agent1.component_params.num_legs': [2, 3, 4, 8, 10],
         },
-        ppo_params=defaults.get_ppo_params('ant', 10))
+        ppo_params=defaults.get_ppo_params('ant', 10)),
+    dict(
+        env_name=['ant_push'],
+        seed=seed,
+        desc_edits={
+            'components.cap1.reward_fns.goal.scale': [0.2, 1, 0.5],
+        },
+        ppo_params=defaults.get_ppo_params('ant', 10)),
+    dict(
+        env_name=['ant_chase'],
+        seed=seed,
+        desc_edits={
+            'components.agent2.reward_fns.goal.scale': [0.2, 1, 0.5],
+        },
+        ppo_params=defaults.get_ppo_params('ant', 10)),
 ]

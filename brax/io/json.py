@@ -17,9 +17,10 @@
 import json
 from typing import List
 
-import jax.numpy as np
 import brax
 from brax.io.file import File
+import jax.numpy as jnp
+import numpy as onp
 
 from google.protobuf import json_format
 
@@ -27,7 +28,9 @@ from google.protobuf import json_format
 class JaxEncoder(json.JSONEncoder):
 
   def default(self, obj):
-    if isinstance(obj, np.ndarray):
+    if isinstance(obj, jnp.ndarray):
+      return obj.tolist()
+    if isinstance(obj, onp.ndarray):
       return obj.tolist()
     return json.JSONEncoder.default(self, obj)
 

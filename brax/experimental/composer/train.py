@@ -107,9 +107,12 @@ def train(train_job_params: Dict[str, Any],
 
   inference_fn, params, _ = ppo.train(
       environment_fn=env_fn, progress_fn=progress, seed=seed, **ppo_params)
-  print(f'time to jit: {times[1] - times[0]}')
-  print(f'time to train: {times[-1] - times[1]}')
+  time_to_jit = times[1] - times[0]
+  time_to_train = times[-1] - times[1]
+  print(f'time to jit: {time_to_jit}')
+  print(f'time to train: {time_to_train}')
   print(f'Saved logs to {log_path}')
+  return_dict.update(dict(time_to_jit=time_to_jit, time_to_train=time_to_train))
 
   evaluators.visualize_env(
       env_fn=env_fn,

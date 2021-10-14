@@ -15,8 +15,8 @@
 """Trains an ant to run in the +x direction."""
 
 import brax
+from brax import jumpy as jp
 from brax.envs import env
-import jax.numpy as jnp
 
 
 class Ant(env.Env):
@@ -25,12 +25,12 @@ class Ant(env.Env):
   def __init__(self, **kwargs):
     super().__init__(_SYSTEM_CONFIG, **kwargs)
 
-  def reset(self, rng: jnp.ndarray) -> env.State:
+  def reset(self, rng: jp.ndarray) -> env.State:
     """Resets the environment to an initial state."""
     qp = self.sys.default_qp()
     info = self.sys.info(qp)
     obs = self._get_obs(qp, info)
-    reward, done, zero = jnp.zeros(3)
+    reward, done, zero = jp.zeros(3)
     metrics = {
         'reward_ctrl_cost': zero,
         'reward_contact_cost': zero,
@@ -39,7 +39,7 @@ class Ant(env.Env):
     }
     return env.State(qp, obs, reward, done, metrics)
 
-  def step(self, state: env.State, action: jnp.ndarray) -> env.State:
+  def step(self, state: env.State, action: jp.ndarray) -> env.State:
     """Run one timestep of the environment's dynamics."""
     qp, info = self.sys.step(state.qp, action)
     obs = self._get_obs(qp, info)
@@ -47,14 +47,14 @@ class Ant(env.Env):
     x_before = state.qp.pos[0, 0]
     x_after = qp.pos[0, 0]
     forward_reward = (x_after - x_before) / self.sys.config.dt
-    ctrl_cost = .5 * jnp.sum(jnp.square(action))
+    ctrl_cost = .5 * jp.sum(jp.square(action))
     contact_cost = (0.5 * 1e-3 *
-                    jnp.sum(jnp.square(jnp.clip(info.contact.vel, -1, 1))))
+                    jp.sum(jp.square(jp.clip(info.contact.vel, -1, 1))))
     survive_reward = 1.0
     reward = forward_reward - ctrl_cost - contact_cost + survive_reward
 
-    done = jnp.where(qp.pos[0, 2] < 0.2, x=1.0, y=0.0)
-    done = jnp.where(qp.pos[0, 2] > 1.0, x=1.0, y=done)
+    done = jp.where(qp.pos[0, 2] < 0.2, x=1.0, y=0.0)
+    done = jp.where(qp.pos[0, 2] > 1.0, x=1.0, y=done)
     state.metrics.update(
         reward_ctrl_cost=ctrl_cost,
         reward_contact_cost=contact_cost,
@@ -63,7 +63,7 @@ class Ant(env.Env):
 
     return state.replace(qp=qp, obs=obs, reward=reward, done=done)
 
-  def _get_obs(self, qp: brax.QP, info: brax.Info) -> jnp.ndarray:
+  def _get_obs(self, qp: brax.QP, info: brax.Info) -> jp.ndarray:
     """Observe ant body position and velocities."""
     # some pre-processing to pull joint angles and velocities
     (joint_angle,), (joint_vel,) = self.sys.joints[0].angle_vel(qp)
@@ -85,13 +85,13 @@ class Ant(env.Env):
     # Note that mujoco has 4 extra bodies tucked inside the Torso that Brax
     # ignores
     cfrc = [
-        jnp.clip(info.contact.vel, -1, 1),
-        jnp.clip(info.contact.ang, -1, 1)
+        jp.clip(info.contact.vel, -1, 1),
+        jp.clip(info.contact.ang, -1, 1)
     ]
     # flatten bottom dimension
-    cfrc = [jnp.reshape(x, x.shape[:-2] + (-1,)) for x in cfrc]
+    cfrc = [jp.reshape(x, x.shape[:-2] + (-1,)) for x in cfrc]
 
-    return jnp.concatenate(qpos + qvel + cfrc)
+    return jp.concatenate(qpos + qvel + cfrc)
 
 _SYSTEM_CONFIG = """
 bodies {
