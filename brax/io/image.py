@@ -18,8 +18,8 @@ import io
 from typing import List, Optional, Tuple
 
 import brax
-from brax.physics.base import vec_to_arr
 from brax import math
+from brax.physics.base import vec_to_arr
 import numpy as onp
 from PIL import Image
 from pytinyrenderer import TinyRenderCamera as Camera
@@ -45,7 +45,7 @@ class Grid(TextureRGB888):
     super().__init__(list(grid.ravel()))
 
 
-_BASIC = TextureRGB888([102, 85, 68])
+_BASIC = TextureRGB888([133, 118, 102])
 _TARGET = TextureRGB888([255, 34, 34])
 _GROUND = Grid(100, [200, 200, 200])
 

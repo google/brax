@@ -73,7 +73,8 @@ class Fetch(env.Env):
     fwd = jp.array([1., 0., 0.])
     torso_fwd = math.rotate(fwd, qp.rot[self.torso_idx])
     torso_facing = jp.dot(target_dir, torso_fwd)
-    target_hit = jp.where(target_dist < self.target_radius, 1.0, 0.0)
+    target_hit = target_dist < self.target_radius
+    target_hit = jp.where(target_hit, jp.float32(1), jp.float32(0))
     weighted_hit = target_hit * torso_facing
 
     reward = torso_height + moving_to_target + torso_is_up + weighted_hit

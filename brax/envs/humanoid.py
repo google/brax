@@ -57,12 +57,12 @@ class Humanoid(env.Env):
     lin_vel_cost = 1.25 * (com_after[0] - com_before[0]) / self.sys.config.dt
     quad_ctrl_cost = .01 * jp.sum(jp.square(action))
     # can ignore contact cost, see: https://github.com/openai/gym/issues/1541
-    quad_impact_cost = 0.0
-    alive_bonus = 5.0
+    quad_impact_cost = jp.float32(0)
+    alive_bonus = jp.float32(5)
     reward = lin_vel_cost - quad_ctrl_cost - quad_impact_cost + alive_bonus
 
-    done = jp.where(qp.pos[0, 2] < 0.65, x=1.0, y=0.0)
-    done = jp.where(qp.pos[0, 2] > 2.1, x=1.0, y=done)
+    done = jp.where(qp.pos[0, 2] < 0.65, jp.float32(1), jp.float32(0))
+    done = jp.where(qp.pos[0, 2] > 2.1, jp.float32(1), done)
     state.metrics.update(
         reward_linvel=lin_vel_cost,
         reward_quadctrl=quad_ctrl_cost,

@@ -67,7 +67,8 @@ class Ur5e(env.Env):
     moving_to_target = .1 * jp.dot(torso_delta, target_dir)
 
     # big reward for reaching target
-    target_hit = jp.where(target_dist < self.target_radius, 1.0, 0.0)
+    target_hit = target_dist < self.target_radius
+    target_hit = jp.where(target_hit, jp.float32(1), jp.float32(0))
     weighted_hit = target_hit
 
     reward = moving_to_target + weighted_hit

@@ -26,6 +26,8 @@ ndarray = Union[onp.ndarray, jnp.ndarray]  # pylint:disable=invalid-name
 tree_map = jax.tree_map  # works great with jax or numpy as-is
 pi = onp.pi
 inf = onp.inf
+float32 = onp.float32
+int32 = onp.int32
 
 
 def _in_jit() -> bool:
