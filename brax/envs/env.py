@@ -94,4 +94,6 @@ class Wrapper(Env):
     return self.env.unwrapped
 
   def __getattr__(self, name):
+    if name == "__setstate__":
+      raise AttributeError(name)
     return getattr(self.env, name)
