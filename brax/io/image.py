@@ -143,8 +143,10 @@ def render_array(sys: brax.System, qp: brax.QP, width: int, height: int,
                   shadowmap_center=target)
   if camera is None:
     eye, up = _eye(sys, qp), _up(sys)
+    hfov = 58.0
+    vfov = hfov * height / width
     camera = Camera(viewWidth=width * ssaa, viewHeight=height * ssaa,
-                    position=eye, target=target, up=up)
+                    position=eye, target=target, up=up, hfov=hfov, vfov=vfov)
   img = scene.get_camera_image(instances, light, camera).rgb
   arr = onp.reshape(
       onp.array(img, dtype=onp.uint8),

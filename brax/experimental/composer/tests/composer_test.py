@@ -20,15 +20,18 @@ from absl.testing import absltest
 from absl.testing import parameterized
 from brax.experimental.composer import composer
 from brax.experimental.composer import observers
+import jax
 from jax import numpy as jnp
 
 
 class ComposerTest(parameterized.TestCase):
   """Tests for Composer module."""
 
-  @parameterized.parameters('ant_push', 'ant_chase')
+  @parameterized.parameters('ant_push', 'ant_chase', 'ant_chase_ma',
+                            'pro_ant_run')
   def testEnvCreation(self, env_name):
-    composer.create(env_name=env_name)
+    env = composer.create(env_name=env_name)
+    env.reset(rng=jax.random.PRNGKey(0))
 
   def testActionConcatSplit(self):
     env = composer.create(env_name='humanoid')

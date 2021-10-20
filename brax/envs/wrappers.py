@@ -143,6 +143,15 @@ class GymWrapper(gym.Env):
   def seed(self, seed: int = 0):
     self._key = jax.random.PRNGKey(seed)
 
+  def render(self, mode='human'):
+    # pylint:disable=g-import-not-at-top
+    from brax.io import image
+    if mode == 'rgb_array':
+      sys, qp = self._env.sys, self._state.qp
+      return image.render_array(sys, qp, 256, 256)
+    else:
+      return super().render(mode=mode)  # just raise an exception
+
 
 class VectorGymWrapper(gym.vector.VectorEnv):
   """A wrapper that converts batched Brax Env to one that follows Gym VectorEnv API."""
@@ -199,3 +208,16 @@ class VectorGymWrapper(gym.vector.VectorEnv):
 
   def seed(self, seed: int = 0):
     self._key = jax.random.PRNGKey(seed)
+
+  def render(self, mode='human'):
+    # pylint:disable=g-import-not-at-top
+    from brax.io import image
+    if mode == 'rgb_array':
+      sys = self._env.sys
+      imgs = []
+      for i in range(self.num_envs):
+        qp = jp.take(self._state.qp, i)
+        imgs.append(image.render_array(sys, qp, 256, 256))
+      return jp.stack(imgs)
+    else:
+      return super().render(mode=mode)  # just raise an exception

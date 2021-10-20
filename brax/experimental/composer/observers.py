@@ -61,7 +61,7 @@ class Observer(abc.ABC):
 
   def index_obs(self, obs: jnp.ndarray):
     if self.indices is not None:
-      obs = jnp.take(obs, self.indices, axis=-1)
+      obs = obs[..., self.indices]
     return obs
 
   def get_obs(self, sys, qp: brax.QP, info: brax.Info,

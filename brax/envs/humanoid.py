@@ -32,9 +32,12 @@ class Humanoid(env.Env):
 
   def reset(self, rng: jp.ndarray) -> env.State:
     """Resets the environment to an initial state."""
-    qp = self.sys.default_qp()
-    random_action = jp.random_uniform(rng, (self.action_size,)) * .5
-    qp, info = self.sys.step(qp, random_action)
+    rng, rng1, rng2 = jp.random_split(rng, 3)
+    qpos = self.sys.default_angle() + jp.random_uniform(
+        rng1, (self.sys.num_joint_dof,), -.01, .01)
+    qvel = jp.random_uniform(rng2, (self.sys.num_joint_dof,), -.01, .01)
+    qp = self.sys.default_qp(joint_angle=qpos, joint_velocity=qvel)
+    info = self.sys.info(qp)
     obs = self._get_obs(qp, info, jp.zeros(self.action_size))
     reward, done, zero = jp.zeros(3)
     metrics = {

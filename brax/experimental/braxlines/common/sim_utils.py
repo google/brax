@@ -40,8 +40,8 @@ def transform_qp(qp, mask: jnp.ndarray, rot: jnp.ndarray, rot_vec: jnp.ndarray,
     transformed QP
   """
   relative_pos = qp.pos - rot_vec
-  new_pos = brax.physics.math.rotate(relative_pos, rot) + rot_vec + offset_vec
-  new_rot = brax.physics.math.qmult(rot, qp.rot)
+  new_pos = brax.math.rotate(relative_pos, rot) + rot_vec + offset_vec
+  new_rot = brax.math.quat_mul(rot, qp.rot)
   return brax.physics.base.QP(
       pos=jnp.where(mask, new_pos, qp.pos),
       vel=qp.vel,
@@ -96,7 +96,7 @@ def names2indices(config, names: List[str], datatype: str = 'body'):
       if datatype in ('joint',):
         info[b.name] = dict(dof=dof, index=joint_counters[dof - 1])
       if datatype in ('actuator',):
-        info[b.name] = tuple(range(actuator_counter, actuator_counter+dof))
+        info[b.name] = tuple(range(actuator_counter, actuator_counter + dof))
     if datatype in ('joint',):
       joint_counters[dof - 1] += 1
     if datatype in ('actuator',):

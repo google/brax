@@ -41,7 +41,11 @@ class ReacherAngle(env.Env):
     self._range_act = jp.array([l[1] - l[0] for l in limits])
 
   def reset(self, rng: jp.ndarray) -> env.State:
-    qp = self.sys.default_qp()
+    rng, rng1, rng2 = jp.random_split(rng, 3)
+    qpos = self.sys.default_angle() + jp.random_uniform(
+        rng1, (self.sys.num_joint_dof,), -.1, .1)
+    qvel = jp.random_uniform(rng2, (self.sys.num_joint_dof,), -.005, .005)
+    qp = self.sys.default_qp(joint_angle=qpos, joint_velocity=qvel)
     rng, target = self._random_target(rng)
     pos = jp.index_update(qp.pos, self.target_idx, target)
     qp = qp.replace(pos=pos)

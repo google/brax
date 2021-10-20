@@ -15,7 +15,7 @@
 # pylint:disable=g-multiple-import
 """A brax system."""
 
-from typing import Tuple
+from typing import Dict, Optional, Tuple
 
 from brax import jumpy as jp
 from brax import math
@@ -49,16 +49,60 @@ class System:
     self.num_joint_dof = sum(len(j.angle_limit) for j in config.joints)
     self.actuators = actuators.get(self.config, self.joints)
 
-  def default_qp(self, default_index: int = 0) -> QP:
-    """Returns a default state for the system."""
-    qps = {}
+  def default_angle(self, default_index: int = 0) -> jp.ndarray:
+    """Returns the default joint angles for the system."""
+    if not self.config.joints:
+      return jp.array([])
 
-    # do we have default overrides in the config?
-    default_angles, default_qps = {}, {}
+    dofs = {j.name: len(j.angle_limit) for j in self.config.joints}
+    angles = {}
+
+    # check overrides in config defaults
     if default_index < len(self.config.defaults):
       defaults = self.config.defaults[default_index]
-      default_qps = {qp.name: qp for qp in defaults.qps}
-      default_angles = {angle.name: angle for angle in defaults.angles}
+      for ja in defaults.angles:
+        arr = vec_to_arr(ja.angle)[:dofs[ja.name]] * jp.pi / 180
+        angles[ja.name] = arr
+
+    # set remaining joint angles set from angle limits, and add jitter
+    for joint in self.config.joints:
+      if joint.name not in angles:
+        angle = [(l.min + l.max) * jp.pi / 360 for l in joint.angle_limit]
+        angles[joint.name] = jp.array(angle)
+
+    return jp.concatenate([angles[j.name] for j in self.config.joints])
+
+  def default_qp(
+      self,
+      default_index: int = 0,
+      joint_angle: Optional[jp.ndarray] = None,
+      joint_velocity: Optional[jp.ndarray] = None) -> QP:
+    """Returns a default state for the system."""
+    qps = {}
+    if joint_angle is None:
+      joint_angle = self.default_angle(default_index)
+    if joint_velocity is None:
+      joint_velocity = jp.zeros_like(joint_angle)
+
+    # build dof lookup for each joint
+    dofs_idx = {}
+    dof_beg = 0
+    for joint in self.config.joints:
+      dof = len(joint.angle_limit)
+      dofs_idx[joint.name] = (dof_beg, dof_beg + dof)
+      dof_beg += dof
+
+    # check overrides in config defaults
+    default_qps = {}
+    if default_index < len(self.config.defaults):
+      defaults = self.config.defaults[default_index]
+      default_qps = {qp.name for qp in defaults.qps}
+      for qp in defaults.qps:
+        qps[qp.name] = QP(
+            pos=vec_to_arr(qp.pos),
+            rot=math.euler_to_quat(vec_to_arr(qp.rot)),
+            vel=vec_to_arr(qp.vel),
+            ang=vec_to_arr(qp.ang))
 
     # make the kinematic tree of bodies
     root = tree.Node.from_config(self.config)
@@ -67,44 +111,33 @@ class System:
     rot_axes = jp.vmap(math.rotate, [True, False])
 
     for body in root.depth_first():
-      if body.name in default_qps:
-        # set qp if found in defaults.qps override
-        qp = default_qps[body.name]
-        qps[body.name] = QP(
-            pos=vec_to_arr(qp.pos),
-            rot=math.euler_to_quat(vec_to_arr(qp.rot)),
-            vel=vec_to_arr(qp.vel),
-            ang=vec_to_arr(qp.ang))
-      elif body.name in parent_joint:
-        # pos/rot can be determined if the body is the child of a joint
-        joint = parent_joint[body.name]
-        rot = math.euler_to_quat(vec_to_arr(joint.rotation))
-        axes = rot_axes(jp.eye(3), rot)
-        if joint.name in default_angles:
-          angle = default_angles[joint.name].angle
-          angles = vec_to_arr(angle) * jp.pi / 180
-        else:
-          angles = [(l.min + l.max) * jp.pi / 360 for l in joint.angle_limit]
-
-        # for each joint angle, rotate by that angle.
-        # these are euler intrinsic rotations, so the axes are rotated too
-        local_rot = jp.array([1., 0., 0., 0.])
-        for axis, angle in zip(axes, angles):
-          axis_rotated = math.rotate(axis, local_rot)
-          next_rot = math.quat_rot_axis(axis_rotated, angle)
-          local_rot = math.quat_mul(next_rot, local_rot)
-        base_rot = math.euler_to_quat(vec_to_arr(joint.reference_rotation))
-        local_rot = math.quat_mul(base_rot, local_rot)
-        local_offset = math.rotate(vec_to_arr(joint.child_offset), local_rot)
-        local_pos = vec_to_arr(joint.parent_offset) - local_offset
-
-        parent_qp = qps[joint.parent]
-        rot = math.quat_mul(parent_qp.rot, local_rot)
-        pos = parent_qp.pos + math.rotate(local_pos, parent_qp.rot)
-        qps[body.name] = QP(
-            pos=pos, rot=rot, vel=jp.zeros(3), ang=jp.zeros(3))
-      else:
+      if body.name in qps:
+        continue
+      if body.name not in parent_joint:
         qps[body.name] = QP.zero()
+        continue
+      # qp can be determined if the body is the child of a joint
+      joint = parent_joint[body.name]
+      dof_beg, dof_end = dofs_idx[joint.name]
+      rot = math.euler_to_quat(vec_to_arr(joint.rotation))
+      axes = rot_axes(jp.eye(3), rot)[:dof_end - dof_beg]
+      angles = joint_angle[dof_beg:dof_end]
+      velocities = joint_velocity[dof_beg:dof_end]
+      # for each joint angle, rotate by that angle.
+      # these are euler intrinsic rotations, so the axes are rotated too
+      local_rot = math.euler_to_quat(vec_to_arr(joint.reference_rotation))
+      for axis, angle in zip(axes, angles):
+        local_axis = math.rotate(axis, local_rot)
+        next_rot = math.quat_rot_axis(local_axis, angle)
+        local_rot = math.quat_mul(next_rot, local_rot)
+      local_offset = math.rotate(vec_to_arr(joint.child_offset), local_rot)
+      local_pos = vec_to_arr(joint.parent_offset) - local_offset
+      parent_qp = qps[joint.parent]
+      rot = math.quat_mul(parent_qp.rot, local_rot)
+      pos = parent_qp.pos + math.rotate(local_pos, parent_qp.rot)
+      # TODO: propagate ang through tree and account for joint offset
+      ang = jp.dot(axes.T, velocities).T
+      qps[body.name] = QP(pos=pos, rot=rot, vel=jp.zeros(3), ang=ang)
 
     # any trees that have no body qp overrides in the config are set just above
     # the xy plane.  this convenience operation may be removed in the future.

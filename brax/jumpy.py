@@ -274,12 +274,15 @@ def random_prngkey(seed: int) -> ndarray:
     return rng.integers(low=0, high=2**32, dtype='uint32', size=2)
 
 
-def random_uniform(rng: ndarray, shape: Tuple[int, ...] = ()) -> ndarray:
-  """Sample uniform random values in [minval, maxval) with given shape/dtype."""
+def random_uniform(rng: ndarray,
+                   shape: Tuple[int, ...] = (),
+                   low: Optional[float] = 0.0,
+                   high: Optional[float] = 1.0) -> ndarray:
+  """Sample uniform random values in [low, high) with given shape/dtype."""
   if _which_np(rng) is jnp:
-    return jax.random.uniform(rng, shape=shape)
+    return jax.random.uniform(rng, shape=shape, minval=low, maxval=high)
   else:
-    return onp.random.default_rng(rng).uniform(size=shape)
+    return onp.random.default_rng(rng).uniform(size=shape, low=low, high=high)
 
 
 def random_split(rng: ndarray, num: int = 2) -> ndarray:
