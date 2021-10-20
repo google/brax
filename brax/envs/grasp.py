@@ -54,7 +54,7 @@ class Grasp(env.Env):
   def reset(self, rng: jp.ndarray) -> env.State:
     qp = self.sys.default_qp()
     # rng, target = self._random_target(rng)
-    # pos = jax.ops.index_update(qp.pos, jax.ops.index[self.target_idx], target)
+    # pos = qp.pos.at[self.target_idx].set(target)
     # qp = dataclasses.replace(qp, pos=pos)
     info = self.sys.info(qp)
     obs = self._get_obs(qp, info)

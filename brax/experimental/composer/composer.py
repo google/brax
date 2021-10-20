@@ -334,10 +334,9 @@ class ComponentEnv(Env):
           assert reward_name in reward_tuple_dict, (
               f'{reward_name} not in {reward_tuple_dict.keys()}')
           r, s, d = reward_tuple_dict[reward_name]
-          reward = jax.ops.index_add(reward, jax.ops.index[i], r)
-          score = jax.ops.index_add(score, jax.ops.index[i], r)
-          done = jax.ops.index_update(done, jax.ops.index[i],
-                                      jnp.logical_or(done[i], d))
+          reward = reward.at[i].add(r)
+          score = score.at[i].add(r)
+          done = done.at[i].set(jnp.logical_or(done[i], d))
         all_reward_names += reward_names
       assert set(all_reward_names) == set(reward_tuple_dict.keys()), (
           f'{set(all_reward_names)} != {set(reward_tuple_dict.keys())}')
