@@ -19,7 +19,7 @@ import functools
 from absl.testing import absltest
 from absl.testing import parameterized
 from brax.experimental.composer import composer
-from brax.experimental.composer import observers
+from brax.experimental.composer import data_utils
 import jax
 from jax import numpy as jnp
 
@@ -38,8 +38,8 @@ class ComposerTest(parameterized.TestCase):
     action_shapes = composer.get_action_shapes(env.sys)
     leading_dims = (5,)
     actions = jnp.zeros(leading_dims + (env.action_size,))
-    actions_dict = composer.split_array(actions, action_shapes)
-    actions2 = composer.concat_array(actions_dict, action_shapes)
+    actions_dict = data_utils.split_array(actions, action_shapes)
+    actions2 = data_utils.concat_array(actions_dict, action_shapes)
     assert actions.shape == actions2.shape, f'{actions.shape} != {actions2.shape}'
 
   def testObservationConcatSplit(self):
@@ -52,19 +52,19 @@ class ComposerTest(parameterized.TestCase):
     obs_dict = collections.OrderedDict([(i, jnp.zeros(leading_dims + shape))
                                         for i, shape in enumerate(obs_shapes)])
     # get observer_shapes
-    obs_shapes_from_data = observers.get_obs_dict_shape(
+    obs_shapes_from_data = data_utils.get_array_shapes(
         obs_dict, batch_shape=leading_dims)
     for s1, s2 in zip(obs_shapes, obs_shapes_from_data.values()):
       s2 = s2['shape']
       self.assertEqual(s1, s2, f'{s1} != {s2}')
 
     # concat
-    obs = composer.concat_array(obs_dict, obs_shapes_from_data)
+    obs = data_utils.concat_array(obs_dict, obs_shapes_from_data)
     self.assertEqual(obs.shape, leading_dims + (obs_vec_size,),
                      f'{obs.shape} != {leading_dims} + ({obs_vec_size},)')
 
     # split again
-    obs_dict_2 = composer.split_array(obs, obs_shapes_from_data)
+    obs_dict_2 = data_utils.split_array(obs, obs_shapes_from_data)
     for s1, s2 in zip(obs_dict_2.values(), obs_shapes_from_data.values()):
       s1 = s1.shape
       s2 = s2['shape']

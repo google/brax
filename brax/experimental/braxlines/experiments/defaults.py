@@ -137,9 +137,15 @@ DEFAULT_PPO_PARAMS.update(
         walker2d=DEFAULT_PPO_PARAMS['halfcheetah']))
 
 
-def get_ppo_params(env_name: str, timesteps_multiplier: float = 1, **kwargs):
+def get_ppo_params(env_name: str,
+                   timesteps_multiplier: float = 1,
+                   default: str = None,
+                   **kwargs):
   """Get Brax Training default ppo params."""
-  ppo_params = DEFAULT_PPO_PARAMS[env_name]
+  if default:
+    ppo_params = DEFAULT_PPO_PARAMS.get(env_name, DEFAULT_PPO_PARAMS[default])
+  else:
+    ppo_params = DEFAULT_PPO_PARAMS[env_name]
   ppo_params = copy.deepcopy(ppo_params)
   ppo_params['num_timesteps'] = int(ppo_params['num_timesteps'] *
                                     timesteps_multiplier)

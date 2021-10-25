@@ -12,13 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Proximal policy optimization training.
+"""Multi-agent proximal policy optimization training.
 
-See: https://arxiv.org/pdf/1707.06347.pdf
-
-*This is branched from training/ppo.py, and will be folded back later.*
+*This is branched from braxlines/training/ppo.py, and will be folded back.*
 """
 
+from collections import OrderedDict as odict
 import functools
 import time
 from typing import Any, Callable, Dict, Optional, Tuple
@@ -26,6 +25,7 @@ from typing import Any, Callable, Dict, Optional, Tuple
 from absl import logging
 from brax import envs
 from brax.experimental.braxlines.training import env
+from brax.experimental.composer import data_utils
 from brax.training import distribution
 from brax.training import networks
 from brax.training import normalization
@@ -47,6 +47,15 @@ class TrainingState:
   normalizer_params: Params
 
 
+@flax.struct.dataclass
+class Agent:
+  parametric_action_distribution: distribution.ParametricDistribution
+  policy_model: Any
+  optimizer_state: Any
+  init_params: Any
+  grad_loss: Any
+
+
 def compute_ppo_loss(
     models: Dict[str, Params],
     data: ppo.StepData,
@@ -62,7 +71,10 @@ def compute_ppo_loss(
     ppo_epsilon: float = 0.3,
     extra_loss_update_ratios: Optional[Dict[str, float]] = None,
     extra_loss_fns: Optional[Dict[str, Callable[[ppo.StepData],
-                                                jnp.ndarray]]] = None):
+                                                jnp.ndarray]]] = None,
+    action_shapes: Dict[str, Dict[str, Any]] = None,
+    agent_name: str = None,
+):
   """Computes PPO loss."""
   policy_params, value_params = models['policy'], models['value']
   extra_params = models.get('extra', {})
@@ -81,14 +93,17 @@ def compute_ppo_loss(
   # actions = actions[:-1]
   # logits = logits[:-1]
 
-  rewards = data.rewards[1:] * reward_scaling
+  agent_index = list(action_shapes.keys()).index(agent_name)
+  rewards = data.rewards[1:, ..., agent_index] * reward_scaling
   truncation = data.truncation[1:]
   termination = data.dones[1:] * (1 - truncation)
+  actions = data.actions[agent_index]
+  logits = data.logits[agent_index]
 
   target_action_log_probs = parametric_action_distribution.log_prob(
-      policy_logits, data.actions)
+      policy_logits, actions)
   behaviour_action_log_probs = parametric_action_distribution.log_prob(
-      data.logits, data.actions)
+      logits, actions)
 
   vs, advantages = ppo.compute_gae(
       truncation=truncation,
@@ -203,27 +218,16 @@ def train(environment_fn: Callable[..., envs.Env],
       batch_size=num_envs // local_devices_to_use // process_count,
       episode_length=episode_length)
 
+  component_env = core_env.unwrapped
+  action_shapes = component_env.group_action_shapes
+  action_size = component_env.action_size
+
   core_eval_env = environment_fn(
       action_repeat=action_repeat,
       batch_size=num_eval_envs,
       episode_length=episode_length)
-  eval_first_state, eval_step_fn = env.wrap(core_eval_env, key_eval,
-                                            extra_step_kwargs=extra_step_kwargs)
-
-  parametric_action_distribution = parametric_action_distribution_fn(
-      event_size=core_env.action_size)
-
-  policy_model, value_model = make_models_fn(
-      parametric_action_distribution.param_size, core_env.observation_size)
-  key_policy, key_value = jax.random.split(key_models)
-
-  optimizer = optax.adam(learning_rate=learning_rate)
-  init_params = {'policy': policy_params or policy_model.init(key_policy),
-                 'value': value_params or value_model.init(key_value),
-                 'extra': extra_params}
-  optimizer_state = optimizer.init(init_params)
-  optimizer_state, init_params = normalization.bcast_local_devices(
-      (optimizer_state, init_params), local_devices_to_use)
+  eval_first_state, eval_step_fn = env.wrap(
+      core_eval_env, key_eval, extra_step_kwargs=extra_step_kwargs)
 
   tmp_env_states = []
   for key in key_envs:
@@ -240,27 +244,57 @@ def train(environment_fn: Callable[..., envs.Env],
           num_leading_batch_dims=2,
           pmap_to_devices=local_devices_to_use))
 
+  agents = odict()
+  policy_params = policy_params or [None] * len(action_shapes)
+  value_params = value_params or [None] * len(action_shapes)
+  for i, (k, action_shape) in enumerate(action_shapes.items()):
+    parametric_action_distribution = parametric_action_distribution_fn(
+        event_size=action_shape['size'])
+
+    policy_model, value_model = make_models_fn(
+        parametric_action_distribution.param_size, core_env.observation_size)
+    key_policy, key_value, key_models = jax.random.split(key_models, 3)
+
+    optimizer = optax.adam(learning_rate=learning_rate)
+    init_params = {
+        'policy': policy_params[i] or policy_model.init(key_policy),
+        'value': value_params[i] or value_model.init(key_value),
+        'extra': extra_params
+    }
+    optimizer_state = optimizer.init(init_params)
+    optimizer_state, init_params = normalization.bcast_local_devices(
+        (optimizer_state, init_params), local_devices_to_use)
+
+    loss_fn = functools.partial(
+        compute_ppo_loss,
+        parametric_action_distribution=parametric_action_distribution,
+        policy_apply=policy_model.apply,
+        value_apply=value_model.apply,
+        entropy_cost=entropy_cost,
+        discounting=discounting,
+        reward_scaling=reward_scaling,
+        extra_loss_update_ratios=extra_loss_update_ratios,
+        extra_loss_fns=extra_loss_fns,
+        action_shapes=action_shapes,
+        agent_name=k)
+
+    grad_loss = jax.grad(loss_fn, has_aux=True)
+    agents[k] = Agent(parametric_action_distribution, policy_model,
+                      optimizer_state, init_params, grad_loss)
+
   key_debug = jax.random.PRNGKey(seed + 666)
-
-  loss_fn = functools.partial(
-      compute_ppo_loss,
-      parametric_action_distribution=parametric_action_distribution,
-      policy_apply=policy_model.apply,
-      value_apply=value_model.apply,
-      entropy_cost=entropy_cost,
-      discounting=discounting,
-      reward_scaling=reward_scaling,
-      extra_loss_update_ratios=extra_loss_update_ratios,
-      extra_loss_fns=extra_loss_fns)
-
-  grad_loss = jax.grad(loss_fn, has_aux=True)
 
   def do_one_step_eval(carry, unused_target_t):
     state, policy_params, normalizer_params, extra_params, key = carry
     key, key_sample = jax.random.split(key)
     obs = obs_normalizer_apply_fn(normalizer_params, state.core.obs)
-    logits = policy_model.apply(policy_params, obs)
-    actions = parametric_action_distribution.sample(logits, key_sample)
+    actions = odict()
+    for i, (k, agent) in enumerate(agents.items()):
+      logits = agent.policy_model.apply(policy_params[i], obs)
+      actions[k] = agent.parametric_action_distribution.sample(
+          logits, key_sample)
+    actions_arr = jnp.zeros(obs.shape[:-1] + (action_size,))
+    actions = data_utils.fill_array(actions, actions_arr, action_shapes)
     nstate = eval_step_fn(state, actions, normalizer_params, extra_params)
     return (nstate, policy_params, normalizer_params, extra_params, key), ()
 
@@ -279,10 +313,20 @@ def train(environment_fn: Callable[..., envs.Env],
     state, normalizer_params, policy_params, extra_params, key = carry
     key, key_sample = jax.random.split(key)
     normalized_obs = obs_normalizer_apply_fn(normalizer_params, state.core.obs)
-    logits = policy_model.apply(policy_params, normalized_obs)
-    actions = parametric_action_distribution.sample_no_postprocessing(
-        logits, key_sample)
-    postprocessed_actions = parametric_action_distribution.postprocess(actions)
+    logits, actions, postprocessed_actions = [], [], odict()
+    for i, (k, agent) in enumerate(agents.items()):
+      logits += [agent.policy_model.apply(policy_params[i], normalized_obs)]
+      actions += [
+          agent.parametric_action_distribution.sample_no_postprocessing(
+              logits[-1], key_sample)
+      ]
+      postprocessed_actions[
+          k] = agent.parametric_action_distribution.postprocess(actions[-1])
+    postprocessed_actions_arr = jnp.zeros(normalized_obs.shape[:-1] +
+                                          (action_size,))
+    postprocessed_actions = data_utils.fill_array(postprocessed_actions,
+                                                  postprocessed_actions_arr,
+                                                  action_shapes)
     nstate = step_fn(state, postprocessed_actions, normalizer_params,
                      extra_params)
     return (nstate, normalizer_params, policy_params, extra_params,
@@ -308,20 +352,25 @@ def train(environment_fn: Callable[..., envs.Env],
              jnp.expand_dims(state.core.reward, axis=0)]),
         dones=jnp.concatenate(
             [data.dones, jnp.expand_dims(state.core.done, axis=0)]),
-        truncation=jnp.concatenate(
-            [data.truncation, jnp.expand_dims(state.core.info['truncation'],
-                                              axis=0)]))
+        truncation=jnp.concatenate([
+            data.truncation,
+            jnp.expand_dims(state.core.info['truncation'], axis=0)
+        ]))
     return (state, normalizer_params, policy_params, extra_params, key), data
 
   def update_model(carry, data_tuple):
     optimizer_state, params, key = carry
     data, udata = data_tuple
     key, key_loss = jax.random.split(key)
-    loss_grad, metrics = grad_loss(params, data, udata, key_loss)
-    loss_grad = jax.lax.pmean(loss_grad, axis_name='i')
-    params_update, optimizer_state = optimizer.update(loss_grad,
-                                                      optimizer_state)
-    params = optax.apply_updates(params, params_update)
+    metrics = []
+    for i, agent in enumerate(agents.values()):
+      loss_grad, agent_metrics = agent.grad_loss(params[i], data, udata,
+                                                 key_loss)
+      metrics.append(agent_metrics)
+      loss_grad = jax.lax.pmean(loss_grad, axis_name='i')
+      params_update, optimizer_state[i] = optimizer.update(
+          loss_grad, optimizer_state[i])
+      params[i] = optax.apply_updates(params[i], params_update)
 
     return (optimizer_state, params, key), metrics
 
@@ -344,6 +393,11 @@ def train(environment_fn: Callable[..., envs.Env],
         length=num_minibatches)
     return (optimizer_state, params, data, udata, key), metrics
 
+  def get_params(state, key, value=None):
+    if value is not None:
+      return [params.get(key, value) for params in state.params]
+    return [params[key] for params in state.params]
+
   def run_epoch(carry, unused_t):
     training_state, state = carry
     key_minimize, key_generate_unroll, new_key = jax.random.split(
@@ -351,9 +405,8 @@ def train(environment_fn: Callable[..., envs.Env],
     (state, _, _, _, _), data = jax.lax.scan(
         generate_unroll,
         (state, training_state.normalizer_params,
-         training_state.params['policy'],
-         training_state.params.get('extra', {}), key_generate_unroll),
-        (),
+         get_params(training_state, 'policy'),
+         get_params(training_state, 'extra', {}), key_generate_unroll), (),
         length=batch_size * num_minibatches // num_envs)
     # make unroll first
     data = jax.tree_map(lambda x: jnp.swapaxes(x, 0, 1), data)
@@ -369,13 +422,14 @@ def train(environment_fn: Callable[..., envs.Env],
 
     (optimizer_state, params, _, _, _), metrics = jax.lax.scan(
         minimize_epoch, (training_state.optimizer_state, training_state.params,
-                         data, udata, key_minimize),
-        (),
+                         data, udata, key_minimize), (),
         length=num_update_epochs)
 
     new_training_state = TrainingState(
-        optimizer_state=optimizer_state, params=params,
-        normalizer_params=normalizer_params, key=new_key)
+        optimizer_state=optimizer_state,
+        params=params,
+        normalizer_params=normalizer_params,
+        key=new_key)
     return (new_training_state, state), metrics
 
   num_epochs = num_timesteps // (
@@ -391,19 +445,19 @@ def train(environment_fn: Callable[..., envs.Env],
   minimize_loop = jax.pmap(_minimize_loop, axis_name='i')
 
   _, inference = make_params_and_inference_fn(
-      core_env.observation_size, core_env.action_size, normalize_observations,
+      core_env.observation_size, action_shapes, normalize_observations,
       parametric_action_distribution_fn, make_models_fn)
 
   training_state = TrainingState(
-      optimizer_state=optimizer_state,
-      params=init_params,
+      optimizer_state=[agent.optimizer_state for agent in agents.values()],
+      params=[agent.init_params for agent in agents.values()],
       key=jnp.stack(jax.random.split(key, local_devices_to_use)),
       normalizer_params=normalizer_params)
   training_walltime = 0
   eval_walltime = 0
   sps = 0
   eval_sps = 0
-  losses = {}
+  losses = []
   state = first_state
   metrics = {}
 
@@ -414,19 +468,24 @@ def train(environment_fn: Callable[..., envs.Env],
     if process_id == 0:
       eval_state, key_debug = (
           run_eval(eval_first_state, key_debug,
-                   training_state.params['policy'],
+                   get_params(training_state, 'policy'),
                    training_state.normalizer_params,
-                   training_state.params.get('extra', {})))
+                   get_params(training_state, 'extra', {})))
       eval_state.total_episodes.block_until_ready()
       eval_walltime += time.time() - t
       eval_sps = (
           episode_length * eval_first_state.core.reward.shape[0] /
           (time.time() - t))
+
       metrics = dict(
           **dict({
               f'eval/episode_{name}': value / eval_state.total_episodes
               for name, value in eval_state.total_metrics.items()
-          }), **dict({f'losses/{k}': jnp.mean(v) for k, v in losses.items()}),
+          }),
+          **dict({
+              f'{index}/losses/{k}': jnp.mean(v)
+              for index, loss in enumerate(losses) for k, v in loss.items()
+          }),
           **dict({
               'eval/total_episodes': eval_state.total_episodes,
               'speed/sps': sps,
@@ -435,14 +494,16 @@ def train(environment_fn: Callable[..., envs.Env],
               'speed/eval_walltime': eval_walltime,
               'speed/timestamp': training_walltime
           }))
+
       logging.info(metrics)
       if progress_fn:
         params = dict(
             normalizer=jax.tree_map(lambda x: x[0],
                                     training_state.normalizer_params),
             policy=jax.tree_map(lambda x: x[0],
-                                training_state.params['policy']),
-            extra=jax.tree_map(lambda x: x[0], training_state.params['extra']))
+                                get_params(training_state, 'policy')),
+            extra=jax.tree_map(lambda x: x[0],
+                               get_params(training_state, 'extra')))
         progress_fn(
             int(training_state.normalizer_params[0][0]) * action_repeat,
             metrics, params)
@@ -463,9 +524,9 @@ def train(environment_fn: Callable[..., envs.Env],
   normalizer_params = jax.tree_map(lambda x: x[0],
                                    training_state.normalizer_params)
   policy_params = jax.tree_map(lambda x: x[0],
-                               training_state.params['policy'])
+                               get_params(training_state, 'policy'))
   extra_params = jax.tree_map(lambda x: x[0],
-                              training_state.params.get('extra', {}))
+                              get_params(training_state, 'extra'))
 
   logging.info('total steps: %s', normalizer_params[0] * action_repeat)
 
@@ -483,7 +544,7 @@ def train(environment_fn: Callable[..., envs.Env],
 
 def make_params_and_inference_fn(
     observation_size: int,
-    action_size: int,
+    action_shapes: Dict[str, Any],
     normalize_observations: bool = False,
     parametric_action_distribution_fn: Optional[Callable[[
         int,
@@ -493,24 +554,35 @@ def make_params_and_inference_fn(
         [int, int], Tuple[networks.FeedForwardModel]]] = networks.make_models,
     extra_params: Dict[str, Dict[str, jnp.ndarray]] = None,
 ):
-  """Creates params and inference function for the PPO agent."""
+  """Creates params and inference function for the multi-agent PPO agent."""
+  action_size = sum([s['size'] for s in action_shapes.values()])
   obs_normalizer_params, obs_normalizer_apply_fn = normalization.make_data_and_apply_fn(
       observation_size, normalize_observations=normalize_observations)
-  parametric_action_distribution = parametric_action_distribution_fn(
-      event_size=action_size)
-  policy_model, _ = make_models_fn(parametric_action_distribution.param_size,
-                                   observation_size)
+  agents = odict()
+  for k, action_shape in action_shapes.items():
+    parametric_action_distribution = parametric_action_distribution_fn(
+        event_size=action_shape['size'])
+    policy_model, _ = make_models_fn(parametric_action_distribution.param_size,
+                                     observation_size)
+    agents[k] = (parametric_action_distribution, policy_model)
 
   def inference_fn(params, obs, key):
     normalizer_params, policy_params = params['normalizer'], params['policy']
     obs = obs_normalizer_apply_fn(normalizer_params, obs)
-    action = parametric_action_distribution.sample(
-        policy_model.apply(policy_params, obs), key)
-    return action
+    actions = odict()
+    for i, (k, (parametric_action_distribution,
+                policy_model)) in enumerate(agents.items()):
+      actions[k] = parametric_action_distribution.sample(
+          policy_model.apply(policy_params[i], obs), key)
+    actions_arr = jnp.zeros(obs.shape[:-1] + (action_size,))
+    actions = data_utils.fill_array(actions, actions_arr, action_shapes)
+    return actions
 
   params = dict(
       normalizer=obs_normalizer_params,
-      policy=policy_model.init(jax.random.PRNGKey(0)),
-      extra={} if extra_params is None else extra_params
-      )
+      policy=[
+          policy_model.init(jax.random.PRNGKey(0))
+          for _, policy_model in agents.values()
+      ],
+      extra={} if extra_params is None else extra_params)
   return params, inference_fn

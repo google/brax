@@ -16,20 +16,16 @@
 import copy
 import datetime
 import functools
-import math
 from typing import Dict, Any
+from brax.experimental.braxlines import experiments
 from brax.experimental.braxlines.common import logger_utils
+from brax.experimental.braxlines.envs.obs_indices import OBS_INDICES
 from brax.experimental.braxlines.training import ppo
 from brax.experimental.braxlines.vgcrl import evaluators as vgcrl_evaluators
 from brax.experimental.braxlines.vgcrl import utils as vgcrl_utils
 from brax.experimental.composer import composer
-from brax.experimental.composer import register_default_components
-from brax.experimental.composer.obs_descs import OBS_INDICES
-from brax.io import file
 import jax
-import matplotlib.pyplot as plt
 import tensorflow_probability as tfp
-register_default_components()
 
 tfp = tfp.substrates.jax
 tfd = tfp.distributions
@@ -67,21 +63,7 @@ def train(train_job_params: Dict[str, Any],
   diayn_num_skills = config.pop('diayn_num_skills', 8)
   disc_update_ratio = config.pop('disc_update_ratio', 1.0)
   spectral_norm = config.pop('spectral_norm', False)
-  ppo_params = dict(
-      num_timesteps=int(5e7),
-      reward_scaling=10,
-      episode_length=1000,
-      normalize_observations=True,
-      action_repeat=1,
-      unroll_length=5,
-      num_minibatches=32,
-      num_update_epochs=4,
-      discounting=0.95,
-      learning_rate=3e-4,
-      entropy_cost=1e-2,
-      num_envs=2048,
-      log_frequency=20,
-      batch_size=1024)
+  ppo_params = experiments.defaults.get_ppo_params(env_name, default='ant')
   ppo_params.update(config.pop('ppo_params', {}))
   assert not config, f'unused config: {config}'
 
@@ -129,79 +111,50 @@ def train(train_job_params: Dict[str, Any],
   train_fn = functools.partial(ppo.train, **ppo_params)
 
   times = [datetime.datetime.now()]
-  plotdata = {}
-  plotkeys = [
+  plotpatterns = [
       'eval/episode_reward', 'losses/disc_loss', 'metrics/lgr',
       'metrics/entropy_all_', 'metrics/entropy_z_', 'metrics/mi_'
   ]
-  ncols = 5
 
-  def plot(output_path: str = None, output_name: str = 'training_curves'):
-    matched_keys = [
-        key for key in sorted(plotdata.keys())
-        if any(plotkey in key for plotkey in plotkeys)
-    ]
-    num_figs = len(matched_keys)
-    nrows = int(math.ceil(num_figs / ncols))
-    fig, axs = plt.subplots(
-        ncols=ncols, nrows=nrows, figsize=(3.5 * ncols, 3 * nrows))
-    for i, key in enumerate(matched_keys):
-      ax = axs
-      row, col = int(i / ncols), i % ncols
-      if nrows > 1:
-        ax = ax[row]
-      if ncols > 1:
-        ax = ax[col]
-      ax.plot(plotdata[key]['x'], plotdata[key]['y'])
-      ax.set(xlabel='# environment steps', ylabel=key)
-      ax.set_xlim([0, train_fn.keywords['num_timesteps']])
-    fig.tight_layout()
-    if output_path:
-      with file.File(f'{output_path}/{output_name}.png', 'wb') as f:
-        plt.savefig(f)
-
-  def progress(num_steps, metrics, params):
+  def update_metrics_fn(num_steps, metrics, params):
+    del num_steps
     if evaluate_mi:
-      mi_metrics = vgcrl_evaluators.estimate_empowerment_metric(
-          env_fn=eval_env_fn,
-          disc=disc,
-          inference_fn=inference_fn,
-          params=params,
-          num_z=10,
-          num_samples_per_z=10,
-          time_subsampling=1,
-          time_last_n=500,
-          num_1d_bins=1000,
-          num_2d_bins=30,
-          verbose=True,
-          seed=0)
-      metrics.update(mi_metrics)
-
+      metrics.update(
+          vgcrl_evaluators.estimate_empowerment_metric(
+              env_fn=eval_env_fn,
+              disc=disc,
+              inference_fn=inference_fn,
+              params=params,
+              num_z=10,
+              num_samples_per_z=10,
+              time_subsampling=1,
+              time_last_n=500,
+              num_1d_bins=1000,
+              num_2d_bins=30,
+              verbose=True,
+              seed=0))
     if evaluate_lgr:
-      lgr_metrics = vgcrl_evaluators.estimate_latent_goal_reaching_metric(
-          params=params,
-          env_fn=eval_env_fn,
-          disc=disc,
-          inference_fn=inference_fn,
-          goals=goals,
-          num_samples_per_z=10,
-          time_subsampling=1,
-          time_last_n=500,
-          seed=0)
-      metrics.update(lgr_metrics)
+      metrics.update(
+          vgcrl_evaluators.estimate_latent_goal_reaching_metric(
+              params=params,
+              env_fn=eval_env_fn,
+              disc=disc,
+              inference_fn=inference_fn,
+              goals=goals,
+              num_samples_per_z=10,
+              time_subsampling=1,
+              time_last_n=500,
+              seed=0))
 
-    times.append(datetime.datetime.now())
-
-    for key, v in metrics.items():
-      plotdata[key] = plotdata.get(key, dict(x=[], y=[]))
-      plotdata[key]['x'] += [num_steps]
-      plotdata[key]['y'] += [v]
-    # the first step does not include losses
-    if num_steps > 0:
-      tab.add(num_steps=num_steps, **metrics)
-      tab.dump()
-      return_dict.update(dict(num_steps=num_steps, **metrics))
-      progress_dict.update(dict(num_steps=num_steps, **metrics))
+  progress, plot, _, _ = experiments.get_progress_fn(
+      plotpatterns,
+      times,
+      tab=tab,
+      max_ncols=5,
+      return_dict=return_dict,
+      progress_dict=progress_dict,
+      xlim=[0, train_fn.keywords['num_timesteps']],
+      update_metrics_fn=update_metrics_fn)
 
   extra_loss_fns = dict(disc_loss=disc.disc_loss_fn) if extra_params else None
   extra_loss_update_ratios = dict(

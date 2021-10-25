@@ -16,15 +16,12 @@
 import copy
 import datetime
 from typing import Dict, Any
+from brax.experimental.braxlines import experiments
 from brax.experimental.braxlines.common import evaluators
 from brax.experimental.braxlines.common import logger_utils
+from brax.experimental.braxlines.training import mappo
 from brax.experimental.braxlines.training import ppo
 from brax.experimental.composer import composer
-from brax.experimental.composer import register_default_components
-import jax.numpy as jnp
-import matplotlib.pyplot as plt
-
-register_default_components()
 
 TASK_KEYS = (('env_name',),)
 
@@ -48,22 +45,7 @@ def train(train_job_params: Dict[str, Any],
   desc_edits = config.pop('desc_edits', {})
   seed = config.pop('seed', 0)
   eval_seed = config.pop('eval_seed', 0)
-  ppo_params = dict(
-      num_timesteps=int(5e7),
-      log_frequency=20,
-      reward_scaling=10,
-      episode_length=1000,
-      normalize_observations=True,
-      action_repeat=1,
-      unroll_length=5,
-      num_minibatches=32,
-      num_update_epochs=4,
-      discounting=0.95,
-      learning_rate=3e-4,
-      entropy_cost=1e-2,
-      num_envs=2048,
-      extra_step_kwargs=False,
-      batch_size=1024)
+  ppo_params = experiments.defaults.get_ppo_params(env_name, default='ant')
   ppo_params.update(config.pop('ppo_params', {}))
   assert not config, f'unused config: {config}'
 
@@ -77,36 +59,24 @@ def train(train_job_params: Dict[str, Any],
 
   # We determined some reasonable hyperparameters offline and share them here.
   times = [datetime.datetime.now()]
-  plotdata = {}
   plotpatterns = ['eval/episode_reward', 'eval/episode_score']
 
-  def progress(num_steps, metrics, params):
-    del params
-    times.append(datetime.datetime.now())
-    plotkeys = []
-    for key, v in metrics.items():
-      assert not jnp.isnan(v), f'{key} {num_steps} NaN'
-      plotdata[key] = plotdata.get(key, dict(x=[], y=[]))
-      plotdata[key]['x'] += [num_steps]
-      plotdata[key]['y'] += [v]
-      if any(x in key for x in plotpatterns):
-        plotkeys += [key]
-    if num_steps > 0:
-      tab.add(num_steps=num_steps, **metrics)
-      tab.dump()
-      return_dict.update(dict(num_steps=num_steps, **metrics))
-      progress_dict.update(dict(num_steps=num_steps, **metrics))
-    num_figs = max(len(plotkeys), 2)
-    fig, axs = plt.subplots(ncols=num_figs, figsize=(3.5 * num_figs, 3))
-    for i, key in enumerate(plotkeys):
-      if key in plotdata:
-        axs[i].plot(plotdata[key]['x'], plotdata[key]['y'])
-      axs[i].set(xlabel='# environment steps', ylabel=key)
-      axs[i].set_xlim([0, ppo_params['num_timesteps']])
-    fig.tight_layout()
+  progress, _, _, _ = experiments.get_progress_fn(
+      plotpatterns,
+      times,
+      tab=tab,
+      max_ncols=5,
+      xlim=[0, ppo_params['num_timesteps']],
+      return_dict=return_dict,
+      progress_dict=progress_dict)
 
-  inference_fn, params, _ = ppo.train(
-      environment_fn=env_fn, progress_fn=progress, seed=seed, **ppo_params)
+  ppo_lib = mappo if env_fn().metadata.agent_groups else ppo
+  inference_fn, params, _ = ppo_lib.train(
+      environment_fn=env_fn,
+      progress_fn=progress,
+      seed=seed,
+      extra_step_kwargs=False,
+      **ppo_params)
   time_to_jit = times[1] - times[0]
   time_to_train = times[-1] - times[1]
   print(f'time to jit: {time_to_jit}')

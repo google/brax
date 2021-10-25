@@ -37,7 +37,6 @@ setup(
     scripts=["bin/learn"],
     install_requires=[
         "absl-py",
-        "clu",
         "dataclasses",
         "flax",
         "gym",
@@ -48,7 +47,7 @@ setup(
         "optax",
         "Pillow",
         "pytinyrenderer",
-        "tensorflow_probability[jax]",
+        "tensorboardX",
     ],
     extras_require={
         "develop": ["pytest", "transforms3d"],

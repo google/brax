@@ -16,20 +16,16 @@
 import copy
 import datetime
 import functools
-import math
 from typing import Dict, Any
+from brax.experimental.braxlines import experiments
 from brax.experimental.braxlines.common import evaluators
 from brax.experimental.braxlines.common import logger_utils
+from brax.experimental.braxlines.envs.obs_indices import OBS_INDICES
 from brax.experimental.braxlines.irl_smm import evaluators as irl_evaluators
 from brax.experimental.braxlines.irl_smm import utils as irl_utils
 from brax.experimental.braxlines.training import ppo
 from brax.experimental.composer import composer
-from brax.experimental.composer import register_default_components
-from brax.experimental.composer.obs_descs import OBS_INDICES
-from brax.io import file
 import jax
-import matplotlib.pyplot as plt
-register_default_components()
 
 TASK_KEYS = (
     ('env_name',),
@@ -71,21 +67,7 @@ def train(train_job_params: Dict[str, Any],
   evaluate_dist = config.pop('evaluate_dist', False)
   spectral_norm = config.pop('spectral_norm', False)
   gradient_penalty_weight = config.pop('gradient_penalty_weight', 0.0)
-  ppo_params = dict(
-      num_timesteps=int(5e7),
-      reward_scaling=10,
-      episode_length=1000,
-      normalize_observations=True,
-      action_repeat=1,
-      unroll_length=5,
-      num_minibatches=32,
-      num_update_epochs=4,
-      discounting=0.95,
-      learning_rate=3e-4,
-      entropy_cost=1e-2,
-      num_envs=2048,
-      log_frequency=20,
-      batch_size=1024)
+  ppo_params = experiments.defaults.get_ppo_params(env_name, default='ant')
   ppo_params.update(config.pop('ppo_params', {}))
   assert not config, f'unused config: {config}'
 
@@ -98,8 +80,7 @@ def train(train_job_params: Dict[str, Any],
           num_modes=target_num_modes,
           scale=obs_scale))
   target_dist = jit_get_dist()
-  target_data = target_dist.sample(
-      seed=rng, sample_shape=(target_num_samples,))
+  target_data = target_dist.sample(seed=rng, sample_shape=(target_num_samples,))
 
   # make env_fn
   base_env_fn = composer.create_fn(env_name=env_name)
@@ -142,66 +123,37 @@ def train(train_job_params: Dict[str, Any],
   train_fn = functools.partial(ppo.train, **ppo_params)
 
   times = [datetime.datetime.now()]
-  plotdata = {}
-  plotkeys = [
+  plotpatterns = [
       'eval/episode_reward', 'losses/disc_loss', 'losses/total_loss',
       'losses/policy_loss', 'losses/value_loss', 'losses/entropy_loss',
       'metrics/energy_dist'
   ]
 
-  ncols = 5
-
-  def plot(output_path: str = None, output_name: str = 'training_curves'):
-    matched_keys = [
-        key for key in sorted(plotdata.keys())
-        if any(plotkey in key for plotkey in plotkeys)
-    ]
-    num_figs = len(matched_keys)
-    nrows = int(math.ceil(num_figs / ncols))
-    fig, axs = plt.subplots(
-        ncols=ncols, nrows=nrows, figsize=(3.5 * ncols, 3 * nrows))
-    for i, key in enumerate(matched_keys):
-      ax = axs
-      row, col = int(i / ncols), i % ncols
-      if nrows > 1:
-        ax = ax[row]
-      if ncols > 1:
-        ax = ax[col]
-      ax.plot(plotdata[key]['x'], plotdata[key]['y'])
-      ax.set(xlabel='# environment steps', ylabel=key)
-      ax.set_xlim([0, train_fn.keywords['num_timesteps']])
-    fig.tight_layout()
-    if output_path:
-      with file.File(f'{output_path}/{output_name}.png', 'wb') as f:
-        plt.savefig(f)
-
-  def progress(num_steps, metrics, params):
-    times.append(datetime.datetime.now())
-
+  def update_metrics_fn(num_steps, metrics, params):
+    del num_steps
     if evaluate_dist:
-      dist_metrics = irl_evaluators.estimate_energy_distance_metric(
-          params=params,
-          disc=disc,
-          target_data=target_data,
-          env_fn=eval_env_fn,
-          inference_fn=inference_fn,
-          num_samples=10,
-          time_subsampling=10,
-          time_last_n=500,
-          visualize=False,
-          seed=0)
-      metrics.update(dist_metrics)
+      metrics.update(
+          irl_evaluators.estimate_energy_distance_metric(
+              params=params,
+              disc=disc,
+              target_data=target_data,
+              env_fn=eval_env_fn,
+              inference_fn=inference_fn,
+              num_samples=10,
+              time_subsampling=10,
+              time_last_n=500,
+              visualize=False,
+              seed=0))
 
-    for key, v in metrics.items():
-      plotdata[key] = plotdata.get(key, dict(x=[], y=[]))
-      plotdata[key]['x'] += [num_steps]
-      plotdata[key]['y'] += [v]
-    # the first step does not include losses
-    if num_steps > 0:
-      tab.add(num_steps=num_steps, **metrics)
-      tab.dump()
-      return_dict.update(dict(num_steps=num_steps, **metrics))
-      progress_dict.update(dict(num_steps=num_steps, **metrics))
+  progress, plot, _, _ = experiments.get_progress_fn(
+      plotpatterns,
+      times,
+      tab=tab,
+      max_ncols=5,
+      return_dict=return_dict,
+      progress_dict=progress_dict,
+      xlim=[0, train_fn.keywords['num_timesteps']],
+      update_metrics_fn=update_metrics_fn)
 
   extra_loss_fns = dict(disc_loss=disc.disc_loss_fn)
   inference_fn, params, _ = train_fn(

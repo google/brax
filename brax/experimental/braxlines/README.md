@@ -41,7 +41,10 @@ Since each experiment runs under a few minutes, a reasonable amount of hyperpara
 <img src="https://github.com/google/brax/raw/main/docs/img/braxlines/sketches.png" width="540" height="220"/>
 
 For a deep dive into Braxlines, please see
-our paper, [Braxlines: Fast and Interactive Toolkit for RL-driven Behavior Generation Beyond Reward Maximization](https://openreview.net/forum?id=-W0LCm8wE2S).
+our paper, [Braxlines: Fast and Interactive Toolkit for RL-driven Behavior Generation Beyond Reward Maximization](https://arxiv.org/abs/2110.04686).
+
+*Braxlines is under rapid development. While API is stabilizing,
+feel free to send documentation and feature questions and requests.*
 
 ## Citing Braxlines
 
@@ -49,8 +52,9 @@ If you would like to reference Braxlines in a publication, please use:
 
 ```
 @article{gu2021braxlines,
-  title={Braxlines: Fast and Interactive Toolkit for RL-driven Behavior Generation Beyond Reward Maximization},
-  author={Gu, Shixiang Shane and Diaz, Manfred and Freeman, C Daniel and Furuta, Hiroki and Ghasemipour, Seyed Kamyar Seyed and Raichuk, Anton and David, Byron and Frey, Erik and Coumans, Erwin and Bachem, Olivier},
+  title={Braxlines: Fast and Interactive Toolkit for RL-driven Behavior Engineering beyond Reward Maximization},
+  author={Gu, Shixiang Shane and Diaz, Manfred and Freeman, Daniel C and Furuta, Hiroki and Ghasemipour, Seyed Kamyar Seyed and Raichuk, Anton and David, Byron and Frey, Erik and Coumans, Erwin and Bachem, Olivier},
+  journal={arXiv preprint arXiv:2110.04686},
   year={2021}
 }
 @software{brax2021github,

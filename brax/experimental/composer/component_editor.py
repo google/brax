@@ -15,6 +15,8 @@
 """Component loader and editor."""
 # pylint:disable=protected-access
 # pylint:disable=g-complex-comprehension
+# pylint:disable=g-doc-args
+# pylint:disable=g-doc-return-or-yield
 import copy
 import itertools
 import json
@@ -100,12 +102,55 @@ def json_collides(first_collides: Tuple[str],
   return dict(collide_include=collides)
 
 
+SPLITTER = '::'
+
+
 def add_suffix(name: str, suffix: str):
   """Add suffix to string."""
   if suffix:
-    return f'{name}_{suffix}'
-  else:
+    return f'{suffix}{SPLITTER}{name}'
+  return name
+
+
+def split_suffix(name: str):
+  """Split string to name, suffix."""
+  if SPLITTER not in name:
+    return name, ''
+  suffix, name = name.split(SPLITTER, 1)
+  return name, suffix
+
+
+def match_name(name: str, *agent_names):
+  """Check if *agent_names matches name.
+
+  E.g. match_name('a1__a2::dist', 'a1', 'a2') --> True
+  """
+  assert agent_names
+  suffix = '__'.join(sorted(agent_names))
+  return name.startswith(f'{suffix}{SPLITTER}')
+
+
+def concat_name(name: str, *agent_names):
+  """Add agent suffices to name.
+
+  E.g. concat_name('dist', 'a2', 'a1') --> 'a1__a2::dist'
+  """
+  if not agent_names:
     return name
+  suffix = '__'.join(sorted(agent_names))
+  return add_suffix(name, suffix)
+
+
+def split_name(name: str):
+  """Split a string to name, *agent_names.
+
+  E.g. split_name('a1__a2::dist') --> ('dist', ('a1', 'a2'))
+  """
+  name, suffix = split_suffix(name)
+  if suffix:
+    agent_names = suffix.split('__')
+  agent_names = []
+  return name, agent_names
 
 
 def json_add_suffix(

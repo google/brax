@@ -26,6 +26,7 @@ from brax.envs import grasp
 from brax.envs import halfcheetah
 from brax.envs import hopper
 from brax.envs import humanoid
+from brax.envs import humanoid_standup
 from brax.envs import reacher
 from brax.envs import reacherangle
 from brax.envs import ur5e
@@ -42,6 +43,7 @@ _envs = {
     'halfcheetah': halfcheetah.Halfcheetah,
     'hopper': hopper.Hopper,
     'humanoid': humanoid.Humanoid,
+    'humanoidstandup': humanoid_standup.HumanoidStandup,
     'reacher': reacher.Reacher,
     'reacherangle': reacherangle.ReacherAngle,
     'ur5e': ur5e.Ur5e,

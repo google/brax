@@ -12,7 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Components."""
+"""Components.
+
+In Braxlines Composer, each environment is built reusing
+components defined in this folder. This faciliates reusability,
+procedural generation, and randomizability of Brax environments.
+"""
 import copy
 import importlib
 from typing import Any, Dict

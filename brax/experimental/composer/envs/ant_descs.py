@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Environment descriptions."""
+"""ants environments."""
 from brax.experimental.composer import composer_utils
 from brax.experimental.composer.components import ant
 from brax.experimental.composer.observers import LambdaObserver as lo
@@ -32,36 +32,6 @@ ENV_DESCS = {
                             indices=(0, 1),
                             offset=5,
                             target_goal=(4, 0))),
-                ),)),
-    'ant_chase_ma':
-        dict(
-            agent_groups=dict(
-                agent1=dict(reward_names=('dist_agent1__agent2',)),
-                agent2=dict(reward_names=('goal_agent2',)),
-            ),
-            components=dict(
-                agent1=dict(component='ant', pos=(0, 0, 0)),
-                agent2=dict(
-                    component='ant',
-                    pos=(0, 2, 0),
-                    reward_fns=dict(
-                        goal=dict(
-                            reward_type='root_goal',
-                            sdcomp='vel',
-                            indices=(0, 1),
-                            offset=5,
-                            scale=1,
-                            target_goal=(4, 0)),),
-                ),
-            ),
-            edges=dict(
-                agent1__agent2=dict(
-                    extra_observers=[
-                        dict(observer_type='root_vec', indices=(0, 1)),
-                    ],
-                    reward_fns=dict(
-                        dist=dict(
-                            reward_type='root_dist', min_dist=1, offset=5)),
                 ),)),
     'ant_chase':
         dict(

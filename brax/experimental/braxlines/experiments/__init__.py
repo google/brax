@@ -15,14 +15,16 @@
 """Experiment configuration loader and runner."""
 # pylint:disable=broad-except
 # pylint:disable=g-complex-comprehension
+import datetime
 import importlib
 import math
 import os
 import pprint
 import re
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Tuple, Callable
 from brax.experimental.braxlines.common import config_utils
 from brax.experimental.braxlines.common import logger_utils
+from brax.experimental.braxlines.experiments import defaults
 from brax.io import file
 import numpy as np
 
@@ -176,6 +178,71 @@ def compute_statistics(data,
 def color_spec(n):
   t = np.linspace(-510, 510, n)
   return np.clip(np.stack([-t, 510 - np.abs(t), t], axis=1), 0, 255) / 255.
+
+
+def get_progress_fn(plotpatterns: List[str],
+                    times: List[float],
+                    return_dict: Dict[str, float] = None,
+                    progress_dict: Dict[str, float] = None,
+                    xlabel: str = '# environment steps',
+                    xlim: List[float] = None,
+                    max_ncols: int = 5,
+                    update_metrics_fn: Callable[..., Any] = None,
+                    pre_plot_fn: Callable[..., Any] = None,
+                    post_plot_fn: Callable[..., Any] = None,
+                    tab: logger_utils.Tabulator = None):
+  """Get progress function for training."""
+  # pylint:disable=g-import-not-at-top
+  import matplotlib.pyplot as plt
+  # pylint:enable=g-import-not-at-top
+  plotdata = {}
+  return_dict = return_dict or {}
+  progress_dict = progress_dict or {}
+
+  def plot(output_name: str = 'training_curves', output_path: str = None):
+    plotkeys = [key for key in plotdata if any(x in key for x in plotpatterns)]
+    num_figs = len(plotkeys)
+    ncols = min(num_figs, max_ncols)
+    nrows = int(math.ceil(num_figs / ncols))
+    fig, axs = plt.subplots(
+        ncols=ncols, nrows=nrows, figsize=(3.5 * ncols, 3 * nrows))
+    for i, key in enumerate(plotkeys):
+      col, row = i % ncols, int(i / ncols)
+      ax = axs
+      if nrows > 1:
+        ax = ax[row]
+      if ncols > 1:
+        ax = ax[col]
+      ax.plot(plotdata[key]['x'], plotdata[key]['y'])
+      ax.set(xlabel=xlabel, ylabel=key)
+      if xlim:
+        ax.set_xlim(xlim)
+    fig.tight_layout()
+    if output_path:
+      with file.File(f'{output_path}/{output_name}.png', 'wb') as f:
+        plt.savefig(f)
+
+  def progress(num_steps, metrics, params):
+    if update_metrics_fn:
+      update_metrics_fn(num_steps, metrics, params)
+    times.append(datetime.datetime.now())
+    for key, v in metrics.items():
+      assert not np.isnan(v), f'{key} {num_steps} NaN'
+      plotdata[key] = plotdata.get(key, dict(x=[], y=[]))
+      plotdata[key]['x'] += [num_steps]
+      plotdata[key]['y'] += [v]
+    if num_steps > 0:
+      tab.add(num_steps=num_steps, **metrics)
+      tab.dump()
+      return_dict.update(dict(num_steps=num_steps, **metrics))
+      progress_dict.update(dict(num_steps=num_steps, **metrics))
+    if pre_plot_fn:
+      pre_plot_fn()
+    plot()
+    if post_plot_fn:
+      post_plot_fn()
+
+  return progress, plot, plotdata, progress_dict
 
 
 def plot_statistics(statistics: Dict[str, Any],

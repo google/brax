@@ -14,22 +14,21 @@
 
 """RL training with an environment running entirely on an accelerator."""
 
-import dataclasses
 import os
 import uuid
 
 from absl import app
 from absl import flags
-from clu import metric_writers
-import jax
 from brax import envs
 from brax.io import html
+from brax.io import metrics
 from brax.io import model
 from brax.training import apg
 from brax.training import ars
 from brax.training import es
 from brax.training import ppo
 from brax.training import sac
+import jax
 
 FLAGS = flags.FLAGS
 
@@ -99,12 +98,11 @@ flags.DEFINE_enum('head_type', '', ['', 'clip', 'tanh'],
 def main(unused_argv):
 
   env_fn = envs.create_fn(FLAGS.env)
-  writer = metric_writers.create_default_writer(FLAGS.logdir)
-  writer.write_hparams({'log_frequency': FLAGS.eval_frequency,
-                        'num_envs': FLAGS.num_envs,
-                        'total_env_steps': FLAGS.total_env_steps})
 
-  with metric_writers.ensure_flushes(writer):
+  with metrics.Writer(FLAGS.logdir) as writer:
+    writer.write_hparams({'log_frequency': FLAGS.eval_frequency,
+                          'num_envs': FLAGS.num_envs,
+                          'total_env_steps': FLAGS.total_env_steps})
     if FLAGS.learner == 'sac':
       inference_fn, params, _ = sac.train(
           environment_fn=env_fn,

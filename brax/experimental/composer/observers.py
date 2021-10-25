@@ -24,9 +24,6 @@ get_obs_dict() supports modular observation specs, with observer=
     component
   'root_z_joints': the same as 'root_joints' but remove root body's pos[:2]
 
-get_obs_dict_shape() returns shape info in the form:
-  dict(key1=dict(shape=(10,), start=40, end=50), ...)
-
 index_preprocess() converts special specs, e.g. ('key1', 2), into int indices
   for index_obs()
 
@@ -34,7 +31,6 @@ index_obs() allows indexing with a list of indices
 """
 import abc
 import collections
-import functools
 from typing import Any, Dict, List, Tuple, Union
 import brax
 from brax.envs import Env
@@ -257,21 +253,6 @@ def get_obs_dict(sys, qp: brax.QP, info: brax.Info, observer: Union[str,
   else:
     raise NotImplementedError(observer)
   return obs_dict
-
-
-def get_obs_dict_shape(obs_dict: Union[Dict[str, jnp.ndarray], jnp.ndarray],
-                       batch_shape: Tuple[int] = ()):
-  """Get observation dict shape information."""
-  if isinstance(obs_dict, jnp.ndarray):
-    return obs_dict.shape
-  observer_shapes = collections.OrderedDict()
-  i = 0
-  for k, v in obs_dict.items():
-    v_shape = v.shape[len(batch_shape):]
-    size = functools.reduce(lambda x, y: x * y, v_shape)
-    observer_shapes[k] = dict(shape=v_shape, size=size, start=i, end=i + size)
-    i += size
-  return observer_shapes
 
 
 def get_component_observers(component: Dict[str, Any],

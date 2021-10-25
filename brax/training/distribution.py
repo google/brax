@@ -17,10 +17,6 @@
 import abc
 import jax
 import jax.numpy as jnp
-import tensorflow_probability as tfp
-
-tfp = tfp.substrates.jax
-tfd = tfp.distributions
 
 
 class ParametricDistribution(abc.ABC):
@@ -34,8 +30,8 @@ class ParametricDistribution(abc.ABC):
 
     Args:
       param_size: size of the parameters for the distribution
-      postprocessor: tfp.bijector which is applied after sampling (in practice,
-        it's tanh or identity)
+      postprocessor: bijector which is applied after sampling (in practice, it's
+        tanh or identity)
       event_ndims: rank of the distribution sample (i.e. action)
       reparametrizable: is the distribution reparametrizable
     """
@@ -47,7 +43,7 @@ class ParametricDistribution(abc.ABC):
 
   @abc.abstractmethod
   def create_dist(self, parameters):
-    """Creates tfp.distribution from parameters."""
+    """Creates distribution from parameters."""
     pass
 
   @property
@@ -75,8 +71,7 @@ class ParametricDistribution(abc.ABC):
     """Compute the log probability of actions."""
     dist = self.create_dist(parameters)
     log_probs = dist.log_prob(actions)
-    log_probs -= self._postprocessor.forward_log_det_jacobian(
-        jnp.asarray(actions, jnp.float32), event_ndims=0)
+    log_probs -= self._postprocessor.forward_log_det_jacobian(actions)
     if self._event_ndims == 1:
       log_probs = jnp.sum(log_probs, axis=-1)  # sum over action dimension
     return log_probs
@@ -86,10 +81,44 @@ class ParametricDistribution(abc.ABC):
     dist = self.create_dist(parameters)
     entropy = dist.entropy()
     entropy += self._postprocessor.forward_log_det_jacobian(
-        jnp.asarray(dist.sample(seed=seed), jnp.float32), event_ndims=0)
+        dist.sample(seed=seed))
     if self._event_ndims == 1:
       entropy = jnp.sum(entropy, axis=-1)
     return entropy
+
+
+class NormalDistribution:
+  """Normal distribution."""
+
+  def __init__(self, loc, scale):
+    self.loc = loc
+    self.scale = scale
+
+  def sample(self, seed):
+    return jax.random.normal(seed, shape=self.loc.shape) * self.scale + self.loc
+
+  def log_prob(self, x):
+    log_unnormalized = -0.5 * jnp.square(x / self.scale - self.loc / self.scale)
+    log_normalization = 0.5 * jnp.log(2. * jnp.pi) + jnp.log(self.scale)
+    return log_unnormalized - log_normalization
+
+  def entropy(self):
+    log_normalization = 0.5 * jnp.log(2. * jnp.pi) + jnp.log(self.scale)
+    entropy = 0.5 + log_normalization
+    return entropy * jnp.ones_like(self.loc)
+
+
+class TanhBijector:
+  """Tanh Bijector."""
+
+  def forward(self, x):
+    return jnp.tanh(x)
+
+  def inverse(self, y):
+    return jnp.arctanh(y)
+
+  def forward_log_det_jacobian(self, x):
+    return 2. * (jnp.log(2.) - x - jax.nn.softplus(-2. * x))
 
 
 class NormalTanhDistribution(ParametricDistribution):
@@ -103,7 +132,7 @@ class NormalTanhDistribution(ParametricDistribution):
       min_std: minimum std for the gaussian.
     """
     # We apply tanh to gaussian actions to bound them.
-    # Normally we would use tfd.TransformedDistribution to automatically
+    # Normally we would use TransformedDistribution to automatically
     # apply tanh to the distribution.
     # We can't do it here because of tanh saturation
     # which would make log_prob computations impossible. Instead, most
@@ -111,7 +140,7 @@ class NormalTanhDistribution(ParametricDistribution):
     # jacobian into account in log_prob computations.
     super().__init__(
         param_size=2 * event_size,
-        postprocessor=tfp.bijectors.Tanh(),
+        postprocessor=TanhBijector(),
         event_ndims=1,
         reparametrizable=True)
     self._min_std = min_std
@@ -119,5 +148,5 @@ class NormalTanhDistribution(ParametricDistribution):
   def create_dist(self, parameters):
     loc, scale = jnp.split(parameters, 2, axis=-1)
     scale = jax.nn.softplus(scale) + self._min_std
-    dist = tfd.Normal(loc=loc, scale=scale)
+    dist = NormalDistribution(loc=loc, scale=scale)
     return dist

@@ -126,7 +126,7 @@ def estimate_empowerment_metric(disc: Discriminator,
     obs_labels += custom_obs_labels
     obs_indices += custom_obs_indices
     obs_scale = jnp.concatenate([obs_scale, custom_obs_scale])
-  env_vars = jnp.take(env_obses, obs_indices, axis=-1)
+  env_vars = env_obses[..., obs_indices]
 
   D = zs.shape[0]
   I = env_vars.shape[-1]

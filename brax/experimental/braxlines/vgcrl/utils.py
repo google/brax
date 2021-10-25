@@ -208,17 +208,15 @@ class Discriminator(object):
 
   def index_obs(self, obs: jnp.ndarray):
     if self.obs_indices:
-      return obs.take(self.obs_indices, axis=-1)
-    else:
-      return obs
+      return obs[..., self.obs_indices]
+    return obs
 
   def unindex_obs(self, indexed_obs: jnp.ndarray):
     if self.obs_indices:
       obs = jnp.zeros(indexed_obs.shape[:-1] + (self.env_obs_size,))
       obs = obs.at[..., self.obs_indices].add(indexed_obs)
       return obs
-    else:
-      return indexed_obs
+    return indexed_obs
 
   def concat_obs(self, obs: jnp.ndarray, z: jnp.ndarray):
     new_obs = jnp.concatenate([obs, z], axis=-1)

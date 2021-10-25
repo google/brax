@@ -200,13 +200,13 @@ class IRLDiscriminator(object):
     data = self.index_obs(data)
     if self.include_action:
       if self.act_indices:
-        act = act.take(self.act_indices, axis=-1)
+        act = act[..., self.act_indices]
       data = jnp.concatenate([data, act], axis=-1)
     return data
 
   def index_obs(self, obs: jnp.ndarray):
     if self.obs_indices:
-      return obs.take(self.obs_indices, axis=-1)
+      return obs[..., self.obs_indices]
     else:
       return obs
 
