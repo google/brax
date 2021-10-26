@@ -75,19 +75,6 @@ _HTML = """
       import {Viewer} from 'https://cdn.jsdelivr.net/gh/google/brax@v0.0.6/js/viewer.js';
       const domElement = document.getElementById('brax-viewer');
       var viewer = new Viewer(domElement, system);
-
-      function resizeCanvasToDisplaySize() {
-
-        // look up the size the canvas is being displayed
-        const width = domElement.clientWidth;
-        const height = domElement.clientHeight;
-
-        // you must pass false here or three.js sadly fights the browser
-        viewer.setSize(width, height, false);
-      }
-
-      const resizeObserver = new ResizeObserver(resizeCanvasToDisplaySize);
-      resizeObserver.observe(domElement, {box: 'content-box'});
     </script>
   </body>
 </html>
