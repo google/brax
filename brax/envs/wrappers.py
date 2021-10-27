@@ -103,6 +103,10 @@ class GymWrapper(gym.Env):
   # Flag that prevents `gym.register` from misinterpreting the `_step` and
   # `_reset` as signs of a deprecated gym Env API.
   _gym_disable_underscore_compat: ClassVar[bool] = True
+  metadata = {
+    'render.modes': ['human', 'rgb_array'],
+    'video.frames_per_second' : 24
+  }
 
   def __init__(self,
                env: brax_env.Env,
@@ -159,6 +163,10 @@ class VectorGymWrapper(gym.vector.VectorEnv):
   # Flag that prevents `gym.register` from misinterpreting the `_step` and
   # `_reset` as signs of a deprecated gym Env API.
   _gym_disable_underscore_compat: ClassVar[bool] = True
+  metadata = {
+    'render.modes': ['human', 'rgb_array'],
+    'video.frames_per_second' : 24
+  }
 
   def __init__(self,
                env: brax_env.Env,
@@ -214,10 +222,7 @@ class VectorGymWrapper(gym.vector.VectorEnv):
     from brax.io import image
     if mode == 'rgb_array':
       sys = self._env.sys
-      imgs = []
-      for i in range(self.num_envs):
-        qp = jp.take(self._state.qp, i)
-        imgs.append(image.render_array(sys, qp, 256, 256))
-      return jp.stack(imgs)
+      qp = jp.take(self._state.qp, 0)
+      return image.render_array(sys, qp, 256, 256)
     else:
       return super().render(mode=mode)  # just raise an exception
