@@ -103,16 +103,16 @@ class GymWrapper(gym.Env):
   # Flag that prevents `gym.register` from misinterpreting the `_step` and
   # `_reset` as signs of a deprecated gym Env API.
   _gym_disable_underscore_compat: ClassVar[bool] = True
-  metadata = {
-    'render.modes': ['human', 'rgb_array'],
-    'video.frames_per_second' : 24
-  }
 
   def __init__(self,
                env: brax_env.Env,
                seed: int = 0,
                backend: Optional[str] = None):
     self._env = env
+    self.metadata = {
+      'render.modes': ['human', 'rgb_array'],
+      'video.frames_per_second' : 1 / self._env.sys.config.dt
+    }
     self.seed(seed)
     self.backend = backend
     self._state = None
@@ -163,16 +163,16 @@ class VectorGymWrapper(gym.vector.VectorEnv):
   # Flag that prevents `gym.register` from misinterpreting the `_step` and
   # `_reset` as signs of a deprecated gym Env API.
   _gym_disable_underscore_compat: ClassVar[bool] = True
-  metadata = {
-    'render.modes': ['human', 'rgb_array'],
-    'video.frames_per_second' : 24
-  }
 
   def __init__(self,
                env: brax_env.Env,
                seed: int = 0,
                backend: Optional[str] = None):
     self._env = env
+    self.metadata = {
+      'render.modes': ['human', 'rgb_array'],
+      'video.frames_per_second' : 1 / self._env.sys.config.dt
+    }
     if not hasattr(self._env, 'batch_size'):
       raise ValueError('underlying env must be batched')
 
