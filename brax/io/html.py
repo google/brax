@@ -37,7 +37,7 @@ def save_html(path: str,
     fout.write(render(sys, qps))
 
 
-def render(sys: brax.System, qps: List[brax.QP]) -> str:
+def render(sys: brax.System, qps: List[brax.QP], height: int=480) -> str:
   if any((len(qp.pos.shape), len(qp.rot.shape)) != (2, 2) for qp in qps):
     raise RuntimeError('unexpected shape in qp.')
   d = {
@@ -46,12 +46,12 @@ def render(sys: brax.System, qps: List[brax.QP]) -> str:
       'rot': [qp.rot for qp in qps],
   }
   system = json.dumps(d, cls=JaxEncoder)
-  return _HTML.replace('<!-- system json goes here -->', system)
+  return _HTML.replace('<!-- system json goes here -->', system). \
+               replace('<!-- system height goes here -->', f'{height}px')
 
 
 _HTML = """
 <html>
-
   <head>
     <title>brax visualizer</title>
     <style>
@@ -59,22 +59,18 @@ _HTML = """
         margin: 0;
         padding: 0;
       }
-
       #brax-viewer {
         margin: 0;
         padding: 0;
-        height: 480px;
+        height: <!-- system height goes here -->;
       }
     </style>
   </head>
-
   <body>
     <script type="application/javascript">
     var system = <!-- system json goes here -->;
     </script>
-
     <div id="brax-viewer"></div>
-
     <script type="module">
       import {Viewer} from 'https://cdn.jsdelivr.net/gh/google/brax@v0.0.6/js/viewer.js';
       const domElement = document.getElementById('brax-viewer');

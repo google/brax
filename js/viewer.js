@@ -160,6 +160,9 @@ class Viewer {
     window.addEventListener('resize', (evt) => this.setSize(), false);
     requestAnimationFrame(() => this.setSize());
 
+    const resizeObserver = new ResizeObserver(() => this.resizeCanvasToDisplaySize());
+    resizeObserver.observe(this.domElement, {box: 'content-box'});
+
     /* start animation */
     this.animate();
   }
@@ -184,6 +187,13 @@ class Viewer {
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
     this.setDirty();
+  }
+
+  resizeCanvasToDisplaySize() {
+    //look up canvas size
+    const width = this.domElement.clientWidth;
+    const height = this.domElement.clientHeight;
+    this.setSize(width, height);
   }
 
   render() {
