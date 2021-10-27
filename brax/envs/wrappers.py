@@ -109,6 +109,10 @@ class GymWrapper(gym.Env):
                seed: int = 0,
                backend: Optional[str] = None):
     self._env = env
+    self.metadata = {
+      'render.modes': ['human', 'rgb_array'],
+      'video.frames_per_second' : 1 / self._env.sys.config.dt
+    }
     self.seed(seed)
     self.backend = backend
     self._state = None
@@ -165,6 +169,10 @@ class VectorGymWrapper(gym.vector.VectorEnv):
                seed: int = 0,
                backend: Optional[str] = None):
     self._env = env
+    self.metadata = {
+      'render.modes': ['human', 'rgb_array'],
+      'video.frames_per_second' : 1 / self._env.sys.config.dt
+    }
     if not hasattr(self._env, 'batch_size'):
       raise ValueError('underlying env must be batched')
 
@@ -214,10 +222,7 @@ class VectorGymWrapper(gym.vector.VectorEnv):
     from brax.io import image
     if mode == 'rgb_array':
       sys = self._env.sys
-      imgs = []
-      for i in range(self.num_envs):
-        qp = jp.take(self._state.qp, i)
-        imgs.append(image.render_array(sys, qp, 256, 256))
-      return jp.stack(imgs)
+      qp = jp.take(self._state.qp, 0)
+      return image.render_array(sys, qp, 256, 256)
     else:
       return super().render(mode=mode)  # just raise an exception
