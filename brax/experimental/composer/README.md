@@ -16,15 +16,18 @@ The composed environment is compatible with training algorithms in
 ## Usage
 
 For composing an environment registered in [envs/](https://github.com/google/brax/tree/main/brax/experimental/composer/envs),
-where `desc_edits` can be used for dynamic environment editing
 during creation:
 ```python
 from brax.experimental.composer import composer
-desc_edits = {'components.agent1.component_params.num_legs': 2}
-env = composer.create(env_name='pro_ant_run', desc_edits=desc_edits)
+env = composer.create(env_name='pro_ant_run', num_legs=2)
 ```
 
-For composing an environment directly from a description:
+To inspect what are configurable environment parameters e.g. `num_legs`, use:
+```python
+env_params = composer.inspect_env(env_name='pro_ant_run')
+```
+
+For composing an environment from a description `env_desc`:
 ```python
 # env_desc captures the full information about the environment
 #   including rewards, observations, resets
@@ -49,14 +52,15 @@ env_desc = dict(
                 dist=dict(reward_type='root_dist')),),))
 env = composer.create(env_desc=env_desc)
 
-# you may also register throughs envs
-from brax.experiments.braxlines import envs
+# you may also register envs and create later with `env_name`
 env_name = 'ant_push_6legs'
-envs.register_env(env_name=env_name, env_desc=env_desc)
+composer.register_env(env_name=env_name, env_desc=env_desc)
 env = composer.create(env_name=env_name)
 ```
 
-*This is an illustrative example. For full examples, see [envs/ant_descs.py](https://github.com/google/brax/tree/main/brax/experimental/composer/envs/ant_descs.py) for standard Brax envs and [envs/ma_descs.py](https://github.com/google/brax/tree/main/brax/experimental/composer/envs/ma_descs.py) for multi-agent RL Brax envs.*
+Lastly, while less recommended, `desc_edits` can be used for dynamic environment editing by directly modifying `env_desc` dictionary object. For examples, see [envs/ant_descs.py](https://github.com/google/brax/tree/main/brax/experimental/composer/envs/ant_descs.py).
+
+*These are illustrative examples. For full examples, see [envs/ant_descs.py](https://github.com/google/brax/tree/main/brax/experimental/composer/envs/ant_descs.py) for standard Brax envs and [envs/ma_descs.py](https://github.com/google/brax/tree/main/brax/experimental/composer/envs/ma_descs.py) for multi-agent RL Brax envs.*
 
 ## Colab Notebooks
 
@@ -66,7 +70,8 @@ Explore Composer easily and quickly through:
 * [Experiment Viewer](https://colab.research.google.com/github/google/brax/blob/main/notebooks/braxlines/experiment_viewer.ipynb) provides a basic example for visualizing results from a hyperparameter sweep.
 
 Tips:
-* for debugging, use:
+* `env_desc` and `config_json` are full descriptions of the environment and the system, and are accessible through `env.env_desc` and `env.metadata.config_json`.
+* for debugging NaNs, use:
 ```python
 from jax.config import config
 config.update("jax_debug_nans", True)

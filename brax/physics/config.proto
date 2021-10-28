@@ -136,6 +136,25 @@ message Actuator {
   }
 }
 
+// Forces provide interactive control of a system via the step function.
+// A force acts on a single body.  It occupies 3 positions in the action vector
+// corresponding to the direction and magnitude of the force to apply, which is
+// additionally multiplied by `strength`.
+message Force {
+  // Unique name for this force
+  string name = 1;
+  // Body for this force
+  string body = 2;
+  // Multiplier for intensity of force
+  float strength = 3;
+  // Applies a force to the center of the body in the specified direction
+  message Thruster {}
+  // A force may only be one type
+  oneof type {
+    Thruster thruster = 4;
+  }
+}
+
 // DefaultState determines the default orientations of bodies in the system
 // returned by the default_qp() function.
 message DefaultState {
@@ -175,6 +194,8 @@ message Config {
   repeated Joint joints = 2;
   // All of the actuators in the system
   repeated Actuator actuators = 3;
+  // Forces to apply to bodies
+  repeated Force forces = 16;
   // Bounciness of all collisions
   float elasticity = 4;
   // How much surfaces in contact resist translation

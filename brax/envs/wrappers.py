@@ -64,7 +64,7 @@ class EpisodeWrapper(brax_env.Wrapper):
     zero = jp.zeros_like(state.done)
     done = jp.where(steps >= self.episode_length, one, state.done)
     state.info['truncation'] = jp.where(steps >= self.episode_length,
-                                         1 - state.done, zero)
+                                        1 - state.done, zero)
     state.info['steps'] = steps
     return state.replace(done=done)
 
@@ -110,8 +110,8 @@ class GymWrapper(gym.Env):
                backend: Optional[str] = None):
     self._env = env
     self.metadata = {
-      'render.modes': ['human', 'rgb_array'],
-      'video.frames_per_second' : 1 / self._env.sys.config.dt
+        'render.modes': ['human', 'rgb_array'],
+        'video.frames_per_second': 1 / self._env.sys.config.dt
     }
     self.seed(seed)
     self.backend = backend
@@ -170,8 +170,8 @@ class VectorGymWrapper(gym.vector.VectorEnv):
                backend: Optional[str] = None):
     self._env = env
     self.metadata = {
-      'render.modes': ['human', 'rgb_array'],
-      'video.frames_per_second' : 1 / self._env.sys.config.dt
+        'render.modes': ['human', 'rgb_array'],
+        'video.frames_per_second': 1 / self._env.sys.config.dt
     }
     if not hasattr(self._env, 'batch_size'):
       raise ValueError('underlying env must be batched')

@@ -16,15 +16,9 @@
 
 from typing import Optional
 
+from brax.training import pmap
 import jax
 import jax.numpy as jnp
-
-
-def bcast_local_devices(value, local_devices_to_use=1):
-  """Broadcasts an object to all local devices."""
-  devices = jax.local_devices()[:local_devices_to_use]
-  return jax.tree_map(
-      lambda v: jax.device_put_sharded(len(devices) * [v], devices), value)
 
 
 def create_observation_normalizer(obs_size, normalize_observations=True,
@@ -83,7 +77,7 @@ def create_observation_normalizer(obs_size, normalize_observations=True,
   data, apply_fn = make_data_and_apply_fn(obs_size, normalize_observations,
                                           apply_clipping)
   if pmap_to_devices:
-    data = bcast_local_devices(data, pmap_to_devices)
+    data = pmap.bcast_local_devices(data, pmap_to_devices)
   return data, update_fn, apply_fn
 
 

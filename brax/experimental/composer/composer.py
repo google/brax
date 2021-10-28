@@ -37,7 +37,7 @@ During loading an env through create(), it:
     components defined in components/
     such as ant.py or ground.py
   - new components can be registered through register_component()
-  - support multiple instances of the same component through suffixes
+  - support multiple instances of the same component through comp_name's
   - each component requires: ROOT=root body, SYS_CONFIG=config in string form,
       TERM_FN=termination function of this component, COLLIDES=bodies that
       are allowed to collide, DEFAULT_OBSERVERS=a list of observers (
@@ -62,7 +62,7 @@ from collections import OrderedDict as odict
 import copy
 import functools
 import itertools
-from typing import Dict, Any, Callable, Tuple, Optional
+from typing import Dict, Any, Callable, Tuple, Optional, Union
 
 import brax
 from brax import envs
@@ -78,10 +78,14 @@ from brax.experimental.composer import data_utils
 from brax.experimental.composer import envs as composer_envs
 from brax.experimental.composer import observers
 from brax.experimental.composer import reward_functions
-from brax.experimental.composer.component_editor import add_suffix
 from brax.experimental.composer.components import load_component
 from brax.experimental.composer.components import register_default_components
 from jax import numpy as jnp
+
+inspect_env = composer_envs.inspect_env
+register_env = composer_envs.register_env
+register_lib = composer_envs.register_lib
+
 register_default_components()
 composer_envs.register_default_libs()
 
@@ -133,18 +137,18 @@ class Composer(object):
     for k, v in components_.items():
       # convert to json format for easy editing
       v['json'] = component_editor.message_str2json(v['message_str'])
-      # add suffices
-      suffix = v.get('suffix', k)
-      if suffix:
+      # add comp_name's
+      comp_name = k
+      if comp_name:
         rename_fn = functools.partial(
-            component_editor.json_add_suffix, suffix=suffix)
+            component_editor.json_concat_name, comp_name=comp_name)
         v['json'] = rename_fn(v['json'])
         v['collides'] = rename_fn(v['collides'], force_add=True)
         v['root'] = rename_fn(v['root'], force_add=True)
       v['bodies'] = [b['name'] for b in v['json'].get('bodies', [])]
       v['joints'] = [b['name'] for b in v['json'].get('joints', [])]
       v['actuators'] = [b['name'] for b in v['json'].get('actuators', [])]
-      v['suffix'] = suffix
+      v['comp_name'] = comp_name
       # convert back to str
       v['message_str'] = component_editor.json2message_str(v['json'])
 
@@ -161,7 +165,7 @@ class Composer(object):
       # add reward functions
       component_reward_fns = v.pop('reward_fns', {})
       for name, reward_kwargs in sorted(component_reward_fns.items()):
-        name = add_suffix(name, suffix)
+        name = component_editor.concat_name(name, comp_name)
         assert name not in reward_fns, f'duplicate reward_fns {name}'
         reward_fn, unwrapped_reward_fn = reward_functions.get_component_reward_fns(
             v, **reward_kwargs)
@@ -180,14 +184,14 @@ class Composer(object):
       if k1 == k2:
         continue
       k1, k2 = sorted([k1, k2])  # ensure the name is always sorted in order
-      edge_name = f'{k1}__{k2}'
+      edge_name = component_editor.concat_comps(k1, k2)
       v, new_v = edges.pop(edge_name, {}), {}
       v1, v2 = [components_[k] for k in [k1, k2]]
 
       # add reward functions
       edge_reward_fns = v.pop('reward_fns', {})
       for name, reward_kwargs in sorted(edge_reward_fns.items()):
-        name = add_suffix(name, edge_name)
+        name = component_editor.concat_name(name, edge_name)
         assert name not in reward_fns, f'duplicate reward_fns {name}'
         reward_fn, unwrapped_reward_fn = reward_functions.get_edge_reward_fns(
             v1, v2, **reward_kwargs)
@@ -290,11 +294,12 @@ class Composer(object):
 class ComponentEnv(Env):
   """Make a brax Env fromc config/metadata for training and inference."""
 
-  def __init__(self, composer: Composer, *args, **kwargs):
+  def __init__(self, composer: Composer, env_desc: Dict[str, Any]):
     self.observer_shapes = None
     self.composer = composer
+    self.env_desc = env_desc
     self.metadata = composer.metadata
-    super().__init__(*args, config=self.composer.metadata.config_str, **kwargs)
+    super().__init__(config=self.composer.metadata.config_str)
     self.action_shapes = get_action_shapes(self.sys)
     # reward_shape = (num_agents,) if multi-agent else ()
     self.reward_shape = (len(
@@ -302,6 +307,10 @@ class ComponentEnv(Env):
     assert self.observation_size  # ensure self.observer_shapes is set
     self.group_action_shapes = agent_utils.set_agent_groups(
         self.metadata, self.action_shapes, self.observer_shapes)
+
+  @property
+  def is_multiagent(self):
+    return bool(self.metadata.agent_groups)
 
   def reset(self, rng: jnp.ndarray) -> State:
     """Resets the environment to an initial state."""
@@ -391,7 +400,8 @@ def get_env_obs_dict_shape(env: Env):
 
 
 def create(env_name: str = None,
-           env_desc: Dict[str, Any] = None,
+           env_desc: Union[Dict[str, Any], Callable[..., Dict[str,
+                                                              Any]]] = None,
            desc_edits: Dict[str, Any] = None,
            episode_length: int = 1000,
            action_repeat: int = 1,
@@ -403,14 +413,23 @@ def create(env_name: str = None,
   env_desc = env_desc or {}
   desc_edits = desc_edits or {}
   if env_name in composer_envs.ENV_DESCS:
-    env_desc = dict(**env_desc, **composer_envs.ENV_DESCS[env_name])
+    desc = composer_envs.ENV_DESCS[env_name]
+    if callable(desc):
+      desc = desc(**kwargs)
+    else:
+      assert not kwargs, f'unused kwargs: {kwargs}'
+    env_desc = dict(**env_desc, **desc)
     env_desc = composer_utils.edit_desc(env_desc, desc_edits)
     composer = Composer(**env_desc)
-    env = ComponentEnv(composer=composer, **kwargs)
+    env = ComponentEnv(composer=composer, env_desc=env_desc)
   elif env_desc:
+    if callable(env_desc):
+      env_desc = env_desc(**kwargs)
+    else:
+      assert not kwargs, f'unused kwargs: {kwargs}'
     env_desc = composer_utils.edit_desc(env_desc, desc_edits)
     composer = Composer(**env_desc)
-    env = ComponentEnv(composer=composer, **kwargs)
+    env = ComponentEnv(composer=composer, env_desc=env_desc)
   else:
     env = envs.create(env_name, **kwargs)
 
@@ -426,7 +445,8 @@ def create(env_name: str = None,
 
 
 def create_fn(env_name: str = None,
-              env_desc: Dict[str, Any] = None,
+              env_desc: Union[Dict[str, Any], Callable[..., Dict[str,
+                                                                 Any]]] = None,
               desc_edits: Dict[str, Any] = None,
               episode_length: int = 1000,
               action_repeat: int = 1,

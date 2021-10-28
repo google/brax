@@ -27,6 +27,7 @@ from brax.training import distribution
 from brax.training import env
 from brax.training import networks
 from brax.training import normalization
+from brax.training import pmap
 from brax.training.types import Params
 from brax.training.types import PRNGKey
 import flax
@@ -35,7 +36,6 @@ import jax
 import jax.numpy as jnp
 import numpy as onp
 import optax
-
 
 Metrics = Mapping[str, jnp.ndarray]
 
@@ -149,8 +149,7 @@ def train(
     # The rewarder is an init function and a compute_reward function.
     # It is used to change the reward before the learner trains on it.
     make_rewarder: Optional[Callable[[], Rewarder]] = None,
-    checkpoint_logdir: Optional[str] = None
-):
+    checkpoint_logdir: Optional[str] = None):
   """SAC training."""
   assert min_replay_size % num_envs == 0
   assert max_replay_size % min_replay_size == 0
@@ -212,11 +211,11 @@ def train(
   q_params = value_model.init(key_q)
   q_optimizer_state = q_optimizer.init(q_params)
 
-  policy_optimizer_state, policy_params = normalization.bcast_local_devices(
+  policy_optimizer_state, policy_params = pmap.bcast_local_devices(
       (policy_optimizer_state, policy_params), local_devices_to_use)
-  q_optimizer_state, q_params = normalization.bcast_local_devices(
+  q_optimizer_state, q_params = pmap.bcast_local_devices(
       (q_optimizer_state, q_params), local_devices_to_use)
-  alpha_optimizer_state, log_alpha = normalization.bcast_local_devices(
+  alpha_optimizer_state, log_alpha = pmap.bcast_local_devices(
       (alpha_optimizer_state, log_alpha), local_devices_to_use)
 
   normalizer_params, obs_normalizer_update_fn, obs_normalizer_apply_fn = (
@@ -228,8 +227,8 @@ def train(
   if make_rewarder is not None:
     init, compute_reward = make_rewarder()
     rewarder_state = init(obs_size, key_rewarder)
-    rewarder_state = normalization.bcast_local_devices(rewarder_state,
-                                                       local_devices_to_use)
+    rewarder_state = pmap.bcast_local_devices(rewarder_state,
+                                              local_devices_to_use)
   else:
     rewarder_state = None
     compute_reward = None
@@ -292,9 +291,8 @@ def train(
     q_loss = 0.5 * jnp.mean(jnp.square(q_error))
     return q_loss
 
-  def actor_loss(policy_params: Params, q_params: Params,
-                 alpha: jnp.ndarray, transitions: Transition,
-                 key: PRNGKey) -> jnp.ndarray:
+  def actor_loss(policy_params: Params, q_params: Params, alpha: jnp.ndarray,
+                 transitions: Transition, key: PRNGKey) -> jnp.ndarray:
     dist_params = policy_model.apply(policy_params, transitions.o_tm1)
     action = parametric_action_distribution.sample_no_postprocessing(
         dist_params, key)
@@ -340,13 +338,12 @@ def train(
     alpha = jnp.exp(state.alpha_params)
     alpha_loss, alpha_grads = alpha_grad(alpha, state.policy_params,
                                          normalized_transitions, key_alpha)
-    critic_loss, critic_grads = critic_grad(state.q_params,
-                                            state.policy_params,
+    critic_loss, critic_grads = critic_grad(state.q_params, state.policy_params,
                                             state.target_q_params, alpha,
                                             normalized_transitions, key_critic)
-    actor_loss, actor_grads = actor_grad(state.policy_params,
-                                         state.q_params, alpha,
-                                         normalized_transitions, key_actor)
+    actor_loss, actor_grads = actor_grad(state.policy_params, state.q_params,
+                                         alpha, normalized_transitions,
+                                         key_actor)
     alpha_grads = jax.lax.pmean(alpha_grads, axis_name='i')
     critic_grads = jax.lax.pmean(critic_grads, axis_name='i')
     actor_grads = jax.lax.pmean(actor_grads, axis_name='i')
@@ -437,6 +434,7 @@ def train(
         current_size=new_size)
 
   def init_replay_buffer(training_state, state, replay_buffer):
+
     (training_state, state, replay_buffer), _ = jax.lax.scan(
         (lambda a, b: (collect_and_update_buffer(*a),
                        ())), (training_state, state, replay_buffer), (),
@@ -474,11 +472,13 @@ def train(
     return (training_state, state, replay_buffer), metrics
 
   def run_sac_training(training_state, state, replay_buffer):
+    synchro = pmap.is_synchronized(
+        training_state.replace(key=jax.random.PRNGKey(0)), axis_name='i')
     (training_state, state, replay_buffer), metrics = jax.lax.scan(
         run_one_sac_epoch, (training_state, state, replay_buffer), (),
         length=(log_frequency // action_repeat + num_envs - 1) // num_envs)
     metrics = jax.tree_map(jnp.mean, metrics)
-    return training_state, state, replay_buffer, metrics
+    return training_state, state, replay_buffer, metrics, synchro
 
   run_sac_training = jax.pmap(run_sac_training, axis_name='i')
 
@@ -509,8 +509,7 @@ def train(
 
     t = time.time()
     eval_state, key_debug = (
-        run_eval(eval_first_state, key_debug,
-                 training_state.policy_params,
+        run_eval(eval_first_state, key_debug, training_state.policy_params,
                  training_state.normalizer_params))
     eval_state.completed_episodes.block_until_ready()
     eval_walltime += time.time() - t
@@ -546,8 +545,7 @@ def train(
       # Save current policy.
       normalizer_params = jax.tree_map(lambda x: x[0],
                                        training_state.normalizer_params)
-      policy_params = jax.tree_map(lambda x: x[0],
-                                   training_state.policy_params)
+      policy_params = jax.tree_map(lambda x: x[0], training_state.policy_params)
       params = normalizer_params, policy_params
       path = f'{checkpoint_logdir}_sac_{current_step}.flax'
       model.save_params(path, params)
@@ -571,8 +569,9 @@ def train(
 
     t = time.time()
     # optimization
-    training_state, state, replay_buffer, training_metrics = run_sac_training(
+    training_state, state, replay_buffer, training_metrics, synchro = run_sac_training(
         training_state, state, replay_buffer)
+    assert synchro[0], (current_step, training_state)
     jax.tree_map(lambda x: x.block_until_ready(), training_metrics)
     sps = ((training_state.normalizer_params[0][0] * action_repeat -
             current_step) / (time.time() - t))
@@ -580,8 +579,7 @@ def train(
 
   normalizer_params = jax.tree_map(lambda x: x[0],
                                    training_state.normalizer_params)
-  policy_params = jax.tree_map(lambda x: x[0],
-                               training_state.policy_params)
+  policy_params = jax.tree_map(lambda x: x[0], training_state.policy_params)
 
   logging.info('total steps: %s', normalizer_params[0] * action_repeat)
 

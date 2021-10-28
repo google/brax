@@ -14,9 +14,6 @@
 
 """ants environments."""
 from brax.experimental.composer import composer_utils
-from brax.experimental.composer.components import ant
-from brax.experimental.composer.observers import LambdaObserver as lo
-from brax.experimental.composer.observers import SimObserver as so
 
 ENV_DESCS = {
     'ant_run':
@@ -89,41 +86,6 @@ ENV_DESCS = {
                     reward_fns=dict(
                         dist=dict(reward_type='root_dist', offset=5)),
                 ),)),
-    'uni_ant':
-        dict(components=dict(agent1=dict(component='ant', pos=(0, 0, 0)),),),
-    'uni_octopus':
-        dict(
-            components=dict(agent1=dict(component='octopus', pos=(0, 0, 0)),),),
-    'bi_ant':
-        dict(
-            components=dict(
-                agent1=dict(component='ant', pos=(0, 1, 0)),
-                agent2=dict(component='ant', pos=(0, -1, 0)),
-            ),
-            extra_observers=[
-                lo(name='delta_pos',
-                   fn='-',
-                   observers=[
-                       so('body', 'pos', ant.ROOT, 'agent1'),
-                       so('body', 'pos', ant.ROOT, 'agent2')
-                   ]),
-                lo(name='delta_vel',
-                   fn='-',
-                   observers=[
-                       so('body', 'vel', ant.ROOT, 'agent1'),
-                       so('body', 'vel', ant.ROOT, 'agent2')
-                   ]),
-            ],
-            edges=dict(agent1__agent2=dict(collide_type=None),)),
-    'tri_ant':
-        dict(
-            components=dict(
-                agent1=dict(component='ant', pos=(0, 1, 0)),
-                agent2=dict(component='ant', pos=(0, -1, 0)),
-                agent3=dict(component='ant', pos=(1, 0, 0)),
-            ),
-            edges=dict(),
-        ),
     'ant_on_ball':
         dict(
             global_options=dict(dt=0.02, substeps=16),
@@ -156,19 +118,23 @@ ENV_DESCS = {
         )
 }
 
-VARIANTS = (
-    ('ant_run', 'pro_ant_run', {
-        'components.agent1.component': 'pro_ant',
-        'components.agent1.component_params': dict(num_legs=10),
-        'global_options.dt': 0.02,
-        'global_options.substeps': 16,
-    }),
-    ('ant_run', 'octopus_run', {
-        'components.agent1.component': 'octopus',
-        'global_options.dt': 0.02,
-        'global_options.substeps': 16,
-    }),
-)
+
+def create_pro_ant_run(num_legs: int = 4):
+  return composer_utils.edit_desc(
+      ENV_DESCS['ant_run'], {
+          'components.agent1.component': 'pro_ant',
+          'components.agent1.component_params': dict(num_legs=num_legs),
+          'global_options.dt': 0.02,
+          'global_options.substeps': 16,
+      })
+
+ENV_DESCS['pro_ant_run'] = create_pro_ant_run
+
+VARIANTS = (('ant_run', 'octopus_run', {
+    'components.agent1.component': 'octopus',
+    'global_options.dt': 0.02,
+    'global_options.substeps': 16,
+}),)
 
 for base_desc_name, new_desc_name, desc_edits in VARIANTS:
   ENV_DESCS[new_desc_name] = composer_utils.edit_desc(ENV_DESCS[base_desc_name],

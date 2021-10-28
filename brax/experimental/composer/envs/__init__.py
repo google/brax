@@ -15,10 +15,14 @@
 """Environments.
 
 In Braxlines Composer, all environments are defined through
-a descriotion dictionary.
+a descriotion dictionary `env_desc`.
+
+composer.py loads from `ENV_DESCS` with `env_name`,
+where each entry can be a `env_desc` or a function that returns `env_desc`.
 """
 import copy
 import importlib
+import inspect
 from typing import Any
 
 ENV_DESCS = {}
@@ -48,3 +52,15 @@ def register_default_libs():
   """Register all default env."""
   for load_path in DEFAULT_REGISTER_LIBS:
     register_lib(load_path)
+
+
+def inspect_env(env_name: str):
+  """Inspect parameters of the env."""
+  desc = env_name
+  if isinstance(desc, str):
+    desc = ENV_DESCS[desc]
+  assert callable(desc) or isinstance(desc, dict), desc
+  if not callable(desc):
+    return {}
+  fn_params = inspect.signature(desc).parameters
+  return {k: v.default for k, v in fn_params.items()}

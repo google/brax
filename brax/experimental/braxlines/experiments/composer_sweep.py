@@ -22,8 +22,8 @@ CONFIG = [
     dict(
         env_name=['pro_ant_run'],
         seed=seed,
-        desc_edits={
-            'components.agent1.component_params.num_legs': [2, 3, 4, 8, 10],
+        env_params={
+            'num_legs': [2, 3, 4, 8, 10],
         },
         ppo_params=defaults.get_ppo_params('ant', 10)),
     dict(

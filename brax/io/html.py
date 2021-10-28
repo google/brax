@@ -37,7 +37,8 @@ def save_html(path: str,
     fout.write(render(sys, qps))
 
 
-def render(sys: brax.System, qps: List[brax.QP], height: int=480) -> str:
+def render(sys: brax.System, qps: List[brax.QP], height: int = 480) -> str:
+  """Returns an HTML page that visualizes the system and qps trajectory."""
   if any((len(qp.pos.shape), len(qp.rot.shape)) != (2, 2) for qp in qps):
     raise RuntimeError('unexpected shape in qp.')
   d = {
@@ -46,8 +47,9 @@ def render(sys: brax.System, qps: List[brax.QP], height: int=480) -> str:
       'rot': [qp.rot for qp in qps],
   }
   system = json.dumps(d, cls=JaxEncoder)
-  return _HTML.replace('<!-- system json goes here -->', system). \
-               replace('<!-- system height goes here -->', f'{height}px')
+  html = _HTML.replace('<!-- system json goes here -->', system)
+  html = html.replace('<!-- viewer height goes here -->', f'{height}px')
+  return html
 
 
 _HTML = """
@@ -62,7 +64,7 @@ _HTML = """
       #brax-viewer {
         margin: 0;
         padding: 0;
-        height: <!-- system height goes here -->;
+        height: <!-- viewer height goes here -->;
       }
     </style>
   </head>

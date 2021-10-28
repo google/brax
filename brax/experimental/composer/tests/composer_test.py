@@ -27,11 +27,20 @@ from jax import numpy as jnp
 class ComposerTest(parameterized.TestCase):
   """Tests for Composer module."""
 
-  @parameterized.parameters('ant_push', 'ant_chase', 'ant_chase_ma',
-                            'pro_ant_run')
+  @parameterized.parameters('ant_push', 'ant_chase', 'pro_ant_run')
   def testEnvCreation(self, env_name):
     env = composer.create(env_name=env_name)
     env.reset(rng=jax.random.PRNGKey(0))
+
+  @parameterized.parameters('chase', 'follow')
+  def testMultiAgentEnvCreation(self, env_name):
+    env = composer.create(env_name=env_name)
+    state = env.reset(rng=jax.random.PRNGKey(0))
+    assert state.reward.ndim > 0, state.reward
+
+  def testInspect(self):
+    env_params = composer.inspect_env('pro_ant_run')
+    assert tuple(sorted(env_params)) == ('num_legs',), env_params
 
   def testActionConcatSplit(self):
     env = composer.create(env_name='humanoid')

@@ -19,9 +19,9 @@ from typing import Dict, Any
 from brax.experimental.braxlines import experiments
 from brax.experimental.braxlines.common import evaluators
 from brax.experimental.braxlines.common import logger_utils
-from brax.experimental.braxlines.training import mappo
 from brax.experimental.braxlines.training import ppo
 from brax.experimental.composer import composer
+from brax.experimental.composer.training import mappo
 
 TASK_KEYS = (('env_name',),)
 
@@ -42,6 +42,7 @@ def train(train_job_params: Dict[str, Any],
 
   # extra parameters
   env_name = config.pop('env_name', 'ant_run')
+  env_params = config.pop('env_params', {})
   desc_edits = config.pop('desc_edits', {})
   seed = config.pop('seed', 0)
   eval_seed = config.pop('eval_seed', 0)
@@ -49,7 +50,8 @@ def train(train_job_params: Dict[str, Any],
   ppo_params.update(config.pop('ppo_params', {}))
   assert not config, f'unused config: {config}'
 
-  env_fn = composer.create_fn(env_name=env_name, desc_edits=desc_edits)
+  env_fn = composer.create_fn(
+      env_name=env_name, desc_edits=desc_edits, **env_params)
 
   # @title Training the custom env
   log_path = output_path

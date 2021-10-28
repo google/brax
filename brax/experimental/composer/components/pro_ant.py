@@ -13,34 +13,10 @@
 # limitations under the License.
 
 """Procedural ant."""
-import brax
-from brax import math
-from brax.experimental.braxlines.common import sim_utils
 from brax.experimental.composer.components.ant import DEFAULT_OBSERVERS
-from brax.experimental.composer.components.ant import height_term_fn
 from brax.experimental.composer.components.ant import ROOT
-from jax import numpy as jnp
+from brax.experimental.composer.components.ant import term_fn
 import numpy as np
-
-
-def upright_term_fn(done, sys, qp: brax.QP, info: brax.Info, component):
-  """Terminate when it falls."""
-  del info
-  # upright termination
-  index = sim_utils.names2indices(sys.config, component['root'], 'body')[0][0]
-  rot = qp.rot[index]
-  up = jnp.array([0., 0., 1.])
-  torso_up = math.rotate(up, rot)
-  torso_is_up = jnp.dot(torso_up, up)
-  done = jnp.where(torso_is_up < 0.0, x=1.0, y=done)
-  return done
-
-
-def term_fn(done, sys, qp: brax.QP, info: brax.Info, suffix: str,
-            **unused_kwargs):
-  done = height_term_fn(done, sys, qp, info, suffix, **unused_kwargs)
-  done = upright_term_fn(done, sys, qp, info, suffix, **unused_kwargs)
-  return done
 
 
 def generate_ant_config_with_n_legs(n):

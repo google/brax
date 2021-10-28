@@ -105,7 +105,7 @@ def take(tree: Any, i: Union[ndarray, Sequence[int]], axis: int = 0) -> Any:
   """Returns tree sliced by i."""
   np = _which_np(i)
   if isinstance(i, list) or isinstance(i, tuple):
-    i = np.array(i)
+    i = np.array(i, dtype=int)
   return jax.tree_map(lambda x: np.take(x, i, axis=axis, mode='clip'), tree)
 
 

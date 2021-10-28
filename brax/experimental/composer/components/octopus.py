@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """Octopus."""
-from brax.experimental.composer.components.pro_ant import upright_term_fn
+from brax.experimental.composer.components.common import upright_term_fn
 
 ROOT = 'octopus'
 

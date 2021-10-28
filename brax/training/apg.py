@@ -23,6 +23,7 @@ from brax.training import distribution
 from brax.training import env
 from brax.training import networks
 from brax.training import normalization
+from brax.training import pmap
 from brax.training.types import Params
 from brax.training.types import PRNGKey
 import flax
@@ -100,7 +101,7 @@ def train(
   policy_params = policy_model.init(key_models)
   optimizer = optax.adam(learning_rate=learning_rate)
   optimizer_state = optimizer.init(policy_params)
-  optimizer_state, policy_params = normalization.bcast_local_devices(
+  optimizer_state, policy_params = pmap.bcast_local_devices(
       (optimizer_state, policy_params), local_devices_to_use)
 
   normalizer_params, obs_normalizer_update_fn, obs_normalizer_apply_fn = (
@@ -168,6 +169,10 @@ def train(
     return updates
 
   def _minimize(training_state: TrainingState, state: envs.State):
+    synchro = pmap.is_synchronized(
+        (training_state.optimizer_state, training_state.policy_params,
+         training_state.normalizer_params),
+        axis_name='i')
     key, key_grad = jax.random.split(training_state.key)
     grad, normalizer_params = loss_grad(training_state.policy_params,
                                         training_state.normalizer_params,
@@ -187,7 +192,7 @@ def train(
         key=key,
         optimizer_state=optimizer_state,
         normalizer_params=normalizer_params,
-        policy_params=policy_params), metrics
+        policy_params=policy_params), metrics, synchro
 
   minimize = jax.pmap(_minimize, axis_name='i')
 
@@ -245,7 +250,8 @@ def train(
 
     t = time.time()
     # optimization
-    training_state, summary = minimize(training_state, first_state)
+    training_state, summary, synchro = minimize(training_state, first_state)
+    assert synchro[0], (it, training_state)
     jax.tree_map(lambda x: x.block_until_ready(), summary)
     sps = (episode_length * num_envs) / (time.time() - t)
     training_walltime += time.time() - t
@@ -258,12 +264,7 @@ def train(
                                               core_env.action_size,
                                               normalize_observations)
 
-  if process_count > 1:
-    # Make sure all processes stay up until the end of main.
-    x = jnp.ones([jax.local_device_count()])
-    x = jax.device_get(jax.pmap(lambda x: jax.lax.psum(x, 'i'), 'i')(x))
-    assert x[0] == jax.device_count()
-
+  pmap.synchronize_hosts()
   return (inference, params, metrics)
 
 

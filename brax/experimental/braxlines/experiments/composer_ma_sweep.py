@@ -13,14 +13,25 @@
 # limitations under the License.
 
 """composer Sweep."""
+# pylint:disable=g-complex-comprehension
+import itertools
 from brax.experimental.braxlines.experiments import defaults
 
 seed = 0
+comps = [('ant', {}), ('humanoid', {}), ('pro_ant', dict(num_legs=[2, 6]))]
 
 AGENT_MODULE = 'brax.experimental.composer.train'
 CONFIG = [
     dict(
-        env_name=['ant_chase_ma'],
+        env_name=['follow', 'chase'],
+        env_params=dict(
+            main_agent=[comp1[0]],
+            main_agent_params=comp1[1],
+            other_agent=[comp2[0]],
+            other_agent_params=comp2[1],
+            num_agents=list(range(2, 5)),
+        ),
         seed=seed,
-        ppo_params=defaults.get_ppo_params('ant', 10)),
+        ppo_params=defaults.get_ppo_params(comp1[0], 3, default='ant'))
+    for comp1, comp2 in itertools.product(comps, comps)
 ]

@@ -121,11 +121,11 @@ class SimObserver(Observer):
                sdtype: str = 'body',
                sdcomp: str = 'pos',
                sdname: str = '',
-               suffix: str = '',
+               comp_name: str = '',
                name: str = None,
                indices: Tuple[int] = None,
                **kwargs):
-    sdname = component_editor.add_suffix(sdname, suffix)
+    sdname = component_editor.concat_name(sdname, comp_name)
     if not name:
       name = f'{sdtype}_{sdcomp}:{sdname}'
       if indices:

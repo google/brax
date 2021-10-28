@@ -19,7 +19,7 @@ rewards are all dictionaries), and therefore it is
 straight-forward to enable multi-agent environments.
 
 composer_env.metadata.agent_groups specifies full information for the
-multi-agent task. E.g. ant_chase_ma in envs/ma_descs.py.py.
+multi-agent task. E.g. envs/ma_descs.py.py.
 
 E.g.
    agent_groups=dict(
@@ -118,6 +118,8 @@ def set_names_info(
 ):
   """Set names based on '{var}_(names|agents)'."""
   names = v.get(f'{var}_names', ())
+  assert all(isinstance(v, tuple)
+             for v in names), f'{names} must be a Sequence of Tuples'
   names = tuple(ce.concat_name(*v) for v in names)
   agents = v.get(f'{var}_agents', default_agents)
   for agent in agents:

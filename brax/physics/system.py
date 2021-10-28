@@ -24,6 +24,7 @@ from brax.physics import actuators
 from brax.physics import bodies
 from brax.physics import colliders
 from brax.physics import config_pb2
+from brax.physics import forces
 from brax.physics import integrators
 from brax.physics import joints
 from brax.physics import tree
@@ -48,6 +49,7 @@ class System:
     self.num_actuators = len(config.actuators)
     self.num_joint_dof = sum(len(j.angle_limit) for j in config.joints)
     self.actuators = actuators.get(self.config, self.joints)
+    self.forces = forces.get(self.config, self.body)
 
   def default_angle(self, default_index: int = 0) -> jp.ndarray:
     """Returns the default joint angles for the system."""
@@ -179,7 +181,8 @@ class System:
       zero = P(jp.zeros((self.num_bodies, 3)), jp.zeros((self.num_bodies, 3)))
       dp_j = sum([j.apply(qp) for j in self.joints], zero)
       dp_a = sum([a.apply(qp, act) for a in self.actuators], zero)
-      qp = self.integrator.potential(qp, dp_j + dp_a)
+      dp_f = sum([f.apply(qp, act) for f in self.forces], zero)
+      qp = self.integrator.potential(qp, dp_j + dp_a + dp_f)
 
       # apply collision velocity updates
       dp_c = sum([c.apply(qp) for c in self.colliders], zero)

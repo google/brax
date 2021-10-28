@@ -25,6 +25,7 @@ from brax import envs
 from brax.training import env
 from brax.training import networks
 from brax.training import normalization
+from brax.training import pmap
 import flax
 import jax
 import jax.numpy as jnp
@@ -90,9 +91,8 @@ def train(
     local_devices_to_use = min(local_devices_to_use, max_devices_per_host)
   logging.info(
       'Device count: %d, process count: %d (id %d), local device count: %d, '
-      'devices to be used count: %d',
-      jax.device_count(), process_count, process_id, local_device_count,
-      local_devices_to_use)
+      'devices to be used count: %d', jax.device_count(), process_count,
+      process_id, local_device_count, local_devices_to_use)
 
   key = jax.random.PRNGKey(seed)
   key, key_model, key_env, key_eval = jax.random.split(key, 4)
@@ -119,8 +119,11 @@ def train(
 
   normalizer_params, obs_normalizer_update_fn, obs_normalizer_apply_fn = (
       normalization.create_observation_normalizer(
-          obs_size, normalize_observations, num_leading_batch_dims=1,
-          apply_clipping=False, pmap_to_devices=local_devices_to_use))
+          obs_size,
+          normalize_observations,
+          num_leading_batch_dims=1,
+          apply_clipping=False,
+          pmap_to_devices=local_devices_to_use))
 
   policy_params = policy_model.init(key_model)
 
@@ -152,18 +155,18 @@ def train(
                                              reward_shift) * active_episode
     new_active_episode = active_episode * (1 - nstate.done)
     new_normalizer_params = obs_normalizer_update_fn(new_normalizer_params,
-                                                     state.obs,
-                                                     active_episode)
+                                                     state.obs, active_episode)
     return nstate, policy_params, cumulative_reward, new_active_episode, normalizer_params, new_normalizer_params
 
   def run_ars_eval(state, params, normalizer_params):
+    synchro = pmap.is_synchronized(normalizer_params, axis_name='i')
     cumulative_reward = jnp.zeros(state.obs.shape[0])
     active_episode = jnp.ones(state.obs.shape[0])
     _, _, cumulative_reward, _, _, normalizer_params = jax.lax.while_loop(
         lambda a: jax.lax.psum(jnp.sum(a[3]), axis_name='i') > 0, do_one_step,
         (state, params, cumulative_reward, active_episode, normalizer_params,
          normalizer_params))
-    return cumulative_reward, normalizer_params
+    return cumulative_reward, normalizer_params, synchro
 
   def add_noise(params, key):
     noise = jax.random.normal(key, shape=params.shape, dtype=params.dtype)
@@ -173,8 +176,10 @@ def train(
 
   @jax.jit
   def ars_one_epoch(state, training_state):
-    params = jnp.repeat(jnp.expand_dims(training_state.policy_params, axis=0),
-                        num_envs // 2, axis=0)
+    params = jnp.repeat(
+        jnp.expand_dims(training_state.policy_params, axis=0),
+        num_envs // 2,
+        axis=0)
 
     key, key_petr = jax.random.split(training_state.key)
     # generate perturbations
@@ -189,7 +194,7 @@ def train(
                              ), pparams)
 
     prun_ars_eval = jax.pmap(run_ars_eval, axis_name='i')
-    eval_scores, normalizer_params = prun_ars_eval(
+    eval_scores, normalizer_params, synchro = prun_ars_eval(
         state, pparams, training_state.normalizer_params)
 
     eval_scores = jnp.reshape(eval_scores, [-1])
@@ -202,11 +207,15 @@ def train(
                                            axis=0)
     reward_std = jnp.std(eval_scores, where=reward_weight_double)
 
-    noise = jnp.sum(jnp.transpose(jnp.transpose(noise) * reward_weight *
-                                  (reward_plus - reward_minus)), axis=0)
+    noise = jnp.sum(
+        jnp.transpose(
+            jnp.transpose(noise) * reward_weight *
+            (reward_plus - reward_minus)),
+        axis=0)
 
-    policy_params = (training_state.policy_params +
-                     step_size / (top_directions * reward_std) * noise)
+    policy_params = (
+        training_state.policy_params + step_size /
+        (top_directions * reward_std) * noise)
 
     metrics = {
         'params_norm': optax.global_norm(policy_params),
@@ -218,11 +227,10 @@ def train(
     return TrainingState(
         key=key,
         normalizer_params=normalizer_params,
-        policy_params=policy_params), metrics
+        policy_params=policy_params), metrics, synchro
 
-  training_state = TrainingState(key=key,
-                                 normalizer_params=normalizer_params,
-                                 policy_params=policy_params)
+  training_state = TrainingState(
+      key=key, normalizer_params=normalizer_params, policy_params=policy_params)
 
   training_walltime = 0
   eval_walltime = 0
@@ -241,8 +249,7 @@ def train(
         training_state.normalizer_params[0][0]) * action_repeat
 
     if process_id == 0 and it % log_frequency == 0:
-      eval_state = run_eval(eval_first_state,
-                            training_state.policy_params,
+      eval_state = run_eval(eval_first_state, training_state.policy_params,
                             training_state.normalizer_params)
       eval_state.completed_episodes.block_until_ready()
       eval_walltime += time.time() - t
@@ -256,9 +263,7 @@ def train(
               f'eval/episode_{name}': value / eval_state.completed_episodes
               for name, value in eval_state.completed_episodes_metrics.items()
           }),
-          **dict({
-              f'train/{name}': value for name, value in summary.items()
-          }),
+          **dict({f'train/{name}': value for name, value in summary.items()}),
           **dict({
               'eval/completed_episodes': eval_state.completed_episodes,
               'eval/episode_length': avg_episode_length,
@@ -278,7 +283,8 @@ def train(
 
     t = time.time()
     # optimization
-    training_state, summary = ars_one_epoch(state, training_state)
+    training_state, summary, synchro = ars_one_epoch(state, training_state)
+    assert synchro[0], (it, training_state.normalizer_params)
     # Don't override state with new_state. For environments with variable
     # episode length we still want to start from a 'reset', not from where the
     # last run finished.
@@ -291,8 +297,7 @@ def train(
 
   _, inference = make_params_and_inference_fn(core_env.observation_size,
                                               core_env.action_size,
-                                              normalize_observations,
-                                              head_type)
+                                              normalize_observations, head_type)
   normalizer_params = jax.tree_map(lambda x: x[0],
                                    training_state.normalizer_params)
   params = normalizer_params, training_state.policy_params
@@ -300,8 +305,10 @@ def train(
   return (inference, params, metrics)
 
 
-def make_params_and_inference_fn(observation_size, action_size,
-                                 normalize_observations, head_type=None):
+def make_params_and_inference_fn(observation_size,
+                                 action_size,
+                                 normalize_observations,
+                                 head_type=None):
   """Creates params and inference function for the ES agent."""
   obs_normalizer_params, obs_normalizer_apply_fn = normalization.make_data_and_apply_fn(
       observation_size, normalize_observations, apply_clipping=False)
