@@ -35,8 +35,6 @@ from brax.envs import ur5e
 from brax.envs import walker2d
 from brax.envs import wrappers
 from brax.envs.env import Env, State, Wrapper
-from brax.google.envs import ghumanoid
-from brax.google.envs import random_walk
 import gym
 
 
