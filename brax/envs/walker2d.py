@@ -39,7 +39,7 @@ class Walker2d(brax_env.Env):
                exclude_current_positions_from_observation: bool = True,
                system_config: Optional[str] = None,
                **kwargs):
-    """Creates a Hopper environment.
+    """Creates a Walker environment.
 
     Args:
       forward_reward_weight: Weight for the forward reward, i.e. velocity in
