@@ -36,7 +36,7 @@ class System:
   """A brax system."""
 
   __pytree_ignore__ = ('config', 'num_bodies', 'num_joints', 'num_joint_dof',
-                       'num_actuators')
+                       'num_actuators', 'num_forces_dof')
 
   def __init__(self, config: config_pb2.Config):
     self.config = validate_config(config)
