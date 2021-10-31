@@ -153,6 +153,8 @@ message Force {
   oneof type {
     Thruster thruster = 4;
   }
+  // Prevents motion or rotation along specified axes for this body.
+  Frozen frozen = 5;  
 }
 
 // DefaultState determines the default orientations of bodies in the system
