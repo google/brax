@@ -36,7 +36,7 @@ class System:
   """A brax system."""
 
   __pytree_ignore__ = ('config', 'num_bodies', 'num_joints', 'num_joint_dof',
-                       'num_actuators')
+                       'num_actuators', 'num_forces_dof')
 
   def __init__(self, config: config_pb2.Config):
     self.config = validate_config(config)
@@ -50,6 +50,7 @@ class System:
     self.num_joint_dof = sum(len(j.angle_limit) for j in config.joints)
     self.actuators = actuators.get(self.config, self.joints)
     self.forces = forces.get(self.config, self.body)
+    self.num_forces_dof = sum(f.act_index.shape[-1] for f in self.forces)
 
   def default_angle(self, default_index: int = 0) -> jp.ndarray:
     """Returns the default joint angles for the system."""
