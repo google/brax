@@ -1,4 +1,4 @@
-# `BRAX`
+<img src="https://github.com/google/brax/raw/main/docs/img/brax_logo.gif" width="336" height="80" alt="BRAX"/>
 
 Brax is a differentiable physics engine that simulates environments made up of
 rigid bodies, joints, and actuators. Brax is written in

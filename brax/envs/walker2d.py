@@ -21,6 +21,7 @@ from brax import jumpy as jp
 from brax.envs import env as brax_env
 from brax.physics import bodies
 
+
 class Walker2d(brax_env.Env):
   """Trains a 2D walker to run in the +x direction.
 
@@ -79,7 +80,6 @@ class Walker2d(brax_env.Env):
         rng1, (self.sys.num_joint_dof,), -.005, .005)
     qvel = jp.random_uniform(rng2, (self.sys.num_joint_dof,), -.005, .005)
     qp = self.sys.default_qp(joint_angle=qpos, joint_velocity=qvel)
-    info = self.sys.info(qp)
     obs = self._get_obs(qp)
     reward, done, zero = jp.zeros(3)
     metrics = {
@@ -136,8 +136,6 @@ class Walker2d(brax_env.Env):
     # qvel: velocity of the torso and the joint angle velocities.
     qvel = [qp.vel[0], joint_vel]
     return jp.concatenate(qpos + qvel)
-
-
 
 
 _SYSTEM_CONFIG = """

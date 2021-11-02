@@ -45,7 +45,7 @@ During loading an env through create(), it:
   - optionally, each component can specify a dictionary of reward functions
       as `reward_fns`. See reward_functions.py.
 - creates edges: automatically create necessary edge information
-    between components, such as collide_include's in brax.Config()
+    among 2+ components, such as collide_include's in brax.Config()
   - optionally edge information can be supplied,
       e.g. `collide_type`={'full', 'root', None} specifying full collisons,
       collision only between roots, or no collision between two components
@@ -167,7 +167,7 @@ class Composer(object):
       for name, reward_kwargs in sorted(component_reward_fns.items()):
         name = component_editor.concat_name(name, comp_name)
         assert name not in reward_fns, f'duplicate reward_fns {name}'
-        reward_fn, unwrapped_reward_fn = reward_functions.get_component_reward_fns(
+        reward_fn, unwrapped_reward_fn = reward_functions.get_reward_fns(
             v, **reward_kwargs)
         reward_fns[name] = reward_fn
         reward_features += reward_functions.get_observers_from_reward_fns(
@@ -193,7 +193,7 @@ class Composer(object):
       for name, reward_kwargs in sorted(edge_reward_fns.items()):
         name = component_editor.concat_name(name, edge_name)
         assert name not in reward_fns, f'duplicate reward_fns {name}'
-        reward_fn, unwrapped_reward_fn = reward_functions.get_edge_reward_fns(
+        reward_fn, unwrapped_reward_fn = reward_functions.get_reward_fns(
             v1, v2, **reward_kwargs)
         reward_fns[name] = reward_fn
         reward_features += reward_functions.get_observers_from_reward_fns(
