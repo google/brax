@@ -17,8 +17,13 @@ import functools
 import itertools
 from typing import Any, Dict, Sequence
 from brax.experimental.composer import component_editor
+from brax.experimental.composer import reward_functions
 from brax.experimental.composer.composer_utils import merge_desc
+from brax.experimental.composer.observers import SimObserver as so
 import numpy as np
+
+MAX_DIST = 20
+MIN_DIST = 0.5
 
 
 def get_n_agents_desc(agents: Sequence[str],
@@ -68,7 +73,9 @@ def add_follow(env_desc: Dict[str, Any], leader_vel: float = 3.0):
     edges[edge_name] = dict(
         reward_fns=dict(
             dist=dict(
-                reward_type='root_dist', min_dist=1, max_dist=20, offset=21)))
+                reward_type='root_dist',
+                max_dist=MAX_DIST,
+                offset=MAX_DIST + 1)))
     agent_groups[agent] = dict(reward_names=(('dist', agent, leader),))
   merge_desc(
       env_desc,
@@ -79,24 +86,44 @@ def add_follow(env_desc: Dict[str, Any], leader_vel: float = 3.0):
 def add_chase(env_desc: Dict[str, Any]):
   """Add chase task."""
   agent_groups = {}
+  components = {}
   edges = {}
   agents = sorted(env_desc['components'])
   prey, predators = agents[0], agents[1:]
   prey_rewards = ()
+  run_reward = dict(
+      reward_type=reward_functions.norm_reward,
+      obs=lambda x: so('body', 'vel', x['root'], indices=(0, 1)),
+      scale=-1)
   for agent in predators:
-    # prey aims to run away from all predators
-    # predators aim to chase the prey
     edge_name = component_editor.concat_comps(agent, prey)
     edges[edge_name] = dict(
         reward_fns=dict(
+            # predators aim to chase the prey
             chase=dict(
-                reward_type='root_dist', min_dist=1, offset=11, max_dist=10),
-            escape=dict(reward_type='root_dist', scale=-1),
+                reward_type='root_dist',
+                offset=MAX_DIST + 1,
+                min_dist=MIN_DIST,
+                done_bonus=1000 * MAX_DIST),
+            # prey aims to run away from all predators
+            escape=dict(
+                reward_type='root_dist',
+                scale=-1,
+                max_dist=MAX_DIST,
+                done_bonus=1000 * MAX_DIST,
+            ),
         ))
     prey_rewards += (('escape', agent, prey),)
-    agent_groups[agent] = dict(reward_names=(('chase', agent, prey),))
-  agent_groups[prey] = dict(reward_names=prey_rewards)
-  merge_desc(env_desc, dict(agent_groups=agent_groups, edges=edges))
+    # add velocity bonus for each agent
+    components[agent] = dict(reward_fns=dict(run=run_reward))
+    agent_groups[agent] = dict(
+        reward_names=(('chase', agent, prey), ('run', agent)))
+  # add velocity bonus for each agent
+  components[prey] = dict(reward_fns=dict(run=run_reward))
+  agent_groups[prey] = dict(reward_names=prey_rewards + (('run', prey),))
+  merge_desc(
+      env_desc,
+      dict(agent_groups=agent_groups, edges=edges, components=components))
   return env_desc
 
 

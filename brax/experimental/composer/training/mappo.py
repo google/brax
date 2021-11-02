@@ -29,6 +29,7 @@ from brax.experimental.composer import data_utils
 from brax.training import distribution
 from brax.training import networks
 from brax.training import normalization
+from brax.training import pmap
 from brax.training import ppo
 from brax.training.types import Params
 from brax.training.types import PRNGKey
@@ -262,7 +263,7 @@ def train(environment_fn: Callable[..., envs.Env],
         'extra': extra_params
     }
     optimizer_state = optimizer.init(init_params)
-    optimizer_state, init_params = normalization.bcast_local_devices(
+    optimizer_state, init_params = pmap.bcast_local_devices(
         (optimizer_state, init_params), local_devices_to_use)
 
     loss_fn = functools.partial(

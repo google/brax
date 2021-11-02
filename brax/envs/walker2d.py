@@ -14,12 +14,15 @@
 
 """Trains a 2D walker to run in the +x direction."""
 
-from typing import Tuple
+from typing import Optional, Tuple
 
-from brax.envs import hopper
+import brax
+from brax import jumpy as jp
+from brax.envs import env as brax_env
+from brax.physics import bodies
 
 
-class Walker2d(hopper.Hopper):
+class Walker2d(brax_env.Env):
   """Trains a 2D walker to run in the +x direction.
 
   This is similar to the Walker2d-V3 Mujoco environment in OpenAI Gym, which is
@@ -27,15 +30,112 @@ class Walker2d(hopper.Hopper):
   other.
   """
 
+  # TODO: Add healthy_angle_range.
   def __init__(self,
-               *argv,
+               forward_reward_weight: float = 1.0,
+               ctrl_cost_weight: float = 1e-3,
+               healthy_reward: float = 1.0,
+               terminate_when_unhealthy: bool = True,
                healthy_z_range: Tuple[float, float] = (0.7, 2.0),
+               exclude_current_positions_from_observation: bool = True,
+               system_config: Optional[str] = None,
                **kwargs):
-    super().__init__(
-        *argv,
-        **kwargs,
-        healthy_z_range=healthy_z_range,
-        system_config=_SYSTEM_CONFIG)
+    """Creates a Walker environment.
+
+    Args:
+      forward_reward_weight: Weight for the forward reward, i.e. velocity in
+        x-direction.
+      ctrl_cost_weight: Weight for the control cost.
+      healthy_reward: Reward for staying healthy, i.e. respecting the posture
+        constraints.
+      terminate_when_unhealthy: Done bit will be set when unhealthy if true.
+      healthy_z_range: Range of the z-position for being healthy.
+      exclude_current_positions_from_observation: x-position will not be exposed
+        in the observations if true.
+      system_config: System config to use. If None, then _SYSTEM_CONFIG defined
+        in this file will be used.
+      **kwargs: Arguments that are passed to the base class.
+    """
+    self._forward_reward_weight = forward_reward_weight
+    self._ctrl_cost_weight = ctrl_cost_weight
+    self._healthy_reward = healthy_reward
+    self._terminate_when_unhealthy = terminate_when_unhealthy
+    self._healthy_z_range = healthy_z_range
+    self._exclude_current_positions_from_observation = (
+        exclude_current_positions_from_observation)
+
+    super().__init__(system_config or _SYSTEM_CONFIG, **kwargs)
+
+    config = self.sys.config
+    body = bodies.Body(config)
+    assert config.bodies[-1].name == 'floor'
+    body = jp.take(body, body.idx[:-1])  # Skip the floor body.
+    self.mass = body.mass.reshape(-1, 1)
+    self.inertia = body.inertia
+
+  def reset(self, rng: jp.ndarray) -> brax_env.State:
+    """Resets the environment to an initial state."""
+    rng, rng1, rng2 = jp.random_split(rng, 3)
+    qpos = self.sys.default_angle() + jp.random_uniform(
+        rng1, (self.sys.num_joint_dof,), -.005, .005)
+    qvel = jp.random_uniform(rng2, (self.sys.num_joint_dof,), -.005, .005)
+    qp = self.sys.default_qp(joint_angle=qpos, joint_velocity=qvel)
+    obs = self._get_obs(qp)
+    reward, done, zero = jp.zeros(3)
+    metrics = {
+        'reward_forward': zero,
+        'reward_ctrl': zero,
+        'reward_healthy': zero,
+    }
+    return brax_env.State(qp, obs, reward, done, metrics)
+
+  def step(self, state: brax_env.State, action: jp.ndarray) -> brax_env.State:
+    """Run one timestep of the environment's dynamics."""
+    # Reverse torque improves performance over a range of hparams.
+    qp, _ = self.sys.step(state.qp, -action)
+    obs = self._get_obs(qp)
+
+    # Ignore the floor at last index.
+    pos_before = state.qp.pos[:-1]
+    pos_after = qp.pos[:-1]
+    com_before = jp.sum(pos_before * self.mass, axis=0) / jp.sum(self.mass)
+    com_after = jp.sum(pos_after * self.mass, axis=0) / jp.sum(self.mass)
+    x_velocity = (com_after[0] - com_before[0]) / self.sys.config.dt
+    forward_reward = self._forward_reward_weight * x_velocity
+
+    min_z, max_z = self._healthy_z_range
+    is_healthy = jp.where(qp.pos[0, 2] < min_z, x=0.0, y=1.0)
+    is_healthy = jp.where(qp.pos[0, 2] > max_z, x=0.0, y=is_healthy)
+    if self._terminate_when_unhealthy:
+      healthy_reward = self._healthy_reward
+    else:
+      healthy_reward = self._healthy_reward * is_healthy
+
+    rewards = forward_reward + healthy_reward
+
+    ctrl_cost = self._ctrl_cost_weight * jp.sum(jp.square(action))
+    costs = ctrl_cost
+
+    reward = rewards - costs
+
+    done = 1.0 - is_healthy if self._terminate_when_unhealthy else 0.0
+
+    state.metrics.update(
+        reward_forward=forward_reward,
+        reward_ctrl=-ctrl_cost,
+        reward_healthy=healthy_reward)
+    return state.replace(qp=qp, obs=obs, reward=reward, done=done)
+
+  def _get_obs(self, qp: brax.QP) -> jp.ndarray:
+    """Returns the environment observations."""
+    (joint_angle,), (joint_vel,) = self.sys.joints[0].angle_vel(qp)
+    # qpos: position and orientation of the torso and the joint angles.
+    qpos = ([] if self._exclude_current_positions_from_observation else
+            [qp.pos[0, 0:1]])
+    qpos += [qp.pos[0, 2:], qp.rot[0], joint_angle]
+    # qvel: velocity of the torso and the joint angle velocities.
+    qvel = [qp.vel[0], joint_vel]
+    return jp.concatenate(qpos + qvel)
 
 
 _SYSTEM_CONFIG = """

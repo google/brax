@@ -18,7 +18,7 @@ import itertools
 from brax.experimental.braxlines.experiments import defaults
 
 seed = 0
-comps = [('ant', {}), ('humanoid', {}), ('pro_ant', dict(num_legs=[2, 6]))]
+comps = [('ant', {}), ('pro_ant', dict(num_legs=[2, 6]))]
 
 AGENT_MODULE = 'brax.experimental.composer.train'
 CONFIG = [
