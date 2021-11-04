@@ -16,12 +16,14 @@
 # pylint:disable=broad-except
 # pylint:disable=g-complex-comprehension
 import datetime
+import functools
 import importlib
 import math
 import os
 import pprint
 import re
 from typing import Dict, Any, List, Tuple, Callable
+from brax.envs.env import State
 from brax.experimental.braxlines.common import config_utils
 from brax.experimental.braxlines.common import logger_utils
 from brax.experimental.braxlines.experiments import defaults
@@ -180,6 +182,61 @@ def color_spec(n):
   return np.clip(np.stack([-t, 510 - np.abs(t), t], axis=1), 0, 255) / 255.
 
 
+def plot_states(states: List[State], **kwargs):
+  """Plot trajectory."""
+  x = np.array([s.info['steps'] for s in states])
+  ys = {}
+  ys.update({
+      f'rewards/{k}': np.array([s.info['rewards'][k] for s in states
+                               ]) for k in states[-1].info['rewards']
+  })
+  ys.update({
+      f'scores/{k}': np.array([s.info['scores'][k] for s in states
+                              ]) for k in states[-1].info['scores']
+  })
+  ys.update({'score': np.array([s.info['score'] for s in states])})
+  ys.update({'reward': np.array([s.reward for s in states])})
+  plotdata = {k: dict(x=x, y=y) for k, y in ys.items()}
+  plot_curves(plotdata=plotdata, xlabel='time steps', **kwargs)
+
+
+def plot_curves(plotdata: Dict[str, Any],
+                plotpatterns: List[str] = None,
+                xlabel: str = '# environment steps',
+                xlim: List[float] = None,
+                max_ncols: int = 5,
+                output_name: str = 'training_curves',
+                output_path: str = None):
+  """Plot data."""
+  # pylint:disable=g-import-not-at-top
+  import matplotlib.pyplot as plt
+  # pylint:enable=g-import-not-at-top
+  if plotpatterns:
+    plotkeys = [key for key in plotdata if any(x in key for x in plotpatterns)]
+  else:
+    plotkeys = list(plotdata)
+  num_figs = len(plotkeys)
+  ncols = min(num_figs, max_ncols)
+  nrows = int(math.ceil(num_figs / ncols))
+  fig, axs = plt.subplots(
+      ncols=ncols, nrows=nrows, figsize=(3.5 * ncols, 3 * nrows))
+  for i, key in enumerate(plotkeys):
+    col, row = i % ncols, int(i / ncols)
+    ax = axs
+    if nrows > 1:
+      ax = ax[row]
+    if ncols > 1:
+      ax = ax[col]
+    ax.plot(plotdata[key]['x'], plotdata[key]['y'])
+    ax.set(xlabel=xlabel, ylabel=key)
+    if xlim:
+      ax.set_xlim(xlim)
+  fig.tight_layout()
+  if output_path:
+    with file.File(f'{output_path}/{output_name}.png', 'wb') as f:
+      plt.savefig(f)
+
+
 def get_progress_fn(plotpatterns: List[str],
                     times: List[float],
                     return_dict: Dict[str, float] = None,
@@ -192,35 +249,17 @@ def get_progress_fn(plotpatterns: List[str],
                     post_plot_fn: Callable[..., Any] = None,
                     tab: logger_utils.Tabulator = None):
   """Get progress function for training."""
-  # pylint:disable=g-import-not-at-top
-  import matplotlib.pyplot as plt
-  # pylint:enable=g-import-not-at-top
   plotdata = {}
   return_dict = return_dict or {}
   progress_dict = progress_dict or {}
 
-  def plot(output_name: str = 'training_curves', output_path: str = None):
-    plotkeys = [key for key in plotdata if any(x in key for x in plotpatterns)]
-    num_figs = len(plotkeys)
-    ncols = min(num_figs, max_ncols)
-    nrows = int(math.ceil(num_figs / ncols))
-    fig, axs = plt.subplots(
-        ncols=ncols, nrows=nrows, figsize=(3.5 * ncols, 3 * nrows))
-    for i, key in enumerate(plotkeys):
-      col, row = i % ncols, int(i / ncols)
-      ax = axs
-      if nrows > 1:
-        ax = ax[row]
-      if ncols > 1:
-        ax = ax[col]
-      ax.plot(plotdata[key]['x'], plotdata[key]['y'])
-      ax.set(xlabel=xlabel, ylabel=key)
-      if xlim:
-        ax.set_xlim(xlim)
-    fig.tight_layout()
-    if output_path:
-      with file.File(f'{output_path}/{output_name}.png', 'wb') as f:
-        plt.savefig(f)
+  plot = functools.partial(
+      plot_curves,
+      plotdata=plotdata,
+      plotpatterns=plotpatterns,
+      xlabel=xlabel,
+      xlim=xlim,
+      max_ncols=max_ncols)
 
   def progress(num_steps, metrics, params):
     if update_metrics_fn:

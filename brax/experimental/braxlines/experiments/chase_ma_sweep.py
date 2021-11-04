@@ -23,7 +23,7 @@ comps = [('ant', {}), ('pro_ant', dict(num_legs=[2, 6]))]
 AGENT_MODULE = 'brax.experimental.composer.train'
 CONFIG = [
     dict(
-        env_name=['follow', 'chase'],
+        env_name='chase',
         env_params=dict(
             main_agent=[comp1[0]],
             main_agent_params=comp1[1],

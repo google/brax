@@ -80,6 +80,6 @@ def get(config: config_pb2.Config,
     act_indices.append(act_index)
     current_index += 3
   if act_indices:
-    return [Thruster(config.forces, body, act_indices)]
+    return [Thruster(list(config.forces), body, act_indices)]
   else:
     return []

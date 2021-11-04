@@ -49,6 +49,7 @@ def get_compressed_name_from_keys(config: Dict[str, Any],
   """Generate a compressed name from keys wrt config."""
   assert not isinstance(config, list), config
   name = ''
+  used_pre_keys_strs = []
   for pre_keys in keys:
     v = config
     pre_keys_str = ''
@@ -62,6 +63,13 @@ def get_compressed_name_from_keys(config: Dict[str, Any],
       pre_keys_str = f'{pre_keys_str}.{k_str}' if pre_keys_str else k_str
     if missing:
       continue
+    if pre_keys_str in used_pre_keys_strs:
+      i = 0
+      while f'{pre_keys_str}{i}' in used_pre_keys_strs and i < 10:
+        i += 1
+      assert i < 10, 'too many conflicts'
+      pre_keys_str = f'{pre_keys_str}{i}'
+    used_pre_keys_strs.append(pre_keys_str)
     if isinstance(v, bool):
       v = str(v)[0]  # True/False -> 'T', 'F'
     elif v is None:

@@ -83,6 +83,7 @@ from brax.experimental.composer.components import register_default_components
 from jax import numpy as jnp
 
 inspect_env = composer_envs.inspect_env
+list_env = composer_envs.list_env
 register_env = composer_envs.register_env
 register_lib = composer_envs.register_lib
 
@@ -114,6 +115,7 @@ class Composer(object):
                global_options: Dict[str, Any] = None):
     components = copy.deepcopy(components)
     edges = copy.deepcopy(edges or {})
+    global_options = copy.deepcopy(global_options or {})
     extra_observers = copy.deepcopy(extra_observers)
     reward_features = []
     reward_fns = odict()
@@ -125,42 +127,56 @@ class Composer(object):
     components = {
         name: load_component(**value) for name, value in components.items()
     }
-    component_keys = sorted(components.keys())
-    components_ = odict([(k, components[k]) for k in component_keys])
+    component_keys = sorted(components)
+    components = odict([(k, components[k]) for k in component_keys])
 
     # set global
-    v = dict(
-        json=component_editor.json_global_options(**(global_options or {})))
-    v['message_str'] = component_editor.json2message_str(v['json'])
-    global_options_ = v
+    global_options = dict(
+        json=component_editor.json_global_options(**global_options))
+    global_options['message_str'] = component_editor.json2message_str(
+        global_options['json'])
 
-    for k, v in components_.items():
-      # convert to json format for easy editing
-      v['json'] = component_editor.message_str2json(v['message_str'])
+    components_ = odict()
+    for k in component_keys:
+      v, new_v = components[k], {}
+      # [start config editing] convert to json format for easy editing
+      new_v['json'] = component_editor.message_str2json(v.pop('message_str'))
+
       # add comp_name's
       comp_name = k
-      if comp_name:
-        rename_fn = functools.partial(
-            component_editor.json_concat_name, comp_name=comp_name)
-        v['json'] = rename_fn(v['json'])
-        v['collides'] = rename_fn(v['collides'], force_add=True)
-        v['root'] = rename_fn(v['root'], force_add=True)
-      v['bodies'] = [b['name'] for b in v['json'].get('bodies', [])]
-      v['joints'] = [b['name'] for b in v['json'].get('joints', [])]
-      v['actuators'] = [b['name'] for b in v['json'].get('actuators', [])]
-      v['comp_name'] = comp_name
-      # convert back to str
-      v['message_str'] = component_editor.json2message_str(v['json'])
+      rename_fn = functools.partial(
+          component_editor.json_concat_name, comp_name=comp_name)
+      new_v['json'] = rename_fn(new_v['json'])
+      new_v['collides'] = rename_fn(v.pop('collides'), force_add=True)
+      new_v['root'] = rename_fn(v.pop('root'), force_add=True)
+
+      # add frozen bodies option
+      if v.pop('frozen', False):
+        for b in new_v['json'].get('bodies', []):
+          b['frozen'] = {'all': True}
+        new_v['frozen'] = True
+
+      # cache config properties
+      new_v['bodies'] = [b['name'] for b in new_v['json'].get('bodies', [])]
+      new_v['joints'] = [b['name'] for b in new_v['json'].get('joints', [])]
+      new_v['actuators'] = [
+          b['name'] for b in new_v['json'].get('actuators', [])
+      ]
+      new_v['comp_name'] = comp_name
+
+      # [end config editing] convert back to str
+      new_v['message_str'] = component_editor.json2message_str(new_v['json'])
 
       # set transform or not
       if 'pos' in v or 'quat' in v:
-        v['transform'] = True
-        v['pos'] = jnp.array(v.get('pos', [0, 0, 0]), dtype='float')
-        v['quat_origin'] = jnp.array(
-            v.get('quat_origin', [0, 0, 0]), dtype='float')
-        v['quat'] = jnp.array(v.get('quat', [1., 0., 0., 0.]), dtype='float')
+        new_v['transform'] = True
+        new_v['pos'] = jnp.array(v.pop('pos', [0, 0, 0]), dtype='float')
+        new_v['quat_origin'] = jnp.array(
+            v.pop('quat_origin', [0, 0, 0]), dtype='float')
+        new_v['quat'] = jnp.array(
+            v.pop('quat', [1., 0., 0., 0.]), dtype='float')
       else:
-        v['transform'] = False
+        new_v['transform'] = False
 
       # add reward functions
       component_reward_fns = v.pop('reward_fns', {})
@@ -168,7 +184,7 @@ class Composer(object):
         name = component_editor.concat_name(name, comp_name)
         assert name not in reward_fns, f'duplicate reward_fns {name}'
         reward_fn, unwrapped_reward_fn = reward_functions.get_reward_fns(
-            v, **reward_kwargs)
+            new_v, **reward_kwargs)
         reward_fns[name] = reward_fn
         reward_features += reward_functions.get_observers_from_reward_fns(
             unwrapped_reward_fn)
@@ -177,10 +193,16 @@ class Composer(object):
       component_observers = v.pop('extra_observers', ())
       for observer_kwargs in component_observers:
         extra_observers += (observers.get_component_observers(
-            v, **observer_kwargs),)
+            new_v, **observer_kwargs),)
+
+      assert all(kk in ('term_fn', 'observers', 'collide')
+                 for kk in v), f'unused kwargs in components[{k}]: {v}'
+      new_v.update(v)
+      components_[k] = new_v
+    del components
 
     edges_ = {}
-    for k1, k2 in itertools.combinations(list(components_.keys()), 2):
+    for k1, k2 in itertools.combinations(component_keys, 2):
       if k1 == k2:
         continue
       k1, k2 = sorted([k1, k2])  # ensure the name is always sorted in order
@@ -205,10 +227,14 @@ class Composer(object):
         extra_observers += (observers.get_edge_observers(
             v1, v2, **observer_kwargs),)
 
+      # [start config editing]
       collide_type = v.pop('collide_type', 'full')
       v_json = {}
       # add colliders
-      if collide_type == 'full':
+      # TODO: add conaffinity-based collide definitions
+      if not all([vv.get('collide', True) for vv in [v1, v2]]):
+        pass
+      elif collide_type == 'full':
         v_json.update(
             component_editor.json_collides(v1['collides'], v2['collides']))
       elif collide_type == 'root':
@@ -216,13 +242,14 @@ class Composer(object):
             component_editor.json_collides([v1['root']], [v2['root']]))
       else:
         assert not collide_type, collide_type
+      # [end config editing]
       if v_json:
         # convert back to str
         new_v['message_str'] = component_editor.json2message_str(v_json)
       else:
         new_v['message_str'] = ''
       new_v['json'] = v_json
-      assert not v, f'unused edges[{edge_name}]: {v}'
+      assert not v, f'unused kwargs in edges[{edge_name}]: {v}'
       edges_[edge_name] = new_v
     assert not edges, f'unused edges: {edges}'
     edge_keys = sorted(edges_.keys())
@@ -234,13 +261,13 @@ class Composer(object):
       message_str += v.get('message_str', '')
     for _, v in sorted(edges_.items()):
       message_str += v.get('message_str', '')
-    message_str += global_options_.get('message_str', '')
+    message_str += global_options.get('message_str', '')
     config_str = message_str
     config_json = component_editor.message_str2json(message_str)
     metadata = MetaData(
         components=components_,
         edges=edges_,
-        global_options=global_options_,
+        global_options=global_options,
         config_str=config_str,
         config_json=config_json,
         extra_observers=extra_observers,
@@ -312,6 +339,13 @@ class ComponentEnv(Env):
   def is_multiagent(self):
     return bool(self.metadata.agent_groups)
 
+  @property
+  def agent_names(self):
+    if not self.is_multiagent:
+      return ()
+    else:
+      return tuple(sorted(self.metadata.agent_groups))
+
   def reset(self, rng: jnp.ndarray) -> State:
     """Resets the environment to an initial state."""
     qp = self.sys.default_qp()
@@ -320,14 +354,18 @@ class ComponentEnv(Env):
     obs_dict, _ = self._get_obs(qp, info)
     obs = data_utils.concat_array(obs_dict, self.observer_shapes)
     reward, done, score = jnp.zeros((3,) + self.reward_shape)
-    if self.reward_shape:  # multi-agent
+    if self.is_multiagent:  # multi-agent
       done = jnp.any(done, axis=-1)  # ensure done is a scalar
     state_info = {}
     state_info['score'] = score
-    state_info['rewards'] = odict([(k, jnp.zeros(
-        ())) for k, _ in self.composer.metadata.reward_fns.items()])
-    state_info['scores'] = odict([(k, jnp.zeros(
-        ())) for k, _ in self.composer.metadata.reward_fns.items()])
+    state_info['rewards'] = odict([
+        (k, jnp.zeros(()))
+        for k in tuple(self.composer.metadata.reward_fns) + self.agent_names
+    ])
+    state_info['scores'] = odict([
+        (k, jnp.zeros(()))
+        for k in tuple(self.composer.metadata.reward_fns) + self.agent_names
+    ])
     return State(
         qp=qp,
         obs=obs,
@@ -349,7 +387,7 @@ class ComponentEnv(Env):
         (k, fn(action, reward_features))
         for k, fn in self.composer.metadata.reward_fns.items()
     ])
-    if self.reward_shape:  # multi-agent
+    if self.is_multiagent:  # multi-agent
       reward, score, done = agent_utils.process_agent_rewards(
           self.metadata, reward_tuple_dict)
     else:
@@ -359,12 +397,12 @@ class ComponentEnv(Env):
         score += s
         done = jnp.logical_or(done, d)
     done = self.composer.term_fn(done, self.sys, qp, info)
-    state.info['rewards'] = odict([
-        (k, v[0]) for k, v in reward_tuple_dict.items()
-    ])
-    state.info['scores'] = odict([
-        (k, v[1]) for k, v in reward_tuple_dict.items()
-    ])
+    state.info['rewards'] = odict(
+        [(k, v[0]) for k, v in reward_tuple_dict.items()] +
+        [(k, v) for k, v in zip(self.agent_names, reward)])
+    state.info['scores'] = odict(
+        [(k, v[1]) for k, v in reward_tuple_dict.items()] +
+        [(k, v) for k, v in zip(self.agent_names, score)])
     state.info['score'] = score
     return state.replace(
         qp=qp, obs=obs, reward=reward, done=done.astype(jnp.float32))
