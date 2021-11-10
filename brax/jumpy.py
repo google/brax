@@ -195,6 +195,11 @@ def square(x: ndarray) -> ndarray:
   return _which_np(x).square(x)
 
 
+def tile(x: ndarray, reps: Union[Tuple[int, ...], int]) -> ndarray:
+  """Construct an array by repeating A the number of times given by reps."""
+  return _which_np(x).tile(x, reps)
+
+
 def repeat(a: ndarray, repeats: Union[int, ndarray]) -> ndarray:
   """Repeat elements of an array."""
   return _which_np(a, repeats).repeat(a, repeats=repeats)

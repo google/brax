@@ -174,7 +174,11 @@ def train(
   min_replay_size = min_replay_size // local_devices_to_use
 
   key = jax.random.PRNGKey(seed)
-  key, key_models, key_env, key_eval, key_rewarder = jax.random.split(key, 5)
+  global_key, local_key = jax.random.split(key)
+  del key
+  local_key = jax.random.fold_in(local_key, process_id)
+  key_models, key_rewarder = jax.random.split(global_key, 2)
+  local_key, key_env, key_eval = jax.random.split(local_key, 3)
 
   core_env = environment_fn(
       action_repeat=action_repeat,
@@ -488,7 +492,7 @@ def train(
       q_optimizer_state=q_optimizer_state,
       q_params=q_params,
       target_q_params=q_params,
-      key=jnp.stack(jax.random.split(key, local_devices_to_use)),
+      key=jnp.stack(jax.random.split(local_key, local_devices_to_use)),
       steps=jnp.zeros((local_devices_to_use,)),
       alpha_optimizer_state=alpha_optimizer_state,
       alpha_params=log_alpha,
@@ -506,49 +510,51 @@ def train(
   while True:
     current_step = int(training_state.normalizer_params[0][0]) * action_repeat
     logging.info('step %s', current_step)
-
     t = time.time()
-    eval_state, key_debug = (
-        run_eval(eval_first_state, key_debug, training_state.policy_params,
-                 training_state.normalizer_params))
-    eval_state.completed_episodes.block_until_ready()
-    eval_walltime += time.time() - t
-    eval_sps = (
-        episode_length * eval_first_state.core.reward.shape[0] /
-        (time.time() - t))
-    avg_episode_length = (
-        eval_state.completed_episodes_steps / eval_state.completed_episodes)
-    metrics = dict(
-        dict({
-            f'eval/episode_{name}': value / eval_state.completed_episodes
-            for name, value in eval_state.completed_episodes_metrics.items()
-        }),
-        **dict({
-            f'training/{name}': onp.mean(value)
-            for name, value in training_metrics.items()
-        }),
-        **dict({
-            'eval/completed_episodes': eval_state.completed_episodes,
-            'eval/avg_episode_length': avg_episode_length,
-            'speed/sps': sps,
-            'speed/eval_sps': eval_sps,
-            'speed/training_walltime': training_walltime,
-            'speed/eval_walltime': eval_walltime,
-            'training/grad_updates': training_state.steps[0],
-        }),
-    )
-    logging.info(metrics)
-    if progress_fn:
-      progress_fn(current_step, metrics)
 
-    if checkpoint_logdir:
-      # Save current policy.
-      normalizer_params = jax.tree_map(lambda x: x[0],
+    if process_id == 0:
+      eval_state, key_debug = run_eval(eval_first_state, key_debug,
+                                       training_state.policy_params,
                                        training_state.normalizer_params)
-      policy_params = jax.tree_map(lambda x: x[0], training_state.policy_params)
-      params = normalizer_params, policy_params
-      path = f'{checkpoint_logdir}_sac_{current_step}.flax'
-      model.save_params(path, params)
+      eval_state.completed_episodes.block_until_ready()
+      eval_walltime += time.time() - t
+      eval_sps = (
+          episode_length * eval_first_state.core.reward.shape[0] /
+          (time.time() - t))
+      avg_episode_length = (
+          eval_state.completed_episodes_steps / eval_state.completed_episodes)
+      metrics = dict(
+          dict({
+              f'eval/episode_{name}': value / eval_state.completed_episodes
+              for name, value in eval_state.completed_episodes_metrics.items()
+          }),
+          **dict({
+              f'training/{name}': onp.mean(value)
+              for name, value in training_metrics.items()
+          }),
+          **dict({
+              'eval/completed_episodes': eval_state.completed_episodes,
+              'eval/avg_episode_length': avg_episode_length,
+              'speed/sps': sps,
+              'speed/eval_sps': eval_sps,
+              'speed/training_walltime': training_walltime,
+              'speed/eval_walltime': eval_walltime,
+              'training/grad_updates': training_state.steps[0],
+          }),
+      )
+      logging.info(metrics)
+      if progress_fn:
+        progress_fn(current_step, metrics)
+
+      if checkpoint_logdir:
+        # Save current policy.
+        normalizer_params = jax.tree_map(lambda x: x[0],
+                                         training_state.normalizer_params)
+        policy_params = jax.tree_map(lambda x: x[0],
+                                     training_state.policy_params)
+        params = normalizer_params, policy_params
+        path = f'{checkpoint_logdir}_sac_{current_step}.flax'
+        model.save_params(path, params)
 
     if current_step >= num_timesteps:
       break
@@ -588,6 +594,7 @@ def train(
                                               normalize_observations)
   params = normalizer_params, policy_params
 
+  pmap.synchronize_hosts()
   return (inference, params, metrics)
 
 

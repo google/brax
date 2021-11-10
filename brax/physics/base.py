@@ -99,12 +99,12 @@ class QP(object):
     return QP(self.pos * o, self.rot * o, self.vel * o, self.ang * o)
 
   @classmethod
-  def zero(cls):
+  def zero(cls, shape=()):
     return cls(
-        pos=jp.zeros(3),
-        rot=jp.array([1., 0., 0., 0]),
-        vel=jp.zeros(3),
-        ang=jp.zeros(3))
+        pos=jp.zeros(shape + (3,)),
+        rot=jp.tile(jp.array([1., 0., 0., 0]), reps=shape + (1,)),
+        vel=jp.zeros(shape + (3,)),
+        ang=jp.zeros(shape + (3,)))
 
   def to_world(self, rpos: jp.ndarray) -> Tuple[jp.ndarray, jp.ndarray]:
     """Returns world information about a point relative to a part.
