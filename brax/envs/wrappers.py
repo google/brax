@@ -22,6 +22,7 @@ import gym
 from gym import spaces
 from gym.vector import utils
 import jax
+from dataclasses import dataclass
 
 
 class VectorWrapper(brax_env.Wrapper):
@@ -101,14 +102,14 @@ class RunningMeanStdState(NamedTuple):
   """Running statistics for observtations/rewards"""
   mean: jp.ndarray
   var: jp.ndarray
-  count: jp.ndarray
+  count: float = 1e-4
 
 
 def update_running_mean_std(std_state: RunningMeanStdState, batch: jp.ndarray) -> RunningMeanStdState:
   """Update running statistics with batch of obsrvations (Welford's algorithm)"""
-  batch = jp.reshape(batch, (-1, std_state.mean.shape[0]))  # Account for unbatched environment
-  batch_mean = batch.mean(0, keepdims=True)
-  batch_var = batch.var(0, keepdims=True)
+  batch = jp.atleast_2d(batch)[0]  # Account for unbatched environments
+  batch_mean = batch.mean(0)
+  batch_var = batch.var(0)
   batch_count = batch.shape[0]
   mean, var, count = std_state
 
@@ -136,15 +137,16 @@ class NormalizeObservationWrapper(brax_env.Wrapper):
     state = self.env.reset(rng)
     if 'running_obs' not in state.info:
       obs_like = state.obs[0] if hasattr(self.env, 'batch_size') else state.obs
-      obs_like = jp.atleast_2d(obs_like)[0]
-      state.info['running_obs'] = RunningMeanStdState(jp.zeros_like(obs_like), jp.ones_like(obs_like), jp.full_like(obs_like, 1e-4))
+      # obs_like = jp.atleast_2d(obs_like)[0]
+      state.info['running_obs'] = RunningMeanStdState(jp.zeros_like(obs_like), jp.ones_like(obs_like))
     state.info.update(running_obs=update_running_mean_std(state.info['running_obs'], state.obs))
     return state.replace(obs=normalize_with_rmstd(state.obs, state.info['running_obs']))
 
 
   def step(self, state: brax_env.State, action: jp.ndarray) -> brax_env.State:
+    running_obs = state.info.pop('running_obs')  # hack to avoid vmap :(
     state = self.env.step(state, action)
-    state.info.update(running_obs=update_running_mean_std(state.info['running_obs'], state.obs))
+    state.info['running_obs'] = update_running_mean_std(running_obs, state.obs)
     return state.replace(obs=normalize_with_rmstd(state.obs, state.info['running_obs']))
 
 
@@ -159,15 +161,16 @@ class NormalizeRewardWrapper(brax_env.Wrapper):
   def reset(self, rng: jp.ndarray) -> brax_env.State:
     state = self.env.reset(rng)
     state.info['returns'] = jp.zeros_like(state.reward)
-    state.info['steps'] = jp.zeros(())
-    state.info['running_ret'] = state.info.get('running_ret', RunningMeanStdState(jp.zeros((1,)), jp.ones((1,)), jp.full((1,), 1e-4)))
+    state.info['running_ret'] = state.info.get('running_ret', RunningMeanStdState(jp.zeros(()), jp.ones(())))
     return state
 
   def step(self, state: brax_env.State, action: jp.ndarray) -> brax_env.State:
+    running_ret = state.info.pop('running_ret')  # Hack to avoid vmap :(
     state = self.env.step(state, action)
     state.info.update(returns=state.info['returns'] * self.gamma + state.reward)
-    state.info.update(running_ret=update_running_mean_std(state.info['running_ret'], state.info['returns']))
-    state.info.update(returns=jp.index_update(state.info['returns'], state.done.astype(bool), 0.))
+    state.info['running_ret'] = update_running_mean_std(running_ret, state.info['returns'])
+    state.info['returns'] = state.info['returns'] * (1 - state.done)  #
+    # state.info.update(returns=jp.index_update(state.info['returns'], state.done.astype(bool), 0.))
     return state.replace(reward=normalize_with_rmstd(state.reward, state.info['running_ret'], shift=False))
 
 
