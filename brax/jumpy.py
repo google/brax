@@ -115,7 +115,7 @@ def norm(x: ndarray,
   return _which_np(x, axis).linalg.norm(x, axis=axis)
 
 
-def index_update(x: ndarray, idx: ndarray, y: ndarray) -> ndarray:
+def index_update(x: ndarray, idx: ndarray, y: Union[ndarray, float, int, bool]) -> ndarray:
   """Pure equivalent of x[idx] = y."""
   if _which_np(x) is jnp:
     return x.at[idx].set(y)
@@ -158,6 +158,11 @@ def any(a: ndarray, axis: Optional[int] = None) -> ndarray:
 def all(a: ndarray, axis: Optional[int] = None) -> ndarray:
   """Test whether all array elements along a given axis evaluate to True."""
   return _which_np(a).all(a, axis=axis)
+
+
+def atleast_2d(*arys: ndarray) -> Sequence[ndarray]:
+  """Return views/copies of inputs as at least 2-dimensional"""
+  return [_which_np(*arys).atleast_2d(ary) for ary in arys]
 
 
 def mean(a: ndarray, axis: Optional[int] = None) -> ndarray:
@@ -375,6 +380,16 @@ def ones(shape, dtype=float) -> ndarray:
 def ones_like(a: ndarray) -> ndarray:
   """Return an array of ones with the same shape and type as a given array."""
   return _which_np(a).ones_like(a)
+
+
+def full(shape, value, dtype=float) -> ndarray:
+  """Return a new array of given shape and type, filled with ones."""
+  return _which_np().full(shape, value, dtype=dtype)
+
+
+def full_like(a: ndarray, value) -> ndarray:
+  """Return an array of ones with the same shape and type as a given array."""
+  return _which_np(a).full_like(a, value)
 
 
 def reshape(a: ndarray, newshape: Union[Tuple[int, ...], int]) -> ndarray:

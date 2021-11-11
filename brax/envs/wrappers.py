@@ -14,7 +14,7 @@
 
 """Wrappers for Brax and Gym env."""
 
-from typing import ClassVar, Optional
+from typing import ClassVar, Optional, NamedTuple
 
 from brax import jumpy as jp
 from brax.envs import env as brax_env
@@ -95,6 +95,82 @@ class AutoResetWrapper(brax_env.Wrapper):
     qp = jp.tree_map(where_done, state.info['first_qp'], state.qp)
     obs = where_done(state.info['first_obs'], state.obs)
     return state.replace(qp=qp, obs=obs)
+
+
+class RunningMeanStdState(NamedTuple):
+  """Running statistics for observtations/rewards"""
+  mean: jp.ndarray
+  var: jp.ndarray
+  count: jp.ndarray
+
+
+def update_running_mean_std(std_state: RunningMeanStdState, batch: jp.ndarray) -> RunningMeanStdState:
+  """Update running statistics with batch of obsrvations (Welford's algorithm)"""
+  batch = jp.reshape(batch, (-1, std_state.mean.shape[0]))  # Account for unbatched environment
+  batch_mean = batch.mean(0, keepdims=True)
+  batch_var = batch.var(0, keepdims=True)
+  batch_count = batch.shape[0]
+  mean, var, count = std_state
+
+  delta = batch_mean - mean
+  new_count = count + batch_count
+  new_mean = mean + delta * batch_count / new_count
+  m_a = var * count
+  m_b = batch_var * batch_count
+  M2 = m_a + m_b + (delta ** 2) * count * batch_count / new_count
+  new_var = M2 / new_count
+  return RunningMeanStdState(new_mean, new_var, new_count)
+
+def normalize_with_rmstd(x: jp.ndarray, rmstd: RunningMeanStdState, epsilon: float = 1e-8, shift: bool = True) -> jp.ndarray:
+  """Normalize input with provided running statistics"""
+  return ((x - rmstd.mean) if shift else x) / ((rmstd.var + epsilon) ** 0.5)
+
+class NormalizeObservationWrapper(brax_env.Wrapper):
+  """Normalize Brax envs observations using running statistics"""
+
+  def __init__(self, env: brax_env.Env, epsilon: float = 1e-8):
+    super().__init__(env)
+    self.epsilon = epsilon
+
+  def reset(self, rng: jp.ndarray) -> brax_env.State:
+    state = self.env.reset(rng)
+    if 'running_obs' not in state.info:
+      obs_like = state.obs[0] if hasattr(self.env, 'batch_size') else state.obs
+      obs_like = jp.atleast_2d(obs_like)[0]
+      state.info['running_obs'] = RunningMeanStdState(jp.zeros_like(obs_like), jp.ones_like(obs_like), jp.full_like(obs_like, 1e-4))
+    state.info.update(running_obs=update_running_mean_std(state.info['running_obs'], state.obs))
+    return state.replace(obs=normalize_with_rmstd(state.obs, state.info['running_obs']))
+
+
+  def step(self, state: brax_env.State, action: jp.ndarray) -> brax_env.State:
+    state = self.env.step(state, action)
+    state.info.update(running_obs=update_running_mean_std(state.info['running_obs'], state.obs))
+    return state.replace(obs=normalize_with_rmstd(state.obs, state.info['running_obs']))
+
+
+class NormalizeRewardWrapper(brax_env.Wrapper):
+  """Normalize Brax envs rewards using running statistics of discounted return"""
+
+  def __init__(self, env: brax_env.Env, gamma: float = 0.99, epsilon: float = 1e-8):
+    super().__init__(env)
+    self.epsilon = epsilon
+    self.gamma = gamma
+
+  def reset(self, rng: jp.ndarray) -> brax_env.State:
+    state = self.env.reset(rng)
+    state.info['returns'] = jp.zeros_like(state.reward)
+    state.info['steps'] = jp.zeros(())
+    state.info['running_ret'] = state.info.get('running_ret', RunningMeanStdState(jp.zeros((1,)), jp.ones((1,)), jp.full((1,), 1e-4)))
+    return state
+
+  def step(self, state: brax_env.State, action: jp.ndarray) -> brax_env.State:
+    state = self.env.step(state, action)
+    state.info.update(returns=state.info['returns'] * self.gamma + state.reward)
+    state.info.update(running_ret=update_running_mean_std(state.info['running_ret'], state.info['returns']))
+    state.info.update(returns=jp.index_update(state.info['returns'], state.done.astype(bool), 0.))
+    return state.replace(reward=normalize_with_rmstd(state.reward, state.info['running_ret'], shift=False))
+
+
 
 
 class GymWrapper(gym.Env):
