@@ -114,6 +114,7 @@ forces {
   body: "cart"
   strength: 100.0
   thruster {}
+  frozen { position { x: 0.0 y: 1.0 z: 1.0} rotation { x: 1.0 y: 1.0 z: 1.0 } }
 }
 collide_include {}
 friction: 0.6
