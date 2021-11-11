@@ -44,7 +44,7 @@ For a deep dive into Braxlines, please see
 our paper, [Braxlines: Fast and Interactive Toolkit for RL-driven Behavior Generation Beyond Reward Maximization](https://arxiv.org/abs/2110.04686).
 
 *Braxlines is under rapid development. While API is stabilizing,
-feel free to send documentation and feature questions and requests.*
+feel free to send documentation and feature questions and requests through git or email.*
 
 ## Citing Braxlines
 

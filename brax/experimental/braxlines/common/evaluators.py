@@ -96,6 +96,7 @@ def rollout_env(
     tmp_key, rng = jax.random.split(rng)
     act = jit_inference_fn(params, state.obs, tmp_key)
     state = jit_env_step(state, act, *step_args)
+  states.append(state)
   return env, states
 
 

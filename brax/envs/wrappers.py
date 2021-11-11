@@ -132,7 +132,7 @@ class GymWrapper(gym.Env):
 
     def step(state, action):
       state = self._env.step(state, action)
-      return state, state.obs, state.reward, state.done
+      return state, state.obs, state.reward, state.done, state.info
 
     self._step = jax.jit(step, backend=self.backend)
 
@@ -141,8 +141,8 @@ class GymWrapper(gym.Env):
     return obs
 
   def step(self, action):
-    self._state, obs, reward, done = self._step(self._state, action)
-    return obs, reward, done, {}
+    self._state, obs, reward, done, info = self._step(self._state, action)
+    return obs, reward, done, info
 
   def seed(self, seed: int = 0):
     self._key = jax.random.PRNGKey(seed)
@@ -202,7 +202,7 @@ class VectorGymWrapper(gym.vector.VectorEnv):
 
     def step(state, action):
       state = self._env.step(state, action)
-      return state, state.obs, state.reward, state.done
+      return state, state.obs, state.reward, state.done, state.info
 
     self._step = jax.jit(step, backend=self.backend)
 
@@ -211,8 +211,8 @@ class VectorGymWrapper(gym.vector.VectorEnv):
     return obs
 
   def step(self, action):
-    self._state, obs, reward, done = self._step(self._state, action)
-    return obs, reward, done, {}
+    self._state, obs, reward, done, info = self._step(self._state, action)
+    return obs, reward, done, info
 
   def seed(self, seed: int = 0):
     self._key = jax.random.PRNGKey(seed)

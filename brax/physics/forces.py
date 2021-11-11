@@ -99,6 +99,6 @@ def get(config: config_pb2.Config,
     current_index += torque_dof
 
   if force_indices or torque_indices:
-    return [Thruster(config.forces, body, force_indices, torque_indices)]
+    return [Thruster(list(config.forces), body, force_indices, torque_indices)]
   else:
     return []

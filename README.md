@@ -28,7 +28,8 @@ Explore Brax easily and quickly through a series of colab notebooks:
 
 * [Brax Basics](https://colab.research.google.com/github/google/brax/blob/main/notebooks/basics.ipynb) introduces the Brax API, and shows how to simulate basic physics primitives.
 * [Brax Environments](https://colab.research.google.com/github/google/brax/blob/main/notebooks/environments.ipynb) shows how to operate and visualize Brax environments. It also demonstrates converting Brax environments to Gym environments, and how to use Brax via other ML frameworks such as PyTorch.
-* [Brax Training](https://colab.research.google.com/github/google/brax/blob/main/notebooks/training.ipynb) introduces Brax's training algorithms, and lets you train your own policies directly within the colab.  It also demonstrates loading and saving policies.
+* [Brax Training with TPU](https://colab.research.google.com/github/google/brax/blob/main/notebooks/training.ipynb) introduces Brax's training algorithms, and lets you train your own policies directly within the colab.  It also demonstrates loading and saving policies.
+* [Brax Training with PyTorch on GPU](https://colab.research.google.com/github/google/brax/blob/main/notebooks/training_torch.ipynb) demonstrates how Brax can be used in other ML frameworks for fast training, in this case PyTorch.
 * [Brax Multi-Agent](https://colab.research.google.com/github/google/brax/blob/main/notebooks/multiagent.ipynb) measures Brax's performance on multi-agent simulation, with many bodies in the environment at once.
 
 ## Using Brax locally
@@ -75,7 +76,7 @@ If you would like to reference Brax in a publication, please use:
   author = {C. Daniel Freeman and Erik Frey and Anton Raichuk and Sertan Girgin and Igor Mordatch and Olivier Bachem},
   title = {Brax - A Differentiable Physics Engine for Large Scale Rigid Body Simulation},
   url = {http://github.com/google/brax},
-  version = {0.0.6},
+  version = {0.0.7},
   year = {2021},
 }
 ```

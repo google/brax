@@ -54,6 +54,11 @@ def register_default_libs():
     register_lib(load_path)
 
 
+def list_env():
+  """List registered envs."""
+  return sorted(ENV_DESCS)
+
+
 def inspect_env(env_name: str):
   """Inspect parameters of the env."""
   desc = env_name
@@ -61,6 +66,9 @@ def inspect_env(env_name: str):
     desc = ENV_DESCS[desc]
   assert callable(desc) or isinstance(desc, dict), desc
   if not callable(desc):
-    return {}
+    return {}, False
   fn_params = inspect.signature(desc).parameters
-  return {k: v.default for k, v in fn_params.items()}
+  supported_params = {k: v.default for k, v in fn_params.items()}
+  support_kwargs = 'kwargs' in supported_params
+  supported_params.pop('kwargs', None)
+  return supported_params, support_kwargs

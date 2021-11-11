@@ -39,8 +39,9 @@ class ComposerTest(parameterized.TestCase):
     assert state.reward.ndim > 0, state.reward
 
   def testInspect(self):
-    env_params = composer.inspect_env('pro_ant_run')
+    env_params, support_kwargs = composer.inspect_env('pro_ant_run')
     assert tuple(sorted(env_params)) == ('num_legs',), env_params
+    assert not support_kwargs, support_kwargs
 
   def testActionConcatSplit(self):
     env = composer.create(env_name='humanoid')

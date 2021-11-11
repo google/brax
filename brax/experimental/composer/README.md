@@ -22,9 +22,10 @@ from brax.experimental.composer import composer
 env = composer.create(env_name='pro_ant_run', num_legs=2)
 ```
 
-To inspect what are configurable environment parameters e.g. `num_legs`, use:
+To inspect what environments are pre-registered, and what are configurable environment parameters e.g. `num_legs` for an environment e.g. `pro_ant_run`, use the following. `support_kwargs==True` means that the environment may have unlisted keyword parameters:
 ```python
-env_params = composer.inspect_env(env_name='pro_ant_run')
+env_list = composer.list_env()
+env_params, support_kwargs = composer.inspect_env(env_name='pro_ant_run')
 ```
 
 For composing an environment from a description `env_desc`:
@@ -85,7 +86,7 @@ For a deep dive into Braxlines, please see
 our paper, [Braxlines: Fast and Interactive Toolkit for RL-driven Behavior Generation Beyond Reward Maximization](https://arxiv.org/abs/2110.04686).
 
 *Braxlines is under rapid development. While API is stabilizing,
-feel free to send documentation and feature questions and requests.*
+feel free to send documentation and feature questions and requests through git or email.*
 
 ## Citing Composer
 

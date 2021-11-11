@@ -15,7 +15,7 @@
 # pylint:disable=g-multiple-import
 """A brax system."""
 
-from typing import Dict, Optional, Tuple
+from typing import Optional, Tuple
 
 from brax import jumpy as jp
 from brax import math
@@ -27,7 +27,6 @@ from brax.physics import config_pb2
 from brax.physics import forces
 from brax.physics import integrators
 from brax.physics import joints
-from brax.physics import tree
 from brax.physics.base import Info, P, QP, validate_config, vec_to_arr
 
 
@@ -81,84 +80,130 @@ class System:
       joint_angle: Optional[jp.ndarray] = None,
       joint_velocity: Optional[jp.ndarray] = None) -> QP:
     """Returns a default state for the system."""
-    qps = {}
+    qp = QP.zero(shape=(self.num_bodies,))
+
+    # set any default qps from the config
+    default = None
+    if default_index < len(self.config.defaults):
+      default = self.config.defaults[default_index]
+      for dqp in default.qps:
+        body_i = self.body.index[dqp.name]
+        pos = jp.index_update(qp.pos, body_i, vec_to_arr(dqp.pos))
+        rot = jp.index_update(qp.rot, body_i,
+                              math.euler_to_quat(vec_to_arr(dqp.rot)))
+        vel = jp.index_update(qp.vel, body_i, vec_to_arr(dqp.vel))
+        ang = jp.index_update(qp.ang, body_i, vec_to_arr(dqp.ang))
+        qp = qp.replace(pos=pos, rot=rot, vel=vel, ang=ang)
+
+    # build joints and joint -> array lookup, and order by depth
     if joint_angle is None:
       joint_angle = self.default_angle(default_index)
     if joint_velocity is None:
       joint_velocity = jp.zeros_like(joint_angle)
+    joint_idxs = []
+    for j in self.config.joints:
+      beg = joint_idxs[-1][1][1] if joint_idxs else 0
+      dof = len(j.angle_limit)
+      joint_idxs.append((j, (beg, beg + dof)))
+    lineage = {j.child: j.parent for j in self.config.joints}
+    depth = {}
+    for child, parent in lineage.items():
+      depth[child] = 1
+      while parent in lineage:
+        parent = lineage[parent]
+        depth[child] += 1
+    joint_idxs = sorted(joint_idxs, key=lambda x: depth.get(x[0].parent, 0))
+    joint = [j for j, _ in joint_idxs]
 
-    # build dof lookup for each joint
-    dofs_idx = {}
-    dof_beg = 0
-    for joint in self.config.joints:
-      dof = len(joint.angle_limit)
-      dofs_idx[joint.name] = (dof_beg, dof_beg + dof)
-      dof_beg += dof
+    if joint:
+      # convert joint_angle and joint_vel to 3dof
+      takes = []
+      beg = 0
+      for j, (beg, end) in joint_idxs:
+        arr = list(range(beg, end))
+        arr.extend([self.num_joint_dof] * (3 - len(arr)))
+        takes.extend(arr)
+      takes = jp.array(takes, dtype=int)
+      def to_3dof(a):
+        a = jp.concatenate([a, jp.array([0.0])])
+        a = jp.take(a, takes)
+        a = jp.reshape(a, (self.num_joints, 3))
+        return a
+      joint_angle = to_3dof(joint_angle)
+      joint_velocity = to_3dof(joint_velocity)
 
-    # check overrides in config defaults
-    default_qps = {}
-    if default_index < len(self.config.defaults):
-      defaults = self.config.defaults[default_index]
-      default_qps = {qp.name for qp in defaults.qps}
-      for qp in defaults.qps:
-        qps[qp.name] = QP(
-            pos=vec_to_arr(qp.pos),
-            rot=math.euler_to_quat(vec_to_arr(qp.rot)),
-            vel=vec_to_arr(qp.vel),
-            ang=vec_to_arr(qp.ang))
+      # build local rot and ang per joint
+      joint_rot = jp.array([
+          math.euler_to_quat(vec_to_arr(j.rotation)) for j in joint
+      ])
+      joint_ref = jp.array([
+          math.euler_to_quat(vec_to_arr(j.reference_rotation)) for j in joint
+      ])
+      def local_rot_ang(_, x):
+        angles, vels, rot, ref = x
+        axes = jp.vmap(math.rotate, [True, False])(jp.eye(3), rot)
+        ang = jp.dot(axes.T, vels).T
+        rot = ref
+        for axis, angle in zip(axes, angles):
+          # these are euler intrinsic rotations, so the axes are rotated too:
+          axis = math.rotate(axis, rot)
+          next_rot = math.quat_rot_axis(axis, angle)
+          rot = math.quat_mul(next_rot, rot)
+        return (), (rot, ang)
+      xs = (joint_angle, joint_velocity, joint_rot, joint_ref)
+      _, (local_rot, local_ang) = jp.scan(local_rot_ang, (), xs, len(joint))
 
-    # make the kinematic tree of bodies
-    root = tree.Node.from_config(self.config)
+      # update qp in depth order
+      joint_body = jp.array([
+          (self.body.index[j.parent], self.body.index[j.child]) for j in joint
+      ])
+      joint_off = jp.array([
+          (vec_to_arr(j.parent_offset),
+           vec_to_arr(j.child_offset)) for j in joint
+      ])
+      def set_qp(carry, x):
+        qp, = carry
+        (body_p, body_c), (off_p, off_c), local_rot, local_ang = x
+        world_rot = math.quat_mul(qp.rot[body_p], local_rot)
+        local_pos = off_p - math.rotate(off_c, local_rot)
+        world_pos = qp.pos[body_p] + math.rotate(local_pos, qp.rot[body_p])
+        world_ang = math.rotate(local_ang, qp.rot[body_p])
+        pos = jp.index_update(qp.pos, body_c, world_pos)
+        rot = jp.index_update(qp.rot, body_c, world_rot)
+        ang = jp.index_update(qp.ang, body_c, world_ang)
+        qp = qp.replace(pos=pos, rot=rot, ang=ang)
+        return (qp,), ()
+      xs = (joint_body, joint_off, local_rot, local_ang)
+      (qp,), () = jp.scan(set_qp, (qp,), xs, len(joint))
 
-    parent_joint = {j.child: j for j in self.config.joints}
-    rot_axes = jp.vmap(math.rotate, [True, False])
-
-    for body in root.depth_first():
-      if body.name in qps:
-        continue
-      if body.name not in parent_joint:
-        qps[body.name] = QP.zero()
-        continue
-      # qp can be determined if the body is the child of a joint
-      joint = parent_joint[body.name]
-      dof_beg, dof_end = dofs_idx[joint.name]
-      rot = math.euler_to_quat(vec_to_arr(joint.rotation))
-      axes = rot_axes(jp.eye(3), rot)[:dof_end - dof_beg]
-      angles = joint_angle[dof_beg:dof_end]
-      velocities = joint_velocity[dof_beg:dof_end]
-      # for each joint angle, rotate by that angle.
-      # these are euler intrinsic rotations, so the axes are rotated too
-      local_rot = math.euler_to_quat(vec_to_arr(joint.reference_rotation))
-      for axis, angle in zip(axes, angles):
-        local_axis = math.rotate(axis, local_rot)
-        next_rot = math.quat_rot_axis(local_axis, angle)
-        local_rot = math.quat_mul(next_rot, local_rot)
-      local_offset = math.rotate(vec_to_arr(joint.child_offset), local_rot)
-      local_pos = vec_to_arr(joint.parent_offset) - local_offset
-      parent_qp = qps[joint.parent]
-      rot = math.quat_mul(parent_qp.rot, local_rot)
-      pos = parent_qp.pos + math.rotate(local_pos, parent_qp.rot)
-      # TODO: propagate ang through tree and account for joint offset
-      ang = jp.dot(axes.T, velocities).T
-      qps[body.name] = QP(pos=pos, rot=rot, vel=jp.zeros(3), ang=ang)
-
-    # any trees that have no body qp overrides in the config are set just above
+    # any trees that have no body qp overrides in the config are moved above
     # the xy plane.  this convenience operation may be removed in the future.
-    body_map = {body.name: body for body in self.config.bodies}
-    for node in root.children:
-      children = [node.name] + [n.name for n in node.depth_first()]
-      if any(c in default_qps for c in children):
-        continue  # ignore a tree if some part of it is overriden
+    fixed = {j.child for j in joint}
+    if default:
+      fixed |= {qp.name for qp in default.qps}
+    root_idx = {
+        b.name: [i]
+        for i, b in enumerate(self.config.bodies)
+        if b.name not in fixed
+    }
+    for j in joint:
+      parent = j.parent
+      while parent in lineage:
+        parent = lineage[parent]
+      if parent in root_idx:
+        root_idx[parent].append(self.body.index[j.child])
 
-      zs = jp.array([bodies.min_z(qps[c], body_map[c]) for c in children])
+    for children in root_idx.values():
+      zs = jp.array([
+          bodies.min_z(jp.take(qp, c), self.config.bodies[c]) for c in children
+      ])
       min_z = jp.amin(zs)
-      for body in children:
-        qp = qps[body]
-        pos = qp.pos - min_z * jp.array([0., 0., 1.])
-        qps[body] = qp.replace(pos=pos)
+      children = jp.array(children)
+      pos = jp.take(qp.pos, children) - min_z * jp.array([0., 0., 1.])
+      pos = jp.index_update(qp.pos, children, pos)
+      qp = qp.replace(pos=pos)
 
-    qps = [qps[body.name] for body in self.config.bodies]
-    return jp.tree_map(lambda *args: jp.stack(args), *qps)
+    return qp
 
   def info(self, qp: QP) -> Info:
     """Return info about a system state."""
