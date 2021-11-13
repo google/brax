@@ -16,6 +16,7 @@
 
 import json
 import os
+import uuid
 from typing import List
 
 import brax
@@ -36,7 +37,6 @@ def save_html(path: str,
   with File(path, 'w') as fout:
     fout.write(render(sys, qps))
 
-
 def render(sys: brax.System, qps: List[brax.QP], height: int = 480) -> str:
   """Returns an HTML page that visualizes the system and qps trajectory."""
   if any((len(qp.pos.shape), len(qp.rot.shape)) != (2, 2) for qp in qps):
@@ -49,6 +49,7 @@ def render(sys: brax.System, qps: List[brax.QP], height: int = 480) -> str:
   system = json.dumps(d, cls=JaxEncoder)
   html = _HTML.replace('<!-- system json goes here -->', system)
   html = html.replace('<!-- viewer height goes here -->', f'{height}px')
+  html = html.replace('<!-- brax viewer id goes here -->', f'brax-viewer-{uuid.uuid4()}')
   return html
 
 
@@ -61,7 +62,7 @@ _HTML = """
         margin: 0;
         padding: 0;
       }
-      #brax-viewer {
+        #<!-- brax viewer id goes here --> {
         margin: 0;
         padding: 0;
         height: <!-- viewer height goes here -->;
@@ -72,10 +73,10 @@ _HTML = """
     <script type="application/javascript">
     var system = <!-- system json goes here -->;
     </script>
-    <div id="brax-viewer"></div>
+    <div id="<!-- brax viewer id goes here -->"></div>
     <script type="module">
       import {Viewer} from 'https://cdn.jsdelivr.net/gh/google/brax@v0.0.7/js/viewer.js';
-      const domElement = document.getElementById('brax-viewer');
+      const domElement = document.getElementById('<!-- brax viewer id goes here -->');
       var viewer = new Viewer(domElement, system);
     </script>
   </body>
