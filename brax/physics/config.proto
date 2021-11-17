@@ -61,6 +61,12 @@ message Collider {
     float size = 1;
     repeated float data = 2;
   }
+  // High-level message for containing elasticity and friction information
+  message Material {
+    // How much surfaces in contact resist translation
+    float friction = 1;  // When unspecified, defaults to global friction coefficient
+    // TODO: add elasticity coefficient (float elasticity = 2);
+  }
   // Position relative to parent body
   Vector3 position = 1;
   // Rotation relative to parent body
@@ -73,6 +79,8 @@ message Collider {
     Capsule capsule = 6;
     HeightMap heightMap = 7;
   }
+  // Material properties (e.g. friction, elasticity) specific to the collider
+  Material material = 8;
 }
 
 // Joints connect two bodies and restrain their movement to a rotational frame.
@@ -196,6 +204,7 @@ message Config {
   repeated Actuator actuators = 3;
   // Forces to apply to bodies
   repeated Force forces = 16;
+  // TODO: encapsulate global elasticity and friction into global material
   // Bounciness of all collisions
   float elasticity = 4;
   // How much surfaces in contact resist translation
