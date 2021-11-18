@@ -425,7 +425,7 @@ actuators {
   torque {
   }
 }
-friction: 0.6000000059604645
+friction: 0.77459666924
 gravity {
   z: -9.8100004196167
 }

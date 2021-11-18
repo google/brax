@@ -17,7 +17,7 @@
 
 import abc
 import itertools
-from typing import Any, Callable, List, Tuple
+from typing import Any, Callable, List, Optional, Tuple
 import warnings
 
 from brax import jumpy as jp
@@ -39,8 +39,10 @@ class Collidable:
     self.body = jp.take(body, [body.index[c.name] for c in collidables])
     self.pos = jp.array(
         [vec_to_arr(c.colliders[0].position) for c in collidables])
-    # assuming first collider's material is body's material
-    self.friction = jp.array([c.colliders[0].material.friction for c in collidables])
+    self.friction = jp.array(
+        [c.colliders[0].material.friction for c in collidables])
+    self.elasticity = jp.array(
+        [c.colliders[0].material.elasticity for c in collidables])
 
   def position(self, qp: QP) -> jp.ndarray:
     """Returns the collidable's position in world space."""
@@ -67,6 +69,7 @@ class Contact:
     self.vel = vel
     self.normal = normal
     self.penetration = penetration
+
 
 class Cull(abc.ABC):
   """Selects collidable pair candidates for collision detection."""
@@ -132,8 +135,7 @@ class NearNeighbors(Cull):
 class Collider(abc.ABC):
   """Calculates impulses given contacts from a contact function."""
 
-  __pytree_ignore__ = ('contact_fn', 'cull', 'friction', 'elasticity',
-                       'baumgarte_erp')
+  __pytree_ignore__ = ('contact_fn', 'cull', 'baumgarte_erp')
 
   def __init__(self, contact_fn: Callable[[Any, Any, QP, QP], Contact],
                cull: Cull, config: config_pb2.Config):
@@ -146,10 +148,8 @@ class Collider(abc.ABC):
     """
     self.contact_fn = contact_fn
     self.cull = cull
-    self.elasticity = config.elasticity
     self.baumgarte_erp = config.baumgarte_erp * config.substeps / config.dt
 
-  @abc.abstractmethod
   def apply(self, qp: QP) -> P:
     """Returns impulse from any potential contacts between collidables.
 
@@ -159,73 +159,18 @@ class Collider(abc.ABC):
     Returns:
       dP: Impulse to apply to the bodies in the collision.
     """
-
-
-@pytree.register
-class OneWayCollider(Collider):
-  """Calculates one-way impulses, where the second collidable is static."""
-
-  def apply(self, qp: QP) -> P:
-    """Returns impulse from any potential contacts between collidables."""
-    col_a, col_b = self.cull.get()
-    qp_a = jp.take(qp, col_a.body.idx)
-    qp_b = jp.take(qp, col_b.body.idx)
-    contact = jp.vmap(self.contact_fn)(col_a, col_b, qp_a, qp_b)
-    dp = jp.vmap(self._contact)(qp_a, col_a, contact)
-
-    contact = jp.where(jp.any(dp.vel, axis=-1), 1.0, 0.0)
-    contact = jp.segment_sum(contact, col_a.body.idx, qp.pos.shape[0])
-    dp_vel = jp.segment_sum(dp.vel, col_a.body.idx, qp.pos.shape[0])
-    dp_ang = jp.segment_sum(dp.ang, col_a.body.idx, qp.pos.shape[0])
-
-    # equally distribute impulse over possible contacts
-    dp_vel = dp_vel / jp.reshape(1e-8 + contact, (dp_vel.shape[0], 1))
-    dp_ang = dp_ang / jp.reshape(1e-8 + contact, (dp_ang.shape[0], 1))
-
-    return P(vel=dp_vel, ang=dp_ang)
-
-  def _contact(self, qp: QP, col: Collidable, contact: Contact) -> P:
-    """Calculates impulse on a body due to a contact."""
-    rel_pos = contact.pos - qp.pos
-    baumgarte_vel = self.baumgarte_erp * contact.penetration
-    normal_vel = jp.dot(contact.normal, contact.vel)
-    temp1 = jp.matmul(col.body.inertia, jp.cross(rel_pos, contact.normal))
-    ang = jp.dot(contact.normal, jp.cross(temp1, rel_pos))
-    impulse = (-1. * (1. + self.elasticity) * normal_vel + baumgarte_vel) / (
-        (1. / col.body.mass) + ang)
-    dp_n = col.body.impulse(qp, impulse * contact.normal, contact.pos)
-
-    # apply drag due to friction acting parallel to the surface contact
-    vel_d = contact.vel - normal_vel * contact.normal
-    impulse_d = jp.safe_norm(vel_d) / ((1. / (col.body.mass)) + ang)
-    # drag magnitude cannot exceed max friction
-    impulse_d = jp.minimum(impulse_d, col.friction * impulse)
-    dir_d = vel_d / (1e-6 + jp.safe_norm(vel_d))
-    dp_d = col.body.impulse(qp, -impulse_d * dir_d, contact.pos)
-    # apply collision if penetrating, approaching, and oriented correctly
-    apply_n = jp.where(
-        (contact.penetration > 0.) & (normal_vel < 0) & (impulse > 0.), 1., 0.)
-    # apply drag if moving laterally above threshold
-    apply_d = apply_n * jp.where(jp.safe_norm(vel_d) > 0.01, 1., 0.)
-
-    return dp_n * apply_n + dp_d * apply_d
-
-
-@pytree.register
-class TwoWayCollider(Collider):
-  """Calculates two-way impulses on collidable pairs."""
-
-  def apply(self, qp: QP) -> P:
-    """Returns impulse from any potential contacts between collidables."""
     col_a, col_b = self.cull.get()
     qp_a = jp.take(qp, col_a.body.idx)
     qp_b = jp.take(qp, col_b.body.idx)
     contact = jp.vmap(self.contact_fn)(col_a, col_b, qp_a, qp_b)
     dp_a, dp_b = jp.vmap(self._contact)(col_a, col_b, qp_a, qp_b, contact)
 
-    body_idx = jp.concatenate((col_a.body.idx, col_b.body.idx))
-    dp_vel = jp.concatenate((dp_a.vel, dp_b.vel))
-    dp_ang = jp.concatenate((dp_a.ang, dp_b.ang))
+    if dp_b is None:
+      dp_vel, dp_ang, body_idx = dp_a.vel, dp_a.ang, col_a.body.idx
+    else:
+      body_idx = jp.concatenate((col_a.body.idx, col_b.body.idx))
+      dp_vel = jp.concatenate((dp_a.vel, dp_b.vel))
+      dp_ang = jp.concatenate((dp_a.ang, dp_b.ang))
     contact = jp.where(jp.any(dp_vel, axis=-1), 1.0, 0.0)
     contact = jp.segment_sum(contact, body_idx, qp.pos.shape[0])
     dp_vel = jp.segment_sum(dp_vel, body_idx, qp.pos.shape[0])
@@ -237,9 +182,60 @@ class TwoWayCollider(Collider):
     dp_ang = dp_ang / contact
     return P(vel=dp_vel, ang=dp_ang)
 
+  @abc.abstractmethod
   def _contact(self, col_a: Collidable, col_b: Collidable, qp_a: QP, qp_b: QP,
-               contact: Contact) -> Tuple[P, P]:
+               contact: Contact) -> Tuple[P, Optional[P]]:
+    pass
+
+
+@pytree.register
+class OneWayCollider(Collider):
+  """Calculates one-way impulses, where the second collidable is static."""
+
+  def _contact(self, col_a: Collidable, col_b: Collidable, qp_a: QP, qp_b: QP,
+               contact: Contact) -> Tuple[P, Optional[P]]:
     """Calculates impulse on a body due to a contact."""
+    # there are a few ways to combine material properties during contact.
+    # multiplying is a reasonable default.  in the future we may allow others
+    elasticity = col_a.elasticity * col_b.elasticity
+    friction = col_a.friction * col_b.friction
+    rel_pos = contact.pos - qp_a.pos
+    baumgarte_vel = self.baumgarte_erp * contact.penetration
+    normal_vel = jp.dot(contact.normal, contact.vel)
+    temp1 = jp.matmul(col_a.body.inertia, jp.cross(rel_pos, contact.normal))
+    ang = jp.dot(contact.normal, jp.cross(temp1, rel_pos))
+    impulse = (-1. * (1. + elasticity) * normal_vel + baumgarte_vel) / (
+        (1. / col_a.body.mass) + ang)
+    dp_n = col_a.body.impulse(qp_a, impulse * contact.normal, contact.pos)
+
+    # apply drag due to friction acting parallel to the surface contact
+    vel_d = contact.vel - normal_vel * contact.normal
+    impulse_d = jp.safe_norm(vel_d) / ((1. / (col_a.body.mass)) + ang)
+    # drag magnitude cannot exceed max friction
+    impulse_d = jp.minimum(impulse_d, friction * impulse)
+    dir_d = vel_d / (1e-6 + jp.safe_norm(vel_d))
+    dp_d = col_a.body.impulse(qp_a, -impulse_d * dir_d, contact.pos)
+    # apply collision if penetrating, approaching, and oriented correctly
+    apply_n = jp.where(
+        (contact.penetration > 0.) & (normal_vel < 0) & (impulse > 0.), 1., 0.)
+    # apply drag if moving laterally above threshold
+    apply_d = apply_n * jp.where(jp.safe_norm(vel_d) > 0.01, 1., 0.)
+
+    dp_a = dp_n * apply_n + dp_d * apply_d
+    return dp_a, None
+
+
+@pytree.register
+class TwoWayCollider(Collider):
+  """Calculates two-way impulses on collidable pairs."""
+
+  def _contact(self, col_a: Collidable, col_b: Collidable, qp_a: QP, qp_b: QP,
+               contact: Contact) -> Tuple[P, Optional[P]]:
+    """Calculates impulse on a body due to a contact."""
+    # there are a few ways to combine material properties during contact.
+    # multiplying is a reasonable default.  in the future we may allow others
+    elasticity = col_a.elasticity * col_b.elasticity
+    friction = col_a.friction * col_b.friction
     rel_pos_a = contact.pos - qp_a.pos
     rel_pos_b = contact.pos - qp_b.pos
     baumgarte_vel = self.baumgarte_erp * contact.penetration
@@ -248,7 +244,7 @@ class TwoWayCollider(Collider):
     temp2 = jp.matmul(col_b.body.inertia, jp.cross(rel_pos_b, contact.normal))
     ang = jp.dot(contact.normal,
                  jp.cross(temp1, rel_pos_a) + jp.cross(temp2, rel_pos_b))
-    impulse = (-1. * (1. + self.elasticity) * normal_vel + baumgarte_vel) / (
+    impulse = (-1. * (1. + elasticity) * normal_vel + baumgarte_vel) / (
         (1. / col_a.body.mass) + (1. / col_b.body.mass) + ang)
     dp_n_a = col_a.body.impulse(qp_a, -impulse * contact.normal, contact.pos)
     dp_n_b = col_b.body.impulse(qp_b, impulse * contact.normal, contact.pos)
@@ -257,8 +253,6 @@ class TwoWayCollider(Collider):
     vel_d = contact.vel - normal_vel * contact.normal
     impulse_d = jp.safe_norm(vel_d) / ((1. / col_a.body.mass) +
                                        (1. / col_b.body.mass) + ang)
-    # select friction coefficients (combine by multiplication rule by default)
-    friction = col_a.friction * col_b.friction
     # drag magnitude cannot exceed max friction
     impulse_d = jp.minimum(impulse_d, friction * impulse)
     dir_d = vel_d / (1e-6 + jp.safe_norm(vel_d))

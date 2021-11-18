@@ -228,18 +228,16 @@ class Universal(Joint):
     dp_c = self.body_c.impulse(qp_c, impulse, pos_c)
 
     # torque the bodies to align to a joint plane
-    (axis_1, axis_2), (angle_1, angle_2) = self.axis_angle(qp_p, qp_c)
+    (axis_1, axis_2), angles = self.axis_angle(qp_p, qp_c)
     axis_c_proj = axis_2 - jp.dot(axis_2, axis_1) * axis_1
     axis_c_proj = axis_c_proj / jp.safe_norm(axis_c_proj)
     torque = (self.limit_strength / 5.) * jp.cross(axis_c_proj, axis_2)
 
     # torque the bodies to stay within angle limits
-    limit_1, limit_2 = self.limit
-    dang_1 = jp.where(angle_1 < limit_1[0], limit_1[0] - angle_1, 0)
-    dang_1 = jp.where(angle_1 > limit_1[1], limit_1[1] - angle_1, dang_1)
-    dang_2 = jp.where(angle_2 < limit_2[0], limit_2[0] - angle_2, 0)
-    dang_2 = jp.where(angle_2 > limit_2[1], limit_2[1] - angle_2, dang_2)
-    torque -= self.limit_strength * (axis_1 * dang_1 + axis_2 * dang_2)
+    axis, angle = jp.array((axis_1, axis_2)), jp.array(angles)
+    dang = jp.where(angle < self.limit[:, 0], self.limit[:, 0] - angle, 0)
+    dang = jp.where(angle > self.limit[:, 1], self.limit[:, 1] - angle, dang)
+    torque -= self.limit_strength * jp.sum(jp.vmap(jp.multiply)(axis, dang), 0)
 
     # damp the angular motion
     torque -= self.angular_damping * (qp_p.ang - qp_c.ang)
@@ -301,19 +299,11 @@ class Spherical(Joint):
     dp_c = self.body_c.impulse(qp_c, impulse, pos_c)
 
     # torque the bodies to stay within angle limits
-    axis, angle = self.axis_angle(qp_p, qp_c)
-    angle_1, angle_2, angle_3 = angle
-    limit_1, limit_2, limit_3 = self.limit
-    dang_1 = jp.where(angle_1 < limit_1[0], limit_1[0] - angle_1, 0)
-    dang_1 = jp.where(angle_1 > limit_1[1], limit_1[1] - angle_1, dang_1)
-    dang_2 = jp.where(angle_2 < limit_2[0], limit_2[0] - angle_2, 0)
-    dang_2 = jp.where(angle_2 > limit_2[1], limit_2[1] - angle_2, dang_2)
-    dang_3 = jp.where(angle_3 < limit_3[0], limit_3[0] - angle_3, 0)
-    dang_3 = jp.where(angle_3 > limit_3[1], limit_3[1] - angle_3, dang_3)
-
-    # TODO: fully decouple different torque axes
-    torque = axis[0] * dang_1 + axis[1] * dang_2 + axis[2] * dang_3
-    torque *= self.limit_strength * -1.
+    axes, angles = self.axis_angle(qp_p, qp_c)
+    axis, angle = jp.array(axes), jp.array(angles)
+    dang = jp.where(angle < self.limit[:, 0], self.limit[:, 0] - angle, 0)
+    dang = jp.where(angle > self.limit[:, 1], self.limit[:, 1] - angle, dang)
+    torque = -self.limit_strength * jp.sum(jp.vmap(jp.multiply)(axis, dang), 0)
 
     # damp the angular motion
     torque -= self.angular_damping * (qp_p.ang - qp_c.ang)

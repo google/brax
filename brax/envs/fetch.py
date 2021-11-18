@@ -422,7 +422,7 @@ actuators {
   joint: "Back Left Upper_Back Left Lower"
   strength: 300.0
 }
-friction: 0.6
+friction: 0.77459666924
 gravity { z: -9.8 }
 angular_damping: -0.05
 baumgarte_erp: 0.1

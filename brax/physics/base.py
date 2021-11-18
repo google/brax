@@ -200,6 +200,7 @@ def validate_config(config: config_pb2.Config) -> config_pb2.Config:
     for c in b.colliders:
       if not c.HasField("material"):
         c.material.friction = config.friction
+        c.material.elasticity = config.elasticity
 
   frozen.all = all(b.frozen.all for b in config.bodies)
 

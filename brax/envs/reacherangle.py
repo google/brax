@@ -252,7 +252,6 @@ actuators {
 }
 collide_include {
 }
-friction: 0.6
 gravity {
   z: -9.81
 }

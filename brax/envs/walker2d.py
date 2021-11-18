@@ -354,7 +354,7 @@ actuators {
   strength: 100.0
   torque {}
 }
-friction: 0.9
+friction: 0.94868329805
 gravity { z: -9.81 }
 velocity_damping: 1.0
 angular_damping: -0.05

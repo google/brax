@@ -50,7 +50,7 @@ class BodyTest(absltest.TestCase):
 class BoxTest(absltest.TestCase):
 
   _CONFIG = """
-    dt: 1.5 substeps: 1000 friction: 0.6 baumgarte_erp: 0.1
+    dt: 1.5 substeps: 1000 friction: 0.77459666924 baumgarte_erp: 0.1
     gravity { z: -9.8 }
     bodies {
       name: "box" mass: 1
@@ -126,7 +126,7 @@ class SphereTest(absltest.TestCase):
   """
 
   def test_sphere_hits_ground(self):
-    """A sphere falls onto the ground and stjp."""
+    """A sphere falls onto the ground and stops."""
     sys = brax.System(text_format.Parse(SphereTest._CONFIG, brax.Config()))
     qp = sys.default_qp(0)
     qp, _ = sys.step(qp, jp.array([]))
@@ -174,7 +174,7 @@ class CapsuleTest(absltest.TestCase):
   """
 
   def test_capsule_hits_ground(self):
-    """A capsule falls onto the ground and stjp."""
+    """A capsule falls onto the ground and stops."""
     sys = brax.System(text_format.Parse(CapsuleTest._CONFIG, brax.Config()))
     qp = sys.default_qp(0)
     qp, _ = jax.jit(sys.step)(qp, jp.array([]))

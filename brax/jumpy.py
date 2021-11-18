@@ -38,7 +38,7 @@ def _in_jit() -> bool:
 def _which_np(*args):
   """Returns np or jnp depending on args."""
   for a in args:
-    if isinstance(a, jnp.ndarray):
+    if isinstance(a, jnp.ndarray) and not isinstance(a, onp.ndarray):
       return jnp
   return onp
 
