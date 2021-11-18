@@ -195,6 +195,12 @@ def validate_config(config: config_pb2.Config) -> config_pb2.Config:
         b.frozen.rotation.x, b.frozen.rotation.y, b.frozen.rotation.z
     ]):
       b.frozen.all = True
+
+    # insert material properties to colliders
+    for c in b.colliders:
+      if not c.HasField("material"):
+        c.material.friction = config.friction
+
   frozen.all = all(b.frozen.all for b in config.bodies)
 
   return config

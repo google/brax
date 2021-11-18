@@ -39,6 +39,8 @@ class Collidable:
     self.body = jp.take(body, [body.index[c.name] for c in collidables])
     self.pos = jp.array(
         [vec_to_arr(c.colliders[0].position) for c in collidables])
+    # assuming first collider's material is body's material
+    self.friction = jp.array([c.colliders[0].material.friction for c in collidables])
 
   def position(self, qp: QP) -> jp.ndarray:
     """Returns the collidable's position in world space."""
@@ -65,7 +67,6 @@ class Contact:
     self.vel = vel
     self.normal = normal
     self.penetration = penetration
-
 
 class Cull(abc.ABC):
   """Selects collidable pair candidates for collision detection."""
@@ -145,7 +146,6 @@ class Collider(abc.ABC):
     """
     self.contact_fn = contact_fn
     self.cull = cull
-    self.friction = config.friction
     self.elasticity = config.elasticity
     self.baumgarte_erp = config.baumgarte_erp * config.substeps / config.dt
 
@@ -199,7 +199,7 @@ class OneWayCollider(Collider):
     vel_d = contact.vel - normal_vel * contact.normal
     impulse_d = jp.safe_norm(vel_d) / ((1. / (col.body.mass)) + ang)
     # drag magnitude cannot exceed max friction
-    impulse_d = jp.minimum(impulse_d, self.friction * impulse)
+    impulse_d = jp.minimum(impulse_d, col.friction * impulse)
     dir_d = vel_d / (1e-6 + jp.safe_norm(vel_d))
     dp_d = col.body.impulse(qp, -impulse_d * dir_d, contact.pos)
     # apply collision if penetrating, approaching, and oriented correctly
@@ -257,8 +257,10 @@ class TwoWayCollider(Collider):
     vel_d = contact.vel - normal_vel * contact.normal
     impulse_d = jp.safe_norm(vel_d) / ((1. / col_a.body.mass) +
                                        (1. / col_b.body.mass) + ang)
+    # select friction coefficients (combine by multiplication rule by default)
+    friction = col_a.friction * col_b.friction
     # drag magnitude cannot exceed max friction
-    impulse_d = jp.minimum(impulse_d, self.friction * impulse)
+    impulse_d = jp.minimum(impulse_d, friction * impulse)
     dir_d = vel_d / (1e-6 + jp.safe_norm(vel_d))
     dp_d_a = col_a.body.impulse(qp_a, impulse_d * dir_d, contact.pos)
     dp_d_b = col_a.body.impulse(qp_b, -impulse_d * dir_d, contact.pos)
