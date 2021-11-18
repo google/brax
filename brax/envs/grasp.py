@@ -706,7 +706,7 @@ actuators {
   strength: 300.0
   angle {}
 }
-friction: 0.6000000238418579
+friction: 0.77459666924
 gravity {
   z: -9.800000190734863
 }
