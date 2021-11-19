@@ -390,3 +390,7 @@ def array(object: Any, dtype=None) -> ndarray:
     np = _which_np(object)  # object is not iterable (e.g. primitive type)
   return np.array(object, dtype)
 
+
+def abs(a: ndarray) -> ndarray:
+  """Calculate the absolute value element-wise."""
+  return _which_np(a).abs(a)

@@ -155,3 +155,8 @@ def quat_inv(q: Quaternion) -> Quaternion:
     The inverse of q, where qmult(q, inv_quat(q)) = [1, 0, 0, 0].
   """
   return q * jp.array([1, -1, -1, -1])
+
+
+def normalize(v: Vector3, epsilon=1e-6) -> Vector3:
+  """Normalizes a vector."""
+  return v / (epsilon + jp.safe_norm(v))

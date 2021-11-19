@@ -48,6 +48,7 @@ setup(
         "Pillow",
         "pytinyrenderer",
         "tensorboardX",
+        "trimesh",
     ],
     extras_require={
         "develop": ["pytest", "transforms3d"],
@@ -61,4 +62,7 @@ setup(
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
     ],
     keywords="JAX reinforcement learning rigidbody physics",
+    data_files=[
+        ("testdata", ["brax/tests/testdata/cylinder.stl"])
+    ],
 )

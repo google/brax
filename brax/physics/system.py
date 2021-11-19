@@ -15,7 +15,7 @@
 # pylint:disable=g-multiple-import
 """A brax system."""
 
-from typing import Optional, Tuple
+from typing import Optional, Sequence, Tuple
 
 from brax import jumpy as jp
 from brax import math
@@ -37,8 +37,10 @@ class System:
   __pytree_ignore__ = ('config', 'num_bodies', 'num_joints', 'num_joint_dof',
                        'num_actuators', 'num_forces_dof')
 
-  def __init__(self, config: config_pb2.Config):
-    self.config = validate_config(config)
+  def __init__(self,
+               config: config_pb2.Config,
+               resource_paths: Optional[Sequence[str]] = None):
+    self.config = validate_config(config, resource_paths=resource_paths)
     self.num_bodies = len(config.bodies)
     self.body = bodies.Body(config)
     self.integrator = integrators.Euler(self.config)
@@ -74,11 +76,10 @@ class System:
 
     return jp.concatenate([angles[j.name] for j in self.config.joints])
 
-  def default_qp(
-      self,
-      default_index: int = 0,
-      joint_angle: Optional[jp.ndarray] = None,
-      joint_velocity: Optional[jp.ndarray] = None) -> QP:
+  def default_qp(self,
+                 default_index: int = 0,
+                 joint_angle: Optional[jp.ndarray] = None,
+                 joint_velocity: Optional[jp.ndarray] = None) -> QP:
     """Returns a default state for the system."""
     qp = QP.zero(shape=(self.num_bodies,))
 
@@ -124,21 +125,22 @@ class System:
         arr.extend([self.num_joint_dof] * (3 - len(arr)))
         takes.extend(arr)
       takes = jp.array(takes, dtype=int)
+
       def to_3dof(a):
         a = jp.concatenate([a, jp.array([0.0])])
         a = jp.take(a, takes)
         a = jp.reshape(a, (self.num_joints, 3))
         return a
+
       joint_angle = to_3dof(joint_angle)
       joint_velocity = to_3dof(joint_velocity)
 
       # build local rot and ang per joint
-      joint_rot = jp.array([
-          math.euler_to_quat(vec_to_arr(j.rotation)) for j in joint
-      ])
-      joint_ref = jp.array([
-          math.euler_to_quat(vec_to_arr(j.reference_rotation)) for j in joint
-      ])
+      joint_rot = jp.array(
+          [math.euler_to_quat(vec_to_arr(j.rotation)) for j in joint])
+      joint_ref = jp.array(
+          [math.euler_to_quat(vec_to_arr(j.reference_rotation)) for j in joint])
+
       def local_rot_ang(_, x):
         angles, vels, rot, ref = x
         axes = jp.vmap(math.rotate, [True, False])(jp.eye(3), rot)
@@ -150,6 +152,7 @@ class System:
           next_rot = math.quat_rot_axis(axis, angle)
           rot = math.quat_mul(next_rot, rot)
         return (), (rot, ang)
+
       xs = (joint_angle, joint_velocity, joint_rot, joint_ref)
       _, (local_rot, local_ang) = jp.scan(local_rot_ang, (), xs, len(joint))
 
@@ -157,10 +160,9 @@ class System:
       joint_body = jp.array([
           (self.body.index[j.parent], self.body.index[j.child]) for j in joint
       ])
-      joint_off = jp.array([
-          (vec_to_arr(j.parent_offset),
-           vec_to_arr(j.child_offset)) for j in joint
-      ])
+      joint_off = jp.array([(vec_to_arr(j.parent_offset),
+                             vec_to_arr(j.child_offset)) for j in joint])
+
       def set_qp(carry, x):
         qp, = carry
         (body_p, body_c), (off_p, off_c), local_rot, local_ang = x
@@ -173,6 +175,7 @@ class System:
         ang = jp.index_update(qp.ang, body_c, world_ang)
         qp = qp.replace(pos=pos, rot=rot, ang=ang)
         return (qp,), ()
+
       xs = (joint_body, joint_off, local_rot, local_ang)
       (qp,), () = jp.scan(set_qp, (qp,), xs, len(joint))
 

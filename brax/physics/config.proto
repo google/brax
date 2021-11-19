@@ -70,6 +70,14 @@ message Collider {
   }
   // Physical material of the collider
   Material material = 8;
+  // A mesh. Currently, only mesh-plane and mesh-capsule collisions are
+  // supported.
+  message Mesh {
+    // Name of the mesh geometry defined in the config.
+    string name = 1;
+    // Scaling for the mesh.
+    float scale = 2;
+  }
   // Position relative to parent body
   Vector3 position = 1;
   // Rotation relative to parent body
@@ -81,6 +89,7 @@ message Collider {
     Sphere sphere = 5;
     Capsule capsule = 6;
     HeightMap heightMap = 7;
+    Mesh mesh = 9;
   }
 }
 
@@ -191,7 +200,39 @@ message DefaultState {
   repeated QP qps = 2;
 }
 
+// Geometry of a mesh.
+message MeshGeometry {
+  // Name of the mesh geometry. This is used in mesh colliders to refer to the
+  // geometry.
+  string name = 1;
+  // Path of the mesh file. See https://trimsh.org/ for the supported formats.
+  // If the path is specified, then the {vertices, faces, vertex_normals}
+  // fields below will be ignored and populated from the mesh defined in the
+  // file.
+  string path = 2;
+  // Vertices of the mesh.
+  repeated Vector3 vertices = 3;
+  // Triangular faces. This will be a flattened array of triples that contain
+  // the indices of the vertices in the `vertices` field above. For example,
+  //
+  // vertices { x: -0.5 y: -0.5 z: 0 }
+  // vertices { x: +0.5 y: -0.5 z: 0 }
+  // vertices { x: +0.5 y: +0.5 z: 0 }
+  // vertices { x: -0.5 y: +0.5 z: 0 }
+  // vertices { x: 0 y: 0 z: 1.0 }
+  // faces: [0, 2, 1, 0, 3, 2, 0, 4, 3, 0, 1, 4, 1, 2, 4, 2, 3, 4]
+  //
+  // defines a pyramid with 6 faces (two for the bottom and four for the
+  // sides).
+  repeated int32 faces = 4;
+  // Unit normal vectors for each vertex.
+  repeated Vector3 vertex_normals = 5;
+  // Unit normal vectors for each face.
+  repeated Vector3 face_normals = 6;
+}
+
 // The configuration of a system for Brax to simulate
+// Next ID: 18
 message Config {
   message NamePair {
     string first = 1;
@@ -229,4 +270,6 @@ message Config {
   repeated DefaultState defaults = 14;
   // Limits the number of collision checks per collider pair
   int32 collider_cutoff = 15;
+  // All of the mesh geometries in the system.
+  repeated MeshGeometry mesh_geometries = 17;
 }

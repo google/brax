@@ -16,6 +16,7 @@
 
 import copy
 import itertools
+import os
 
 from absl.testing import absltest
 from absl.testing import parameterized
@@ -202,6 +203,68 @@ class CapsuleTest(absltest.TestCase):
     self.assertAlmostEqual(qp.pos[1, 2], 1.25, 2)  # lying on Capsule1
 
 
+class MeshTest(absltest.TestCase):
+
+  _CONFIG = """
+    dt: 0.05 substeps: 10 friction: 1.0 baumgarte_erp: 0.1
+    gravity { z: -9.8 }
+    bodies {
+      name: "Mesh" mass: 1
+      colliders { mesh { name: "Cylinder" scale: 0.1 } }
+      inertia { x: 1 y: 1 z: 1 }
+    }
+    bodies {
+      name: "Capsule" mass: 1
+      colliders { capsule { length: 2 radius: 0.2 } }
+      inertia { x: 1 y: 1 z: 1 }
+    }
+    bodies { name: "Ground" frozen: { all: true } colliders { plane {} } }
+    defaults {
+      # Initial position is high up in the air.
+      qps { name: "Mesh" pos: {x: 0 y: 0 z: 1.5} }
+
+      # Capsule is away from the cylinder.
+      qps { name: "Capsule" pos: {x: 10 y: 0 z: 0.2} rot: {x: 0 y: 90 z: 0} }
+    }
+    mesh_geometries {
+      name: "Cylinder"
+      path: "cylinder.stl"
+    }
+  """
+
+  def test_mesh_hits_ground(self):
+    """A mesh falls onto the ground."""
+    config = text_format.Parse(MeshTest._CONFIG, brax.Config())
+    resource_path = os.path.join(absltest.get_default_test_srcdir(),
+                                 'brax/tests/testdata')
+    sys = brax.System(config, [resource_path])
+    qp = sys.default_qp()
+    # Cylinder should be up in the air.
+    self.assertAlmostEqual(qp.pos[0, 2], 1.5, 2)
+
+    step = jax.jit(sys.step)
+    for _ in range(30):
+      qp, _ = step(qp, jp.array([]))
+    # Cylinder should be on the ground.
+    self.assertAlmostEqual(qp.pos[0, 2], 0, 2)
+
+  def test_mesh_hits_capsule(self):
+    config = text_format.Parse(MeshTest._CONFIG, brax.Config())
+    # Move the capsule under the cylinder.
+    config.defaults[0].qps[1].pos.x = 0
+    resource_path = os.path.join(absltest.get_default_test_srcdir(),
+                                 'brax/tests/testdata')
+    sys = brax.System(config, [resource_path])
+    qp = sys.default_qp()
+    self.assertAlmostEqual(qp.pos[0, 2], 1.5, 2)
+
+    step = jax.jit(sys.step)
+    for _ in range(30):
+      qp, _ = step(qp, jp.array([]))
+    # Cylinder should be on the capsule, rather than on the ground.
+    self.assertAlmostEqual(qp.pos[0, 2], 0.38, 2)
+
+
 class JointTest(parameterized.TestCase):
 
   _CONFIG = """
@@ -249,13 +312,15 @@ class JointTest(parameterized.TestCase):
     self.assertAlmostEqual(qp.pos[1, 1], 0., 3)  # returned to the origin
 
   offsets = [-15, 15, -45, 45, -75, 75]
-  axes = [[1, 0, 0],
-          [0, 1, 0],
-          [0, 0, 1],
-          [1, 1, 0],
-          [0, 1, 1],
-          [1, 0, 1],
-          [1, 1, 1],]
+  axes = [
+      [1, 0, 0],
+      [0, 1, 0],
+      [0, 0, 1],
+      [1, 1, 0],
+      [0, 1, 1],
+      [1, 0, 1],
+      [1, 1, 1],
+  ]
   limits = [0, 1]
 
   @parameterized.parameters(itertools.product(offsets, axes, limits))

@@ -92,9 +92,37 @@ function createHeightMap(heightMap) {
   return group;
 }
 
+function createMesh(mesh, geom) {
+  const bufferGeometry = new THREE.BufferGeometry();
+  const vertices = geom.vertices;
+  const positions = new Float32Array(vertices.length * 3);
+  const scale = mesh.scale ? mesh.scale : 1;
+  // Convert the coordinate system.
+  vertices.forEach(function(vertice, i) {
+      positions[i * 3] = vertice.x * scale;
+      positions[i * 3 + 1] = vertice.z * scale;
+      positions[i * 3 + 2] = vertice.y * scale;
+  });
+  const indices = new Uint16Array(geom.faces);
+  for (let i = 1; i < indices.length; i += 3) {
+      [indices[i + 1], indices[i]] = [indices[i], indices[i + 1]];
+  }
+  bufferGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  bufferGeometry.setIndex(new THREE.BufferAttribute(indices, 1));
+  bufferGeometry.computeVertexNormals();
+
+  const mesh3 = new THREE.Mesh(bufferGeometry, basicMaterial);
+  mesh3.castShadow = true;
+  mesh3.baseMaterial = mesh.material;
+  return mesh3;
+}
+
 function createScene(system) {
   const scene = new THREE.Scene();
-
+  const meshGeoms = {};
+  system.config.meshGeometries.forEach(function(geom) {
+    meshGeoms[geom.name] = geom;
+  });
   system.config.bodies.forEach(function(body) {
     const parent = new THREE.Group();
     parent.name = body.name.replaceAll('/', '_');  // sanitize node name
@@ -110,6 +138,8 @@ function createScene(system) {
         child = createSphere(collider.sphere, body.name);
       } else if ('heightMap' in collider) {
         child = createHeightMap(collider.heightMap);
+      } else if ('mesh' in collider) {
+        child = createMesh(collider.mesh, meshGeoms[collider.mesh.name]);
       }
       if (collider.rotation) {
         // convert from z-up to y-up coordinate system
