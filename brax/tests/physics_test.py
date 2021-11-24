@@ -81,6 +81,42 @@ class BoxTest(absltest.TestCase):
     self.assertLess(qp.pos[0, 0], 1.5)  # ... and keeps it from travelling 2m
 
 
+class BoxCapsuleTest(absltest.TestCase):
+
+  _CONFIG = """
+    dt: 0.05 substeps: 20 friction: 1 baumgarte_erp: 0.1
+    gravity { z: -9.8 }
+    bodies {
+      name: "box" mass: 1
+      colliders { box { halfsize { x: 0.5 y: 0.5 z: 0.5 }}}
+      inertia { x: 1 y: 1 z: 1 }
+    }
+    bodies {
+      name: "capsule" mass: 1
+      colliders { capsule { length: 2 radius: 0.2 } }
+      inertia { x: 1 y: 1 z: 1 }
+    }
+
+    bodies { name: "Ground" frozen: { all: true } colliders { plane {}}}
+    defaults {
+      qps { name: "box" pos { z: 2 }}
+      qps { name: "capsule" pos: { z: 0.2 } rot: { y: 90 } }
+    }
+  """
+
+  def test_box_hits_capsule(self):
+    """A box falls onto a capsule and stays above it."""
+    sys = brax.System(text_format.Parse(BoxCapsuleTest._CONFIG, brax.Config()))
+    qp = sys.default_qp()
+    self.assertAlmostEqual(qp.pos[0, 2], 2, 2)
+
+    step = jax.jit(sys.step)
+    for _ in range(50):
+      qp, _ = step(qp, jp.array([]))
+    # Box should be on the capsule, rather than on the ground.
+    self.assertAlmostEqual(qp.pos[0, 2], 0.9, 2)
+
+
 class HeightMapTest(absltest.TestCase):
 
   _CONFIG = """

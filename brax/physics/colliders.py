@@ -269,22 +269,98 @@ class TwoWayCollider(Collider):
     return dp_a, dp_b
 
 
+# Coordinates of the 8 corners of a box.
+_BOX_CORNERS = jp.array(list(itertools.product((-1, 1), (-1, 1), (-1, 1))))
+
+# pyformat: disable
+# The faces of a triangulated box, i.e. the indices in _BOX_CORNERS of the
+# vertices of the 12 triangles (two triangles for each side of the box).
+_BOX_FACES = [
+    0, 4, 1, 4, 5, 1,  # front
+    0, 2, 4, 2, 6, 4,  # bottom
+    6, 5, 4, 6, 7, 5,  # right
+    2, 3, 6, 3, 7, 6,  # back
+    1, 5, 3, 5, 7, 3,  # top
+    0, 1, 2, 1, 3, 2,  # left
+]
+
+# Normals of the triangulated box faces above.
+_BOX_FACE_NORMALS = jp.array([
+    [0, -1., 0],  # front
+    [0, -1., 0],
+    [0, 0, -1.],  # bottom
+    [0, 0, -1.],
+    [+1., 0, 0],  # right
+    [+1., 0, 0],
+    [0, +1., 0],  # back
+    [0, +1., 0],
+    [0, 0, +1.],  # top
+    [0, 0, +1.],
+    [-1., 0, 0],  # left
+    [-1., 0, 0],
+])
+# pyformat: enable
+
+
 @pytree.register
 class BoxCorner(Collidable):
   """A box corner."""
 
   def __init__(self, boxes: List[config_pb2.Body], body: bodies.Body):
     super().__init__([boxes[i // 8] for i in range(len(boxes) * 8)], body)
-    coords = jp.array(list(itertools.product((-1, 1), (-1, 1), (-1, 1))))
     corners = []
     for b in boxes:
       col = b.colliders[0]
       rot = math.euler_to_quat(vec_to_arr(col.rotation))
-      box = coords * vec_to_arr(col.box.halfsize)
+      box = _BOX_CORNERS * vec_to_arr(col.box.halfsize)
       box = jp.vmap(math.rotate, include=(True, False))(box, rot)
       box = box + vec_to_arr(col.position)
       corners.extend(box)
     self.corner = jp.array(corners)
+
+
+@pytree.register
+class BaseMesh(Collidable):
+  """Base class for mesh colliders."""
+
+  def __init__(self, collidables: List[config_pb2.Body], body: bodies.Body,
+               vertices: jp.ndarray, faces: jp.ndarray,
+               face_normals: jp.ndarray):
+    super().__init__(collidables, body)
+    self.vertices = vertices
+    self.faces = faces
+    self.face_normals = face_normals
+
+
+@pytree.register
+class TriangulatedBox(BaseMesh):
+  """A box converted into a triangular mesh."""
+
+  def __init__(self, boxes: List[config_pb2.Body], body: bodies.Body):
+    vertices = []
+    faces = []
+    face_normals = []
+    for b in boxes:
+      col = b.colliders[0]
+      rot = math.euler_to_quat(vec_to_arr(col.rotation))
+      vertex = _BOX_CORNERS * vec_to_arr(col.box.halfsize)
+      vertex = jp.vmap(math.rotate, include=(True, False))(vertex, rot)
+      vertex = vertex + vec_to_arr(col.position)
+      vertices.extend(vertex)
+
+      # Each face consists of two triangles.
+      face = jp.reshape(jp.take(vertex, _BOX_FACES), (-1, 3, 3))
+      faces.extend(face)
+
+      # Apply rotation to face normals.
+      face_normal = jp.vmap(
+          math.rotate, include=(True, False))(_BOX_FACE_NORMALS, rot)
+      face_normals.extend(face_normal)
+
+    # Each triangle is a collidable.
+    super().__init__([boxes[i // 12] for i in range(len(boxes) * 12)], body,
+                     jp.array(vertices), jp.array(faces),
+                     jp.array(face_normals))
 
 
 @pytree.register
@@ -353,14 +429,24 @@ class HeightMap(Collidable):
 
 
 @pytree.register
-class Mesh(Collidable):
-  """A triangular mesh."""
+class Mesh(BaseMesh):
+  """A triangular mesh with vertex or face collidables."""
 
-  def __init__(self, meshes: List[config_pb2.Body], body: bodies.Body,
-               mesh_geoms: Mapping[str, config_pb2.MeshGeometry]):
+  def __init__(self,
+               meshes: List[config_pb2.Body],
+               body: bodies.Body,
+               mesh_geoms: Mapping[str, config_pb2.MeshGeometry],
+               use_points: bool = False):
+    """Initializes a triangular mesh collider.
+
+    Args:
+      meshes: Mesh colliders of the body in the config.
+      body: The body that the mesh colliders belong to.
+      mesh_geoms: The dictionary of the mesh geometries keyed by their names.
+      use_points: Whether to use the points or the faces of the mesh as the
+        collidables.
+    """
     geoms = [mesh_geoms[m.colliders[0].mesh.name] for m in meshes]
-    var_vertices = [[m] * len(g.vertices) for m, g in zip(meshes, geoms)]
-    super().__init__(sum(var_vertices, []), body)
 
     vertices = []
     faces = []
@@ -387,9 +473,19 @@ class Mesh(Collidable):
           math.rotate, include=(True, False))(face_normal, rot)
       face_normals.extend(face_normal)
 
-    self.vertices = jp.array(vertices)
-    self.faces = jp.array(faces)
-    self.face_normals = jp.array(face_normals)
+    collidables = [[m] * len(g.vertices if use_points else g.faces)
+                   for m, g in zip(meshes, geoms)]
+    super().__init__(
+        sum(collidables, []), body, jp.array(vertices), jp.array(faces),
+        jp.array(face_normals))
+
+
+@pytree.register
+class PointMesh(Mesh):
+  """A triangular mesh with vertex collidables."""
+
+  def __init__(self, *args, **kwargs):
+    super().__init__(*args, **kwargs, use_points=True)
 
 
 def box_plane(box: BoxCorner, _: Plane, qp_a: QP, qp_b: QP) -> Contact:
@@ -526,7 +622,7 @@ def mesh_plane(mesh: Mesh, _: Plane, qp_a: QP, qp_b: QP) -> Contact:
   return Contact(pos, vel, normal, penetration)
 
 
-def capsule_mesh(cap: Capsule, mesh: Mesh, qp_a: QP, qp_b: QP) -> Contact:
+def capsule_mesh(cap: Capsule, mesh: BaseMesh, qp_a: QP, qp_b: QP) -> Contact:
   """Returns the contacts for capsule-mesh collision."""
   # Determine the capsule line.
   a, b = _endpoints(cap.end, qp_a, cap.pos)
@@ -629,10 +725,11 @@ def get(config: config_pb2.Config, body: bodies.Body) -> List[Collider]:
   supported_types = {
       ('box', 'plane'): (BoxCorner, Plane, box_plane),
       ('box', 'heightMap'): (BoxCorner, HeightMap, box_heightmap),
+      ('capsule', 'box'): (Capsule, TriangulatedBox, capsule_mesh),
       ('capsule', 'plane'): (CapsuleEnd, Plane, capsule_plane),
       ('capsule', 'capsule'): (Capsule, Capsule, capsule_capsule),
       ('capsule', 'mesh'): (Capsule, Mesh, capsule_mesh),
-      ('mesh', 'plane'): (Mesh, Plane, mesh_plane),
+      ('mesh', 'plane'): (PointMesh, Plane, mesh_plane),
   }
   supported_near_neighbors = {('capsule', 'capsule')}
   collidable_cache = {}
@@ -643,14 +740,20 @@ def get(config: config_pb2.Config, body: bodies.Body) -> List[Collider]:
 
   def create_collidable(cls, cols, body):
     kwargs = {}
-    if cls is Mesh:
+    if issubclass(cls, Mesh):
       kwargs = {'mesh_geoms': mesh_geoms}
     return cls(cols, body, **kwargs)
+
+  def get_supported_types(type_a: str, type_b: str) -> Tuple[str, str]:
+    # Use the supported type order if possible.
+    if (type_b, type_a) in supported_types:
+      return type_b, type_a
+    return type_a, type_b
 
   ret = []
   for type_a, type_b in itertools.combinations_with_replacement(
       type_colliders, 2):
-    type_a, type_b = sorted((type_a, type_b))
+    type_a, type_b = get_supported_types(type_a, type_b)
 
     # calculate all possible body pairs that can collide via these two types
     cols_a, cols_b = type_colliders[type_a], type_colliders[type_b]
