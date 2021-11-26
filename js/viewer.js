@@ -5,7 +5,7 @@
 
 import * as THREE from 'https://threejs.org/build/three.module.js';
 import {OrbitControls} from 'https://threejs.org/examples/jsm/controls/OrbitControls.js';
-import {GUI} from 'https://threejs.org/examples/jsm/libs/dat.gui.module.js';
+import {GUI} from 'https://threejs.org/examples/jsm/libs/lil-gui.module.min.js';
 
 import {Animator} from './animator.js';
 import {Selector} from './selector.js';
