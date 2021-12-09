@@ -391,7 +391,7 @@ def train(environment_fn: Callable[..., envs.Env],
 
   minimize_loop = jax.pmap(_minimize_loop, axis_name='i')
 
-  _, inference = make_params_and_inference_fn(
+  inference = make_inference_fn(
       core_env.observation_size, core_env.action_size, normalize_observations,
       parametric_action_distribution_fn, make_models_fn)
 
@@ -482,7 +482,7 @@ def train(environment_fn: Callable[..., envs.Env],
   return (inference, params, metrics)
 
 
-def make_params_and_inference_fn(
+def make_inference_fn(
     observation_size: int,
     action_size: int,
     normalize_observations: bool = False,
@@ -492,10 +492,9 @@ def make_params_and_inference_fn(
     .NormalTanhDistribution,
     make_models_fn: Optional[Callable[
         [int, int], Tuple[networks.FeedForwardModel]]] = networks.make_models,
-    extra_params: Dict[str, Dict[str, jnp.ndarray]] = None,
-):
+    params: Dict[str, Dict[str, jnp.ndarray]] = None):
   """Creates params and inference function for the PPO agent."""
-  obs_normalizer_params, obs_normalizer_apply_fn = normalization.make_data_and_apply_fn(
+  _, obs_normalizer_apply_fn = normalization.make_data_and_apply_fn(
       observation_size, normalize_observations=normalize_observations)
   parametric_action_distribution = parametric_action_distribution_fn(
       event_size=action_size)
@@ -509,9 +508,4 @@ def make_params_and_inference_fn(
         policy_model.apply(policy_params, obs), key)
     return action
 
-  params = dict(
-      normalizer=obs_normalizer_params,
-      policy=policy_model.init(jax.random.PRNGKey(0)),
-      extra={} if extra_params is None else extra_params
-      )
-  return params, inference_fn
+  return inference_fn

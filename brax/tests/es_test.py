@@ -13,12 +13,12 @@
 # limitations under the License.
 
 """Evolution Strategy training tests."""
+import pickle
 
 from absl.testing import absltest
 from absl.testing import parameterized
 from brax import envs
 from brax.training import es
-from flax import serialization
 import jax
 
 
@@ -42,10 +42,10 @@ class ESTest(parameterized.TestCase):
         num_timesteps=128,
         episode_length=128)
     env = env_fn()
-    base_params, inference = es.make_params_and_inference_fn(
+    inference = es.make_inference_fn(
         env.observation_size, env.action_size, normalize_observations)
-    byte_encoding = serialization.to_bytes(params)
-    decoded_params = serialization.from_bytes(base_params, byte_encoding)
+    byte_encoding = pickle.dumps(params)
+    decoded_params = pickle.loads(byte_encoding)
 
     # Compute one action.
     state = env.reset(jax.random.PRNGKey(0))

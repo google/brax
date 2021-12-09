@@ -261,7 +261,7 @@ bodies {
 }
 joints {
   name: "bthigh"
-  stiffness: 8000.0
+  stiffness: 25000
   parent: "torso"
   child: "bthigh"
   parent_offset {
@@ -272,16 +272,16 @@ joints {
   rotation {
     z: 90.0
   }
-  spring_damping: 100.0
+  spring_damping: 60
   angle_limit {
     min: -29.793806076049805
     max: 60.16056823730469
   }
-  limit_strength: 2000.0
-}
+  limit_strength: 1000
+  }
 joints {
   name: "bshin"
-  stiffness: 5000.0
+  stiffness: 25000
   parent: "bthigh"
   child: "bshin"
   parent_offset {
@@ -293,16 +293,16 @@ joints {
   rotation {
     z: 90.0
   }
-  spring_damping: 100.0
+  spring_damping: 60
   angle_limit {
     min: -44.97718811035156
     max: 44.97718811035156
   }
-  limit_strength: 1200.0
-}
+  limit_strength: 1000
+  }
 joints {
   name: "bfoot"
-  stiffness: 5000.0
+  stiffness: 25000
   parent: "bshin"
   child: "bfoot"
   parent_offset {
@@ -314,16 +314,16 @@ joints {
   rotation {
     z: 90.0
   }
-  spring_damping: 100.0
+  spring_damping: 60
   angle_limit {
     min: -22.918312072753906
     max: 44.97718811035156
   }
-  limit_strength: 400.0
-}
+  limit_strength: 1000
+  }
 joints {
   name: "fthigh"
-  stiffness: 8000.0
+  stiffness: 25000
   parent: "torso"
   child: "fthigh"
   parent_offset {
@@ -334,16 +334,16 @@ joints {
   rotation {
     z: 90.0
   }
-  spring_damping: 100.0
+  spring_damping: 60
   angle_limit {
     min: -57.295780181884766
     max: 40.1070442199707
   }
-  limit_strength: 2000.0
-}
+  limit_strength: 1000
+  }
 joints {
   name: "fshin"
-  stiffness: 5000.0
+  stiffness: 25000
   parent: "fthigh"
   child: "fshin"
   parent_offset {
@@ -360,11 +360,11 @@ joints {
     min: -68.75493621826172
     max: 49.847328186035156
   }
-  limit_strength: 400.0
-}
+  limit_strength: 1000
+  }
 joints {
   name: "ffoot"
-  stiffness: 3500.0
+  stiffness: 25000
   parent: "fshin"
   child: "ffoot"
   parent_offset {
@@ -381,8 +381,8 @@ joints {
     min: -28.647890090942383
     max: 28.647890090942383
   }
-  limit_strength: 200.0
-}
+  limit_strength: 1000
+  }
 actuators {
   name: "bthigh"
   joint: "bthigh"
@@ -400,7 +400,7 @@ actuators {
 actuators {
   name: "bfoot"
   joint: "bfoot"
-  strength: 60.0
+  strength: 60
   torque {
   }
 }
@@ -414,7 +414,7 @@ actuators {
 actuators {
   name: "fshin"
   joint: "fshin"
-  strength: 60.0
+  strength: 60
   torque {
   }
 }

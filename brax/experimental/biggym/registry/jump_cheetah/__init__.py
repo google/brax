@@ -12,21 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Loading/saving of inference functions."""
+"""Example: an existing Env + a new reward."""
 
-import pickle
-from typing import Any
+ENVS = dict(
+    jump_cheetah=dict(
+        module='jump_cheetah:JumpCheetah',
+        tracks=('rl',),
+    ),)
 
-from brax.io.file import File
-
-
-def load_params(path: str) -> Any:
-  with File(path, 'rb') as fin:
-    buf = fin.read()
-  return pickle.loads(buf)
-
-
-def save_params(path: str, params: Any):
-  """Saves parameters in Flax format."""
-  with File(path, 'wb') as fout:
-    fout.write(pickle.dumps(params))
+COMPONENTS = None

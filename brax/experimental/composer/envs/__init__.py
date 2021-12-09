@@ -23,10 +23,15 @@ where each entry can be a `env_desc` or a function that returns `env_desc`.
 import copy
 import importlib
 import inspect
-from typing import Any
+from typing import Any, Dict
 
 ENV_DESCS = {}
 DEFAULT_REGISTER_LIBS = ('ant_descs', 'ma_descs')
+
+
+def is_env_desc(env_desc: Any):
+  """Check if it is appropriate env_desc object."""
+  return isinstance(env_desc, dict) or callable(env_desc)
 
 
 def register_env(env_name: str, env_desc: Any, override: bool = True):
@@ -55,8 +60,13 @@ def register_default_libs():
 
 
 def list_env():
-  """List registered envs."""
+  """List registered environments."""
   return sorted(ENV_DESCS)
+
+
+def exists(env_name: str):
+  """If environment is registered."""
+  return env_name in ENV_DESCS
 
 
 def inspect_env(env_name: str):
@@ -72,3 +82,17 @@ def inspect_env(env_name: str):
   support_kwargs = 'kwargs' in supported_params
   supported_params.pop('kwargs', None)
   return supported_params, support_kwargs
+
+
+def assert_env_params(env_name: str,
+                      env_params: Dict[str, Any],
+                      ignore_kwargs: bool = False):
+  """Assert env_params are valid parameters for env_name."""
+  assert isinstance(env_params, dict), env_params
+  supported_params, support_kwargs = inspect_env(env_name)
+  # if unnamed **kwargs, then always assert True
+  if support_kwargs and not ignore_kwargs:
+    return
+  assert all(
+      k in supported_params
+      for k in env_params), f'invalid {env_params} for {supported_params}'

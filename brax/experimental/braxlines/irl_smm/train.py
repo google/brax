@@ -110,11 +110,10 @@ def train(train_job_params: Dict[str, Any],
   eval_env_fn = functools.partial(env_fn, auto_reset=False)
   # make inference functions and goals for evaluation
   core_env = env_fn()
-  _, inference_fn = ppo.make_params_and_inference_fn(
+  inference_fn = ppo.make_inference_fn(
       core_env.observation_size,
       core_env.action_size,
-      normalize_observations=ppo_params.get('normalize_observation', True),
-      extra_params=extra_params)
+      normalize_observations=ppo_params.get('normalize_observation', True))
   inference_fn = jax.jit(inference_fn)
 
   tab = logger_utils.Tabulator(

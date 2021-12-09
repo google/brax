@@ -445,7 +445,7 @@ def train(environment_fn: Callable[..., envs.Env],
 
   minimize_loop = jax.pmap(_minimize_loop, axis_name='i')
 
-  _, inference = make_params_and_inference_fn(
+  inference = make_inference_fn(
       core_env.observation_size, action_shapes, normalize_observations,
       parametric_action_distribution_fn, make_models_fn)
 
@@ -543,7 +543,7 @@ def train(environment_fn: Callable[..., envs.Env],
   return (inference, params, metrics)
 
 
-def make_params_and_inference_fn(
+def make_inference_fn(
     observation_size: int,
     action_shapes: Dict[str, Any],
     normalize_observations: bool = False,
@@ -552,12 +552,10 @@ def make_params_and_inference_fn(
     ], distribution.ParametricDistribution]] = distribution
     .NormalTanhDistribution,
     make_models_fn: Optional[Callable[
-        [int, int], Tuple[networks.FeedForwardModel]]] = networks.make_models,
-    extra_params: Dict[str, Dict[str, jnp.ndarray]] = None,
-):
+        [int, int], Tuple[networks.FeedForwardModel]]] = networks.make_models):
   """Creates params and inference function for the multi-agent PPO agent."""
   action_size = sum([s['size'] for s in action_shapes.values()])
-  obs_normalizer_params, obs_normalizer_apply_fn = normalization.make_data_and_apply_fn(
+  _, obs_normalizer_apply_fn = normalization.make_data_and_apply_fn(
       observation_size, normalize_observations=normalize_observations)
   agents = odict()
   for k, action_shape in action_shapes.items():
@@ -579,11 +577,4 @@ def make_params_and_inference_fn(
     actions = data_utils.fill_array(actions, actions_arr, action_shapes)
     return actions
 
-  params = dict(
-      normalizer=obs_normalizer_params,
-      policy=[
-          policy_model.init(jax.random.PRNGKey(0))
-          for _, policy_model in agents.values()
-      ],
-      extra={} if extra_params is None else extra_params)
-  return params, inference_fn
+  return inference_fn

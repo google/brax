@@ -14,11 +14,12 @@
 
 """SAC tests."""
 
+import pickle
+
 from absl.testing import absltest
 from absl.testing import parameterized
 from brax import envs
 from brax.training import sac
-from flax import serialization
 import jax
 
 
@@ -49,10 +50,10 @@ class SACTest(parameterized.TestCase):
     _, params, _ = sac.train(
         env_fn, num_timesteps=128, episode_length=128, num_envs=128)
     env = env_fn()
-    base_params, inference = sac.make_params_and_inference_fn(
+    inference = sac.make_inference_fn(
         env.observation_size, env.action_size, normalize_observations)
-    byte_encoding = serialization.to_bytes(params)
-    decoded_params = serialization.from_bytes(base_params, byte_encoding)
+    byte_encoding = pickle.dumps(params)
+    decoded_params = pickle.loads(byte_encoding)
 
     # Compute one action.
     state = env.reset(jax.random.PRNGKey(0))

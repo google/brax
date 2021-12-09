@@ -328,9 +328,8 @@ def train(
                time.time() - t)
     training_walltime += time.time() - t
 
-  _, inference = make_params_and_inference_fn(core_env.observation_size,
-                                              core_env.action_size,
-                                              normalize_observations)
+  inference = make_inference_fn(core_env.observation_size, core_env.action_size,
+                                normalize_observations)
   params = training_state.normalizer_params, training_state.policy_params
 
   return (inference, params, metrics)
@@ -341,15 +340,13 @@ def make_es_model(parametric_action_distribution, obs_size):
       [32, 32, 32, 32, parametric_action_distribution.param_size], obs_size)
 
 
-def make_params_and_inference_fn(observation_size, action_size,
-                                 normalize_observations):
+def make_inference_fn(observation_size, action_size, normalize_observations):
   """Creates params and inference function for the ES agent."""
-  obs_normalizer_params, obs_normalizer_apply_fn = normalization.make_data_and_apply_fn(
+  _, obs_normalizer_apply_fn = normalization.make_data_and_apply_fn(
       observation_size, normalize_observations)
   parametric_action_distribution = distribution.NormalTanhDistribution(
       event_size=action_size)
-  policy_model = make_es_model(parametric_action_distribution,
-                               observation_size)
+  policy_model = make_es_model(parametric_action_distribution, observation_size)
 
   def inference_fn(params, obs, key):
     normalizer_params, policy_params = params
@@ -358,5 +355,4 @@ def make_params_and_inference_fn(observation_size, action_size,
         policy_model.apply(policy_params, obs), key)
     return action
 
-  params = (obs_normalizer_params, policy_model.init(jax.random.PRNGKey(0)))
-  return params, inference_fn
+  return inference_fn

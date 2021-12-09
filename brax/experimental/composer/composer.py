@@ -68,6 +68,7 @@ import brax
 from brax import envs
 from brax.envs import Env
 from brax.envs import State
+from brax.envs import Wrapper
 from brax.envs import wrappers
 from brax.experimental.braxlines.common import sim_utils
 from brax.experimental.braxlines.envs import wrappers as braxlines_wrappers
@@ -82,6 +83,7 @@ from brax.experimental.composer.components import load_component
 from brax.experimental.composer.components import register_default_components
 from jax import numpy as jnp
 
+assert_env_params = composer_envs.assert_env_params
 inspect_env = composer_envs.inspect_env
 list_env = composer_envs.list_env
 register_env = composer_envs.register_env
@@ -354,18 +356,14 @@ class ComponentEnv(Env):
     obs_dict, _ = self._get_obs(qp, info)
     obs = data_utils.concat_array(obs_dict, self.observer_shapes)
     reward, done, score = jnp.zeros((3,) + self.reward_shape)
+    reward_names = tuple(self.composer.metadata.reward_fns)
     if self.is_multiagent:  # multi-agent
       done = jnp.any(done, axis=-1)  # ensure done is a scalar
+      reward_names += self.agent_names
     state_info = {}
     state_info['score'] = score
-    state_info['rewards'] = odict([
-        (k, jnp.zeros(()))
-        for k in tuple(self.composer.metadata.reward_fns) + self.agent_names
-    ])
-    state_info['scores'] = odict([
-        (k, jnp.zeros(()))
-        for k in tuple(self.composer.metadata.reward_fns) + self.agent_names
-    ])
+    state_info['rewards'] = odict([(k, jnp.zeros(())) for k in reward_names])
+    state_info['scores'] = odict([(k, jnp.zeros(())) for k in reward_names])
     return State(
         qp=qp,
         obs=obs,
@@ -387,9 +385,21 @@ class ComponentEnv(Env):
         (k, fn(action, reward_features))
         for k, fn in self.composer.metadata.reward_fns.items()
     ])
+    state.info['rewards'] = odict([
+        (k, v[0]) for k, v in reward_tuple_dict.items()
+    ])
+    state.info['scores'] = odict([
+        (k, v[1]) for k, v in reward_tuple_dict.items()
+    ])
     if self.is_multiagent:  # multi-agent
       reward, score, done = agent_utils.process_agent_rewards(
           self.metadata, reward_tuple_dict)
+      state.info['rewards'] = odict(
+          list(state.info['rewards'].items()) +
+          [(k, v) for k, v in zip(self.agent_names, reward)])
+      state.info['scores'] = odict(
+          list(state.info['scores'].items()) +
+          [(k, v) for k, v in zip(self.agent_names, score)])
     else:
       reward, done, score = jnp.zeros((3,))
       for r, s, d in reward_tuple_dict.values():
@@ -397,12 +407,6 @@ class ComponentEnv(Env):
         score += s
         done = jnp.logical_or(done, d)
     done = self.composer.term_fn(done, self.sys, qp, info)
-    state.info['rewards'] = odict(
-        [(k, v[0]) for k, v in reward_tuple_dict.items()] +
-        [(k, v) for k, v in zip(self.agent_names, reward)])
-    state.info['scores'] = odict(
-        [(k, v[1]) for k, v in reward_tuple_dict.items()] +
-        [(k, v) for k, v in zip(self.agent_names, score)])
     state.info['score'] = score
     return state.replace(
         qp=qp, obs=obs, reward=reward, done=done.astype(jnp.float32))
@@ -428,8 +432,22 @@ def get_action_shapes(sys):
   return action_shapes
 
 
-def get_env_obs_dict_shape(env: Env):
-  """Gets an Env's observation shape(s)."""
+def unwrap(env: Env):
+  """Unwrap all Env wrappers."""
+  while isinstance(env, Wrapper):  # unwrap wrappers
+    env = env.unwrapped
+  return env
+
+
+def is_multiagent(env: Env):
+  """If it supports multiagent RL."""
+  env = unwrap(env)
+  return env.is_multiagent if hasattr(env, 'is_multiagent') else False
+
+
+def get_obs_dict_shape(env: Env):
+  """Get observation (dictionary) shape."""
+  env = unwrap(env)
   if isinstance(env, ComponentEnv):
     assert env.observation_size  # ensure env.observer_shapes is set
     return env.observer_shapes
@@ -469,7 +487,14 @@ def create(env_name: str = None,
     composer = Composer(**env_desc)
     env = ComponentEnv(composer=composer, env_desc=env_desc)
   else:
-    env = envs.create(env_name, **kwargs)
+    env = envs.create(
+        env_name,
+        episode_length=episode_length,
+        action_repeat=action_repeat,
+        auto_reset=auto_reset,
+        batch_size=batch_size,
+        **kwargs)
+    return env  # type: ignore
 
   # add wrappers
   env = braxlines_wrappers.ExtraStepArgsWrapper(env)

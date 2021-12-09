@@ -225,8 +225,9 @@ joints {
   child_offset { x: -0.1 y: -0.1 }
   parent: "$ Torso"
   child: "Aux 1"
-  stiffness: 5000.0
-  angular_damping: 35
+  stiffness: 18000.0
+  angular_damping: 20
+  spring_damping: 80
   angle_limit { min: -30.0 max: 30.0 }
   rotation { y: -90 }
 }
@@ -236,8 +237,9 @@ joints {
   child_offset { x: -0.2 y: -0.2 }
   parent: "Aux 1"
   child: "$ Body 4"
-  stiffness: 5000.0
-  angular_damping: 35
+  stiffness: 18000.0
+  angular_damping: 20
+  spring_damping: 80
   rotation: { z: 135 }
   angle_limit {
     min: 30.0
@@ -250,8 +252,9 @@ joints {
   child_offset { x: 0.1 y: -0.1 }
   parent: "$ Torso"
   child: "Aux 2"
-  stiffness: 5000.0
-  angular_damping: 35
+  stiffness: 18000.0
+  angular_damping: 20
+  spring_damping: 80
   rotation { y: -90 }
   angle_limit { min: -30.0 max: 30.0 }
 }
@@ -261,8 +264,9 @@ joints {
   child_offset { x: 0.2 y: -0.2 }
   parent: "Aux 2"
   child: "$ Body 7"
-  stiffness: 5000.0
-  angular_damping: 35
+  stiffness: 18000.0
+  angular_damping: 20
+  spring_damping: 80
   rotation { z: 45 }
   angle_limit { min: -70.0 max: -30.0 }
 }
@@ -272,8 +276,9 @@ joints {
   child_offset { x: 0.1 y: 0.1 }
   parent: "$ Torso"
   child: "Aux 3"
-  stiffness: 5000.0
-  angular_damping: 35
+  stiffness: 18000.0
+  angular_damping: 20
+  spring_damping: 80
   rotation { y: -90 }
   angle_limit { min: -30.0 max: 30.0 }
 }
@@ -286,8 +291,9 @@ joints {
   }
   parent: "Aux 3"
   child: "$ Body 10"
-  stiffness: 5000.0
-  angular_damping: 35
+  stiffness: 18000.0
+  angular_damping: 20
+  spring_damping: 80
   rotation { z: 135 }
   angle_limit { min: -70.0 max: -30.0 }
 }
@@ -297,8 +303,9 @@ joints {
   child_offset { x: -0.1 y: 0.1 }
   parent: "$ Torso"
   child: "Aux 4"
-  stiffness: 5000.0
-  angular_damping: 35
+  stiffness: 18000.0
+  angular_damping: 20
+  spring_damping: 80
   rotation { y: -90 }
   angle_limit { min: -30.0 max: 30.0 }
 }
@@ -308,8 +315,9 @@ joints {
   child_offset { x: -0.2 y: 0.2 }
   parent: "Aux 4"
   child: "$ Body 13"
-  stiffness: 5000.0
-  angular_damping: 35
+  stiffness: 18000.0
+  angular_damping: 20
+  spring_damping: 80
   rotation { z: 45 }
   angle_limit { min: 30.0 max: 70.0 }
 }

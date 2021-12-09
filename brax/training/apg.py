@@ -260,9 +260,8 @@ def train(
   normalizer_params = jax.tree_map(lambda x: x[0],
                                    training_state.normalizer_params)
   params = normalizer_params, params
-  _, inference = make_params_and_inference_fn(core_env.observation_size,
-                                              core_env.action_size,
-                                              normalize_observations)
+  inference = make_inference_fn(core_env.observation_size, core_env.action_size,
+                                normalize_observations)
 
   pmap.synchronize_hosts()
   return (inference, params, metrics)
@@ -275,12 +274,11 @@ def make_direct_optimization_model(parametric_action_distribution, obs_size):
       activation=linen.swish)
 
 
-def make_params_and_inference_fn(observation_size, action_size,
-                                 normalize_observations):
+def make_inference_fn(observation_size, action_size, normalize_observations):
   """Creates params and inference function for the direct optimization agent."""
   parametric_action_distribution = distribution.NormalTanhDistribution(
       event_size=action_size)
-  obs_normalizer_params, obs_normalizer_apply_fn = normalization.make_data_and_apply_fn(
+  _, obs_normalizer_apply_fn = normalization.make_data_and_apply_fn(
       observation_size, normalize_observations)
   policy_model = make_direct_optimization_model(parametric_action_distribution,
                                                 observation_size)
@@ -292,5 +290,4 @@ def make_params_and_inference_fn(observation_size, action_size,
         policy_model.apply(params, obs), key)
     return action
 
-  params = (obs_normalizer_params, policy_model.init(jax.random.PRNGKey(0)))
-  return params, inference_fn
+  return inference_fn

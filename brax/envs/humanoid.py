@@ -64,7 +64,7 @@ class Humanoid(env.Env):
     alive_bonus = jp.float32(5)
     reward = lin_vel_cost - quad_ctrl_cost - quad_impact_cost + alive_bonus
 
-    done = jp.where(qp.pos[0, 2] < 0.65, jp.float32(1), jp.float32(0))
+    done = jp.where(qp.pos[0, 2] < 0.7, jp.float32(1), jp.float32(0))
     done = jp.where(qp.pos[0, 2] > 2.1, jp.float32(1), done)
     state.metrics.update(
         reward_linvel=lin_vel_cost,
@@ -470,7 +470,7 @@ bodies {
 }
 joints {
   name: "abdomen_z"
-  stiffness: 15000.0
+  stiffness: 27000
   parent: "torso"
   child: "lwaist"
   parent_offset {
@@ -483,7 +483,9 @@ joints {
   rotation {
     y: -90.0
   }
-  angular_damping: 20.0
+  angular_damping: 30
+  spring_damping: 80
+  limit_strength: 2500
   angle_limit {
     min: -45.0
     max: 45.0
@@ -495,7 +497,7 @@ joints {
 }
 joints {
   name: "abdomen_x"
-  stiffness: 15000.0
+  stiffness: 27000
   parent: "lwaist"
   child: "pelvis"
   parent_offset {
@@ -507,7 +509,9 @@ joints {
   rotation {
     x: 90.0
   }
-  angular_damping: 20.0
+  angular_damping: 30
+  spring_damping: 80
+  limit_strength: 2500
   angle_limit {
     min: -35.0
     max: 35.0
@@ -515,7 +519,7 @@ joints {
 }
 joints {
   name: "right_hip_x"
-  stiffness: 8000.0
+  stiffness: 27000
   parent: "pelvis"
   child: "right_thigh"
   parent_offset {
@@ -526,8 +530,9 @@ joints {
   }
   rotation {
   }
-  angular_damping: 20.0
-  limit_strength: 2000.0
+  angular_damping: 30
+  spring_damping: 80
+  limit_strength: 2500
   angle_limit {
     min: -10.0
     max: 10.0
@@ -543,7 +548,7 @@ joints {
 }
 joints {
   name: "right_knee"
-  stiffness: 15000.0
+  stiffness: 27000
   parent: "right_thigh"
   child: "right_shin"
   parent_offset {
@@ -556,7 +561,9 @@ joints {
   rotation {
     z: -90.0
   }
-  angular_damping: 20.0
+  angular_damping: 30
+  spring_damping: 80
+  limit_strength: 2500
   angle_limit {
     min: -160.0
     max: -2.0
@@ -564,7 +571,7 @@ joints {
 }
 joints {
   name: "left_hip_x"
-  stiffness: 8000.0
+  stiffness: 27000
   parent: "pelvis"
   child: "left_thigh"
   parent_offset {
@@ -573,8 +580,9 @@ joints {
   }
   child_offset {
   }
-  angular_damping: 20.0
-  limit_strength: 2000.0
+  angular_damping: 30
+  spring_damping: 80
+  limit_strength: 2500
   angle_limit {
     min: -10.0
     max: 10.0
@@ -590,7 +598,7 @@ joints {
 }
 joints {
   name: "left_knee"
-  stiffness: 15000.0
+  stiffness: 27000
   parent: "left_thigh"
   child: "left_shin"
   parent_offset {
@@ -603,7 +611,9 @@ joints {
   rotation {
     z: -90.0
   }
-  angular_damping: 20.0
+  angular_damping: 30
+  spring_damping: 80
+  limit_strength: 2500
   angle_limit {
     min: -160.0
     max: -2.0
@@ -611,7 +621,7 @@ joints {
 }
 joints {
   name: "right_shoulder1"
-  stiffness: 15000.0
+  stiffness: 27000
   parent: "torso"
   child: "right_upper_arm"
   parent_offset {
@@ -624,7 +634,9 @@ joints {
     x: 135.0
     y: 35.26439
   }
-  angular_damping: 20.0
+  angular_damping: 30
+  spring_damping: 80
+  limit_strength: 2500
   angle_limit {
     min: -85.0
     max: 60.0
@@ -633,11 +645,10 @@ joints {
     min: -85.0
     max: 60.0
   }
-  limit_strength: 1000.0
 }
 joints {
   name: "right_elbow"
-  stiffness: 15000.0
+  stiffness: 27000
   parent: "right_upper_arm"
   child: "right_lower_arm"
   parent_offset {
@@ -651,7 +662,9 @@ joints {
     x: 135.0
     z: 90.0
   }
-  angular_damping: 20.0
+  angular_damping: 30
+  spring_damping: 80
+  limit_strength: 2500
   angle_limit {
     min: -90.0
     max: 50.0
@@ -659,7 +672,7 @@ joints {
 }
 joints {
   name: "left_shoulder1"
-  stiffness: 15000.0
+  stiffness: 27000
   parent: "torso"
   child: "left_upper_arm"
   parent_offset {
@@ -672,7 +685,9 @@ joints {
     x: 45.0
     y: -35.26439
   }
-  angular_damping: 20.0
+  angular_damping: 30
+  spring_damping: 80
+  limit_strength: 2500
   angle_limit {
     min: -60.0
     max: 85.0
@@ -681,11 +696,10 @@ joints {
     min: -60.0
     max: 85.0
   }
-  limit_strength: 1000.0
 }
 joints {
   name: "left_elbow"
-  stiffness: 15000.0
+  stiffness: 27000
   parent: "left_upper_arm"
   child: "left_lower_arm"
   parent_offset {
@@ -699,7 +713,9 @@ joints {
     x: 45.0
     z: -90.0
   }
-  angular_damping: 20.0
+  angular_damping: 30
+  spring_damping: 80
+  limit_strength: 2500
   angle_limit {
     min: -90.0
     max: 50.0

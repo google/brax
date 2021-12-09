@@ -295,9 +295,8 @@ def train(
                time.time() - t)
     training_walltime += time.time() - t
 
-  _, inference = make_params_and_inference_fn(core_env.observation_size,
-                                              core_env.action_size,
-                                              normalize_observations, head_type)
+  inference = make_inference_fn(core_env.observation_size, core_env.action_size,
+                                normalize_observations, head_type)
   normalizer_params = jax.tree_map(lambda x: x[0],
                                    training_state.normalizer_params)
   params = normalizer_params, training_state.policy_params
@@ -305,12 +304,12 @@ def train(
   return (inference, params, metrics)
 
 
-def make_params_and_inference_fn(observation_size,
-                                 action_size,
-                                 normalize_observations,
-                                 head_type=None):
+def make_inference_fn(observation_size,
+                      action_size,
+                      normalize_observations,
+                      head_type=None):
   """Creates params and inference function for the ES agent."""
-  obs_normalizer_params, obs_normalizer_apply_fn = normalization.make_data_and_apply_fn(
+  _, obs_normalizer_apply_fn = normalization.make_data_and_apply_fn(
       observation_size, normalize_observations, apply_clipping=False)
   policy_head = get_policy_head(head_type)
   policy_model = make_ars_model(action_size, observation_size)
@@ -321,5 +320,4 @@ def make_params_and_inference_fn(observation_size,
     action = policy_head(policy_model.apply(policy_params, obs))
     return action
 
-  params = (obs_normalizer_params, policy_model.init(jax.random.PRNGKey(0)))
-  return params, inference_fn
+  return inference_fn

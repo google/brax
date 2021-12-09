@@ -188,13 +188,14 @@ def plot_states(states: List[State], **kwargs):
   ys = {}
   ys.update({
       f'rewards/{k}': np.array([s.info['rewards'][k] for s in states
-                               ]) for k in states[-1].info['rewards']
+                               ]) for k in states[-1].info.get('rewards', {})
   })
   ys.update({
       f'scores/{k}': np.array([s.info['scores'][k] for s in states
-                              ]) for k in states[-1].info['scores']
+                              ]) for k in states[-1].info.get('scores', {})
   })
-  ys.update({'score': np.array([s.info['score'] for s in states])})
+  if 'score' in states[-1].info:
+    ys.update({'score': np.array([s.info['score'] for s in states])})
   ys.update({'reward': np.array([s.reward for s in states])})
   plotdata = {k: dict(x=x, y=y) for k, y in ys.items()}
   plot_curves(plotdata=plotdata, xlabel='time steps', **kwargs)

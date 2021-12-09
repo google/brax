@@ -3,9 +3,9 @@
  * connect to a remote brax engine for interactive visualization.
  */
 
-import * as THREE from 'https://threejs.org/build/three.module.js';
-import {OrbitControls} from 'https://threejs.org/examples/jsm/controls/OrbitControls.js';
-import {GUI} from 'https://threejs.org/examples/jsm/libs/lil-gui.module.min.js';
+import * as THREE from 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r135/build/three.module.js';
+import {OrbitControls} from 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r135/examples/jsm/controls/OrbitControls.js';
+import {GUI} from 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r135/examples/jsm/libs/lil-gui.module.min.js';
 
 import {Animator} from './animator.js';
 import {Selector} from './selector.js';
@@ -103,6 +103,11 @@ class Viewer {
         .name('Follow Distance')
         .min(1)
         .max(50);
+    const santaHat = this.scene.getObjectByName('santa hat');
+    if (santaHat) {
+      santaHat.visible = false;
+      cameraFolder.add(santaHat, 'visible').name('Santa Hat');
+    }
 
     /* set up animator and load trajectory */
     this.animator = new Animator(this);

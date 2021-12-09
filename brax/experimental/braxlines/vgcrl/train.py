@@ -93,7 +93,7 @@ def train(train_job_params: Dict[str, Any],
 
   # make inference function and test goals
   core_env = env_fn()
-  _, inference_fn = ppo.make_params_and_inference_fn(
+  inference_fn = ppo.make_inference_fn(
       core_env.observation_size,
       core_env.action_size,
       normalize_observations=ppo_params.get('normalize_observation', True),

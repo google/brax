@@ -193,7 +193,7 @@ def main(unused_argv):
   state = env.reset(jax.random.PRNGKey(FLAGS.seed))
 
   # Save to flax serialized checkpoint.
-  filename = f'{FLAGS.env}_{FLAGS.learner}.flax'
+  filename = f'{FLAGS.env}_{FLAGS.learner}.pkl'
   path = os.path.join(FLAGS.logdir, filename)
   model.save_params(path, params)
 

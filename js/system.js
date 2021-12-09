@@ -1,4 +1,4 @@
-import * as THREE from 'https://threejs.org/build/three.module.js';
+import * as THREE from 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r135/build/three.module.js';
 
 const basicMaterial = new THREE.MeshPhongMaterial({color: 0x665544});
 const targetMaterial = new THREE.MeshPhongMaterial({color: 0xff2222});
@@ -117,6 +117,52 @@ function createMesh(mesh, geom) {
   return mesh3;
 }
 
+function addHat(child, collider) {
+  const radius = collider.capsule.radius;
+
+  const hat = new THREE.Group();
+  hat.name = "santa hat";
+  const hatRadius = radius * 0.95;
+  const thickness = radius * 0.22;
+
+  const points = [];
+  for (let i = 0; i < 8; i++) {
+      points.push(new THREE.Vector2(Math.cos(i * 0.2) * hatRadius, (i + 2) * radius / 4));
+  }
+  const beanie = new THREE.Mesh(new THREE.LatheGeometry(points), new THREE.MeshPhongMaterial({
+      color: 0xff0000
+  }));
+  hat.add(beanie);
+
+  const whiteMaterial = new THREE.MeshPhongMaterial({
+      color: 0xffffff
+  });
+
+  const pompom = new THREE.Mesh(new THREE.SphereGeometry(thickness, 8, 8), whiteMaterial);
+  pompom.position.set(0, points[points.length - 1].y, 0);
+  hat.add(pompom);
+
+  const side = new THREE.Mesh(new THREE.TorusGeometry(hatRadius, thickness, 8, 25), whiteMaterial);
+  side.rotateX(Math.PI / 2);
+  side.position.set(0, (hatRadius + thickness) / 2, 0);
+  hat.add(side);
+  // Tilt the hat slightly.
+  hat.rotateZ(0.3);
+
+  const group = new THREE.Group();
+  group.add(hat);
+  group.add(child);
+  return group;
+}
+
+function isHead(body, collider) {
+  if (!('capsule' in collider)) {
+    return false;
+  }
+  return ((body.name == 'torso' && collider.capsule.radius == 0.09) ||
+      (body.name == '$ Torso' && collider.capsule.radius == 0.25));
+}
+
 function createScene(system) {
   const scene = new THREE.Scene();
   const meshGeoms = {};
@@ -140,6 +186,9 @@ function createScene(system) {
         child = createHeightMap(collider.heightMap);
       } else if ('mesh' in collider) {
         child = createMesh(collider.mesh, meshGeoms[collider.mesh.name]);
+      }
+      if (isHead(body, collider)) {
+        child = addHat(child, collider);
       }
       if (collider.rotation) {
         // convert from z-up to y-up coordinate system

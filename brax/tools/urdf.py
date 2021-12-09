@@ -76,6 +76,17 @@ def _xyz_to_vec(xyz):
   return np.array(xyz)
 
 
+def _rot_quat(u: Vector, v: Vector) -> Quaternion:
+  """Returns the quaternion performing rotation from u to v."""
+  dot_p = np.dot(v, u)
+  axis = np.cross(v, u)
+  if not np.any(axis):
+    return quaternions.qeye()
+  norm_axis = np.linalg.norm(axis)
+  angle = np.arctan2(norm_axis, dot_p)
+  return quaternions.axangle2quat(axis, angle)
+
+
 def _vec(v, scale=1.):
   """Converts (numpy) array to Vector3."""
   x, y, z = v
@@ -187,10 +198,16 @@ class UrdfConverter(object):
 
     for c in colliders:
 
-      col_rotation = _relative_quat_from_parent(
-          c.find('origin').get('rpy'), cur_quat)
+      try:
+        col_rotation = _relative_quat_from_parent(
+            c.find('origin').get('rpy'), cur_quat)
+      except AttributeError:
+        col_rotation = np.array([1., 0., 0., 0.])
 
-      col_offset = _xyz_to_vec(c.find('origin').get('xyz'))
+      try:
+        col_offset = _xyz_to_vec(c.find('origin').get('xyz'))
+      except AttributeError:
+        col_offset = np.array([0., 0., 0.])
 
       c_geom = c.find('geometry')
 
@@ -206,6 +223,11 @@ class UrdfConverter(object):
         body.colliders.append(
             _construct_capsule(
                 c_geom.find('cylinder'), col_global_offset + cur_offset,
+                col_total_rot))
+      elif c_geom.find('capsule') is not None:
+        body.colliders.append(
+            _construct_capsule(
+                c_geom.find('capsule'), col_global_offset + cur_offset,
                 col_total_rot))
       elif c_geom.find('box') is not None:
         body.colliders.append(
@@ -233,6 +255,11 @@ class UrdfConverter(object):
         global_offset = quaternions.rotate_vector(offset, cur_quat)
         joint_type = self.joints[j['joint']].get('type')
 
+        axis = _xyz_to_vec(self.joints[j['joint']].find('axis').get('xyz'))
+        axis_rotation = np.array(
+            euler.quat2euler(_rot_quat(axis, np.array([1., 0., 0.])), 'rxyz'))
+        axis_rotation = axis_rotation * 180 / np.pi
+
         if joint_type != 'fixed':
           joint = self.config.joints.add()
           joint.name = j['joint']
@@ -246,12 +273,11 @@ class UrdfConverter(object):
 
           # Note: These are sensible defaults and are not ingested from the urdf
           joint.stiffness = 10000.
-          joint.rotation.x, joint.rotation.y, joint.rotation.z = 0., 0., 0.
+          joint.rotation.x, joint.rotation.y, joint.rotation.z = axis_rotation
           joint.limit_strength = 300.
           joint.spring_damping = 50.
           joint.angular_damping = 10.
-          joint.reference_rotation.x, joint.reference_rotation.y, joint.reference_rotation.z = relative_rotation[
-              0], relative_rotation[1], relative_rotation[2]
+          joint.reference_rotation.x, joint.reference_rotation.y, joint.reference_rotation.z = relative_rotation
 
           # TODO: Load joint limit metadata
           if joint_type in _joint_type_to_limit:

@@ -12,21 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Loading/saving of inference functions."""
-
-import pickle
-from typing import Any
-
-from brax.io.file import File
+"""Ant tasks."""
 
 
-def load_params(path: str) -> Any:
-  with File(path, 'rb') as fin:
-    buf = fin.read()
-  return pickle.loads(buf)
-
-
-def save_params(path: str, params: Any):
-  """Saves parameters in Flax format."""
-  with File(path, 'wb') as fout:
-    fout.write(pickle.dumps(params))
+def Run(num_legs: int = 4):
+  return dict(
+      components=dict(
+          agent1=dict(
+              component='ant_bg',
+              component_params=dict(num_legs=num_legs),
+              pos=(0, 0, 0),
+              reward_fns=dict(
+                  goal=dict(
+                      reward_type='root_goal',
+                      sdcomp='vel',
+                      indices=(0, 1),
+                      offset=5,
+                      target_goal=(4, 0))),
+          ),),
+      global_options=dict(dt=0.2, substeps=16),
+  )
