@@ -13,13 +13,14 @@
 # limitations under the License.
 
 """Ant tasks."""
+from brax.experimental.biggym import registry
 
 
 def Run(num_legs: int = 4):
   return dict(
       components=dict(
           agent1=dict(
-              component='ant_bg',
+              component=registry.get_comp_name('proant', 'ant'),
               component_params=dict(num_legs=num_legs),
               pos=(0, 0, 0),
               reward_fns=dict(

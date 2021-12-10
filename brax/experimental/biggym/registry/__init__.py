@@ -12,16 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Example: a Component + env rewards."""
+"""Registry of BIG-Gym environments and components."""
 
-ENVS = dict(
-    ant_run_bg=dict(
-        module='ant:Run',
-        tracks=('rl',),
-    ),)
+# keep alphabetical ordering
+REGISTRIES = [
+    'jump',
+    'proant',
+]
 
-COMPONENTS = dict(
-    ant_bg=dict(
-        module='ant',
-        tracks=('run',),
-    ),)
+
+def get_comp_name(registry_name: str, comp_name: str):
+  return f'{registry_name}__{comp_name}'
+
+
+def get_env_name(registry_name: str, env_name: str):
+  return f'{registry_name}__{env_name}'

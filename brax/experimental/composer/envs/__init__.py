@@ -20,7 +20,10 @@ a descriotion dictionary `env_desc`.
 composer.py loads from `ENV_DESCS` with `env_name`,
 where each entry can be a `env_desc` or a function that returns `env_desc`.
 """
+# pylint:disable=protected-access
+# pylint:disable=g-complex-comprehension
 import copy
+import functools
 import importlib
 import inspect
 from typing import Any, Dict
@@ -69,6 +72,27 @@ def exists(env_name: str):
   return env_name in ENV_DESCS
 
 
+def get_func_kwargs(func):
+  """Get keyword args of a function."""
+  # first, unwrap functools.partial. only extra keyword arguments.
+  partial_supported_params = {}
+  while isinstance(func, functools.partial):
+    partial_supported_params.update(func.keywords)
+    func = func.func
+  # secondly, inspect the original function for keyword arguments.
+  fn_params = inspect.signature(func).parameters
+  support_kwargs = any(
+      v.kind == inspect.Parameter.VAR_KEYWORD for v in fn_params.values())
+  supported_params = {
+      k: v.default
+      for k, v in fn_params.items()
+      if v.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD and
+      v.default != inspect._empty
+  }
+  supported_params.update(partial_supported_params)
+  return supported_params, support_kwargs
+
+
 def inspect_env(env_name: str):
   """Inspect parameters of the env."""
   desc = env_name
@@ -77,11 +101,7 @@ def inspect_env(env_name: str):
   assert callable(desc) or isinstance(desc, dict), desc
   if not callable(desc):
     return {}, False
-  fn_params = inspect.signature(desc).parameters
-  supported_params = {k: v.default for k, v in fn_params.items()}
-  support_kwargs = 'kwargs' in supported_params
-  supported_params.pop('kwargs', None)
-  return supported_params, support_kwargs
+  return get_func_kwargs(desc)
 
 
 def assert_env_params(env_name: str,

@@ -13,10 +13,13 @@
 # limitations under the License.
 
 """BIG-Gym tasks."""
-from typing import Dict, Any
 
 
-def Run(component: str, component_params: Dict[str, Any]):
+def get_task_env_name(task_name: str, env_name: str):
+  return f'{task_name}__{env_name}'
+
+
+def race(component: str, **component_params):
   return dict(
       components=dict(
           agent1=dict(
@@ -35,4 +38,4 @@ def Run(component: str, component_params: Dict[str, Any]):
   )
 
 
-TASKS = dict(run=Run,)
+TASKS = dict(race=race,)

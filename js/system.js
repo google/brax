@@ -132,6 +132,7 @@ function addHat(child, collider) {
   const beanie = new THREE.Mesh(new THREE.LatheGeometry(points), new THREE.MeshPhongMaterial({
       color: 0xff0000
   }));
+  beanie.baseMaterial = beanie.material;
   hat.add(beanie);
 
   const whiteMaterial = new THREE.MeshPhongMaterial({
@@ -140,11 +141,13 @@ function addHat(child, collider) {
 
   const pompom = new THREE.Mesh(new THREE.SphereGeometry(thickness, 8, 8), whiteMaterial);
   pompom.position.set(0, points[points.length - 1].y, 0);
+  pompom.baseMaterial = pompom.material;
   hat.add(pompom);
 
   const side = new THREE.Mesh(new THREE.TorusGeometry(hatRadius, thickness, 8, 25), whiteMaterial);
   side.rotateX(Math.PI / 2);
   side.position.set(0, (hatRadius + thickness) / 2, 0);
+  side.baseMaterial = side.material;
   hat.add(side);
   // Tilt the hat slightly.
   hat.rotateZ(0.3);

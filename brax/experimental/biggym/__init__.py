@@ -14,13 +14,17 @@
 
 """BIG-Gym: crowd-sourced environments and behaviors."""
 # pylint:disable=protected-access
+# pylint:disable=g-complex-comprehension
+import difflib
 import functools
 import importlib
+import inspect
 from typing import Any, Union, Dict, Callable, Optional
 from brax import envs as brax_envs
 from brax.envs import Env
 from brax.envs import wrappers
-from brax.experimental.biggym.tasks import TASKS
+from brax.experimental.biggym import registry
+from brax.experimental.biggym import tasks
 from brax.experimental.braxlines.envs import obs_indices
 from brax.experimental.composer import components as composer_components
 from brax.experimental.composer import composer
@@ -31,10 +35,18 @@ unwrap = composer.unwrap
 
 ROOT_PATH = 'brax.experimental.biggym.registry'
 ENVS = {}
+REGISTRIES = {}
+OPEN_ENDED_TRACKS = ('rl', 'mimax')
+GOAL_ORIENTED_TRACKS = sorted(tasks.TASKS)
+ENVS_BY_TRACKS = dict(
+    open_ended={k: () for k in OPEN_ENDED_TRACKS},
+    goal_oriented={k: () for k in GOAL_ORIENTED_TRACKS},
+)
 
 
 def inspect_env(env_name: str):
   """Inspect env_params of an env (ComposerEnv only)."""
+  assert_exists(env_name)
   if composer_envs.exists(env_name):
     return composer_envs.inspect_env(env_name)
   else:
@@ -45,6 +57,7 @@ def assert_env_params(env_name: str,
                       env_params: Dict[str, Any],
                       ignore_kwargs: bool = True):
   """Inspect env_params of an env (ComposerEnv only)."""
+  assert_exists(env_name)
   if composer_envs.exists(env_name):
     composer_envs.assert_env_params(env_name, env_params, ignore_kwargs)
   else:
@@ -61,12 +74,65 @@ def exists(env_name: str):
   return env_name in list_env()
 
 
-def register(registry_name: str, assert_override: bool = True):
+def assert_exists(env_name: str):
+  """Assert if an environment is registered."""
+  exists_ = exists(env_name)
+  if not exists_:
+    closest = difflib.get_close_matches(env_name, list_env(), n=3)
+    assert 0, f'{env_name} not found. Closest={closest}'
+
+
+def get_func_kwargs(func):
+  """Get keyword args of a function."""
+  # first, unwrap functools.partial. only extra keyword arguments.
+  partial_supported_params = {}
+  while isinstance(func, functools.partial):
+    partial_supported_params.update(func.keywords)
+    func = func.func
+  # secondly, inspect the original function for keyword arguments.
+  fn_params = inspect.signature(func).parameters
+  support_kwargs = any(
+      v.kind == inspect.Parameter.VAR_KEYWORD for v in fn_params.values())
+  supported_params = {
+      k: v.default
+      for k, v in fn_params.items()
+      if v.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD and
+      v.default != inspect._empty
+  }
+  supported_params.update(partial_supported_params)
+  return supported_params, support_kwargs
+
+
+def register_all(verbose: bool = False, **kwargs):
+  """Register all registries."""
+  for registry_name in registry.REGISTRIES:
+    env_names, comp_names, task_env_names = register(registry_name, **kwargs)
+    if verbose:
+      print((f'Registered {registry_name}: '
+             f'{len(env_names)} envs, '
+             f'{len(comp_names)} comps, '
+             f'{len(task_env_names)} task_envs, '))
+
+
+def register(registry_name: str,
+             assert_override: bool = True,
+             optional: bool = True):
   """Register all envs and components."""
-  global ENVS
+  global ENVS, REGISTRIES, ENVS_BY_TRACKS
+
+  assert (optional or registry_name not in REGISTRIES
+         ), f'non-optional register() conflicts: {registry_name}'
+  if registry_name in REGISTRIES:
+    return REGISTRIES[registry_name]
+
   lib = importlib.import_module(f'{ROOT_PATH}.{registry_name}')
   envs = lib.ENVS or {}
   components = lib.COMPONENTS or {}
+  envs = {registry.get_env_name(registry_name, k): v for k, v in envs.items()}
+  components = {
+      registry.get_comp_name(registry_name, k): v
+      for k, v in components.items()
+  }
   task_envs = []
 
   # register environments
@@ -86,7 +152,11 @@ def register(registry_name: str, assert_override: bool = True):
     else:
       # register a standard Env
       ENVS[env_name] = env_module
-    if 'mimax' in env_info.get('tracks', []):
+    tracks = env_info.get('tracks', ['rl'])
+    for track in tracks:
+      assert track in OPEN_ENDED_TRACKS, f'{track} not in {OPEN_ENDED_TRACKS}'
+      ENVS_BY_TRACKS['open_ended'][track] += (env_name,)
+    if 'mimax' in tracks:
       # (MI-Max only) register obs_indices
       for indices_type, indices in env_info.get('obs_indices', {}).items():
         obs_indices.register_indices(env_name, indices_type, indices)
@@ -98,25 +168,30 @@ def register(registry_name: str, assert_override: bool = True):
           comp_name
       ), f'{composer_components.list_components()} contains {comp_name}'
     comp_module = comp_info['module']
-    composer_components.register_component(
+    comp_lib = composer_components.register_component(
         comp_name,
         load_path=f'{ROOT_PATH}.{registry_name}.components.{comp_module}',
         override=True)
+    component_params = get_func_kwargs(comp_lib.get_specs)[0]
     for track in comp_info.get('tracks', []):
-      assert track in TASKS, f'{track} not in {sorted(TASKS)}'
-      track_env_name = f'{track}_{registry_name}_{comp_name}'
-      track_env_module = TASKS[track](
-          component=comp_module,
-          component_params=comp_info.get('component_params', {}))
+      assert (track
+              in GOAL_ORIENTED_TRACKS), f'{track} not in {GOAL_ORIENTED_TRACKS}'
+      track_env_name = tasks.get_task_env_name(track, comp_name)
       if assert_override:
         assert not exists(
             track_env_name), f'{list_env()} contains {track_env_name}'
+      track_env_module = functools.partial(tasks.TASKS[track], comp_name,
+                                           **component_params)
       # register a ComposerEnv
       composer_envs.register_env(
           track_env_name, track_env_module, override=True)
       task_envs += [track_env_name]
+      ENVS_BY_TRACKS['goal_oriented'][track] += (track_env_name,)
 
-  return sorted(envs), sorted(components), sorted(task_envs)
+  assert envs or task_envs, 'no envs registered'
+  REGISTRIES[registry_name] = (sorted(envs), sorted(components),
+                               sorted(task_envs))
+  return REGISTRIES[registry_name]
 
 
 def create(env_name: str = None,
@@ -126,6 +201,7 @@ def create(env_name: str = None,
            batch_size: Optional[int] = None,
            **kwargs) -> Env:
   """Creates an Env with a specified brax system."""
+  assert_exists(env_name)
   if env_name in ENVS:
     env = ENVS[env_name](**kwargs)
     if episode_length is not None:

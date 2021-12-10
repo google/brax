@@ -271,10 +271,12 @@ class Viewer {
         }
       });
     }
-    const titleElement =
-        this.bodyFolders[object.name].domElement.querySelector('.title');
-    if (titleElement) {
-      titleElement.style.backgroundColor = hovering ? '#2fa1d6' : '#000';
+    if (object.name in this.bodyFolders) {
+      const titleElement =
+          this.bodyFolders[object.name].domElement.querySelector('.title');
+      if (titleElement) {
+        titleElement.style.backgroundColor = hovering ? '#2fa1d6' : '#000';
+      }
     }
   }
 
@@ -286,10 +288,12 @@ class Viewer {
         child.material = selected ? selectMaterial : child.baseMaterial;
       }
     });
-    if (object.selected) {
-      this.bodyFolders[object.name].open();
-    } else {
-      this.bodyFolders[object.name].close();
+    if (object.name in this.bodyFolders) {
+      if (object.selected) {
+        this.bodyFolders[object.name].open();
+      } else {
+        this.bodyFolders[object.name].close();
+      }
     }
     this.setDirty();
   }

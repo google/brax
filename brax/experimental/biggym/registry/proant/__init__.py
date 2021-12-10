@@ -12,12 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Example: an existing Env + a new reward."""
+"""Example: a Component + env rewards."""
 
 ENVS = dict(
-    jump_cheetah=dict(
-        module='jump_cheetah:JumpCheetah',
+    run=dict(
+        module='ant:Run',
         tracks=('rl',),
     ),)
 
-COMPONENTS = None
+COMPONENTS = dict(
+    ant=dict(
+        module='ant',
+        tracks=('race',),
+    ),)
