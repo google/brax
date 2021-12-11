@@ -1,4 +1,5 @@
 import * as THREE from 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r135/build/three.module.js';
+import * as THREE_examples from 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r135/examples/jsm/geometries/ParametricGeometry.js';
 
 const basicMaterial = new THREE.MeshPhongMaterial({color: 0x665544});
 const targetMaterial = new THREE.MeshPhongMaterial({color: 0xff2222});
@@ -94,7 +95,7 @@ function createHeightMap(heightMap) {
     target.set(x, y, z).multiplyScalar(1);
   }
 
-  const geom = new THREE.ParametricGeometry(builder, n_subdiv, n_subdiv);
+  const geom = new THREE_examples.ParametricGeometry(builder, n_subdiv, n_subdiv);
   geom.normalizeNormals();
 
   const group = new THREE.Group();
