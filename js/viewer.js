@@ -78,7 +78,10 @@ class Viewer {
     dirLight.shadow.camera.right = 10;
     dirLight.shadow.camera.near = 0.1;
     dirLight.shadow.camera.far = 40;
+    dirLight.shadow.mapSize.width = 4096; // default is 512
+    dirLight.shadow.mapSize.height = 4096; // default is 512
     this.scene.add(dirLight);
+    this.dirLight = dirLight;
 
     /* set up orbit controls */
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
@@ -115,7 +118,7 @@ class Viewer {
 
     /* add body insepctors */
     const bodiesFolder = this.gui.addFolder('Bodies');
-    bodiesFolder.open();
+    bodiesFolder.close();
 
     this.bodyFolders = {};
 
@@ -123,6 +126,7 @@ class Viewer {
       if (!c.name) continue;
       const folder = bodiesFolder.addFolder(c.name);
       this.bodyFolders[c.name] = folder;
+      folder.close();
 
       function defaults() {
         for (const gui of arguments) {
@@ -229,6 +233,10 @@ class Viewer {
         this.setDirty();
       }
     }
+
+    // make sure target stays within shadow map region
+    this.dirLight.position.set(targetPos.x + 3, targetPos.y + 10, targetPos.z + 10);
+    this.dirLight.target = this.target;
 
     if (this.controls.update()) {
       this.setDirty();

@@ -37,21 +37,36 @@ function createBox(box) {
 }
 
 function createPlane(plane) {
-  const group = new THREE.Group();
-  const mesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(2000, 2000),
-      new THREE.MeshPhongMaterial({color: 0x999999, depthWrite: false}));
+  // make a checkerboard material
+  const width = 2;
+  const height = 2;
+
+  const size = width * height;
+  const data = new Uint8Array( 3 * size );
+  const colors = [new THREE.Color( 0x999999 ), new THREE.Color( 0x888888 )];
+
+  for ( let i = 0; i < size; i ++ ) {
+    const stride = i * 3;
+    const ck = [0, 1, 1, 0];
+    const color = colors[ck[i]];
+    data[ stride + 0] = Math.floor( color.r * 255 );
+    data[ stride + 1] = Math.floor( color.g * 255 );
+    data[ stride + 2] = Math.floor( color.b * 255 );
+  }
+  const texture = new THREE.DataTexture( data, width, height, THREE.RGBFormat );
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set( 1000, 1000 );
+  const material = new THREE.MeshStandardMaterial( { map: texture } );
+
+  // mesh
+  const geometry = new THREE.PlaneGeometry( 2000, 2000);
+  const mesh = new THREE.Mesh( geometry, material );
   mesh.rotation.x = -Math.PI / 2;
   mesh.receiveShadow = true;
   mesh.baseMaterial = mesh.material;
-  group.add(mesh);
 
-  const mesh2 = new THREE.GridHelper(2000, 2000, 0x000000, 0x000000);
-  mesh2.material.opacity = 0.4;
-  mesh2.material.transparent = true;
-  mesh2.baseMaterial = mesh2.material;
-  group.add(mesh2);
-  return group;
+  return mesh;
 }
 
 function createSphere(sphere, name) {
