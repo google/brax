@@ -31,6 +31,7 @@ from brax.envs import inverted_double_pendulum
 from brax.envs import inverted_pendulum
 from brax.envs import reacher
 from brax.envs import reacherangle
+from brax.envs import swimmer
 from brax.envs import ur5e
 from brax.envs import walker2d
 from brax.envs import wrappers
@@ -51,6 +52,7 @@ _envs = {
     'inverted_double_pendulum': inverted_double_pendulum.InvertedDoublePendulum,
     'reacher': reacher.Reacher,
     'reacherangle': reacherangle.ReacherAngle,
+    'swimmer': swimmer.Swimmer,
     'ur5e': ur5e.Ur5e,
     'walker2d': walker2d.Walker2d,
 }
