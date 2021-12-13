@@ -90,6 +90,16 @@ def norm_reward(action: jnp.ndarray, obs_dict: Dict[str, jnp.ndarray],
   return distance_reward(action, obs_dict, obs1=obs, obs2=0, **kwargs)
 
 
+def state_reward(action: jnp.ndarray, obs_dict: Dict[str, jnp.ndarray],
+                 obs: Union[Observer, jnp.ndarray]):
+  """State reward."""
+  del action
+  obs = index_obs_dict(obs_dict, obs)
+  obs = jnp.sum(obs, axis=-1)
+  done = jnp.zeros_like(obs)
+  return obs, done
+
+
 def distance_reward(action: jnp.ndarray,
                     obs_dict: Dict[str, jnp.ndarray],
                     obs1: Union[Observer, jnp.ndarray],

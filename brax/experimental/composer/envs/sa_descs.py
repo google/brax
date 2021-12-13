@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""ants environments."""
+"""single-agent environments."""
 from brax.experimental.composer import composer_utils
 
 ENV_DESCS = {
@@ -130,11 +130,13 @@ def create_pro_ant_run(num_legs: int = 4):
 
 ENV_DESCS['pro_ant_run'] = create_pro_ant_run
 
-VARIANTS = (('ant_run', 'octopus_run', {
-    'components.agent1.component': 'octopus',
-    'global_options.dt': 0.02,
-    'global_options.substeps': 16,
-}),)
+VARIANTS = ()
+for comp in ('octopus', 'humanoid', 'halfcheetah'):
+  VARIANTS += (('ant_run', f'{comp}_run', {
+      'components.agent1.component': comp,
+      'global_options.dt': 0.02,
+      'global_options.substeps': 16,
+  }),)
 
 for base_desc_name, new_desc_name, desc_edits in VARIANTS:
   ENV_DESCS[new_desc_name] = composer_utils.edit_desc(ENV_DESCS[base_desc_name],

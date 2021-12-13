@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""multi-agent ants environments."""
+"""multi-agent environments."""
 import functools
 import itertools
 from typing import Any, Dict, Sequence

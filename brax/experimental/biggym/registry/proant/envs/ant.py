@@ -31,5 +31,5 @@ def Run(num_legs: int = 4):
                       offset=5,
                       target_goal=(4, 0))),
           ),),
-      global_options=dict(dt=0.2, substeps=16),
+      global_options=dict(dt=0.02, substeps=16),
   )

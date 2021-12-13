@@ -12,24 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Halfcheetah."""
+"""Humanoid."""
 # pylint:disable=protected-access
-from brax.envs import halfcheetah
+import functools
+from brax.envs import humanoid
 from brax.experimental.composer import component_editor
+from brax.experimental.composer.components import common
 
-COLLIDES = ('torso', 'bfoot', 'ffoot')
+
+COLLIDES = ('torso', 'left_shin', 'right_shin')
 
 ROOT = 'torso'
 
 DEFAULT_OBSERVERS = ('root_z_joints',)
 
-TERM_FN = None
+TERM_FN = functools.partial(
+    common.height_term_fn, max_height=2.1, min_height=0.7)
 
 
 def get_specs():
   return dict(
       message_str=component_editor.filter_message_str(
-          halfcheetah._SYSTEM_CONFIG, 'floor'),
+          humanoid._SYSTEM_CONFIG, 'floor'),
       collides=COLLIDES,
       root=ROOT,
       term_fn=TERM_FN,

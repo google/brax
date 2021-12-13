@@ -106,7 +106,7 @@ def get_func_kwargs(func):
 def register_all(verbose: bool = False, **kwargs):
   """Register all registries."""
   for registry_name in registry.REGISTRIES:
-    env_names, comp_names, task_env_names = register(registry_name, **kwargs)
+    env_names, comp_names, task_env_names, _ = register(registry_name, **kwargs)
     if verbose:
       print((f'Registered {registry_name}: '
              f'{len(env_names)} envs, '
@@ -116,6 +116,7 @@ def register_all(verbose: bool = False, **kwargs):
 
 def register(registry_name: str,
              assert_override: bool = True,
+             assert_format: bool = True,
              optional: bool = True):
   """Register all envs and components."""
   global ENVS, REGISTRIES, ENVS_BY_TRACKS
@@ -126,6 +127,17 @@ def register(registry_name: str,
     return REGISTRIES[registry_name]
 
   lib = importlib.import_module(f'{ROOT_PATH}.{registry_name}')
+  metadata = {}
+  if assert_format:  # assert submission format
+    for attr in ('AUTHORS', 'CONTACTS', 'AFFILIATIONS', 'DESCRIPTIONS'):
+      assert hasattr(lib, attr), f'{attr} must be defined as a tuple of strs'
+      values = getattr(lib, attr)
+      assert isinstance(
+          values, tuple), f'{attr}={values} must be defined as a tuple of strs'
+      assert all(isinstance(v, str) for v in values
+                ), f'{attr}={values} must be defined as a tuple of strs'
+      metadata[attr] = values
+
   envs = lib.ENVS or {}
   components = lib.COMPONENTS or {}
   envs = {registry.get_env_name(registry_name, k): v for k, v in envs.items()}
@@ -190,7 +202,7 @@ def register(registry_name: str,
 
   assert envs or task_envs, 'no envs registered'
   REGISTRIES[registry_name] = (sorted(envs), sorted(components),
-                               sorted(task_envs))
+                               sorted(task_envs), metadata)
   return REGISTRIES[registry_name]
 
 

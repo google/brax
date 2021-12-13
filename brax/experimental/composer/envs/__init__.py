@@ -29,7 +29,7 @@ import inspect
 from typing import Any, Dict
 
 ENV_DESCS = {}
-DEFAULT_REGISTER_LIBS = ('ant_descs', 'ma_descs')
+DEFAULT_REGISTER_LIBS = ('sa_descs', 'ma_descs')
 
 
 def is_env_desc(env_desc: Any):

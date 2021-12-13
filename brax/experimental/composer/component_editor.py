@@ -80,6 +80,9 @@ def message_str2json(message_str: str) -> Dict[str, Any]:
   return json.loads(json_str)
 
 
+DEFAULT_GLOBAL_OPTIONS_JSON = message_str2json(DEFAULT_GLOBAL_OPTIONS_STR)
+
+
 def json2message_str(config_dict: Dict[str, Any]) -> str:
   json_str = json.dumps(config_dict)
   message = Parse(json_str, brax.Config())
@@ -170,3 +173,33 @@ def json_concat_name(
       if config_dict not in excludes:
         config_dict = concat_name(config_dict, comp_name)
     return config_dict
+
+
+def filter_json(config_dict: Dict[str, Any], ground_name: str):
+  """Filter config dict and remove ground & global configs."""
+  # filter global configs
+  config_dict = {
+      k: v
+      for k, v in config_dict.items()
+      if k not in DEFAULT_GLOBAL_OPTIONS_JSON
+  }
+  # filter ground body and contacts
+  collide_include = config_dict.get('collideInclude', None)
+  assert collide_include, f'missing collideInclude?: {sorted(config_dict)}'
+  collide_include = [
+      c for c in collide_include
+      if not any(v == ground_name for v in c.values())
+  ]
+  config_dict['collide_include'] = collide_include
+  bodies = config_dict.get('bodies', None)
+  assert bodies, f'missing bodies?: {sorted(config_dict)}'
+  bodies = [c for c in bodies if c['name'] != ground_name]
+  config_dict['bodies'] = bodies
+  return config_dict
+
+
+def filter_message_str(config_str: str, *args, **kwargs):
+  """Filter config str and remove ground & global configs."""
+  config_dict = message_str2json(config_str)
+  config_dict = filter_json(config_dict, *args, **kwargs)
+  return json2message_str(config_dict)

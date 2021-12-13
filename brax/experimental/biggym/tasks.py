@@ -13,29 +13,49 @@
 # limitations under the License.
 
 """BIG-Gym tasks."""
+from typing import Dict, Any, Tuple
+from brax.experimental.composer import reward_functions
+from brax.experimental.composer.observers import SimObserver as so
 
 
 def get_task_env_name(task_name: str, env_name: str):
   return f'{task_name}__{env_name}'
 
 
-def race(component: str, **component_params):
+def race(component: str, pos: Tuple[float] = (0, 0, 0), **component_params):
   return dict(
       components=dict(
           agent1=dict(
               component=component,
               component_params=component_params,
-              pos=(0, 0, 0),
+              pos=pos,
               reward_fns=dict(
-                  goal=dict(
-                      reward_type='root_goal',
-                      sdcomp='vel',
-                      indices=(0, 1),
-                      offset=5,
-                      target_goal=(4, 0))),
+                  run=dict(
+                      reward_type=reward_functions.state_reward,
+                      obs=lambda x: so('body', 'vel', x['root'], indices=(0,)),
+                      scale=-1,
+                  )),
           ),),
-      global_options=dict(dt=0.2, substeps=16),
+      global_options=dict(dt=0.02, substeps=16),
   )
 
 
-TASKS = dict(race=race,)
+def race_ma(component: str,
+            opponent: str = 'ant',
+            opponent_params: Dict[str, Any] = None,
+            **component_params):
+  """Two agents racing."""
+  opponent_params = opponent_params or {}
+  agent1_config = race(component, pos=(0, 1.5, 0), **component_params)
+  agent2_config = race(opponent, pos=(0, -1.5, 0), **opponent_params)
+  agent1_config['components']['agent2'] = agent2_config['components']['agent1']
+  agent1_config['agent_groups'] = {
+      k: dict(reward_agents=(k,)) for k in ['agent1', 'agent2']
+  }
+  return agent1_config
+
+
+TASKS = dict(
+    race=race,
+    race_ma=race_ma,
+)

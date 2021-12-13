@@ -1,6 +1,6 @@
 # BIG-Gym
 
-BIG-Gym is a *crowd-sourcing* challenge for RL *environments* and *behaviors*, inspired by [BIG-Bench](https://github.com/google/BIG-bench). *Our goal is to create the "ImageNet" for continuous control, with diversity in agent morphologies, environment scenes, objects, and tasks.* We solicit submissions for two tracks: **Open-Ended Creativity Track** and **Goal-Oriented Competition Track**.
+BIG-Gym is a *crowd-sourcing* challenge for RL *environments* and *behaviors*, inspired by [BIG-Bench](https://github.com/google/BIG-bench). *Our goal is to create the "ImageNet" for continuous control, with diversity in agent morphologies, environment scenes, objects, and tasks.* We solicit submissions for two tracks: **Open-Ended Creativity Track** and **Goal-Oriented Competition Track**. Details (timelines, submission instructions) are [here](https://sites.google.com/view/rlbiggym).
 
 ```python
 from brax.experimental import biggym
@@ -8,18 +8,27 @@ from brax.experimental import biggym
 # register all in registry/__init__.py
 biggym.register_all(verbose=True)
 
-# register a specific folder under registry/
+# OR, register a specific folder under registry/
 #   `biggym.ENVS_BY_TRACKS` shows which envs are registered under each track
-env_names, component_names, task_env_names = biggym.register(registry_name)
+env_names, component_names, task_env_names, metadata = biggym.register(registry_name)
 
 # (optional) inspect and get default configurable parameters of an environment
 env_params, _ = biggym.inspect_env(env_names[0])
 
 # create an environment
-env = biggym.create(env_names[0], env_params=env_params)
+env = biggym.create(env_names[0], **env_params)
 ```
+## Colab Notebooks
 
-Challenge details (timelines, submission instructions) are [here](https://sites.google.com/view/rlbiggym).
+Explore BIG-Gym easily and quickly through:
+* [BIG-Gym Basics](https://colab.research.google.com/github/google/brax/blob/main/notebooks/biggym/biggym.ipynb)
+
+Tips:
+* for debugging NaNs, use:
+```python
+from jax.config import config
+config.update("jax_debug_nans", True)
+```
 
 ## Citing
 

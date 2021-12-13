@@ -350,7 +350,9 @@ class ComponentEnv(Env):
 
   def reset(self, rng: jnp.ndarray) -> State:
     """Resets the environment to an initial state."""
-    qp = self.sys.default_qp()
+    qpos = self.sys.default_angle()
+    qvel = jnp.zeros((self.sys.num_joint_dof,))
+    qp = self.sys.default_qp(joint_angle=qpos, joint_velocity=qvel)
     qp = self.composer.reset_fn(self.sys, qp)
     info = self.sys.info(qp)
     obs_dict, _ = self._get_obs(qp, info)
