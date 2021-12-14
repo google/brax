@@ -159,11 +159,13 @@ def get_ring_components(name: str = 'ring',
 
 def add_sumo(
     env_desc: Dict[str, Any],
-    ring_size: float = 3.0,
-    run_scale: float = 0,
-    chase_scale: float = 1.,
     centering_scale: float = 1.,
+    control_scale: float = 0.1,
+    draw_scale: float = 0.,
     knocking_scale: float = 1.,
+    opp_scale: float = 1.,
+    ring_size: float = 3.,
+    win_bonus: float = 1.,
 ):
   """Add a sumo task."""
   agents = sorted(env_desc['components'])
@@ -175,48 +177,78 @@ def add_sumo(
     edge_name = component_editor.concat_comps(agent, yokozuna)
     edges[edge_name] = dict(
         reward_fns=dict(
-            # komusubis aim to chase the yokozuna and vice versa
-            chase=dict(
-                reward_type='root_dist',
-                offset=2 * ring_size + 0.5,
-                scale=chase_scale),
-            # yokozuna wants to push out komusubis and vice versa
-            yoko_knocking=dict(
-                reward_type=reward_functions.norm_reward,
+            # komusubis wants to push out yokozuna
+            komu_win_bonus=dict(
+                reward_type=reward_functions.exp_norm_reward,
                 obs=lambda x, y: so('body', 'pos', y['root'], indices=(0, 1)),
                 max_dist=ring_size,
-                done_bonus=1000 * ring_size,
+                done_bonus=win_bonus,
                 scale=-knocking_scale,
             ),
-            komu_knocking=dict(
-                reward_type=reward_functions.norm_reward,
+            komu_lose_penalty=dict(
+                reward_type=reward_functions.exp_norm_reward,
                 obs=lambda x, y: so('body', 'pos', x['root'], indices=(0, 1)),
                 max_dist=ring_size,
-                done_bonus=1000 * ring_size,
+                done_bonus=-win_bonus,
+                scale=centering_scale,
+            ),
+            # yokozuna wants to push out komusubis
+            yoko_win_bonus=dict(
+                reward_type=reward_functions.exp_norm_reward,
+                obs=lambda x, y: so('body', 'pos', x['root'], indices=(0, 1)),
+                max_dist=ring_size,
+                done_bonus=win_bonus,
                 scale=-knocking_scale,
             ),
+            # each agent aims to be close to the center
+            yoko_lose_penalty=dict(
+                reward_type=reward_functions.exp_norm_reward,
+                obs=lambda x, y: so('body', 'pos', y['root'], indices=(0, 1)),
+                max_dist=ring_size,
+                done_bonus=-win_bonus,
+                scale=centering_scale,
+            ),
+            # move to opponent's direction
+            komu_move_to_yoko=dict(
+                reward_type=reward_functions.direction_reward,
+                vel0=lambda x, y: so('body', 'vel', x['root'], indices=(0, 1)),
+                vel1=lambda x, y: so('body', 'vel', y['root'], indices=(0, 1)),
+                pos0=lambda x, y: so('body', 'pos', x['root'], indices=(0, 1)),
+                pos1=lambda x, y: so('body', 'pos', y['root'], indices=(0, 1)),
+                scale=opp_scale,
+            ),
+            yoko_move_to_komu=dict(
+                reward_type=reward_functions.direction_reward,
+                vel0=lambda x, y: so('body', 'vel', y['root'], indices=(0, 1)),
+                vel1=lambda x, y: so('body', 'vel', x['root'], indices=(0, 1)),
+                pos0=lambda x, y: so('body', 'pos', y['root'], indices=(0, 1)),
+                pos1=lambda x, y: so('body', 'pos', x['root'], indices=(0, 1)),
+                scale=opp_scale,
+            ),
         ))
-    agent_groups[agent]['reward_names'] += (('chase', agent, yokozuna),
-                                            ('komu_knocking', agent, yokozuna))
-    agent_groups[yokozuna]['reward_names'] += (('chase', agent, yokozuna),
-                                               ('yoko_knocking', agent,
-                                                yokozuna))
+    agent_groups[agent]['reward_names'] += (('komu_win_bonus', agent, yokozuna),
+                                            ('komu_lose_penalty', agent,
+                                             yokozuna), ('komu_move_to_yoko',
+                                                         agent, yokozuna))
+    agent_groups[yokozuna]['reward_names'] += (('yoko_win_bonus', agent,
+                                                yokozuna), ('yoko_lose_penalty',
+                                                            agent, yokozuna),
+                                               ('yoko_move_to_komu', yokozuna,
+                                                agent))
   for agent in agents:
     components[agent]['reward_fns'].update(
         dict(
-            # each agent aims to be close to the center
-            centering=dict(
-                reward_type=reward_functions.norm_reward,
-                obs=lambda x: so('body', 'pos', x['root'], indices=(0, 1)),
-                offset=ring_size + 0.5,
-                scale=centering_scale,
-            ),))
-    agent_groups[agent]['reward_names'] += (('centering', agent),)
-    if run_scale > 0:
-      # add velocity bonus for each agent
-      components[agent] = dict(
-          reward_fns=dict(run=get_run_reward(scale=run_scale)))
-      agent_groups[agent]['reward_names'] += (('run', agent),)
+            control_penalty=dict(
+                reward_type=reward_functions.control_reward,
+                scale=control_scale,
+            ),
+            draw_penalty=dict(
+                reward_type=reward_functions.constant_reward,
+                value=-draw_scale,
+            ),
+        ))
+    agent_groups[agent]['reward_names'] += (('control_penalty', agent),
+                                            ('draw_penalty', agent))
   # add sumo ring
   components.update(get_ring_components(radius=ring_size, num_segments=20))
   merge_desc(

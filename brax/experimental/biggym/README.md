@@ -7,17 +7,29 @@ from brax.experimental import biggym
 
 # register all in registry/__init__.py
 biggym.register_all(verbose=True)
+#   `biggym.ENVS_BY_TRACKS` shows which envs are registered under each track
+#   `biggym.COMPONENTS_BY_TRACK` shows ... components ...
 
 # OR, register a specific folder under registry/
-#   `biggym.ENVS_BY_TRACKS` shows which envs are registered under each track
 env_names, component_names, task_env_names, metadata = biggym.register(registry_name)
 
+# create an environment under Open-Ended Creativity Track
 # (optional) inspect and get default configurable parameters of an environment
-env_params, _ = biggym.inspect_env(env_names[0])
+env0_params, _ = biggym.inspect_env(env_names[0])
+env0 = biggym.create(env_names[0], **env0_params)
 
-# create an environment
-env = biggym.create(env_names[0], **env_params)
+# create an environment under Goal-Oriented Competition Track
+env1_params, _ = biggym.inspect_env(task_env_names[0])
+env1 = biggym.create(task_env_names[0], **env1_params)
+
+# register all combinations of matches among components in Goal-Oriented Track
+match_env_names = biggym.register_matches()
+
+# create an environment between agents under Goal-Oriented Competition Track
+env2_params, _ = biggym.inspect_env(match_env_names[0])
+env2 = biggym.create(match_env_names[0], **env2_params)
 ```
+
 ## Colab Notebooks
 
 Explore BIG-Gym easily and quickly through:

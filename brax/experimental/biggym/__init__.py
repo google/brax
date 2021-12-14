@@ -19,6 +19,7 @@ import difflib
 import functools
 import importlib
 import inspect
+import itertools
 from typing import Any, Union, Dict, Callable, Optional
 from brax import envs as brax_envs
 from brax.envs import Env
@@ -41,7 +42,11 @@ GOAL_ORIENTED_TRACKS = sorted(tasks.TASKS)
 ENVS_BY_TRACKS = dict(
     open_ended={k: () for k in OPEN_ENDED_TRACKS},
     goal_oriented={k: () for k in GOAL_ORIENTED_TRACKS},
+    goal_oriented_matches={
+        k: () for k in tasks.SYMMETRIC_MA_TASKS + tasks.ASYMMETRIC_MA_TASKS
+    },
 )
+COMPONENTS_BY_TRACKS = {k: () for k in tasks.TASKS}
 
 
 def inspect_env(env_name: str):
@@ -199,11 +204,50 @@ def register(registry_name: str,
           track_env_name, track_env_module, override=True)
       task_envs += [track_env_name]
       ENVS_BY_TRACKS['goal_oriented'][track] += (track_env_name,)
+      COMPONENTS_BY_TRACKS[track] += (comp_name,)
 
   assert envs or task_envs, 'no envs registered'
   REGISTRIES[registry_name] = (sorted(envs), sorted(components),
                                sorted(task_envs), metadata)
   return REGISTRIES[registry_name]
+
+
+def register_match(track: str, comp1: str, comp2: str, assert_override=True):
+  """Register a match."""
+  comp1_lib = composer_components.register_component(comp1)
+  comp1_params = get_func_kwargs(comp1_lib.get_specs)[0]
+  comp2_lib = composer_components.register_component(comp2)
+  comp2_params = get_func_kwargs(comp2_lib.get_specs)[0]
+  track_env_name = tasks.get_match_env_name(track, comp1, comp2)
+  if assert_override:
+    assert not exists(track_env_name), f'{list_env()} contains {track_env_name}'
+  track_env_module = functools.partial(
+      tasks.TASKS[track],
+      comp1,
+      opponent=comp2,
+      opponent_params=comp2_params,
+      **comp1_params)
+  # register a ComposerEnv
+  composer_envs.register_env(track_env_name, track_env_module, override=True)
+  ENVS_BY_TRACKS['goal_oriented_matches'][track] += (track_env_name,)
+  return track_env_name
+
+
+def register_matches(assert_override=True):
+  """Register components by goal-oriented track to fight each other."""
+  task_envs = []
+  for track in tasks.SYMMETRIC_MA_TASKS:
+    for comp1, comp2 in itertools.combinations(COMPONENTS_BY_TRACKS[track], 2):
+      task_envs += [
+          register_match(track, comp1, comp2, assert_override=assert_override)
+      ]
+  for track in tasks.ASYMMETRIC_MA_TASKS:
+    for comp1, comp2 in itertools.product(COMPONENTS_BY_TRACKS[track],
+                                          COMPONENTS_BY_TRACKS[track]):
+      task_envs += [
+          register_match(track, comp1, comp2, assert_override=assert_override)
+      ]
+  return task_envs
 
 
 def create(env_name: str = None,

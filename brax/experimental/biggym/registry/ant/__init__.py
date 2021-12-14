@@ -12,17 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Example: a Component + env rewards."""
+"""Example: a Component."""
 AUTHORS = ('Shixiang Shane Gu',)
 CONTACTS = ('shanegu@google.com',)
 AFFILIATIONS = ('google.com',)
-DESCRIPTIONS = ('ant with different number of legs running',)
+DESCRIPTIONS = ('ant with four legs',)
 
-ENVS = dict(
-    run=dict(
-        module='ant:Run',
-        tracks=('rl',),
-    ),)
+ENVS = {}
 
 COMPONENTS = dict(
     ant=dict(

@@ -18,6 +18,7 @@
 REGISTRIES = [
     'jump',
     'proant',
+    'ant',
 ]
 
 

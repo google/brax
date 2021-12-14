@@ -18,11 +18,13 @@ Each function has the form:
     reward, done = reward_fn(action, obs_dict, ...)
     If action.shape = (...,action_dim), reward/done shapes are (...,reward_dim)
 """
+# pylint:disable=g-long-lambda
 import functools
 import inspect
 from typing import Any, Dict, Union
 from brax.experimental.composer.observers import Observer
 from brax.experimental.composer.observers import SimObserver as so
+from jax import lax
 from jax import numpy as jnp
 
 
@@ -66,6 +68,15 @@ def wrapper(reward_fn,
   return fn
 
 
+def index_obs_dict(obs_dict: Dict[str, jnp.ndarray], obs: Union[Observer,
+                                                                jnp.ndarray]):
+  """Index obs_dict with observer."""
+  if isinstance(obs, Observer):
+    assert obs.name in obs_dict, f'{obs.name} not in {obs_dict.keys()}'
+    obs = obs_dict[obs.name]
+  return jnp.array(obs)
+
+
 def constant_reward(action: jnp.ndarray,
                     obs_dict: Dict[str, jnp.ndarray],
                     value: float = 1.0):
@@ -75,13 +86,50 @@ def constant_reward(action: jnp.ndarray,
   return reward, jnp.zeros_like(reward)
 
 
-def index_obs_dict(obs_dict: Dict[str, jnp.ndarray], obs: Union[Observer,
-                                                                jnp.ndarray]):
-  """Index obs_dict with observer."""
-  if isinstance(obs, Observer):
-    assert obs.name in obs_dict, f'{obs.name} not in {obs_dict.keys()}'
-    obs = obs_dict[obs.name]
-  return jnp.array(obs)
+def control_reward(action: jnp.ndarray, obs_dict: Dict[str, jnp.ndarray]):
+  """Negative Control reward."""
+  del obs_dict
+  ctrl_cost = jnp.linalg.norm(action, axis=-1)
+  return -ctrl_cost, jnp.zeros_like(ctrl_cost)
+
+
+def exp_norm_reward(action: jnp.ndarray, obs_dict: Dict[str, jnp.ndarray],
+                    obs: Observer, **kwargs):
+  """Exponential negative norm of an observation as reward."""
+  reward, done = distance_reward(action, obs_dict, obs1=obs, obs2=0, **kwargs)
+  return jnp.exp(reward), done
+
+
+def direction_reward(action: jnp.ndarray,
+                     obs_dict: Dict[str, jnp.ndarray],
+                     vel0: Union[Observer, jnp.ndarray],
+                     vel1: Union[Observer, jnp.ndarray],
+                     pos0: Union[Observer, jnp.ndarray],
+                     pos1: Union[Observer, jnp.ndarray],
+                     sign: float = -1.0,
+                     norm_kwargs: Dict[str, Any] = None):
+  """Positive direction reward based on inner product."""
+  del action
+  norm_kwargs = norm_kwargs or {}
+  vel0 = index_obs_dict(obs_dict, vel0)
+  vel1 = index_obs_dict(obs_dict, vel1)
+  pos0 = index_obs_dict(obs_dict, pos0)
+  pos1 = index_obs_dict(obs_dict, pos1)
+  ndim = max(vel0.ndim, vel1.ndim, pos0.ndim, pos1.ndim)
+  vel0 = vel0.reshape((1,) * (ndim - vel0.ndim) + vel0.shape)
+  vel1 = vel1.reshape((1,) * (ndim - vel1.ndim) + vel1.shape)
+  pos0 = pos0.reshape((1,) * (ndim - pos0.ndim) + pos0.shape)
+  pos1 = pos1.reshape((1,) * (ndim - pos1.ndim) + pos1.shape)
+  agent_sign = jnp.sign(jnp.sum((pos1 - pos0) * vel0, axis=-1))
+  opp_sign = jnp.sign(jnp.sum((pos0 - pos1) * vel1, axis=-1))
+  # get unit vector & direction
+  vel1 /= jnp.linalg.norm(vel1, axis=-1, **norm_kwargs)
+  vel1 *= jnp.sign(sign)
+  inner_product = lax.cond(
+      agent_sign, lambda x: lax.cond(x, lambda y: jnp.sum(vel0 * y, axis=-1),
+                                     lambda y: jnp.zeros_like(x), vel1),
+      jnp.zeros_like, opp_sign)
+  return jnp.clip(inner_product, a_min=0.0), jnp.zeros_like(inner_product)
 
 
 def norm_reward(action: jnp.ndarray, obs_dict: Dict[str, jnp.ndarray],
