@@ -33,7 +33,7 @@ env2 = biggym.create(match_env_names[0], **env2_params)
 ## Colab Notebooks
 
 Explore BIG-Gym easily and quickly through:
-* [BIG-Gym Basics](https://colab.research.google.com/github/google/brax/blob/main/notebooks/biggym/biggym.ipynb)
+* [BIG-Gym Basics](https://colab.research.google.com/github/google/brax/blob/main/notebooks/biggym/biggym_rl.ipynb)
 
 Tips:
 * for debugging NaNs, use:
