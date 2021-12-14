@@ -12,20 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Registry of BIG-Gym environments and components."""
+"""Example: a Component + env rewards."""
+AUTHORS = ('Hiroki Furuta',)
+CONTACTS = ('furuta@weblab.t.u-tokyo.ac.jp',)
+AFFILIATIONS = ('u-tokyo.ac.jp',)
+DESCRIPTIONS = ('worm with different number of torsos running',)
 
-# keep alphabetical ordering
-REGISTRIES = [
-    'ant',
-    'jump',
-    'proant',
-    'worm',
-]
+ENVS = dict(
+    run=dict(
+        module='worm:Run',
+        tracks=('rl',),
+    ),)
 
-
-def get_comp_name(registry_name: str, comp_name: str):
-  return f'{registry_name}__{comp_name}'
-
-
-def get_env_name(registry_name: str, env_name: str):
-  return f'{registry_name}__{env_name}'
+COMPONENTS = dict(
+    ant=dict(
+        module='worm',
+        tracks=('race', 'race_ma', 'onigokko_predator',
+                'onigokko_prey'),
+    ),)
