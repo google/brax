@@ -16,12 +16,12 @@
 from brax.experimental.biggym import registry
 
 
-def Run():
+def Run(num_torso: int = 3):
   return dict(
       components=dict(
           agent1=dict(
               component=registry.get_comp_name('centipede', 'ant'),
-              component_params=dict(),
+              component_params=dict(num_torso=num_torso),
               pos=(0, 0, 0),
               reward_fns=dict(
                   goal=dict(
