@@ -85,7 +85,7 @@ class Humanoid(env.Env):
     # qpos:
     # Z of the torso (1,)
     # orientation of the torso as quaternion (4,)
-    # joint angles (8,)
+    # joint angles (5 + 3 + 3 + 2 + 2 + 2,)
     qpos = [
         qp.pos[0, 2:], qp.rot[0], joint_1d_angle[0], joint_2d_angle[0],
         joint_2d_angle[1], joint_3d_angle[0], joint_3d_angle[1],
@@ -95,7 +95,7 @@ class Humanoid(env.Env):
     # qvel:
     # velocity of the torso (3,)
     # angular velocity of the torso (3,)
-    # joint angle velocities (8,)
+    # joint angle velocities (5 + 3 + 3 + 2 + 2 + 2,)
     qvel = [
         qp.vel[0], qp.ang[0], joint_1d_vel[0], joint_2d_vel[0], joint_2d_vel[1],
         joint_3d_vel[0], joint_3d_vel[1], joint_3d_vel[2]

@@ -29,13 +29,13 @@ def create_observation_normalizer(obs_size, normalize_observations=True,
   """Observation normalization based on running statistics."""
   assert num_leading_batch_dims == 1 or num_leading_batch_dims == 2
   if normalize_observations:
-    def update_fn(params, obs, weights=None):
+    def update_fn(params, obs, mask=None):
       normalization_steps, running_mean, running_variance = params
 
-      if weights is not None:
-        weights = jnp.expand_dims(
-            weights, axis=-1)  # for shape matching during multiplication
-        step_increment = jnp.sum(weights)
+      if mask is not None:
+        mask = jnp.expand_dims(
+            mask, axis=-1)  # for shape matching during multiplication
+        step_increment = jnp.sum(mask)
       else:
         step_increment = obs.shape[0] * (
             obs.shape[1] if num_leading_batch_dims == 2 else 1)
@@ -45,8 +45,8 @@ def create_observation_normalizer(obs_size, normalize_observations=True,
 
       # Compute the incremental update and divide by the number of new steps.
       input_to_old_mean = obs - running_mean
-      if weights is not None:
-        input_to_old_mean = input_to_old_mean * weights
+      if mask is not None:
+        input_to_old_mean = input_to_old_mean * mask
       mean_diff = jnp.sum(input_to_old_mean / total_new_steps,
                           axis=((0, 1) if num_leading_batch_dims == 2 else 0))
       if pmap_to_devices:
@@ -55,8 +55,8 @@ def create_observation_normalizer(obs_size, normalize_observations=True,
 
       # Compute difference of input to the new mean for Welford update.
       input_to_new_mean = obs - new_mean
-      if weights is not None:
-        input_to_new_mean = input_to_new_mean * weights
+      if mask is not None:
+        input_to_new_mean = input_to_new_mean * mask
       var_diff = jnp.sum(input_to_new_mean * input_to_old_mean,
                          axis=((0, 1) if num_leading_batch_dims == 2 else 0))
       if pmap_to_devices:
@@ -65,9 +65,9 @@ def create_observation_normalizer(obs_size, normalize_observations=True,
       return (total_new_steps, new_mean, running_variance + var_diff)
 
   else:
-    def update_fn(params, obs, weights=None):
-      if weights is not None:
-        step_increment = jnp.sum(weights)
+    def update_fn(params, obs, mask=None):
+      if mask is not None:
+        step_increment = jnp.sum(mask)
       else:
         step_increment = obs.shape[0] * (
             obs.shape[1] if num_leading_batch_dims == 2 else 1)

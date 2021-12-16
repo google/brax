@@ -262,13 +262,14 @@ def train(
   # SAC
   target_entropy = -0.5 * core_env.action_size
 
-  def alpha_loss(alpha: jnp.ndarray, policy_params: Params,
+  def alpha_loss(log_alpha: jnp.ndarray, policy_params: Params,
                  transitions: Transition, key: PRNGKey) -> jnp.ndarray:
     """Eq 18 from https://arxiv.org/pdf/1812.05905.pdf."""
     dist_params = policy_model.apply(policy_params, transitions.o_tm1)
     action = parametric_action_distribution.sample_no_postprocessing(
         dist_params, key)
     log_prob = parametric_action_distribution.log_prob(dist_params, action)
+    alpha = jnp.exp(log_alpha)
     alpha_loss = alpha * jax.lax.stop_gradient(-log_prob - target_entropy)
     return jnp.mean(alpha_loss)
 
@@ -339,9 +340,10 @@ def train(
       new_rewarder_state = state.rewarder_state
       rewarder_metrics = {}
 
-    alpha = jnp.exp(state.alpha_params)
-    alpha_loss, alpha_grads = alpha_grad(alpha, state.policy_params,
+    alpha_loss, alpha_grads = alpha_grad(state.alpha_params,
+                                         state.policy_params,
                                          normalized_transitions, key_alpha)
+    alpha = jnp.exp(state.alpha_params)
     critic_loss, critic_grads = critic_grad(state.q_params, state.policy_params,
                                             state.target_q_params, alpha,
                                             normalized_transitions, key_critic)
