@@ -185,7 +185,7 @@ class Viewer {
       w = this.domElement.offsetWidth;
     }
     if (h === undefined) {
-      h = window.innerHeight;
+      h = this.domElement.clientHeight;
     }
     if (this.camera.type == 'OrthographicCamera') {
       this.camera.right =
