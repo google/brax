@@ -14,7 +14,7 @@
 
 """Input normalization utils."""
 
-from typing import Any
+from typing import Any, Callable, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -45,3 +45,43 @@ def is_synchronized(x: Any, axis_name: str) -> jnp.ndarray:
   return jax.lax.pmin(
       fp, axis_name=axis_name) == jax.lax.pmax(
           fp, axis_name=axis_name)
+
+
+def pmap_with_synchro(f: Callable[..., Tuple[Any, ...]],
+                      axis_name: str,
+                      check_input: bool = True,
+                      check_output: bool = True):
+  """Pmap f and perform sanity checks on the input and output.
+
+  Args:
+    f: The function to be pmapped.
+    axis_name: The name of the pmap axis.
+    check_input: If True, assert that the first input of f is the same on all
+      devices.
+    check_output: If True, expect that f's output is a Tuple and assert that the
+      first output of f is the same on all devices.
+
+  Returns:
+    Pmapped f. The output should not be called in a jitted function or
+      assertions will fail.
+  """
+
+  def g(*args, **kwargs):
+    synchro_input = True
+    if check_input:
+      synchro_input = is_synchronized(args[0], axis_name)
+    outputs = f(*args, **kwargs)
+    synchro_output = True
+    if check_output:
+      synchro_output = is_synchronized(outputs[0], axis_name)
+    return outputs, synchro_input, synchro_output
+
+  g = jax.pmap(g, axis_name=axis_name)
+
+  def h(*args, **kwargs):
+    output, synchro_input, synchro_output = g(*args, **kwargs)
+    assert synchro_input[0]
+    assert synchro_output[0]
+    return output
+
+  return h

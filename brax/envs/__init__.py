@@ -63,6 +63,7 @@ def create(env_name: str,
            action_repeat: int = 1,
            auto_reset: bool = True,
            batch_size: Optional[int] = None,
+           eval_metrics: bool = False,
            **kwargs) -> Env:
   """Creates an Env with a specified brax system."""
   env = _envs[env_name](**kwargs)
@@ -72,6 +73,8 @@ def create(env_name: str,
     env = wrappers.VectorWrapper(env, batch_size)
   if auto_reset:
     env = wrappers.AutoResetWrapper(env)
+  if eval_metrics:
+    env = wrappers.EvalWrapper(env)
 
   return env  # type: ignore
 

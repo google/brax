@@ -22,7 +22,6 @@ from typing import Any, Callable, Dict, Optional
 
 from absl import logging
 from brax import envs
-from brax.training import env
 from brax.training import networks
 from brax.training import normalization
 from brax.training import pmap
@@ -106,13 +105,15 @@ def train(
   reset_fn = jax.jit(jax.vmap(core_env.reset))
   first_state = reset_fn(key_envs)
 
-  core_eval_env = environment_fn(
+  eval_env = environment_fn(
       action_repeat=action_repeat,
       batch_size=num_eval_envs,
-      episode_length=episode_length)
-  eval_first_state, eval_step_fn = env.wrap_for_eval(core_eval_env, key_eval)
+      episode_length=episode_length,
+      eval_metrics=True)
+  eval_step_fn = jax.jit(eval_env.step)
+  eval_first_state = jax.jit(eval_env.reset)(key_eval)
 
-  _, obs_size = eval_first_state.core.obs.shape
+  _, obs_size = eval_first_state.obs.shape
 
   policy_model = make_ars_model(core_env.action_size, obs_size)
   policy_head = get_policy_head(head_type)
@@ -129,13 +130,13 @@ def train(
 
   def do_one_step_eval(carry, unused_target_t):
     state, policy_params, normalizer_params = carry
-    obs = obs_normalizer_apply_fn(normalizer_params, state.core.obs)
+    obs = obs_normalizer_apply_fn(normalizer_params, state.obs)
     actions = policy_head(policy_model.apply(policy_params, obs))
     nstate = eval_step_fn(state, actions)
     return (nstate, policy_params, normalizer_params), ()
 
   @jax.jit
-  def run_eval(state, policy_params, normalizer_params) -> env.EvalEnvState:
+  def run_eval(state, policy_params, normalizer_params) -> envs.State:
     normalizer_params = jax.tree_map(lambda x: x[0], normalizer_params)
     (state, _, _), _ = jax.lax.scan(
         do_one_step_eval, (state, policy_params, normalizer_params), (),
@@ -251,21 +252,23 @@ def train(
     if process_id == 0 and it % log_frequency == 0:
       eval_state = run_eval(eval_first_state, training_state.policy_params,
                             training_state.normalizer_params)
-      eval_state.completed_episodes.block_until_ready()
+      eval_metrics = eval_state.info['eval_metrics']
+      eval_metrics.completed_episodes.block_until_ready()
       eval_walltime += time.time() - t
       eval_sps = (
-          episode_length * eval_first_state.core.reward.shape[0] /
+          episode_length * eval_first_state.reward.shape[0] /
           (time.time() - t))
       avg_episode_length = (
-          eval_state.completed_episodes_steps / eval_state.completed_episodes)
+          eval_metrics.completed_episodes_steps /
+          eval_metrics.completed_episodes)
       metrics = dict(
           dict({
-              f'eval/episode_{name}': value / eval_state.completed_episodes
-              for name, value in eval_state.completed_episodes_metrics.items()
+              f'eval/episode_{name}': value / eval_metrics.completed_episodes
+              for name, value in eval_metrics.completed_episodes_metrics.items()
           }),
           **dict({f'train/{name}': value for name, value in summary.items()}),
           **dict({
-              'eval/completed_episodes': eval_state.completed_episodes,
+              'eval/completed_episodes': eval_metrics.completed_episodes,
               'eval/episode_length': avg_episode_length,
               'train/completed_episodes': it * num_envs,
               'speed/sps': sps,
