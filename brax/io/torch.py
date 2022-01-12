@@ -80,7 +80,7 @@ def jax_to_torch(value: Any, device: Device = None) -> Any:
 def _devicearray_to_tensor(value: DeviceArray,
                            device: Device = None) -> torch.Tensor:
   """Converts a Jax DeviceArray into PyTorch Tensor."""
-  dpack = jax_dlpack.to_dlpack(value)
+  dpack = jax_dlpack.to_dlpack(value.astype("float32"))
   tensor = torch_dlpack.from_dlpack(dpack)
   if device:
     return tensor.to(device=device)

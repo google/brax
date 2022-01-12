@@ -106,11 +106,6 @@ class Viewer {
         .name('Follow Distance')
         .min(1)
         .max(50);
-    const santaHat = this.scene.getObjectByName('santa hat');
-    if (santaHat) {
-      santaHat.visible = false;
-      cameraFolder.add(santaHat, 'visible').name('Santa Hat');
-    }
 
     /* set up animator and load trajectory */
     this.animator = new Animator(this);
