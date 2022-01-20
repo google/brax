@@ -164,6 +164,9 @@ def mean(a: ndarray, axis: Optional[int] = None) -> ndarray:
   """Compute the arithmetic mean along the specified axis."""
   return _which_np(a).mean(a, axis=axis)
 
+def var(a: ndarray, axis: Optional[int] = None) -> ndarray:
+  """Compute the variance along the specified axis."""
+  return _which_np(a).var(a, axis=axis)
 
 def arange(start: int, stop: int) -> ndarray:
   """Return evenly spaced values within a given interval."""
