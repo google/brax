@@ -1,4 +1,4 @@
-# Copyright 2021 The Brax Authors.
+# Copyright 2022 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -64,7 +64,7 @@ class Humanoid(env.Env):
     alive_bonus = jp.float32(5)
     reward = lin_vel_cost - quad_ctrl_cost - quad_impact_cost + alive_bonus
 
-    done = jp.where(qp.pos[0, 2] < 0.7, jp.float32(1), jp.float32(0))
+    done = jp.where(qp.pos[0, 2] < 0.72, jp.float32(1), jp.float32(0))
     done = jp.where(qp.pos[0, 2] > 2.1, jp.float32(1), done)
     state.metrics.update(
         reward_linvel=lin_vel_cost,

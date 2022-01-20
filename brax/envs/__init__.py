@@ -1,4 +1,4 @@
-# Copyright 2021 The Brax Authors.
+# Copyright 2022 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -56,6 +56,10 @@ _envs = {
     'ur5e': ur5e.Ur5e,
     'walker2d': walker2d.Walker2d,
 }
+
+
+def get_environment(env_name, **kwargs):
+  return _envs[env_name](**kwargs)
 
 
 def create(env_name: str,

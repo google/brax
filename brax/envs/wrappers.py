@@ -1,4 +1,4 @@
-# Copyright 2021 The Brax Authors.
+# Copyright 2022 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ import jax
 
 
 class VectorWrapper(brax_env.Wrapper):
-  """Vectorizes Brax env."""
+  """DEPRECATED Vectorizes Brax env. Use VmapWrapper instead."""
 
   def __init__(self, env: brax_env.Env, batch_size: int):
     super().__init__(env)
@@ -34,6 +34,16 @@ class VectorWrapper(brax_env.Wrapper):
 
   def reset(self, rng: jp.ndarray) -> brax_env.State:
     rng = jp.random_split(rng, self.batch_size)
+    return jp.vmap(self.env.reset)(rng)
+
+  def step(self, state: brax_env.State, action: jp.ndarray) -> brax_env.State:
+    return jp.vmap(self.env.step)(state, action)
+
+
+class VmapWrapper(brax_env.Wrapper):
+  """Vectorizes Brax env."""
+
+  def reset(self, rng: jp.ndarray) -> brax_env.State:
     return jp.vmap(self.env.reset)(rng)
 
   def step(self, state: brax_env.State, action: jp.ndarray) -> brax_env.State:
