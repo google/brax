@@ -30,9 +30,6 @@ class InvertedDoublePendulum(env.Env):
   5. Cart X Velocity
   6. dTheta 0
   7. dTheta 1
-  
-
-
   """
 
   def __init__(self, **kwargs):
@@ -87,14 +84,12 @@ class InvertedDoublePendulum(env.Env):
                joint_vel: jp.ndarray) -> jp.ndarray:
     """Observe cartpole body position and velocities."""
 
-
     position_obs = [
       jp.array([qp.pos[0, 0]]),  # cart x pos
       jp.sin(joint_angle),
       jp.cos(joint_angle)
     ]
-    
-    
+        
     qvel = [jp.array([qp.vel[0,0]]), # cart x vel
             joint_vel]
 

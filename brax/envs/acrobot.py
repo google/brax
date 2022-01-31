@@ -60,14 +60,15 @@ class Acrobot(env.Env):
   def step(self, state: env.State, action: jp.ndarray) -> env.State:
     """Run one timestep of the environment's dynamics."""
     qp, info = self.sys.step(state.qp, action)
+    (joint_angle,), (joint_vel,) = self.sys.joints[0].angle_vel(qp)
     obs = self._get_obs(qp, info, joint_angle, joint_vel)
 
     alive_bonus = 10.0
-    dist_penalty = obs[0]**2 + obs[1]**2
-    vel_penalty = 1e-3*(obs[2]**2 + obs[3]**2)
+    dist_penalty = joint_angele[0]**2 + joint_angle[1]**2
+    vel_penalty = 1e-3*(joint_bel[0]**2 + joint_vel[1]**2)
     r =  alive_bonus - dist_penalty - vel_penalty
-
     done = jp.float32(0);
+    
     state.metrics.update(
         dist_penalty=dist_penalty,
         vel_penalty=vel_penalty,
@@ -82,8 +83,6 @@ class Acrobot(env.Env):
   def _get_obs(self, qp: brax.QP, info: brax.Info, joint_angle: jp.ndarray,
                joint_vel: jp.ndarray) -> jp.ndarray:
     """Observe acrobot body position and velocities."""
-
-    (joint_angle,), (joint_vel,) = self.sys.joints[0].angle_vel(qp)
  
     return jp.concatenate((joint_angle, joint_vel))
 
