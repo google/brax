@@ -64,8 +64,8 @@ class Acrobot(env.Env):
     obs = self._get_obs(qp, info, joint_angle, joint_vel)
 
     alive_bonus = 10.0
-    dist_penalty = joint_angele[0]**2 + joint_angle[1]**2
-    vel_penalty = 1e-3*(joint_bel[0]**2 + joint_vel[1]**2)
+    dist_penalty = joint_angle[0]**2 + joint_angle[1]**2
+    vel_penalty = 1e-3*(joint_vel[0]**2 + joint_vel[1]**2)
     r =  alive_bonus - dist_penalty - vel_penalty
     done = jp.float32(0);
     
