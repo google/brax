@@ -125,7 +125,7 @@ joints {
   }
   limit_strength: 0.0
   spring_damping: 500.0
-  angle_limit { min: 0.0 max: 0.0 }
+  angle_limit { min: -360.0 max: 360.0 }
 }
 bodies {
   name: "pole2"
@@ -150,7 +150,7 @@ joints {
   }
   limit_strength: 0.0
   spring_damping: 500.0
-  angle_limit { min: 0.0 max: 0.0 }
+  angle_limit { min: -360.0 max: 360.0 }
 }
 
 actuators{
