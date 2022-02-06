@@ -17,6 +17,7 @@
 See: https://arxiv.org/pdf/1812.05905.pdf
 """
 
+import os
 import time
 from typing import Any, Callable, Dict, Mapping, Optional, Tuple
 
@@ -148,7 +149,7 @@ def train(
     # The rewarder is an init function and a compute_reward function.
     # It is used to change the reward before the learner trains on it.
     make_rewarder: Optional[Callable[[], Rewarder]] = None,
-    checkpoint_logdir: Optional[str] = None):
+    checkpoint_dir: Optional[str] = None):
   """SAC training."""
   assert min_replay_size % num_envs == 0
   assert max_replay_size % min_replay_size == 0
@@ -550,14 +551,14 @@ def train(
       if progress_fn:
         progress_fn(current_step, metrics)
 
-      if checkpoint_logdir:
+      if checkpoint_dir:
         # Save current policy.
         normalizer_params = jax.tree_map(lambda x: x[0],
                                          training_state.normalizer_params)
         policy_params = jax.tree_map(lambda x: x[0],
                                      training_state.policy_params)
         params = normalizer_params, policy_params
-        path = f'{checkpoint_logdir}_sac_{current_step}.pkl'
+        path = os.path.join(checkpoint_dir, f'sac_{current_step}.pkl')
         model.save_params(path, params)
 
     if current_step >= num_timesteps:

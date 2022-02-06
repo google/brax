@@ -18,11 +18,13 @@ See: https://arxiv.org/pdf/1707.06347.pdf
 """
 
 import functools
+import os
 import time
 from typing import Any, Callable, Dict, Optional, Tuple
 
 from absl import logging
 from brax import envs
+from brax.io import model
 from brax.training import distribution
 from brax.training import networks
 from brax.training import normalization
@@ -204,6 +206,7 @@ def train(
     normalize_observations=False,
     reward_scaling=1.,
     progress_fn: Optional[Callable[[int, Dict[str, Any]], None]] = None,
+    checkpoint_dir: Optional[str] = None,
 ):
   """PPO training."""
   assert batch_size * num_minibatches % num_envs == 0
@@ -460,9 +463,18 @@ def train(
               'speed/timestamp': training_walltime,
           }))
       logging.info(metrics)
+      current_step = int(training_state.normalizer_params[0][0]) * action_repeat
       if progress_fn:
-        progress_fn(int(training_state.normalizer_params[0][0]) * action_repeat,
-                    metrics)
+        progress_fn(current_step, metrics)
+
+      if checkpoint_dir:
+        normalizer_params = jax.tree_map(lambda x: x[0],
+                                         training_state.normalizer_params)
+        policy_params = jax.tree_map(lambda x: x[0],
+                                     training_state.params['policy'])
+        params = normalizer_params, policy_params
+        path = os.path.join(checkpoint_dir, f'ppo_{current_step}.pkl')
+        model.save_params(path, params)
 
     if it == log_frequency:
       break
