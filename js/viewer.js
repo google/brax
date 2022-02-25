@@ -57,7 +57,13 @@ class Viewer {
     this.domElement.appendChild(this.renderer.domElement);
 
     this.camera = new THREE.PerspectiveCamera(40, 1, 0.01, 100);
-    this.camera.position.set(5, 2, 8);
+    if (system.config.frozen.position.z) {
+      this.camera.position.set(0, 1, 0);
+    } else if (system.config.frozen.position.y) {
+      this.camera.position.set(0, 1, 2);
+    } else {
+      this.camera.position.set(5, 2, 8);
+    }
     this.camera.follow = true;
     this.camera.freezeAngle = false;
     this.camera.followDistance = 10;

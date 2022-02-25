@@ -271,7 +271,7 @@ class VectorGymWrapper(gym.vector.VectorEnv):
 
     def step(state, action):
       state = self._env.step(state, action)
-      return state, state.obs, state.reward, state.done, state.info
+      return state, state.obs, state.reward, state.done, state.metrics
 
     self._step = jax.jit(step, backend=self.backend)
 
