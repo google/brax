@@ -160,6 +160,7 @@ class SphereTest(absltest.TestCase):
     }
     bodies { name: "Ground" frozen: { all: true } colliders { plane {}}}
     defaults {qps { name: "Sphere1" pos {z: 1}}}
+    defaults {qps { name: "Sphere1" pos {z: 1} vel {x: 2}}}
   """
 
   def test_sphere_hits_ground(self):
@@ -168,6 +169,13 @@ class SphereTest(absltest.TestCase):
     qp = sys.default_qp(0)
     qp, _ = sys.step(qp, jp.array([]))
     self.assertAlmostEqual(qp.pos[0, 2], 0.25, 2)
+
+  def test_sphere_roll(self):
+    """A sphere rolls across the ground."""
+    sys = brax.System(text_format.Parse(SphereTest._CONFIG, brax.Config()))
+    qp = sys.default_qp(1)
+    qp, _ = sys.step(qp, jp.array([]))
+    self.assertGreater(qp.ang[0, 1], 0.25)  # sphere is rolling
 
 
 class CapsuleTest(absltest.TestCase):

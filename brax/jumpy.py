@@ -19,6 +19,7 @@ from typing import Any, Callable, List, Optional, Sequence, Tuple, TypeVar, Unio
 
 import jax
 from jax import core
+from jax import custom_jvp
 from jax import numpy as jnp
 import numpy as onp
 
@@ -71,6 +72,7 @@ def vmap(fun: F, include: Optional[Sequence[bool]] = None) -> F:
       args_unflat = jax.tree_unflatten(args_treedef, args_flat)
       rets.append(fun(*args_unflat))
     return jax.tree_map(lambda *x: onp.stack(x), *rets)
+
   return _batched
 
 
@@ -141,7 +143,7 @@ def safe_norm(x: ndarray,
   np = _which_np(x)
   if np is jnp:
     is_zero = jnp.allclose(x, 0.)
-     # temporarily swap x with ones if is_zero, then swap back
+    # temporarily swap x with ones if is_zero, then swap back
     x = jnp.where(is_zero, jnp.ones_like(x), x)
     n = jnp.linalg.norm(x, axis=axis)
     n = jnp.where(is_zero, 0., n)
@@ -163,6 +165,11 @@ def all(a: ndarray, axis: Optional[int] = None) -> ndarray:
 def mean(a: ndarray, axis: Optional[int] = None) -> ndarray:
   """Compute the arithmetic mean along the specified axis."""
   return _which_np(a).mean(a, axis=axis)
+
+
+def var(a: ndarray, axis: Optional[int] = None) -> ndarray:
+  """Compute the variance along the specified axis."""
+  return _which_np(a).var(a, axis=axis)
 
 
 def arange(start: int, stop: int) -> ndarray:
@@ -233,6 +240,21 @@ def arctan2(x1: ndarray, x2: ndarray) -> ndarray:
 def arccos(x: ndarray) -> ndarray:
   """Trigonometric inverse cosine, element-wise."""
   return _which_np(x).arccos(x)
+
+
+@custom_jvp
+def safe_arccos(x: ndarray) -> ndarray:
+  """Trigonometric inverse cosine, element-wise with safety clipping in grad."""
+  return _which_np(x).arccos(x)
+
+
+@safe_arccos.defjvp
+def _safe_arccos_jvp(primal, tangent):
+  x, = primal
+  x_dot, = tangent
+  primal_out = safe_arccos(x)
+  tangent_out = -x_dot / sqrt(1. - clip(x, -1 + 1e-7, 1 - 1e-7)**2.)
+  return primal_out, tangent_out
 
 
 def logical_not(x: ndarray) -> ndarray:

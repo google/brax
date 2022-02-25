@@ -160,7 +160,7 @@ def train(
     return nstate, policy_params, cumulative_reward, new_active_episode, normalizer_params, new_normalizer_params
 
   def run_ars_eval(state, params, normalizer_params):
-    synchro = pmap.is_synchronized(normalizer_params, axis_name='i')
+    synchro = pmap.is_replicated(normalizer_params, axis_name='i')
     cumulative_reward = jnp.zeros(state.obs.shape[0])
     active_episode = jnp.ones(state.obs.shape[0])
     _, _, cumulative_reward, _, _, normalizer_params = jax.lax.while_loop(

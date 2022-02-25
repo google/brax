@@ -24,6 +24,7 @@ finally:
   pass
 
 
+
 class Writer:
   """General purpose metrics writer."""
 
@@ -50,4 +51,3 @@ class Writer:
     logging.info('[%d] %s', step, ', '.join(values))
     for k, v in scalars.items():
       self._writer.add_scalars(k, {k: v}, step)
-

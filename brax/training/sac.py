@@ -479,7 +479,7 @@ def train(
     return (training_state, state, replay_buffer), metrics
 
   def run_sac_training(training_state, state, replay_buffer):
-    synchro = pmap.is_synchronized(
+    synchro = pmap.is_replicated(
         training_state.replace(key=jax.random.PRNGKey(0)), axis_name='i')
     (training_state, state, replay_buffer), metrics = jax.lax.scan(
         run_one_sac_epoch, (training_state, state, replay_buffer), (),

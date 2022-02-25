@@ -402,7 +402,7 @@ def train(
       batch_size * unroll_length * num_minibatches * action_repeat)
 
   def _minimize_loop(training_state, state):
-    synchro = pmap.is_synchronized(
+    synchro = pmap.is_replicated(
         (training_state.optimizer_state, training_state.params,
          training_state.normalizer_params),
         axis_name='i')

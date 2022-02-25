@@ -20,17 +20,7 @@ from brax.envs import env
 
 
 class InvertedDoublePendulum(env.Env):
-  """Trains an inverted pendulum to remain stationary.
-  Observations:
-  0. Cart X position
-  1. Sin(Theta 0)
-  2. Sin(Theta 1)
-  3. Cos(Theta 0)
-  4. Cos(Theta 1)
-  5. Cart X Velocity
-  6. dTheta 0
-  7. dTheta 1
-  """
+  """Trains an inverted pendulum to remain stationary."""
 
   def __init__(self, **kwargs):
     super().__init__(_SYSTEM_CONFIG, **kwargs)
@@ -85,12 +75,13 @@ class InvertedDoublePendulum(env.Env):
     """Observe cartpole body position and velocities."""
 
     position_obs = [
-      jp.array([qp.pos[0, 0]]),  # cart x pos
-      jp.sin(joint_angle),
-      jp.cos(joint_angle)
+        jp.array([qp.pos[0, 0]]),  # cart x pos
+        jp.sin(joint_angle),
+        jp.cos(joint_angle)
     ]
-        
-    qvel = [jp.array([qp.vel[0,0]]), # cart x vel
+
+    # qvel:
+    qvel = [jp.array([qp.vel[0, 0]]),  # cart x vel
             joint_vel]
 
     return jp.concatenate(position_obs + qvel)

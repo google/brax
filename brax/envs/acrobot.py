@@ -1,4 +1,4 @@
-# Copyright 2021 The Brax Authors.
+# Copyright 2022 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,21 +17,18 @@
 import brax
 from brax import jumpy as jp
 from brax.envs import env
-import jax
 
 
 class Acrobot(env.Env):
-  """Trains an acrobot to swingup and balance
+  """Trains an acrobot to swingup and balance.
+
   Observations:
-  0. Theta 0
-  1. Theta 1
-  2. dTheta 0
-  3. dTheta 1
-
+    0. Theta 0
+    1. Theta 1
+    2. dTheta 0
+    3. dTheta 1
   Actions:
-  0. Torque at the elbow joint
-  
-
+    0. Torque at the elbow joint
   """
 
   def __init__(self, **kwargs):
@@ -65,14 +62,12 @@ class Acrobot(env.Env):
 
     alive_bonus = 10.0
     dist_penalty = joint_angle[0]**2 + joint_angle[1]**2
-    vel_penalty = 1e-3*(joint_vel[0]**2 + joint_vel[1]**2)
-    r =  alive_bonus - dist_penalty - vel_penalty
-    done = jp.float32(0);
-    
+    vel_penalty = 1e-3 * (joint_vel[0]**2 + joint_vel[1]**2)
+    r = alive_bonus - dist_penalty - vel_penalty
+    done = jp.zeros(())
+
     state.metrics.update(
-        dist_penalty=dist_penalty,
-        vel_penalty=vel_penalty,
-        r_tot=r)
+        dist_penalty=dist_penalty, vel_penalty=vel_penalty, r_tot=r)
 
     return state.replace(qp=qp, obs=obs, reward=r, done=done)
 
@@ -83,7 +78,6 @@ class Acrobot(env.Env):
   def _get_obs(self, qp: brax.QP, info: brax.Info, joint_angle: jp.ndarray,
                joint_vel: jp.ndarray) -> jp.ndarray:
     """Observe acrobot body position and velocities."""
- 
     return jp.concatenate((joint_angle, joint_vel))
 
 
@@ -108,7 +102,7 @@ bodies {
   colliders {
     capsule {
       radius: 0.049
-      length: 1.0 
+      length: 1.0
     }
   }
   frozen { position { x: 0 y: 1 z: 0 } rotation { x: 1 y: 0 z: 1 } }
@@ -132,7 +126,7 @@ bodies {
   colliders {
     capsule {
       radius: 0.049
-      length:  1.00 
+      length:  1.00
     }
   }
   frozen { position { x: 0 y: 1 z: 0 } rotation { x: 1 y: 0 z: 1 } }
@@ -152,7 +146,6 @@ joints {
   spring_damping: 500.0
   angle_limit { min: -360.0 max: 360.0 }
 }
-
 actuators{
   name: "hinge2"
   joint: "hinge2"
@@ -160,15 +153,12 @@ actuators{
   torque{
   }
 }
-
 defaults {
-    angles { 
-        name: "hinge" 
-        angle{ x: 180.0 y: 0.0 z: 0.0} 
+    angles {
+        name: "hinge"
+        angle{ x: 180.0 y: 0.0 z: 0.0}
     }
 }
-
-
 collide_include {}
 gravity {
   z: -9.81

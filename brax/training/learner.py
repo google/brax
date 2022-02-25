@@ -60,6 +60,9 @@ flags.DEFINE_bool('normalize_observations', True,
 flags.DEFINE_integer('max_devices_per_host', None,
                      'Maximum number of devices to use per host. If None, '
                      'defaults to use as much as it can.')
+flags.DEFINE_integer('num_videos', 1,
+                     'Number of videos to record after training.')
+
 # Evolution Strategy related flags
 flags.DEFINE_integer('population_size', 1,
                      'Number of environments in ES. The actual number is 2x '
@@ -189,27 +192,32 @@ def main(unused_argv):
           head_type=FLAGS.head_type,
           episode_length=FLAGS.episode_length,
           progress_fn=writer.write_scalars)
-  env = env_fn()
-  state = env.reset(jax.random.PRNGKey(FLAGS.seed))
 
   # Save to flax serialized checkpoint.
   filename = f'{FLAGS.env}_{FLAGS.learner}.pkl'
   path = os.path.join(FLAGS.logdir, filename)
   model.save_params(path, params)
 
-  # output an episode trajectory
-  qps = []
-  jit_inference_fn = jax.jit(inference_fn)
-  jit_step_fn = jax.jit(env.step)
-  rng = jax.random.PRNGKey(FLAGS.seed)
-  while not state.done:
-    qps.append(state.qp)
-    tmp_key, rng = jax.random.split(rng)
-    act = jit_inference_fn(params, state.obs, tmp_key)
-    state = jit_step_fn(state, act)
+  # Output an episode trajectory.
+  env = env_fn()
 
-  html_path = f'{FLAGS.logdir}/trajectory_{uuid.uuid4()}.html'
-  html.save_html(html_path, env.sys, qps)
+  @jax.jit
+  def jit_next_state(state, key):
+    new_key, tmp_key = jax.random.split(key)
+    act = inference_fn(params, state.obs, tmp_key)
+    return env.step(state, act), new_key
+
+  for i in range(FLAGS.num_videos):
+    rng = jax.random.PRNGKey(FLAGS.seed + i)
+    rng, env_key = jax.random.split(rng)
+    state = env.reset(env_key)
+    qps = []
+    while not state.done:
+      qps.append(state.qp)
+      state, rng = jit_next_state(state, rng)
+
+    html_path = f'{FLAGS.logdir}/trajectory_{uuid.uuid4()}.html'
+    html.save_html(html_path, env.sys, qps)
 
 
 

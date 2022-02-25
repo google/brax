@@ -494,7 +494,7 @@ class MujocoConverter(object):
           config_pb2.Actuator(
               name=joint_name,
               joint=joint_name,
-              strength=motor.gear,
+              strength=motor.gear.item(),
               angle=config_pb2.Actuator.Angle()))
 
   def _add_collision_pairs(self):

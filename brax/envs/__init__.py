@@ -19,6 +19,7 @@ import functools
 from typing import Callable, Optional, Union, overload
 
 import brax
+from brax.envs import acrobot
 from brax.envs import ant
 from brax.envs import fast
 from brax.envs import fetch
@@ -38,10 +39,9 @@ from brax.envs import wrappers
 from brax.envs.env import Env, State, Wrapper
 import gym
 
-from brax.envs import acrobot
-
 
 _envs = {
+    'acrobot': acrobot.Acrobot,
     'ant': ant.Ant,
     'fast': fast.Fast,
     'fetch': fetch.Fetch,
@@ -56,7 +56,6 @@ _envs = {
     'reacherangle': reacherangle.ReacherAngle,
     'swimmer': swimmer.Swimmer,
     'ur5e': ur5e.Ur5e,
-    'acrobot': acrobot.Acrobot,
     'walker2d': walker2d.Walker2d,
 }
 

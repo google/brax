@@ -170,7 +170,7 @@ def train(
     return updates
 
   def _minimize(training_state: TrainingState, state: envs.State):
-    synchro = pmap.is_synchronized(
+    synchro = pmap.is_replicated(
         (training_state.optimizer_state, training_state.policy_params,
          training_state.normalizer_params),
         axis_name='i')

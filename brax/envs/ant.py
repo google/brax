@@ -79,7 +79,7 @@ class Ant(env.Env):
     qpos = [qp.pos[0, 2:], qp.rot[0], joint_angle]
 
     # qvel:
-    # velcotiy of the torso (3,)
+    # velocity of the torso (3,)
     # angular velocity of the torso (3,)
     # joint angle velocities (8,)
     qvel = [qp.vel[0], qp.ang[0], joint_vel]

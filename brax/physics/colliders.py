@@ -701,11 +701,13 @@ def get(config: config_pb2.Config, body: bodies.Body) -> List[Collider]:
     for collider in b.colliders:
       # we treat spheres as sphere-shaped capsules with a single end
       if collider.WhichOneof('type') == 'sphere':
-        radius = collider.sphere.radius
-        collider = config_pb2.Collider()
-        collider.capsule.radius = radius
-        collider.capsule.length = 2 * radius
-        collider.capsule.end = 1
+        new_collider = config_pb2.Collider()
+        new_collider.CopyFrom(collider)
+        new_collider.ClearField('sphere')
+        new_collider.capsule.radius = collider.sphere.radius
+        new_collider.capsule.length = 2 * collider.sphere.radius
+        new_collider.capsule.end = 1
+        collider = new_collider
 
       new_body = config_pb2.Body()
       new_body.CopyFrom(b)

@@ -199,16 +199,18 @@ class GymWrapper(gym.Env):
 
     def step(state, action):
       state = self._env.step(state, action)
-      return state, state.obs, state.reward, state.done, state.info
+      return state, state.obs, state.reward, state.done, state.metrics
 
     self._step = jax.jit(step, backend=self.backend)
 
   def reset(self):
     self._state, obs, self._key = self._reset(self._key)
+    # We return device arrays for pytorch users.
     return obs
 
   def step(self, action):
     self._state, obs, reward, done, info = self._step(self._state, action)
+    # We return device arrays for pytorch users.
     return obs, reward, done, info
 
   def seed(self, seed: int = 0):

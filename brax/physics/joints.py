@@ -268,7 +268,7 @@ class Universal(Joint):
         axis_1_p, axis_2_c) * axis_2_c
     axis_1_p_in_xz_c = axis_1_p_in_xz_c / (1e-10 +
                                            jp.safe_norm(axis_1_p_in_xz_c))
-    theta = jp.arccos(jp.clip(jp.dot(axis_1_p_in_xz_c, axis_1_p), -1,
+    theta = jp.safe_arccos(jp.clip(jp.dot(axis_1_p_in_xz_c, axis_1_p), -1,
                               1)) * jp.sign(jp.dot(axis_1_p, axis_3_c))
     axis = (axis_1_p, axis_2_c)
     angle = (psi, theta)
@@ -333,7 +333,7 @@ class Spherical(Joint):
     axis_1_p_in_xz_c = axis_1_p_in_xz_c / (1e-10 +
                                            jp.safe_norm(axis_1_p_in_xz_c))
     ang_between_1_p_xz_c = jp.dot(axis_1_p_in_xz_c, axis_1_p)
-    theta = jp.arccos(jp.clip(ang_between_1_p_xz_c, -1, 1)) * jp.sign(
+    theta = jp.safe_arccos(jp.clip(ang_between_1_p_xz_c, -1, 1)) * jp.sign(
         jp.dot(axis_1_p, axis_3_c))
     yc_n_normal = -axis_3_c
     phi = math.signed_angle(yc_n_normal, axis_2_c, line_of_nodes)
