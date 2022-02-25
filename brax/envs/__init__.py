@@ -38,6 +38,8 @@ from brax.envs import wrappers
 from brax.envs.env import Env, State, Wrapper
 import gym
 
+from brax.envs import acrobot
+
 
 _envs = {
     'ant': ant.Ant,
@@ -54,6 +56,7 @@ _envs = {
     'reacherangle': reacherangle.ReacherAngle,
     'swimmer': swimmer.Swimmer,
     'ur5e': ur5e.Ur5e,
+    'acrobot': acrobot.Acrobot,
     'walker2d': walker2d.Walker2d,
 }
 
