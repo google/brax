@@ -15,7 +15,7 @@
 """Core brax structs and some conversion and slicing functions."""
 
 import os
-from typing import Optional, Sequence, Tuple
+from typing import Optional, Sequence, Tuple, Union
 
 from brax import jumpy as jp
 from brax import math
@@ -143,7 +143,7 @@ class Info(object):
     actuator: Actuator forces applied at a step
   """
   contact: P
-  joint: P
+  joint: Union[P, Q]
   actuator: P
 
 

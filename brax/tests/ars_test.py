@@ -29,13 +29,10 @@ class ARSTest(parameterized.TestCase):
   @parameterized.parameters(True, False)
   def testModelEncoding(self, normalize_observations):
     env_fn = envs.create_fn('fast')
-    _, params, _ = ars.train(
-        env_fn,
-        num_timesteps=128,
-        episode_length=128)
+    _, params, _ = ars.train(env_fn, num_timesteps=128, episode_length=128)
     env = env_fn()
-    inference = ars.make_inference_fn(
-        env.observation_size, env.action_size, normalize_observations)
+    inference = ars.make_inference_fn(env.observation_size, env.action_size,
+                                      normalize_observations)
     byte_encoding = pickle.dumps(params)
     decoded_params = pickle.loads(byte_encoding)
 

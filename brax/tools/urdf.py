@@ -123,6 +123,14 @@ def _construct_box(geom, pos, rot):
       position=_vec(pos))
 
 
+def _construct_mesh(geom, pos, rot):
+  """Converts a mesh stl file to a collider."""
+  return config_pb2.Collider(
+      mesh=config_pb2.Collider.Mesh(name=geom.get('filename'), scale=1.0),
+      rotation=_vec(euler.quat2euler(rot, 'rxyz'), scale=180 / np.pi),
+      position=_vec(pos))
+
+
 _joint_type_to_limit = {'revolute': 1, 'universal': 2, 'spherical': 3}
 
 
@@ -195,6 +203,7 @@ class UrdfConverter(object):
       body = fuse_to_parent
     else:
       body = self.config.bodies.add()
+      body.name = node
 
     for c in colliders:
 
@@ -234,14 +243,19 @@ class UrdfConverter(object):
             _construct_box(
                 c_geom.find('box'), col_global_offset + cur_offset,
                 col_total_rot))
+      elif c_geom.find('mesh') is not None:
+        body.colliders.append(
+            _construct_mesh(
+                c_geom.find('mesh'), col_global_offset + cur_offset,
+                col_total_rot))
+        filename = c_geom.find('mesh').get('filename')
+        self.config.mesh_geometries.add(name=filename, path=filename)
+
       else:
         warnings.warn(f'No collider found on link {node}.')
     # TODO: load real mass and inertia
     body.mass += 1.
     body.inertia.x, body.inertia.y, body.inertia.z = 1., 1., 1.
-
-    if not fuse_to_parent:
-      body.name = node
 
     if self.body_tree[node]['joints']:
       for j in self.body_tree[node]['joints']:
@@ -255,7 +269,9 @@ class UrdfConverter(object):
         global_offset = quaternions.rotate_vector(offset, cur_quat)
         joint_type = self.joints[j['joint']].get('type')
 
-        axis = _xyz_to_vec(self.joints[j['joint']].find('axis').get('xyz'))
+        axis = self.joints[j['joint']].find('axis')
+        axis = _xyz_to_vec(axis.get('xyz')) if axis is not None else np.array(
+            [1., 0., 0.])
         axis_rotation = np.array(
             euler.quat2euler(_rot_quat(axis, np.array([1., 0., 0.])), 'rxyz'))
         axis_rotation = axis_rotation * 180 / np.pi

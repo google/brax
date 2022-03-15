@@ -31,8 +31,9 @@ class Acrobot(env.Env):
     0. Torque at the elbow joint
   """
 
-  def __init__(self, **kwargs):
-    super().__init__(_SYSTEM_CONFIG, **kwargs)
+  def __init__(self, legacy_spring=False, **kwargs):
+    config = _SYSTEM_CONFIG_SPRING if legacy_spring else _SYSTEM_CONFIG
+    super().__init__(config=config, **kwargs)
 
   def reset(self, rng: jp.ndarray) -> env.State:
     """Resets the environment to an initial state."""
@@ -82,87 +83,168 @@ class Acrobot(env.Env):
 
 
 _SYSTEM_CONFIG = """
-bodies {
-  name: "cart"
-  colliders {
+  bodies {
+    name: "cart"
+    colliders {
+      rotation {
+      x: 90
+      z: 90
+      }
+      capsule {
+        radius: 0.1
+        length: 0.4
+      }
+    }
+    frozen { position { x:1 y:1 z:1 } rotation { x:1 y:1 z:1 } }
+    mass: 10.471975
+  }
+  bodies {
+    name: "pole"
+    colliders {
+      capsule {
+        radius: 0.049
+        length: 1.0
+      }
+    }
+    frozen { position { x: 0 y: 1 z: 0 } rotation { x: 1 y: 0 z: 1 } }
+    mass: 2.5
+  }
+  joints {
+    name: "hinge"
+    parent: "cart"
+    child: "pole"
+    child_offset { z: -.45 }
     rotation {
-    x: 90
-    z: 90
+      z: 90.0
     }
-    capsule {
-      radius: 0.1
-      length: 0.4
+    angle_limit { min: -360.0 max: 360.0 }
+  }
+  bodies {
+    name: "pole2"
+    colliders {
+      capsule {
+        radius: 0.049
+        length:  1.00
+      }
     }
+    frozen { position { x: 0 y: 1 z: 0 } rotation { x: 1 y: 0 z: 1 } }
+    mass: 2.5
   }
-  frozen { position { x:1 y:1 z:1 } rotation { x:1 y:1 z:1 } }
-  mass: 10.471975
-}
-bodies {
-  name: "pole"
-  colliders {
-    capsule {
-      radius: 0.049
-      length: 1.0
+  joints {
+    name: "hinge2"
+    parent: "pole"
+    child: "pole2"
+    parent_offset { z: .45 }
+    child_offset { z: -.45 }
+    rotation {
+      z: 90.0
     }
+    angle_limit { min: -360.0 max: 360.0 }
   }
-  frozen { position { x: 0 y: 1 z: 0 } rotation { x: 1 y: 0 z: 1 } }
-  mass: 2.5
-}
-joints {
-  name: "hinge"
-  stiffness: 30000.0
-  parent: "cart"
-  child: "pole"
-  child_offset { z: -.45 }
-  rotation {
-    z: 90.0
-  }
-  limit_strength: 0.0
-  spring_damping: 500.0
-  angle_limit { min: -360.0 max: 360.0 }
-}
-bodies {
-  name: "pole2"
-  colliders {
-    capsule {
-      radius: 0.049
-      length:  1.00
+  actuators{
+    name: "hinge2"
+    joint: "hinge2"
+    strength: 25.0
+    torque{
     }
   }
-  frozen { position { x: 0 y: 1 z: 0 } rotation { x: 1 y: 0 z: 1 } }
-  mass: 2.5
-}
-joints {
-  name: "hinge2"
-  stiffness: 30000.0
-  parent: "pole"
-  child: "pole2"
-  parent_offset { z: .45 }
-  child_offset { z: -.45 }
-  rotation {
-    z: 90.0
+  defaults {
+      angles {
+          name: "hinge"
+          angle{ x: 180.0 y: 0.0 z: 0.0}
+      }
   }
-  limit_strength: 0.0
-  spring_damping: 500.0
-  angle_limit { min: -360.0 max: 360.0 }
-}
-actuators{
-  name: "hinge2"
-  joint: "hinge2"
-  strength: 25.0
-  torque{
+  collide_include {}
+  gravity {
+    z: -9.81
   }
-}
-defaults {
-    angles {
-        name: "hinge"
-        angle{ x: 180.0 y: 0.0 z: 0.0}
+  dt: 0.01
+  substeps: 4
+  """
+
+_SYSTEM_CONFIG_SPRING = """
+  bodies {
+    name: "cart"
+    colliders {
+      rotation {
+      x: 90
+      z: 90
+      }
+      capsule {
+        radius: 0.1
+        length: 0.4
+      }
     }
-}
-collide_include {}
-gravity {
-  z: -9.81
-}
-dt: 0.01
-substeps: 4
-"""
+    frozen { position { x:1 y:1 z:1 } rotation { x:1 y:1 z:1 } }
+    mass: 10.471975
+  }
+  bodies {
+    name: "pole"
+    colliders {
+      capsule {
+        radius: 0.049
+        length: 1.0
+      }
+    }
+    frozen { position { x: 0 y: 1 z: 0 } rotation { x: 1 y: 0 z: 1 } }
+    mass: 2.5
+  }
+  joints {
+    name: "hinge"
+    stiffness: 30000.0
+    parent: "cart"
+    child: "pole"
+    child_offset { z: -.45 }
+    rotation {
+      z: 90.0
+    }
+    limit_strength: 0.0
+    spring_damping: 500.0
+    angle_limit { min: -360.0 max: 360.0 }
+  }
+  bodies {
+    name: "pole2"
+    colliders {
+      capsule {
+        radius: 0.049
+        length:  1.00
+      }
+    }
+    frozen { position { x: 0 y: 1 z: 0 } rotation { x: 1 y: 0 z: 1 } }
+    mass: 2.5
+  }
+  joints {
+    name: "hinge2"
+    stiffness: 30000.0
+    parent: "pole"
+    child: "pole2"
+    parent_offset { z: .45 }
+    child_offset { z: -.45 }
+    rotation {
+      z: 90.0
+    }
+    limit_strength: 0.0
+    spring_damping: 500.0
+    angle_limit { min: -360.0 max: 360.0 }
+  }
+  actuators{
+    name: "hinge2"
+    joint: "hinge2"
+    strength: 25.0
+    torque{
+    }
+  }
+  defaults {
+      angles {
+          name: "hinge"
+          angle{ x: 180.0 y: 0.0 z: 0.0}
+      }
+  }
+  collide_include {}
+  gravity {
+    z: -9.81
+  }
+  dt: 0.01
+  substeps: 4
+  dynamics_mode: "legacy_euler"
+  """

@@ -33,7 +33,7 @@ TERM_FN = functools.partial(
 def get_specs():
   return dict(
       message_str=component_editor.filter_message_str(
-          humanoid._SYSTEM_CONFIG, 'floor'),
+          humanoid._SYSTEM_CONFIG_SPRING, 'floor'),
       collides=COLLIDES,
       root=ROOT,
       term_fn=TERM_FN,

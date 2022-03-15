@@ -44,7 +44,7 @@ def term_fn(done, sys, qp: brax.QP, info: brax.Info, component,
 
 def get_specs():
   return dict(
-      message_str=component_editor.filter_message_str(ant._SYSTEM_CONFIG,
+      message_str=component_editor.filter_message_str(ant._SYSTEM_CONFIG_SPRING,
                                                       'Ground'),
       collides=COLLIDES,
       root=ROOT,

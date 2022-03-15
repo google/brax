@@ -29,8 +29,9 @@ class Grasp(env.Env):
   When Object reaches Target, the agent is rewarded.
   """
 
-  def __init__(self, **kwargs):
-    super().__init__(_SYSTEM_CONFIG, **kwargs)
+  def __init__(self, legacy_spring=False, **kwargs):
+    config = _SYSTEM_CONFIG_SPRING if legacy_spring else _SYSTEM_CONFIG
+    super().__init__(config=config, **kwargs)
     self.object_idx = self.sys.body.index['Object']
     self.target_idx = self.sys.body.index['Target']
     self.hand_idx = self.sys.body.index['HandThumbProximal']
@@ -195,547 +196,1102 @@ class Grasp(env.Env):
 
 
 _SYSTEM_CONFIG = """
-bodies {
-  name: "Ground"
-  colliders {
-    plane {
+  bodies {
+    name: "Ground"
+    colliders {
+      plane {
+      }
     }
-  }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 1.0
-  frozen { all: true }
-}
-bodies {
-  name: "Object"
-  colliders {
-    capsule {
-      radius: 1.0
-      length: 2.02
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
     }
-    rotation { x: 90 }
+    mass: 1.0
+    frozen { all: true }
   }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 1.0
-}
-bodies {
-  name: "HandThumbProximal"
-  colliders {
-    capsule {
-      radius: 0.5
-      length: 2.0
+  bodies {
+    name: "Object"
+    colliders {
+      capsule {
+        radius: 1.0
+        length: 2.02
+      }
+      rotation { x: 90 }
     }
-    rotation { x: 90 }
-  }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 1.0
-}
-bodies {
-  name: "HandThumbDistal"
-  colliders {
-    capsule {
-      radius: 0.5
-      length: 2.0
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
     }
-    rotation { x: 90 }
+    mass: 1.0
   }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 1.0
-}
-bodies {
-  name: "HandThumbMiddle"
-  colliders {
-    capsule {
-      radius: 0.5
-      length: 2.0
+  bodies {
+    name: "HandThumbProximal"
+    colliders {
+      capsule {
+        radius: 0.5
+        length: 2.0
+      }
+      rotation { x: 90 }
     }
-    rotation { x: 90 }
-  }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 1.0
-}
-bodies {
-  name: "HandPalm"
-  colliders {
-    capsule {
-      radius: 1.5
-      length: 3.1
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
     }
-    rotation { x: 120 }
+    mass: 1.0
   }
-  inertia {
-    x: 5000.0350000858306885
-    y: 10000.7224998474121094
-    z: 10000.7224998474121094
-  }
-  mass: 1.0
-  frozen { all : true }
-}
-bodies {
-  name: "HandThumbProximalTwo"
-  colliders {
-    capsule {
-      radius: 0.5
-      length: 2.0
+  bodies {
+    name: "HandThumbDistal"
+    colliders {
+      capsule {
+        radius: 0.5
+        length: 2.0
+      }
+      rotation { x: 90 }
     }
-    rotation { x: 90 }
-  }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 1.0
-}
-bodies {
-  name: "HandThumbMiddleTwo"
-  colliders {
-    capsule {
-      radius: 0.5
-      length: 2.0
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
     }
-    rotation { x: 90 }
+    mass: 1.0
   }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 1.0
-}
-bodies {
-  name: "HandThumbDistalTwo"
-  colliders {
-    capsule {
-      radius: 0.5
-      length: 2.0
+  bodies {
+    name: "HandThumbMiddle"
+    colliders {
+      capsule {
+        radius: 0.5
+        length: 2.0
+      }
+      rotation { x: 90 }
     }
-    rotation { x: 90 }
-  }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 1.0
-}
-bodies {
-  name: "HandThumbProximalThree"
-  colliders {
-    capsule {
-      radius: 0.5
-      length: 2.0
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
     }
-    rotation { y: 90 }
+    mass: 1.0
   }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 1.0
-}
-bodies {
-  name: "HandThumbMiddleThree"
-  colliders {
-    capsule {
-      radius: 0.5
-      length: 2.0
+  bodies {
+    name: "HandPalm"
+    colliders {
+      capsule {
+        radius: 1.5
+        length: 3.1
+      }
+      rotation { x: 120 }
     }
-    rotation { y: 90 }
-  }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 1.0
-}
-bodies {
-  name: "HandThumbDistalThree"
-  colliders {
-    capsule {
-      radius: 0.5
-      length: 2.0
+    inertia {
+      x: 5000.0350000858306885
+      y: 10000.7224998474121094
+      z: 10000.7224998474121094
     }
-    rotation { y: 90 }
+    mass: 1.0
+    frozen { all : true }
   }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 1.0
-}
-bodies {
-  name: "HandThumbProximalFour"
-  colliders {
-    capsule {
-      radius: 0.5
-      length: 2.0
+  bodies {
+    name: "HandThumbProximalTwo"
+    colliders {
+      capsule {
+        radius: 0.5
+        length: 2.0
+      }
+      rotation { x: 90 }
     }
-    rotation { y: 90 }
-  }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 1.0
-}
-bodies {
-  name: "HandThumbMiddleFour"
-  colliders {
-    capsule {
-      radius: 0.5
-      length: 2.0
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
     }
-    rotation { y: 90 }
+    mass: 1.0
   }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 1.0
-}
-bodies {
-  name: "HandThumbDistalFour"
-  colliders {
-    capsule {
-      radius: 0.5
-      length: 2.0
+  bodies {
+    name: "HandThumbMiddleTwo"
+    colliders {
+      capsule {
+        radius: 0.5
+        length: 2.0
+      }
+      rotation { x: 90 }
     }
-    rotation { y: 90 }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 1.0
   }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
+  bodies {
+    name: "HandThumbDistalTwo"
+    colliders {
+      capsule {
+        radius: 0.5
+        length: 2.0
+      }
+      rotation { x: 90 }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 1.0
   }
-  mass: 1.0
-}
-bodies {
-  name: "Target"
-  colliders { sphere { radius: 1.1 }}
-  frozen { all: true }
-}
-joints {
-  name: "HandThumbMiddle_HandThumbDistal"
-  parent_offset {
-    y: 0.75
+  bodies {
+    name: "HandThumbProximalThree"
+    colliders {
+      capsule {
+        radius: 0.5
+        length: 2.0
+      }
+      rotation { y: 90 }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 1.0
   }
-  child_offset {
-    y: -0.75
+  bodies {
+    name: "HandThumbMiddleThree"
+    colliders {
+      capsule {
+        radius: 0.5
+        length: 2.0
+      }
+      rotation { y: 90 }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 1.0
   }
-  parent: "HandThumbMiddle"
-  child: "HandThumbDistal"
+  bodies {
+    name: "HandThumbDistalThree"
+    colliders {
+      capsule {
+        radius: 0.5
+        length: 2.0
+      }
+      rotation { y: 90 }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 1.0
+  }
+  bodies {
+    name: "HandThumbProximalFour"
+    colliders {
+      capsule {
+        radius: 0.5
+        length: 2.0
+      }
+      rotation { y: 90 }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 1.0
+  }
+  bodies {
+    name: "HandThumbMiddleFour"
+    colliders {
+      capsule {
+        radius: 0.5
+        length: 2.0
+      }
+      rotation { y: 90 }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 1.0
+  }
+  bodies {
+    name: "HandThumbDistalFour"
+    colliders {
+      capsule {
+        radius: 0.5
+        length: 2.0
+      }
+      rotation { y: 90 }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 1.0
+  }
+  bodies {
+    name: "Target"
+    colliders { sphere { radius: 1.1 }}
+    frozen { all: true }
+  }
+  joints {
+    name: "HandThumbMiddle_HandThumbDistal"
+    angular_damping: 50.0
+    parent_offset {
+      y: 0.75
+    }
+    child_offset {
+      y: -0.75
+    }
+    parent: "HandThumbMiddle"
+    child: "HandThumbDistal"
 
-  stiffness: 5000.0
-  angle_limit { min: -90.0 }
-  angular_damping: 50.0
-}
-joints {
-  name: "HandThumbProximal_HandThumbMiddle"
-  parent_offset {
-    y: 0.75
+    angle_limit { min: -90.0 }
+    angle_limit { min: -0.1 max: 0.1 }
+    angle_limit { min: -0.1 max: 0.1 }
   }
-  child_offset {
-    y: -0.75
-  }
-  parent: "HandThumbProximal"
-  child: "HandThumbMiddle"
+  joints {
+    name: "HandThumbProximal_HandThumbMiddle"
+    angular_damping: 50.0
+    parent_offset {
+      y: 0.75
+    }
+    child_offset {
+      y: -0.75
+    }
+    parent: "HandThumbProximal"
+    child: "HandThumbMiddle"
 
-  stiffness: 5000.0
-  angle_limit { min: -90.0 }
-  angular_damping: 50.0
-}
-joints {
-  name: "HandPalm_HandThumbProximal"
-  parent_offset {
-    y: 1.5
-    z: -.5
+    angle_limit { min: -90.0 }
+    angle_limit { min: -0.1 max: 0.1 }
+    angle_limit { min: -0.1 max: 0.1 }
   }
-  child_offset {
-    y: -0.75
-  }
-  parent: "HandPalm"
-  child: "HandThumbProximal"
+  joints {
+    name: "HandPalm_HandThumbProximal"
+    angular_damping: 50.0
+    parent_offset {
+      y: 1.5
+      z: -.5
+    }
+    child_offset {
+      y: -0.75
+    }
+    parent: "HandPalm"
+    child: "HandThumbProximal"
 
-  stiffness: 5000.0
-  angle_limit { min: -45 max: 45 }
-  angle_limit { min: -45 max: 45 }
-  angular_damping: 50.0
-}
-joints {
-  name: "HandThumbMiddleTwo_HandThumbDistalTwo"
-  parent_offset {
-    y: -0.75
+    angle_limit { min: -45 max: 45 }
+    angle_limit { min: -45 max: 45 }
+    angle_limit { min: -0.1 max: 0.1 }
   }
-  child_offset {
-    y: 0.75
-  }
-  parent: "HandThumbMiddleTwo"
-  child: "HandThumbDistalTwo"
+  joints {
+    name: "HandThumbMiddleTwo_HandThumbDistalTwo"
+    angular_damping: 50.0
+    parent_offset {
+      y: -0.75
+    }
+    child_offset {
+      y: 0.75
+    }
+    parent: "HandThumbMiddleTwo"
+    child: "HandThumbDistalTwo"
 
-  stiffness: 5000.0
-  angle_limit { min: 0 max: 90 }
-  angular_damping: 50.0
+    angle_limit { min: 0 max: 90 }
+    angle_limit { min: -0.1 max: 0.1 }
+    angle_limit { min: -0.1 max: 0.1 }
 
-}
-joints {
-  name: "HandThumbProximalTwo_HandThumbMiddleTwo"
-  parent_offset {
-    y: -0.75
   }
-  child_offset {
-    y: 0.75
-  }
-  parent: "HandThumbProximalTwo"
-  child: "HandThumbMiddleTwo"
+  joints {
+    name: "HandThumbProximalTwo_HandThumbMiddleTwo"
+    angular_damping: 50.0
+    parent_offset {
+      y: -0.75
+    }
+    child_offset {
+      y: 0.75
+    }
+    parent: "HandThumbProximalTwo"
+    child: "HandThumbMiddleTwo"
 
-  stiffness: 5000.0
-  angle_limit { min: 0 max: 90 }
-  angular_damping: 50.0
-}
-joints {
-  name: "HandPalm_HandThumbProximalTwo"
-  parent_offset {
-    y: -1.5
-    z: -.5
+    angle_limit { min: 0 max: 90 }
+    angle_limit { min: -0.1 max: 0.1 }
+    angle_limit { min: -0.1 max: 0.1 }
   }
-  child_offset {
-    y: 0.75
-  }
-  parent: "HandPalm"
-  child: "HandThumbProximalTwo"
+  joints {
+    name: "HandPalm_HandThumbProximalTwo"
+    angular_damping: 50.0
+    parent_offset {
+      y: -1.5
+      z: -.5
+    }
+    child_offset {
+      y: 0.75
+    }
+    parent: "HandPalm"
+    child: "HandThumbProximalTwo"
 
-  stiffness: 5000.0
-  angle_limit { min: -45 max: 45 }
-  angle_limit { min: -45 max: 45 }
-  angular_damping: 50.0
-}
-joints {
-  name: "HandThumbMiddleThree_HandThumbDistalThree"
-  parent_offset {
-    x: -0.75
+    angle_limit { min: -45 max: 45 }
+    angle_limit { min: -45 max: 45 }
+    angle_limit { min: -0.1 max: 0.1 }
   }
-  child_offset {
-    x: 0.75
-  }
-  parent: "HandThumbMiddleThree"
-  child: "HandThumbDistalThree"
+  joints {
+    name: "HandThumbMiddleThree_HandThumbDistalThree"
+    angular_damping: 50.0
+    parent_offset {
+      x: -0.75
+    }
+    child_offset {
+      x: 0.75
+    }
+    parent: "HandThumbMiddleThree"
+    child: "HandThumbDistalThree"
 
-  stiffness: 5000.0
-  rotation { z: -90 }
-  angle_limit { min: 0 max: 90 }
-  angular_damping: 50.0
-}
-joints {
-  name: "HandThumbProximalThree_HandThumbMiddleThree"
-  parent_offset {
-    x: -0.75
+    rotation { z: -90 }
+    angle_limit { min: 0 max: 90 }
+    angle_limit { min: -0.1 max: 0.1 }
+    angle_limit { min: -0.1 max: 0.1 }
   }
-  child_offset {
-    x: 0.75
-  }
-  parent: "HandThumbProximalThree"
-  child: "HandThumbMiddleThree"
+  joints {
+    name: "HandThumbProximalThree_HandThumbMiddleThree"
+    angular_damping: 50.0
+    parent_offset {
+      x: -0.75
+    }
+    child_offset {
+      x: 0.75
+    }
+    parent: "HandThumbProximalThree"
+    child: "HandThumbMiddleThree"
 
-  stiffness: 5000.0
-  rotation { z: -90 }
-  angle_limit { min: 0 max: 90 }
-  angular_damping: 50.0
-}
-joints {
-  name: "HandPalm_HandThumbProximalThree"
-  parent_offset {
-    x: -1.5
-    z: -.5
+    rotation { z: -90 }
+    angle_limit { min: 0 max: 90 }
+    angle_limit { min: -0.1 max: 0.1 }
+    angle_limit { min: -0.1 max: 0.1 }
   }
-  child_offset {
-    x: 0.75
-  }
-  parent: "HandPalm"
-  child: "HandThumbProximalThree"
+  joints {
+    name: "HandPalm_HandThumbProximalThree"
+    angular_damping: 50.0
+    parent_offset {
+      x: -1.5
+      z: -.5
+    }
+    child_offset {
+      x: 0.75
+    }
+    parent: "HandPalm"
+    child: "HandThumbProximalThree"
 
-  stiffness: 5000.0
-  rotation { z: -90 }
-  angle_limit { min: -45 max: 45 }
-  angle_limit { min: -45 max: 45 }
-  angular_damping: 50.0
-}
-joints {
-  name: "HandThumbMiddleFour_HandThumbDistalFour"
-  parent_offset {
-    x: 0.75
+    rotation { z: -90 }
+    angle_limit { min: -45 max: 45 }
+    angle_limit { min: -45 max: 45 }
+    angle_limit { min: -0.1 max: 0.1 }
   }
-  child_offset {
-    x: -0.75
-  }
-  parent: "HandThumbMiddleFour"
-  child: "HandThumbDistalFour"
+  joints {
+    name: "HandThumbMiddleFour_HandThumbDistalFour"
+    angular_damping: 50.0
+    parent_offset {
+      x: 0.75
+    }
+    child_offset {
+      x: -0.75
+    }
+    parent: "HandThumbMiddleFour"
+    child: "HandThumbDistalFour"
 
-  stiffness: 5000.0
-  rotation { z: 90 }
-  angle_limit { min: 0 max: 90 }
-  angular_damping: 50.0
-}
-joints {
-  name: "HandThumbProximalFour_HandThumbMiddleFour"
-  parent_offset {
-    x: 0.75
+    rotation { z: 90 }
+    angle_limit { min: 0 max: 90 }
+    angle_limit { min: -0.1 max: 0.1 }
+    angle_limit { min: -0.1 max: 0.1 }
   }
-  child_offset {
-    x: -0.75
-  }
-  parent: "HandThumbProximalFour"
-  child: "HandThumbMiddleFour"
+  joints {
+    name: "HandThumbProximalFour_HandThumbMiddleFour"
+    angular_damping: 50.0
+    parent_offset {
+      x: 0.75
+    }
+    child_offset {
+      x: -0.75
+    }
+    parent: "HandThumbProximalFour"
+    child: "HandThumbMiddleFour"
 
-  stiffness: 5000.0
-  rotation { z: 90 }
-  angle_limit { min: 0 max: 90 }
-  angular_damping: 50.0
-}
-joints {
-  name: "HandPalm_HandThumbProximalFour"
-  parent_offset {
-    x: 1.5
-    z: -.5
+    rotation { z: 90 }
+    angle_limit { min: 0 max: 90 }
+    angle_limit { min: -0.1 max: 0.1 }
+    angle_limit { min: -0.1 max: 0.1 }
   }
-  child_offset {
-    x: -0.75
-  }
-  parent: "HandPalm"
-  child: "HandThumbProximalFour"
+  joints {
+    name: "HandPalm_HandThumbProximalFour"
+    angular_damping: 50.0
+    parent_offset {
+      x: 1.5
+      z: -.5
+    }
+    child_offset {
+      x: -0.75
+    }
+    parent: "HandPalm"
+    child: "HandThumbProximalFour"
 
-  stiffness: 5000.0
-  rotation { x: 180 z: -90 }
-  angle_limit { min: -45 max: 45 }
-  angle_limit { min: -45 max: 45 }
-  angular_damping: 50.0
-}
-actuators {
-  name: "HandThumbMiddle_HandThumbDistal"
-  joint: "HandThumbMiddle_HandThumbDistal"
-  strength: 300.0
-  angle {}
-}
-actuators {
-  name: "HandThumbProximal_HandThumbMiddle"
-  joint: "HandThumbProximal_HandThumbMiddle"
-  strength: 300.0
-  angle {}
-}
-actuators {
-  name: "HandPalm_HandThumbProximal"
-  joint: "HandPalm_HandThumbProximal"
-  strength: 300.0
-  angle {}
-}
-actuators {
-  name: "HandThumbMiddleTwo_HandThumbDistalTwo"
-  joint: "HandThumbMiddleTwo_HandThumbDistalTwo"
-  strength: 300.0
-  angle {}
-}
-actuators {
-  name: "HandThumbProximalTwo_HandThumbMiddleTwo"
-  joint: "HandThumbProximalTwo_HandThumbMiddleTwo"
-  strength: 300.0
-  angle {}
-}
-actuators {
-  name: "HandPalm_HandThumbProximalTwo"
-  joint: "HandPalm_HandThumbProximalTwo"
-  strength: 300.0
-  angle {}
-}
-actuators {
-  name: "HandThumbMiddleThree_HandThumbDistalThree"
-  joint: "HandThumbMiddleThree_HandThumbDistalThree"
-  strength: 300.0
-  angle {}
-}
-actuators {
-  name: "HandThumbProximalThree_HandThumbMiddleThree"
-  joint: "HandThumbProximalThree_HandThumbMiddleThree"
-  strength: 300.0
-  angle {}
-}
-actuators {
-  name: "HandPalm_HandThumbProximalThree"
-  joint: "HandPalm_HandThumbProximalThree"
-  strength: 300.0
-  angle {}
-}
-actuators {
-  name: "HandThumbMiddleFour_HandThumbDistalFour"
-  joint: "HandThumbMiddleFour_HandThumbDistalFour"
-  strength: 300.0
-  angle {}
-}
-actuators {
-  name: "HandThumbProximalFour_HandThumbMiddleFour"
-  joint: "HandThumbProximalFour_HandThumbMiddleFour"
-  strength: 300.0
-  angle {}
-}
-actuators {
-  name: "HandPalm_HandThumbProximalFour"
-  joint: "HandPalm_HandThumbProximalFour"
-  strength: 300.0
-  angle {}
-}
-friction: 0.77459666924
-gravity {
-  z: -9.800000190734863
-}
-angular_damping: -0.05000000074505806
-baumgarte_erp: 0.15000000149011612
-collide_include {
-  first: "Ground"
-  second: "Object"
-}
-collide_include {
-  first: "HandThumbDistal"
-  second: "Object"
-}
-collide_include {
-  first: "HandThumbDistalTwo"
-  second: "Object"
-}
-collide_include {
-  first: "HandThumbDistalThree"
-  second: "Object"
-}
-collide_include {
-  first: "HandThumbDistalFour"
-  second: "Object"
-}
-collide_include {
-  first: "HandPalm"
-  second: "Object"
-}
-dt: 0.02
-substeps: 4
-"""
+    rotation { x: 180 z: -90 }
+    angle_limit { min: -45 max: 45 }
+    angle_limit { min: -45 max: 45 }
+    angle_limit { min: -0.1 max: 0.1 }
+  }
+  actuators {
+    name: "HandThumbMiddle_HandThumbDistal"
+    joint: "HandThumbMiddle_HandThumbDistal"
+    strength: 300.0
+    angle {}
+  }
+  actuators {
+    name: "HandThumbProximal_HandThumbMiddle"
+    joint: "HandThumbProximal_HandThumbMiddle"
+    strength: 300.0
+    angle {}
+  }
+  actuators {
+    name: "HandPalm_HandThumbProximal"
+    joint: "HandPalm_HandThumbProximal"
+     strength: 300.0
+    angle {}
+  }
+  actuators {
+    name: "HandThumbMiddleTwo_HandThumbDistalTwo"
+    joint: "HandThumbMiddleTwo_HandThumbDistalTwo"
+    strength: 300.0
+    angle {}
+  }
+  actuators {
+    name: "HandThumbProximalTwo_HandThumbMiddleTwo"
+    joint: "HandThumbProximalTwo_HandThumbMiddleTwo"
+    strength: 300.0
+    angle {}
+  }
+  actuators {
+    name: "HandPalm_HandThumbProximalTwo"
+    joint: "HandPalm_HandThumbProximalTwo"
+    strength: 300.0
+    angle {}
+  }
+  actuators {
+    name: "HandThumbMiddleThree_HandThumbDistalThree"
+    joint: "HandThumbMiddleThree_HandThumbDistalThree"
+    strength: 300.0
+    angle {}
+  }
+  actuators {
+    name: "HandThumbProximalThree_HandThumbMiddleThree"
+    joint: "HandThumbProximalThree_HandThumbMiddleThree"
+    strength: 300.0
+    angle {}
+  }
+  actuators {
+    name: "HandPalm_HandThumbProximalThree"
+    joint: "HandPalm_HandThumbProximalThree"
+    strength: 300.0
+    angle {}
+  }
+  actuators {
+    name: "HandThumbMiddleFour_HandThumbDistalFour"
+    joint: "HandThumbMiddleFour_HandThumbDistalFour"
+    strength: 300.0
+    angle {}
+  }
+  actuators {
+    name: "HandThumbProximalFour_HandThumbMiddleFour"
+    joint: "HandThumbProximalFour_HandThumbMiddleFour"
+    strength: 300.0
+    angle {}
+  }
+  actuators {
+    name: "HandPalm_HandThumbProximalFour"
+    joint: "HandPalm_HandThumbProximalFour"
+    strength: 300.0
+    angle {}
+  }
+  friction: 1.0
+  gravity {
+    z: -9.800000190734863
+  }
+  angular_damping: -0.05000000074505806
+  collide_include {
+    first: "Ground"
+    second: "Object"
+  }
+  collide_include {
+    first: "HandThumbDistal"
+    second: "Object"
+  }
+  collide_include {
+    first: "HandThumbDistalTwo"
+    second: "Object"
+  }
+  collide_include {
+    first: "HandThumbDistalThree"
+    second: "Object"
+  }
+  collide_include {
+    first: "HandThumbDistalFour"
+    second: "Object"
+  }
+  collide_include {
+    first: "HandPalm"
+    second: "Object"
+  }
+  dt: 0.02
+  substeps: 4
+  """
+
+_SYSTEM_CONFIG_SPRING = """
+  bodies {
+    name: "Ground"
+    colliders {
+      plane {
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 1.0
+    frozen { all: true }
+  }
+  bodies {
+    name: "Object"
+    colliders {
+      capsule {
+        radius: 1.0
+        length: 2.02
+      }
+      rotation { x: 90 }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 1.0
+  }
+  bodies {
+    name: "HandThumbProximal"
+    colliders {
+      capsule {
+        radius: 0.5
+        length: 2.0
+      }
+      rotation { x: 90 }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 1.0
+  }
+  bodies {
+    name: "HandThumbDistal"
+    colliders {
+      capsule {
+        radius: 0.5
+        length: 2.0
+      }
+      rotation { x: 90 }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 1.0
+  }
+  bodies {
+    name: "HandThumbMiddle"
+    colliders {
+      capsule {
+        radius: 0.5
+        length: 2.0
+      }
+      rotation { x: 90 }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 1.0
+  }
+  bodies {
+    name: "HandPalm"
+    colliders {
+      capsule {
+        radius: 1.5
+        length: 3.1
+      }
+      rotation { x: 120 }
+    }
+    inertia {
+      x: 5000.0350000858306885
+      y: 10000.7224998474121094
+      z: 10000.7224998474121094
+    }
+    mass: 1.0
+    frozen { all : true }
+  }
+  bodies {
+    name: "HandThumbProximalTwo"
+    colliders {
+      capsule {
+        radius: 0.5
+        length: 2.0
+      }
+      rotation { x: 90 }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 1.0
+  }
+  bodies {
+    name: "HandThumbMiddleTwo"
+    colliders {
+      capsule {
+        radius: 0.5
+        length: 2.0
+      }
+      rotation { x: 90 }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 1.0
+  }
+  bodies {
+    name: "HandThumbDistalTwo"
+    colliders {
+      capsule {
+        radius: 0.5
+        length: 2.0
+      }
+      rotation { x: 90 }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 1.0
+  }
+  bodies {
+    name: "HandThumbProximalThree"
+    colliders {
+      capsule {
+        radius: 0.5
+        length: 2.0
+      }
+      rotation { y: 90 }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 1.0
+  }
+  bodies {
+    name: "HandThumbMiddleThree"
+    colliders {
+      capsule {
+        radius: 0.5
+        length: 2.0
+      }
+      rotation { y: 90 }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 1.0
+  }
+  bodies {
+    name: "HandThumbDistalThree"
+    colliders {
+      capsule {
+        radius: 0.5
+        length: 2.0
+      }
+      rotation { y: 90 }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 1.0
+  }
+  bodies {
+    name: "HandThumbProximalFour"
+    colliders {
+      capsule {
+        radius: 0.5
+        length: 2.0
+      }
+      rotation { y: 90 }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 1.0
+  }
+  bodies {
+    name: "HandThumbMiddleFour"
+    colliders {
+      capsule {
+        radius: 0.5
+        length: 2.0
+      }
+      rotation { y: 90 }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 1.0
+  }
+  bodies {
+    name: "HandThumbDistalFour"
+    colliders {
+      capsule {
+        radius: 0.5
+        length: 2.0
+      }
+      rotation { y: 90 }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 1.0
+  }
+  bodies {
+    name: "Target"
+    colliders { sphere { radius: 1.1 }}
+    frozen { all: true }
+  }
+  joints {
+    name: "HandThumbMiddle_HandThumbDistal"
+    parent_offset {
+      y: 0.75
+    }
+    child_offset {
+      y: -0.75
+    }
+    parent: "HandThumbMiddle"
+    child: "HandThumbDistal"
+
+    stiffness: 5000.0
+    angle_limit { min: -90.0 }
+    angular_damping: 50.0
+  }
+  joints {
+    name: "HandThumbProximal_HandThumbMiddle"
+    parent_offset {
+      y: 0.75
+    }
+    child_offset {
+      y: -0.75
+    }
+    parent: "HandThumbProximal"
+    child: "HandThumbMiddle"
+
+    stiffness: 5000.0
+    angle_limit { min: -90.0 }
+    angular_damping: 50.0
+  }
+  joints {
+    name: "HandPalm_HandThumbProximal"
+    parent_offset {
+      y: 1.5
+      z: -.5
+    }
+    child_offset {
+      y: -0.75
+    }
+    parent: "HandPalm"
+    child: "HandThumbProximal"
+
+    stiffness: 5000.0
+    angle_limit { min: -45 max: 45 }
+    angle_limit { min: -45 max: 45 }
+    angular_damping: 50.0
+  }
+  joints {
+    name: "HandThumbMiddleTwo_HandThumbDistalTwo"
+    parent_offset {
+      y: -0.75
+    }
+    child_offset {
+      y: 0.75
+    }
+    parent: "HandThumbMiddleTwo"
+    child: "HandThumbDistalTwo"
+
+    stiffness: 5000.0
+    angle_limit { min: 0 max: 90 }
+    angular_damping: 50.0
+
+  }
+  joints {
+    name: "HandThumbProximalTwo_HandThumbMiddleTwo"
+    parent_offset {
+      y: -0.75
+    }
+    child_offset {
+      y: 0.75
+    }
+    parent: "HandThumbProximalTwo"
+    child: "HandThumbMiddleTwo"
+
+    stiffness: 5000.0
+    angle_limit { min: 0 max: 90 }
+    angular_damping: 50.0
+  }
+  joints {
+    name: "HandPalm_HandThumbProximalTwo"
+    parent_offset {
+      y: -1.5
+      z: -.5
+    }
+    child_offset {
+      y: 0.75
+    }
+    parent: "HandPalm"
+    child: "HandThumbProximalTwo"
+
+    stiffness: 5000.0
+    angle_limit { min: -45 max: 45 }
+    angle_limit { min: -45 max: 45 }
+    angular_damping: 50.0
+  }
+  joints {
+    name: "HandThumbMiddleThree_HandThumbDistalThree"
+    parent_offset {
+      x: -0.75
+    }
+    child_offset {
+      x: 0.75
+    }
+    parent: "HandThumbMiddleThree"
+    child: "HandThumbDistalThree"
+
+    stiffness: 5000.0
+    rotation { z: -90 }
+    angle_limit { min: 0 max: 90 }
+    angular_damping: 50.0
+  }
+  joints {
+    name: "HandThumbProximalThree_HandThumbMiddleThree"
+    parent_offset {
+      x: -0.75
+    }
+    child_offset {
+      x: 0.75
+    }
+    parent: "HandThumbProximalThree"
+    child: "HandThumbMiddleThree"
+
+    stiffness: 5000.0
+    rotation { z: -90 }
+    angle_limit { min: 0 max: 90 }
+    angular_damping: 50.0
+  }
+  joints {
+    name: "HandPalm_HandThumbProximalThree"
+    parent_offset {
+      x: -1.5
+      z: -.5
+    }
+    child_offset {
+      x: 0.75
+    }
+    parent: "HandPalm"
+    child: "HandThumbProximalThree"
+
+    stiffness: 5000.0
+    rotation { z: -90 }
+    angle_limit { min: -45 max: 45 }
+    angle_limit { min: -45 max: 45 }
+    angular_damping: 50.0
+  }
+  joints {
+    name: "HandThumbMiddleFour_HandThumbDistalFour"
+    parent_offset {
+      x: 0.75
+    }
+    child_offset {
+      x: -0.75
+    }
+    parent: "HandThumbMiddleFour"
+    child: "HandThumbDistalFour"
+
+    stiffness: 5000.0
+    rotation { z: 90 }
+    angle_limit { min: 0 max: 90 }
+    angular_damping: 50.0
+  }
+  joints {
+    name: "HandThumbProximalFour_HandThumbMiddleFour"
+    parent_offset {
+      x: 0.75
+    }
+    child_offset {
+      x: -0.75
+    }
+    parent: "HandThumbProximalFour"
+    child: "HandThumbMiddleFour"
+
+    stiffness: 5000.0
+    rotation { z: 90 }
+    angle_limit { min: 0 max: 90 }
+    angular_damping: 50.0
+  }
+  joints {
+    name: "HandPalm_HandThumbProximalFour"
+    parent_offset {
+      x: 1.5
+      z: -.5
+    }
+    child_offset {
+      x: -0.75
+    }
+    parent: "HandPalm"
+    child: "HandThumbProximalFour"
+
+    stiffness: 5000.0
+    rotation { x: 180 z: -90 }
+    angle_limit { min: -45 max: 45 }
+    angle_limit { min: -45 max: 45 }
+    angular_damping: 50.0
+  }
+  actuators {
+    name: "HandThumbMiddle_HandThumbDistal"
+    joint: "HandThumbMiddle_HandThumbDistal"
+    strength: 300.0
+    angle {}
+  }
+  actuators {
+    name: "HandThumbProximal_HandThumbMiddle"
+    joint: "HandThumbProximal_HandThumbMiddle"
+    strength: 300.0
+    angle {}
+  }
+  actuators {
+    name: "HandPalm_HandThumbProximal"
+    joint: "HandPalm_HandThumbProximal"
+    strength: 300.0
+    angle {}
+  }
+  actuators {
+    name: "HandThumbMiddleTwo_HandThumbDistalTwo"
+    joint: "HandThumbMiddleTwo_HandThumbDistalTwo"
+    strength: 300.0
+    angle {}
+  }
+  actuators {
+    name: "HandThumbProximalTwo_HandThumbMiddleTwo"
+    joint: "HandThumbProximalTwo_HandThumbMiddleTwo"
+    strength: 300.0
+    angle {}
+  }
+  actuators {
+    name: "HandPalm_HandThumbProximalTwo"
+    joint: "HandPalm_HandThumbProximalTwo"
+    strength: 300.0
+    angle {}
+  }
+  actuators {
+    name: "HandThumbMiddleThree_HandThumbDistalThree"
+    joint: "HandThumbMiddleThree_HandThumbDistalThree"
+    strength: 300.0
+    angle {}
+  }
+  actuators {
+    name: "HandThumbProximalThree_HandThumbMiddleThree"
+    joint: "HandThumbProximalThree_HandThumbMiddleThree"
+    strength: 300.0
+    angle {}
+  }
+  actuators {
+    name: "HandPalm_HandThumbProximalThree"
+    joint: "HandPalm_HandThumbProximalThree"
+    strength: 300.0
+    angle {}
+  }
+  actuators {
+    name: "HandThumbMiddleFour_HandThumbDistalFour"
+    joint: "HandThumbMiddleFour_HandThumbDistalFour"
+    strength: 300.0
+    angle {}
+  }
+  actuators {
+    name: "HandThumbProximalFour_HandThumbMiddleFour"
+    joint: "HandThumbProximalFour_HandThumbMiddleFour"
+    strength: 300.0
+    angle {}
+  }
+  actuators {
+    name: "HandPalm_HandThumbProximalFour"
+    joint: "HandPalm_HandThumbProximalFour"
+    strength: 300.0
+    angle {}
+  }
+  friction: 0.77459666924
+  gravity {
+    z: -9.800000190734863
+  }
+  angular_damping: -0.05000000074505806
+  baumgarte_erp: 0.15000000149011612
+  collide_include {
+    first: "Ground"
+    second: "Object"
+  }
+  collide_include {
+    first: "HandThumbDistal"
+    second: "Object"
+  }
+  collide_include {
+    first: "HandThumbDistalTwo"
+    second: "Object"
+  }
+  collide_include {
+    first: "HandThumbDistalThree"
+    second: "Object"
+  }
+  collide_include {
+    first: "HandThumbDistalFour"
+    second: "Object"
+  }
+  collide_include {
+    first: "HandPalm"
+    second: "Object"
+  }
+  dt: 0.02
+  substeps: 4
+  dynamics_mode: "legacy_euler"
+  """
+

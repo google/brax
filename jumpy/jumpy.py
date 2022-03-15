@@ -55,22 +55,33 @@ def vmap(fun: F, include: Optional[Sequence[bool]] = None) -> F:
       in_axes = [0 if inc else None for inc in include]
     return jax.vmap(fun, in_axes=in_axes)
 
-  def _batched(*args):
-    args_flat, args_treedef = jax.tree_flatten(args)
-    vargs, vargs_idx = [], []
+  def _batched(*args, include=include):
+    if include is not None and len(include) != len(args):
+      raise RuntimeError('Len of `args` list must match length of `include`.')
+
+    # by default, vectorize over every arg
+    if include is None:
+      include = [True for _ in args]
+
+    # determine number of parallel evaluations to unroll into serial evals
+    batch_size = None
+    for a, inc in zip(args, include):
+      if inc:
+        flat_args, _ = jax.tree_flatten(a)
+        batch_size = flat_args[0].shape[0]
+        break
+
+    # rebuild b_args for each serial evaluation
     rets = []
-    if include:
-      for i, (inc, arg) in enumerate(zip(include, args_flat)):
+    for b_idx in range(batch_size):
+      b_args = []
+      for a, inc in zip(args, include):
         if inc:
-          vargs.append(arg)
-          vargs_idx.append(i)
-    else:
-      vargs, vargs_idx = list(args_flat), list(range(len(args_flat)))
-    for zvargs in zip(*vargs):
-      for varg, idx in zip(zvargs, vargs_idx):
-        args_flat[idx] = varg
-      args_unflat = jax.tree_unflatten(args_treedef, args_flat)
-      rets.append(fun(*args_unflat))
+          b_args.append(take(a, b_idx))
+        else:
+          b_args.append(a)
+      rets.append(fun(*b_args))
+
     return jax.tree_map(lambda *x: onp.stack(x), *rets)
 
   return _batched
@@ -257,9 +268,19 @@ def _safe_arccos_jvp(primal, tangent):
   return primal_out, tangent_out
 
 
+def arcsin(x: ndarray) -> ndarray:
+  """Trigonometric inverse sine, element-wise."""
+  return _which_np(x).arcsin(x)
+
+
 def logical_not(x: ndarray) -> ndarray:
   """Returns the truth value of NOT x element-wise."""
   return _which_np(x).logical_not(x)
+
+
+def logical_and(x1: ndarray, x2: ndarray) -> ndarray:
+  """Returns the truth value of x1 AND x2 element-wise."""
+  return _which_np(x1, x2).logical_and(x1, x2)
 
 
 def multiply(x1: ndarray, x2: ndarray) -> ndarray:
@@ -275,6 +296,11 @@ def minimum(x1: ndarray, x2: ndarray) -> ndarray:
 def amin(x: ndarray) -> ndarray:
   """Returns the minimum along a given axis."""
   return _which_np(x).amin(x)
+
+
+def amax(x: ndarray) -> ndarray:
+  """Returns the maximum along a given axis."""
+  return _which_np(x).amax(x)
 
 
 def exp(x: ndarray) -> ndarray:

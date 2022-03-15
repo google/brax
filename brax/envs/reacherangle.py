@@ -27,8 +27,9 @@ from brax.envs import env
 class ReacherAngle(env.Env):
   """Trains a reacher arm to touch a random target via angle actuators."""
 
-  def __init__(self, **kwargs):
-    super().__init__(_SYSTEM_CONFIG, **kwargs)
+  def __init__(self, legacy_spring=False, **kwargs):
+    config = _SYSTEM_CONFIG_SPRING if legacy_spring else _SYSTEM_CONFIG
+    super().__init__(config=config, **kwargs)
     self.target_idx = self.sys.body.index['target']
     self.arm_idx = self.sys.body.index['body1']
 
@@ -113,158 +114,309 @@ class ReacherAngle(env.Env):
 
 
 _SYSTEM_CONFIG = """
-bodies {
-  name: "ground"
-  colliders {
-    plane {
+  bodies {
+    name: "ground"
+    colliders {
+      plane {
+      }
+    }
+    mass: 1.0
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    frozen {
+      all: true
     }
   }
-  mass: 1.0
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
+  bodies {
+    name: "body0"
+    colliders {
+      position {
+        x: 0.05
+      }
+      rotation {
+        y: 90.0
+      }
+      capsule {
+        radius: 0.01
+        length: 0.12
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 0.035604715
   }
-  frozen {
-    all: true
+  bodies {
+    name: "body1"
+    colliders {
+      position {
+        x: 0.05
+      }
+      rotation {
+        y: 90.0
+      }
+      capsule {
+        radius: 0.01
+        length: 0.12
+      }
+    }
+    colliders {
+      position { x: .11 }
+      sphere {
+        radius: 0.01
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 0.035604715
   }
-}
-bodies {
-  name: "body0"
-  colliders {
-    position {
-      x: 0.05
+  bodies {
+    name: "target"
+    colliders {
+      position {
+      }
+      sphere {
+        radius: 0.009
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 1.0
+    frozen { all: true }
+  }
+  joints {
+    name: "joint0"
+    parent: "ground"
+    child: "body0"
+    parent_offset {
+      z: 0.01
+    }
+    child_offset {
     }
     rotation {
-      y: 90.0
+      y: -90.0
     }
-    capsule {
-      radius: 0.01
-      length: 0.12
+    angle_limit {
+        min: -180
+        max: 180
+      }
+    angular_damping: 10.0
+  }
+  joints {
+    name: "joint1"
+    parent: "body0"
+    child: "body1"
+    parent_offset {
+      x: 0.1
     }
-  }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 0.035604715
-}
-bodies {
-  name: "body1"
-  colliders {
-    position {
-      x: 0.05
+    child_offset {
     }
     rotation {
-      y: 90.0
+      y: -90.0
     }
-    capsule {
-      radius: 0.01
-      length: 0.12
-    }
-  }
-  colliders {
-    position { x: .11 }
-    sphere {
-      radius: 0.01
-    }
-  }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 0.035604715
-}
-bodies {
-  name: "target"
-  colliders {
-    position {
-    }
-    sphere {
-      radius: 0.009
-    }
-  }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 1.0
-  frozen { all: true }
-}
-joints {
-  name: "joint0"
-  stiffness: 100.0
-  parent: "ground"
-  child: "body0"
-  parent_offset {
-    z: 0.01
-  }
-  child_offset {
-  }
-  rotation {
-    y: -90.0
-  }
-  angle_limit {
+    angle_limit {
       min: -180
       max: 180
     }
-  limit_strength: 0.0
-  spring_damping: 3.0
-  angular_damping: 10.0
-}
-joints {
-  name: "joint1"
-  stiffness: 100.0
-  parent: "body0"
-  child: "body1"
-  parent_offset {
-    x: 0.1
+    angular_damping: 10.0
   }
-  child_offset {
+  actuators {
+    name: "joint0"
+    joint: "joint0"
+    strength: 20.0
+    angle {
+    }
   }
-  rotation {
-    y: -90.0
+  actuators {
+    name: "joint1"
+    joint: "joint1"
+    strength: 20.0
+    angle {
+    }
   }
-  angle_limit {
-    min: -180
-    max: 180
+  collide_include {
   }
-  limit_strength: 0.0
-  spring_damping: 3.0
-  angular_damping: 10.0
-}
-actuators {
-  name: "joint0"
-  joint: "joint0"
-  strength: 20.0
-  angle {
+  gravity {
+    z: -9.81
   }
-}
-actuators {
-  name: "joint1"
-  joint: "joint1"
-  strength: 20.0
-  angle {
+  dt: 0.02
+  substeps: 4
+  frozen {
+    position {
+      z: 1.0
+    }
+    rotation {
+      x: 1.0
+      y: 1.0
+    }
   }
-}
-collide_include {
-}
-gravity {
-  z: -9.81
-}
-baumgarte_erp: 0.1
-dt: 0.02
-substeps: 4
-frozen {
-  position {
-    z: 1.0
+  """
+
+_SYSTEM_CONFIG_SPRING = """
+  bodies {
+    name: "ground"
+    colliders {
+      plane {
+      }
+    }
+    mass: 1.0
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    frozen {
+      all: true
+    }
   }
-  rotation {
-    x: 1.0
-    y: 1.0
+  bodies {
+    name: "body0"
+    colliders {
+      position {
+        x: 0.05
+      }
+      rotation {
+        y: 90.0
+      }
+      capsule {
+        radius: 0.01
+        length: 0.12
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 0.035604715
   }
-}
-"""
+  bodies {
+    name: "body1"
+    colliders {
+      position {
+        x: 0.05
+      }
+      rotation {
+        y: 90.0
+      }
+      capsule {
+        radius: 0.01
+        length: 0.12
+      }
+    }
+    colliders {
+      position { x: .11 }
+      sphere {
+        radius: 0.01
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 0.035604715
+  }
+  bodies {
+    name: "target"
+    colliders {
+      position {
+      }
+      sphere {
+        radius: 0.009
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 1.0
+    frozen { all: true }
+  }
+  joints {
+    name: "joint0"
+    stiffness: 100.0
+    parent: "ground"
+    child: "body0"
+    parent_offset {
+      z: 0.01
+    }
+    child_offset {
+    }
+    rotation {
+      y: -90.0
+    }
+    angle_limit {
+        min: -180
+        max: 180
+      }
+    limit_strength: 0.0
+    spring_damping: 3.0
+    angular_damping: 10.0
+  }
+  joints {
+    name: "joint1"
+    stiffness: 100.0
+    parent: "body0"
+    child: "body1"
+    parent_offset {
+      x: 0.1
+    }
+    child_offset {
+    }
+    rotation {
+      y: -90.0
+    }
+    angle_limit {
+      min: -180
+      max: 180
+    }
+    limit_strength: 0.0
+    spring_damping: 3.0
+    angular_damping: 10.0
+  }
+  actuators {
+    name: "joint0"
+    joint: "joint0"
+    strength: 20.0
+    angle {
+    }
+  }
+  actuators {
+    name: "joint1"
+    joint: "joint1"
+    strength: 20.0
+    angle {
+    }
+  }
+  collide_include {
+  }
+  gravity {
+    z: -9.81
+  }
+  baumgarte_erp: 0.1
+  dt: 0.02
+  substeps: 4
+  frozen {
+    position {
+      z: 1.0
+    }
+    rotation {
+      x: 1.0
+      y: 1.0
+    }
+  }
+  dynamics_mode: "legacy_euler"
+  """

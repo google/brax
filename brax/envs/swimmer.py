@@ -26,8 +26,9 @@ from brax.envs import env
 class Swimmer(env.Env):
   """Trains a swimmer to swim forward."""
 
-  def __init__(self, **kwargs):
-    super().__init__(_SYSTEM_CONFIG, **kwargs)
+  def __init__(self, legacy_spring=False, **kwargs):
+    config = _SYSTEM_CONFIG_SPRING if legacy_spring else _SYSTEM_CONFIG
+    super().__init__(config=config, **kwargs)
 
     # these parameters were derived from the mujoco swimmer:
     viscosity = 0.1
@@ -131,153 +132,303 @@ class Swimmer(env.Env):
 
 
 _SYSTEM_CONFIG = """
-bodies {
-  name: "floor"
-  colliders {
-    plane {}
+  bodies {
+    name: "floor"
+    colliders {
+      plane {}
+    }
+    inertia { x: 1.0 y: 1.0 z: 1.0 }
+    mass: 1
+    frozen { all: true }
   }
-  inertia { x: 1.0 y: 1.0 z: 1.0 }
-  mass: 1
-  frozen { all: true }
-}
-bodies {
-  name: "torso"
-  colliders {
+  bodies {
+    name: "torso"
+    colliders {
+      rotation {
+        y: -90.0
+      }
+      capsule {
+        radius: 0.1
+        length: 1.2
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 0.35604717
+  }
+  bodies {
+    name: "mid"
+    colliders {
+      rotation {
+        y: -90.0
+      }
+      capsule {
+        radius: 0.1
+        length: 1.2
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 0.35604717
+  }
+  bodies {
+    name: "back"
+    colliders {
+      rotation {
+        y: -90.0
+      }
+      capsule {
+        radius: 0.1
+        length: 1.2
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 0.35604717
+  }
+  joints {
+    name: "rot2"
+    parent: "torso"
+    child: "mid"
+    parent_offset {
+      x: 0.5
+    }
+    child_offset {
+      x: -.5
+    }
     rotation {
       y: -90.0
     }
-    capsule {
-      radius: 0.1
-      length: 1.2
+    angle_limit {
+      min: -100.0
+      max: 100.0
+    }
+    angular_damping: 10.
+    reference_rotation {
     }
   }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 0.35604717
-}
-bodies {
-  name: "mid"
-  colliders {
+  joints {
+    name: "rot3"
+    parent: "mid"
+    child: "back"
+    parent_offset {
+      x: .5
+    }
+    child_offset {
+      x: -.5
+    }
     rotation {
       y: -90.0
     }
-    capsule {
-      radius: 0.1
-      length: 1.2
+    angle_limit {
+      min: -100.0
+      max: 100.0
+    }
+    angular_damping: 10.
+    reference_rotation {
     }
   }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
+  actuators {
+    name: "rot2"
+    joint: "rot2"
+    strength: 30.0
+    torque {
+    }
   }
-  mass: 0.35604717
-}
-bodies {
-  name: "back"
-  colliders {
+  actuators {
+    name: "rot3"
+    joint: "rot3"
+    strength: 30.0
+    torque {
+    }
+  }
+  forces {
+    name: "torso_viscosity_thruster"
+    body: "torso"
+    strength: 1.0
+    thruster {}
+  }
+  forces {
+    name: "mid_viscosity_thruster"
+    body: "mid"
+    strength: 1.0
+    thruster {}
+  }
+  forces {
+    name: "back_viscosity_thruster"
+    body: "back"
+    strength: 1.0
+    thruster {}
+  }
+  frozen {
+    position { z: 0.0 }
+    rotation { x: 1.0 y: 1.0 }
+  }
+  friction: 0.6
+  angular_damping: -0.05
+  collide_include { }
+  dt: 0.02
+  substeps: 12
+  """
+
+_SYSTEM_CONFIG_SPRING = """
+  bodies {
+    name: "floor"
+    colliders {
+      plane {}
+    }
+    inertia { x: 1.0 y: 1.0 z: 1.0 }
+    mass: 1
+    frozen { all: true }
+  }
+  bodies {
+    name: "torso"
+    colliders {
+      rotation {
+        y: -90.0
+      }
+      capsule {
+        radius: 0.1
+        length: 1.2
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 0.35604717
+  }
+  bodies {
+    name: "mid"
+    colliders {
+      rotation {
+        y: -90.0
+      }
+      capsule {
+        radius: 0.1
+        length: 1.2
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 0.35604717
+  }
+  bodies {
+    name: "back"
+    colliders {
+      rotation {
+        y: -90.0
+      }
+      capsule {
+        radius: 0.1
+        length: 1.2
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 0.35604717
+  }
+  joints {
+    name: "rot2"
+    stiffness: 10000.0
+    parent: "torso"
+    child: "mid"
+    parent_offset {
+      x: 0.5
+    }
+    child_offset {
+      x: -.5
+    }
     rotation {
       y: -90.0
     }
-    capsule {
-      radius: 0.1
-      length: 1.2
+    angle_limit {
+      min: -100.0
+      max: 100.0
+    }
+    angular_damping: 10.
+    reference_rotation {
     }
   }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
+  joints {
+    name: "rot3"
+    stiffness: 10000.0
+    parent: "mid"
+    child: "back"
+    parent_offset {
+      x: .5
+    }
+    child_offset {
+      x: -.5
+    }
+    rotation {
+      y: -90.0
+    }
+    angle_limit {
+      min: -100.0
+      max: 100.0
+    }
+    angular_damping: 10.
+    reference_rotation {
+    }
   }
-  mass: 0.35604717
-}
-joints {
-  name: "rot2"
-  stiffness: 10000.0
-  parent: "torso"
-  child: "mid"
-  parent_offset {
-    x: 0.5
+  actuators {
+    name: "rot2"
+    joint: "rot2"
+    strength: 30.0
+    torque {
+    }
   }
-  child_offset {
-    x: -.5
+  actuators {
+    name: "rot3"
+    joint: "rot3"
+    strength: 30.0
+    torque {
+    }
   }
-  rotation {
-    y: -90.0
+  forces {
+    name: "torso_viscosity_thruster"
+    body: "torso"
+    strength: 1.0
+    thruster {}
   }
-  angle_limit {
-    min: -100.0
-    max: 100.0
+  forces {
+    name: "mid_viscosity_thruster"
+    body: "mid"
+    strength: 1.0
+    thruster {}
   }
-  angular_damping: 10.
-  reference_rotation {
+  forces {
+    name: "back_viscosity_thruster"
+    body: "back"
+    strength: 1.0
+    thruster {}
   }
-}
-joints {
-  name: "rot3"
-  stiffness: 10000.0
-  parent: "mid"
-  child: "back"
-  parent_offset {
-    x: .5
+  frozen {
+    position { z: 0.0 }
+    rotation { x: 1.0 y: 1.0 }
   }
-  child_offset {
-    x: -.5
-  }
-  rotation {
-    y: -90.0
-  }
-  angle_limit {
-    min: -100.0
-    max: 100.0
-  }
-  angular_damping: 10.
-  reference_rotation {
-  }
-}
-actuators {
-  name: "rot2"
-  joint: "rot2"
-  strength: 30.0
-  torque {
-  }
-}
-actuators {
-  name: "rot3"
-  joint: "rot3"
-  strength: 30.0
-  torque {
-  }
-}
-forces {
-  name: "torso_viscosity_thruster"
-  body: "torso"
-  strength: 1.0
-  thruster {}
-}
-forces {
-  name: "mid_viscosity_thruster"
-  body: "mid"
-  strength: 1.0
-  thruster {}
-}
-forces {
-  name: "back_viscosity_thruster"
-  body: "back"
-  strength: 1.0
-  thruster {}
-}
-frozen {
-  position { z: 0.0 }
-  rotation { x: 1.0 y: 1.0 }
-}
-friction: 0.6
-angular_damping: -0.05
-baumgarte_erp: 0.1
-collide_include { }
-dt: 0.02
-substeps: 12
-"""
+  friction: 0.6
+  angular_damping: -0.05
+  baumgarte_erp: 0.1
+  collide_include { }
+  dt: 0.02
+  substeps: 12
+  dynamics_mode: "legacy_euler"
+  """

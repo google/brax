@@ -103,6 +103,7 @@ message Joint {
   // Unique name for this joint
   string name = 1;
   // Spring constant controlling the strength of this joint
+  // If not set, defaults to infinite strength.
   float stiffness = 2;
   // Parent body's name
   string parent = 3;
@@ -122,10 +123,14 @@ message Joint {
   // and two for x,y.
   repeated Range angle_limit = 9;
   // Strength of the force that restores joint to within the angle limits
-  // If not set, defaults to a joint-dependent fraction of `stiffness`.
+  // If stiffness is not set, this field is ignored.
+  // If stiffness is non-zero, and this field is not set, defaults to a
+  // joint-dependent fraction of `stiffness`.
   optional float limit_strength = 10;
   // Damps the spring connecting the parent to the child
-  // If not set, defaults to a joint-dependent fraction of `sqrt(stiffness)`.
+  // If stiffness is not set, this field is ignored.
+  // If stiffness is non-zero, and this field is not set, defaults to a
+  // joint-dependent fraction of `sqrt(stiffness)`.
   optional float spring_damping = 11;
   // The initial rotation between the parent and child, defined in terms of
   // an intrinsic euler rotation about parent's local axes.  This sets the
@@ -232,7 +237,7 @@ message MeshGeometry {
 }
 
 // The configuration of a system for Brax to simulate
-// Next ID: 18
+// Next ID: 21
 message Config {
   message NamePair {
     string first = 1;
@@ -272,4 +277,11 @@ message Config {
   int32 collider_cutoff = 15;
   // All of the mesh geometries in the system.
   repeated MeshGeometry mesh_geometries = 17;
+  // The physics used for this config.  Options: ['pbd_euler', 'legacy_euler']
+  // Defaults to 'pbd_euler'
+  string dynamics_mode = 18;
+  // Sets the default magnitude of position based updates for position data
+  optional float solver_scale_pos = 19;
+  // Sets the default magnitude of position based updates for angular data
+  optional float solver_scale_ang = 20;
 }

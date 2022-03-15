@@ -75,6 +75,19 @@ def euler_to_quat(v: Vector3) -> Quaternion:
   return jp.array([w, x, y, z])
 
 
+def quat_to_euler(q: Quaternion) -> Vector3:
+  """Converts quaternions to euler rotations in radians."""
+  # this follows the Tait-Bryan intrinsic rotation formalism: x-y'-z''
+
+  z = jp.arctan2(-2 * q[1] * q[2] + 2 * q[0] * q[3],
+                 q[1] * q[1] + q[0] * q[0] - q[3] * q[3] - q[2] * q[2])
+  y = jp.arcsin(2 * q[1] * q[3] + 2 * q[0] * q[2])
+  x = jp.arctan2(-2 * q[2] * q[3] + 2 * q[0] * q[1],
+                 q[3] * q[3] - q[2] * q[2] - q[1] * q[1] + q[0] * q[0])
+
+  return jp.array([x, y, z])
+
+
 def quat_to_axis_angle(q: Quaternion) -> Tuple[Vector3, jp.ndarray]:
   """Returns the axis-angle representation of a quaternion.
 
@@ -86,14 +99,15 @@ def quat_to_axis_angle(q: Quaternion) -> Tuple[Vector3, jp.ndarray]:
   """
   # TODO: replace with more accurate safe function
   # avoid the singularity at 0:
-  epsilon = 0.00001
-  # safety 1e-6 jitter added because both sqrt and arctan2 have bad gradients
-  denom = jp.sqrt(epsilon + 1 - q[0] * q[0])
+  epsilon = 1e-10
+  # safety 1e-10 jitter added because both sqrt and arctan2 have bad gradients
+  denom = jp.safe_norm(q[1:])
   angle = 2. * jp.arctan2(
       jp.sqrt(epsilon + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]), q[0])
   angle += jp.where(angle > jp.pi, x=-2 * jp.pi, y=0)
   angle += jp.where(angle < -jp.pi, x=2 * jp.pi, y=0)
-  return q[1:] / denom, angle
+  scale = jp.where(denom == 0., 0., 1. / denom)
+  return q[1:] * scale, angle
 
 
 def signed_angle(axis: Vector3, ref_p: Vector3, ref_c: Vector3) -> jp.ndarray:
@@ -128,6 +142,31 @@ def quat_mul(u: Quaternion, v: Quaternion) -> Quaternion:
   ])
 
 
+def vec_quat_mul(u: Vector3, v: Quaternion) -> Quaternion:
+  """Multiplies a vector and a quaternion.
+
+  This is a convenience method for multiplying two quaternions when
+  one of the quaternions has a 0-value w-part, i.e.:
+  quat_mul([0.,a,b,c], [d,e,f,g])
+
+  It is slightly more efficient than constructing a 0-w-part quaternion
+  from the vector.
+
+  Args:
+    u: (3,) vector representation of the quaternion (0.,x,y,z)
+    v: (4,) quaternion (w,x,y,z)
+
+  Returns:
+    A quaternion u * v.
+  """
+  return jp.array([
+      -u[0] * v[1] - u[1] * v[2] - u[2] * v[3],
+      u[0] * v[0] + u[1] * v[3] - u[2] * v[2],
+      -u[0] * v[3] + u[1] * v[0] + u[2] * v[1],
+      u[0] * v[2] - u[1] * v[1] + u[2] * v[0],
+  ])
+
+
 def quat_rot_axis(axis: Vector3, angle: jp.ndarray) -> Vector3:
   """Provides a quaternion that describes rotating around axis v by angle.
 
@@ -155,6 +194,11 @@ def quat_inv(q: Quaternion) -> Quaternion:
     The inverse of q, where qmult(q, inv_quat(q)) = [1, 0, 0, 0].
   """
   return q * jp.array([1, -1, -1, -1])
+
+
+def relative_quat(q1: Quaternion, q2: Quaternion) -> Quaternion:
+  """Returns the relative quaternion from q1 to q2."""
+  return quat_mul(q2, quat_inv(q1))
 
 
 def normalize(v: Vector3, epsilon=1e-6) -> Vector3:

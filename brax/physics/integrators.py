@@ -15,19 +15,20 @@
 # pylint:disable=g-multiple-import
 """Numerical integrators."""
 
+import abc
+from typing import Optional
+
 from brax import jumpy as jp
 from brax import math
-from brax import pytree
 from brax.physics import config_pb2
-from brax.physics.base import P, QP, vec_to_arr
+from brax.physics.base import P, Q, QP, vec_to_arr
 
 
-@pytree.register
-class Euler:
-  """Symplectic euler integration."""
+class Euler(abc.ABC):
+  """Base integrator class."""
 
   def __init__(self, config: config_pb2.Config):
-    """Creates a Euler integrator.
+    """Creates an integrator.
 
     Args:
       config: brax config
@@ -36,6 +37,9 @@ class Euler:
         jp.array([vec_to_arr(b.frozen.position) for b in config.bodies]))
     self.rot_mask = 1. * jp.logical_not(
         jp.array([vec_to_arr(b.frozen.rotation) for b in config.bodies]))
+    self.quat_mask = 1. * jp.logical_not(
+        jp.array([[0.] + list(vec_to_arr(b.frozen.rotation))
+                  for b in config.bodies]))
     self.dt = config.dt / config.substeps
     self.gravity = vec_to_arr(config.gravity)
     self.velocity_damping = config.velocity_damping
@@ -50,6 +54,7 @@ class Euler:
     Returns:
       State data advanced by one kinematic integration step.
     """
+
     @jp.vmap
     def op(qp, pos_mask, rot_mask) -> QP:
       pos = qp.pos + qp.vel * self.dt * pos_mask
@@ -60,18 +65,25 @@ class Euler:
 
     return op(qp, self.pos_mask, self.rot_mask)
 
-  def potential(self, qp: QP, dp: P) -> QP:
-    """Performs a potential integration step.
+  def update(self,
+             qp: QP,
+             acc_p: Optional[P] = None,
+             vel_p: Optional[P] = None,
+             pos_q: Optional[Q] = None) -> QP:
+    """Performs an arg dependent integrator step.
 
     Args:
       qp: State data to be integrated
-      dp: Impulses to apply during this potential step
+      acc_p: Acceleration level updates to apply to qp
+      vel_p: Velocity level updates to apply to qp
+      pos_q: Position level updates to apply to qp
 
     Returns:
       State data advanced by one potential integration step.
     """
+
     @jp.vmap
-    def op(qp, dp, pos_mask, rot_mask) -> QP:
+    def op_acc(qp, dp, pos_mask, rot_mask) -> QP:
       vel = jp.exp(self.velocity_damping * self.dt) * qp.vel
       vel += (dp.vel + self.gravity) * self.dt
       vel *= pos_mask
@@ -80,22 +92,53 @@ class Euler:
       ang *= rot_mask
       return QP(pos=qp.pos, rot=qp.rot, vel=vel, ang=ang)
 
-    return op(qp, dp, self.pos_mask, self.rot_mask)
-
-  def potential_collision(self, qp: QP, dp: P) -> QP:
-    """Performs a potential collision integration step.
-
-    Args:
-      qp: State data to be integrated
-      dp: Velocity-level collision updates to apply this integration step
-
-    Returns:
-      State data advanced by one velocity-level update.
-    """
     @jp.vmap
-    def op(qp, dp, pos_mask, rot_mask) -> QP:
+    def op_vel(qp, dp, pos_mask, rot_mask) -> QP:
       vel = (qp.vel + dp.vel) * pos_mask
       ang = (qp.ang + dp.ang) * rot_mask
       return QP(pos=qp.pos, rot=qp.rot, vel=vel, ang=ang)
 
-    return op(qp, dp, self.pos_mask, self.rot_mask)
+    @jp.vmap
+    def op_pos(qp, dq, pos_mask, rot_mask) -> QP:
+      qp = QP(
+          pos=qp.pos + dq.pos * pos_mask,
+          rot=qp.rot + dq.rot * rot_mask,
+          ang=qp.ang,
+          vel=qp.vel)
+      return qp
+
+    if acc_p:
+      return op_acc(qp, acc_p, self.pos_mask, self.rot_mask)
+    elif vel_p:
+      return op_vel(qp, vel_p, self.pos_mask, self.rot_mask)
+    elif pos_q:
+      return op_pos(qp, pos_q, self.pos_mask, self.quat_mask)
+    else:
+      # no-op
+      return qp
+
+  def velocity_projection(self, qp: QP, qp_prev: QP) -> QP:
+    """Performs the position based dynamics velocity projection step.
+
+    The velocity and angular velocity must respect the spatial and quaternion
+    distance (respectively) between qp and qpold.
+
+    Args:
+      qp: The current qp
+      qp_prev: The qp at the previous timestep
+
+    Returns:
+      qp with velocities pinned to respect the distance traveled since qpold
+    """
+
+    @jp.vmap
+    def op(qp, qp_prev, pos_mask, rot_mask) -> QP:
+      new_rot = qp.rot / jp.norm(qp.rot)
+      vel = ((qp.pos - qp_prev.pos) / self.dt) * pos_mask
+      dq = math.relative_quat(qp_prev.rot, new_rot)
+      ang = 2. * dq[1:] / self.dt
+      scale = jp.where(dq[0] >= 0., 1., -1.) * rot_mask
+      ang = scale * ang * rot_mask
+      return QP(pos=qp.pos, vel=vel, rot=new_rot, ang=ang)
+
+    return op(qp, qp_prev, self.pos_mask, self.rot_mask)

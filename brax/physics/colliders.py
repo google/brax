@@ -25,7 +25,7 @@ from brax import math
 from brax import pytree
 from brax.physics import bodies
 from brax.physics import config_pb2
-from brax.physics.base import P, QP, vec_to_arr
+from brax.physics.base import P, Q, QP, vec_to_arr
 
 
 class Collidable:
@@ -103,6 +103,7 @@ class NearNeighbors(Cull):
 
   def __init__(self, col_a: Collidable, col_b: Collidable,
                mask: List[Tuple[int, int]], cutoff: int):
+
     dist_off = jp.zeros(col_a.body.idx.shape + col_b.body.idx.shape)
     # TODO: consider accounting for bounds/radius of a collidable
     dist_mask = dist_off + float('inf')
@@ -149,6 +150,8 @@ class Collider(abc.ABC):
     self.contact_fn = contact_fn
     self.cull = cull
     self.baumgarte_erp = config.baumgarte_erp * config.substeps / config.dt
+    self.h = config.dt / config.substeps
+    self.substeps = config.substeps
 
   def apply(self, qp: QP) -> P:
     """Returns impulse from any potential contacts between collidables.
@@ -182,9 +185,104 @@ class Collider(abc.ABC):
     dp_ang = dp_ang / contact
     return P(vel=dp_vel, ang=dp_ang)
 
+  def velocity_apply(self, qp: QP, dlambda: jp.ndarray, qp_prev: QP,
+                     contact) -> P:
+    """Returns impulse from any potential contacts between collidables.
+
+    Args:
+      qp: Coordinate/velocity frame of the bodies.
+      dlambda: Normal forces from position based collision pass
+      qp_prev: State data before the collision pass
+      contact: Contact data from the last collision pass
+
+    Returns:
+      dP: Impulse to apply to the bodies in the collision.
+    """
+    col_a, col_b = self.cull.get()
+    qp_a, qp_a_prev = jp.take((qp, qp_prev), col_a.body.idx)
+    qp_b, qp_b_prev = jp.take((qp, qp_prev), col_b.body.idx)
+    dlambda_a = jp.take(dlambda, col_a.body.idx)
+    dp_a, dp_b = jp.vmap(self._velocity_contact)(
+        col_a,
+        col_b,
+        qp_a,
+        qp_b,  # pytype: disable=attribute-error
+        contact,
+        dlambda_a,
+        qp_a_prev,
+        qp_b_prev)
+
+    if dp_b is None:
+      dp_vel, dp_ang, body_idx = dp_a.vel, dp_a.ang, col_a.body.idx
+    else:
+      body_idx = jp.concatenate((col_a.body.idx, col_b.body.idx))
+      dp_vel = jp.concatenate((dp_a.vel, dp_b.vel))
+      dp_ang = jp.concatenate((dp_a.ang, dp_b.ang))
+    contact = jp.where(jp.any(dp_vel, axis=-1), 1.0, 0.0)
+    contact = jp.segment_sum(contact, body_idx, qp.pos.shape[0])
+    dp_vel = jp.segment_sum(dp_vel, body_idx, qp.pos.shape[0])
+    dp_ang = jp.segment_sum(dp_ang, body_idx, qp.pos.shape[0])
+
+    # equally distribute impulse over possible contacts
+    contact = jp.reshape(1e-6 + contact, (dp_vel.shape[0], 1))
+    dp_vel = dp_vel / contact
+    dp_ang = dp_ang / contact
+    return P(vel=dp_vel, ang=dp_ang)
+
+  def position_apply(self, qp: QP,
+                     qp_prev: QP) -> Tuple[Q, jp.ndarray, Contact]:
+    """Returns a position based update that resolves a collisions for QP.
+
+    Args:
+      qp: Most recent state data for the system.
+      qp_prev: State data before the most recent kinetic update.
+
+    Returns:
+      dQ: Changes in position and quaternion to enforce collision.
+    """
+    col_a, col_b = self.cull.get()
+    qp_a, qp_a_prev = jp.take((qp, qp_prev), col_a.body.idx)
+    qp_b, qp_b_prev = jp.take((qp, qp_prev), col_b.body.idx)
+
+    contact = jp.vmap(self.contact_fn)(col_a, col_b, qp_a, qp_b)
+    pre_contact = contact
+    dq_a, dq_b, dlambda = jp.vmap(self._position_contact)(col_a, col_b, qp_a,
+                                                          qp_b, qp_a_prev,
+                                                          qp_b_prev, contact)
+
+    if dq_b is None:
+      dq_pos, dq_rot, body_idx = dq_a.pos, dq_a.rot, col_a.body.idx
+    else:
+      body_idx = jp.concatenate((col_a.body.idx, col_b.body.idx))
+      dq_pos = jp.concatenate((dq_a.pos, dq_b.pos))
+      dq_rot = jp.concatenate((dq_a.rot, dq_b.rot))
+    contact = jp.where(jp.any(dq_pos, axis=-1), 1.0, 0.0)
+    contact = jp.segment_sum(contact, body_idx, qp.pos.shape[0])
+    dq_pos = jp.segment_sum(dq_pos, body_idx, qp.pos.shape[0])
+    dq_rot = jp.segment_sum(dq_rot, body_idx, qp.rot.shape[0])
+    dlambda = jp.segment_sum(dlambda, col_a.body.idx, qp.pos.shape[0])
+
+    # equally distribute impulse over possible contacts
+    contact = jp.reshape(1e-6 + contact, (dq_pos.shape[0], 1))
+    dq_pos = dq_pos / contact
+    dq_rot = dq_rot / contact
+    return Q(pos=dq_pos, rot=dq_rot), dlambda, pre_contact
+
   @abc.abstractmethod
   def _contact(self, col_a: Collidable, col_b: Collidable, qp_a: QP, qp_b: QP,
                contact: Contact) -> Tuple[P, Optional[P]]:
+    pass
+
+  @abc.abstractmethod
+  def _position_contact(self, col_a: Collidable, col_b: Collidable, qp_a: QP,
+                        qp_b: QP, qp_a_old: QP, qp_b_old: QP,
+                        contact: Contact) -> Tuple[Q, Optional[Q], jp.ndarray]:
+    pass
+
+  @abc.abstractmethod
+  def _velocity_contact(self, col_a: Collidable, col_b: Collidable, qp_a: QP,
+                        qp_b: QP, contact: Contact, dlambda: jp.ndarray,
+                        qp_a_old: QP, qp_b_old: QP) -> Tuple[P, Optional[P]]:
     pass
 
 
@@ -202,7 +300,7 @@ class OneWayCollider(Collider):
     rel_pos = contact.pos - qp_a.pos
     baumgarte_vel = self.baumgarte_erp * contact.penetration
     normal_vel = jp.dot(contact.normal, contact.vel)
-    temp1 = jp.matmul(col_a.body.inertia, jp.cross(rel_pos, contact.normal))
+    temp1 = col_a.body.inertia * jp.cross(rel_pos, contact.normal)
     ang = jp.dot(contact.normal, jp.cross(temp1, rel_pos))
     impulse = (-1. * (1. + elasticity) * normal_vel + baumgarte_vel) / (
         (1. / col_a.body.mass) + ang)
@@ -224,6 +322,129 @@ class OneWayCollider(Collider):
     dp_a = dp_n * apply_n + dp_d * apply_d
     return dp_a, None
 
+  def _position_contact(self, col_a: Collidable, col_b: Collidable, qp_a: QP,
+                        qp_b: QP, qp_a_old: QP, qp_b_old: QP,
+                        contact: Contact) -> Tuple[Q, Optional[Q], jp.ndarray]:
+    """Calculates impulse on a body due to a contact."""
+
+    friction = col_a.friction * col_b.friction
+
+    pos_p = contact.pos
+    pos_c = contact.pos + contact.normal * contact.penetration
+    dx = pos_p - pos_c
+    pos_p = pos_p - qp_a.pos
+    pos_c = pos_c - qp_b.pos
+
+    n = contact.normal
+    c = jp.dot(dx, n)
+
+    # only spherical inertias for now
+    cr1 = jp.cross(pos_p, n)
+    w1 = (1. / col_a.body.mass) + jp.dot(cr1, col_a.body.inertia * cr1)
+
+    dlambda = -c / (w1 + 1e-6)
+
+    coll_mask = jp.where(c < 0, 1., 0.)
+    p = dlambda * n * coll_mask
+
+    dq_p_pos = p / col_a.body.mass
+    dq_p_rot = .5 * math.vec_quat_mul(col_a.body.inertia * jp.cross(pos_p, p),
+                                      qp_a.rot)
+
+    dq_p = Q(pos=dq_p_pos, rot=dq_p_rot)
+
+    # static friction
+
+    q1inv = math.quat_inv(qp_a.rot)
+    r1 = math.rotate(contact.pos - qp_a.pos, q1inv)
+
+    p1bar = qp_a_old.pos + math.rotate(r1, qp_a_old.rot)
+    p1 = contact.pos
+
+    deltap = p1 - p1bar
+    deltap_t = deltap - jp.dot(deltap, n) * n
+
+    dx = deltap_t
+
+    c = jp.safe_norm(dx)
+    n = dx / (c + 1e-6)
+
+    # using spherical inertia
+    cr1 = jp.cross(pos_p, n)
+    w1 = (1. / col_a.body.mass) + jp.dot(cr1, col_a.body.inertia * cr1)
+
+    dlambdat = -c / (w1 + 0.)
+    static_mask = jp.where(
+        jp.abs(dlambdat) < jp.abs(friction * dlambda), 1., 0.)
+    p = dlambdat * n * static_mask * coll_mask
+
+    dq_p_pos = p / col_a.body.mass
+    dq_p_rot = .5 * math.vec_quat_mul(col_a.body.inertia * jp.cross(pos_p, p),
+                                      qp_a.rot)
+
+    dq_p = Q(pos=dq_p.pos + dq_p_pos, rot=dq_p.rot + dq_p_rot)
+
+    return dq_p, None, dlambda * coll_mask
+
+  def _velocity_contact(self, col_a: Collidable, col_b: Collidable, qp_a: QP,
+                        qp_b: QP, contact: Contact, dlambda: jp.ndarray,
+                        qp_a_old: QP, qp_b_old: QP) -> Tuple[P, Optional[P]]:
+    """Calculates impulse on a body due to a contact."""
+    # there are a few ways to combine material properties during contact.
+    # multiplying is a reasonable default.  in the future we may allow others
+
+    # dynamic friction calculation
+    elasticity = col_a.elasticity * col_b.elasticity
+    friction = col_a.friction * col_b.friction
+
+    n = contact.normal
+    rel_vel = qp_a.vel + jp.cross(qp_a.ang, contact.pos - qp_a.pos)
+    v_n = jp.dot(rel_vel, n)
+    v_t = rel_vel - n * v_n
+    v_t_norm = jp.safe_norm(v_t)
+    v_t_dir = v_t / (1e-6 + v_t_norm)
+
+    # factor of 2 from integrator doing 1 collision pass every 2 steps
+    dvel = -v_t_dir * jp.amin(
+        jp.array([friction * jp.abs(dlambda) / (2. * self.h), v_t_norm]))
+
+    angw = jp.cross((contact.pos - qp_a.pos), v_t_dir)
+    w = (1. / col_a.body.mass) + jp.dot(angw, angw)
+
+    p_dyn = dvel / (w + 1e-6)
+
+    # restitution calculation
+
+    rel_vel_old = qp_a_old.vel + jp.cross(qp_a_old.ang,
+                                          contact.pos - qp_a_old.pos)
+    v_n_old = jp.dot(rel_vel_old, n)
+
+    elasticity = jp.where(
+        jp.safe_norm(v_n) < 2. * self.h * 9.81, 0., elasticity)
+    dv_rest = n * (-v_n + jp.amin(jp.array([-elasticity * v_n_old, 0.])))
+
+    pos_p = contact.pos
+
+    dx = dv_rest
+    pos_p = pos_p - qp_a.pos
+
+    c = jp.safe_norm(dx)
+    n = dx / (c + 1e-6)
+
+    # only spherical inertia effects
+    cr1 = jp.cross(pos_p, n)
+    w1 = (1. / col_a.body.mass) + jp.dot(cr1, col_a.body.inertia * cr1)
+
+    dlambda_rest = c / (w1 + 1e-6)
+    static_mask = jp.where(contact.penetration > 0, 1., 0.)
+    p = (dlambda_rest * n + p_dyn) * static_mask
+
+    dp_p = P(
+        vel=p / col_a.body.mass,
+        ang=jp.cross(col_a.body.inertia * (contact.pos - qp_a.pos), p))
+
+    return dp_p, None
+
 
 @pytree.register
 class TwoWayCollider(Collider):
@@ -240,14 +461,14 @@ class TwoWayCollider(Collider):
     rel_pos_b = contact.pos - qp_b.pos
     baumgarte_vel = self.baumgarte_erp * contact.penetration
     normal_vel = jp.dot(contact.normal, contact.vel)
-    temp1 = jp.matmul(col_a.body.inertia, jp.cross(rel_pos_a, contact.normal))
-    temp2 = jp.matmul(col_b.body.inertia, jp.cross(rel_pos_b, contact.normal))
+    temp1 = col_a.body.inertia * jp.cross(rel_pos_a, contact.normal)
+    temp2 = col_b.body.inertia * jp.cross(rel_pos_b, contact.normal)
     ang = jp.dot(contact.normal,
                  jp.cross(temp1, rel_pos_a) + jp.cross(temp2, rel_pos_b))
     impulse = (-1. * (1. + elasticity) * normal_vel + baumgarte_vel) / (
         (1. / col_a.body.mass) + (1. / col_b.body.mass) + ang)
-    dp_n_a = col_a.body.impulse(qp_a, -impulse * contact.normal, contact.pos)
-    dp_n_b = col_b.body.impulse(qp_b, impulse * contact.normal, contact.pos)
+    dp_n_a = col_a.body.impulse(qp_a, impulse * contact.normal, contact.pos)
+    dp_n_b = col_b.body.impulse(qp_b, -impulse * contact.normal, contact.pos)
 
     # apply drag due to friction acting parallel to the surface contact
     vel_d = contact.vel - normal_vel * contact.normal
@@ -256,8 +477,8 @@ class TwoWayCollider(Collider):
     # drag magnitude cannot exceed max friction
     impulse_d = jp.minimum(impulse_d, friction * impulse)
     dir_d = vel_d / (1e-6 + jp.safe_norm(vel_d))
-    dp_d_a = col_a.body.impulse(qp_a, impulse_d * dir_d, contact.pos)
-    dp_d_b = col_a.body.impulse(qp_b, -impulse_d * dir_d, contact.pos)
+    dp_d_a = col_a.body.impulse(qp_a, -impulse_d * dir_d, contact.pos)
+    dp_d_b = col_a.body.impulse(qp_b, impulse_d * dir_d, contact.pos)
     # apply collision normal if penetrating, approaching, and oriented correctly
     apply_n = jp.where(
         (contact.penetration > 0.) & (normal_vel < 0) & (impulse > 0.), 1., 0.)
@@ -267,6 +488,156 @@ class TwoWayCollider(Collider):
     dp_a = dp_n_a * apply_n + dp_d_a * apply_d
     dp_b = dp_n_b * apply_n + dp_d_b * apply_d
     return dp_a, dp_b
+
+  def _position_contact(self, col_a: Collidable, col_b: Collidable, qp_a: QP,
+                        qp_b: QP, qp_a_old: QP, qp_b_old: QP,
+                        contact: Contact) -> Tuple[Q, Optional[Q], jp.ndarray]:
+    """Calculates impulse on a body due to a contact."""
+
+    pos_p = contact.pos - contact.normal * contact.penetration / 2.
+    pos_c = contact.pos + contact.normal * contact.penetration / 2.
+    pos_p = pos_p - qp_a.pos
+    pos_c = pos_c - qp_b.pos
+
+    n = contact.normal
+    c = -contact.penetration
+
+    # only spherical inertia effects
+    cr1 = jp.cross(pos_p, n)
+    w1 = (1. / col_a.body.mass) + jp.dot(cr1, col_a.body.inertia * cr1)
+
+    cr2 = jp.cross(pos_c, n)
+    w2 = (1. / col_b.body.mass) + jp.dot(cr2, col_b.body.inertia * cr2)
+
+    dlambda = -c / (w1 + w2 + 1e-6)
+    coll_mask = jp.where(c < 0, 1., 0.)
+    p = dlambda * n * coll_mask
+
+    dq_p_pos = p / col_a.body.mass
+    dq_p_rot = .5 * math.vec_quat_mul(col_a.body.inertia * jp.cross(pos_p, p),
+                                       qp_a.rot)
+
+    dq_c_pos = -p / col_b.body.mass
+    dq_c_rot = -.5 * math.vec_quat_mul(col_b.body.inertia * jp.cross(pos_c, p),
+                                      qp_b.rot)
+
+    dq_p = Q(pos=.3 * dq_p_pos, rot=.3 * dq_p_rot)
+    dq_c = Q(pos=.3 * dq_c_pos, rot=.3 * dq_c_rot)
+
+    # static friction stuff
+
+    q1inv = math.quat_inv(qp_a.rot)
+    r1 = math.rotate(contact.pos - qp_a.pos, q1inv)
+
+    q2inv = math.quat_inv(qp_b.rot)
+    r2 = math.rotate(contact.pos - qp_b.pos, q2inv)
+
+    p1bar = qp_a_old.pos + math.rotate(r1, qp_a_old.rot)
+    p2bar = qp_b_old.pos + math.rotate(r2, qp_b_old.rot)
+    p0 = contact.pos
+
+    deltap = (p0 - p1bar) - (p0 - p2bar)
+    deltap_t = deltap - jp.dot(deltap, n) * n
+
+    pos_p = contact.pos - qp_a.pos
+    pos_c = contact.pos - qp_b.pos
+
+    c = jp.safe_norm(deltap_t)
+    n = deltap_t / (c + 1e-6)
+
+    # ignoring inertial effects for now
+    cr1 = jp.cross(pos_p, n)
+    w1 = (1. / col_a.body.mass) + jp.dot(cr1, col_a.body.inertia * cr1)
+
+    cr2 = jp.cross(pos_c, n)
+    w2 = (1. / col_b.body.mass) + jp.dot(cr2, col_b.body.inertia * cr2)
+
+    dlambdat = -c / (w1 + w2)
+    static_mask = jp.where(jp.abs(dlambdat) < jp.abs(dlambda), 1., 0.)
+    p = dlambdat * n * static_mask * coll_mask
+
+    dq_p_pos = p / col_a.body.mass
+    dq_p_rot = .5 * math.vec_quat_mul(col_a.body.inertia * jp.cross(pos_p, p),
+                                      qp_a.rot)
+
+    dq_c_pos = -p / col_b.body.mass
+    dq_c_rot = .5 * math.vec_quat_mul(col_b.body.inertia * jp.cross(pos_c, -p),
+                                      qp_b.rot)
+
+    dq_p += Q(pos=.3 * dq_p_pos, rot=.3 * dq_p_rot)
+    dq_c += Q(pos=.3 * dq_c_pos, rot=.3 * dq_c_rot)
+
+    return dq_p, dq_c, dlambda  # pytype: disable=bad-return-type
+
+  def _velocity_contact(self, col_a: Collidable, col_b: Collidable, qp_a: QP,
+                        qp_b: QP, contact: Contact, dlambda: jp.ndarray,
+                        qp_a_old: QP, qp_b_old: QP) -> Tuple[P, Optional[P]]:
+    """Calculates impulse on a body due to a contact."""
+    # there are a few ways to combine material properties during contact.
+    # multiplying is a reasonable default.  in the future we may allow others
+
+    # dynamic friction calculation
+    friction = col_a.friction * col_b.friction
+    elasticity = col_a.elasticity * col_b.elasticity
+    n = contact.normal
+    rel_vel = qp_a.vel + jp.cross(qp_a.ang, contact.pos - qp_a.pos) - (
+        qp_b.vel + jp.cross(qp_b.ang, contact.pos - qp_b.pos))
+    v_n = jp.dot(rel_vel, n)
+    v_t = rel_vel - n * v_n
+    v_t_norm = jp.safe_norm(v_t)
+    v_t_dir = v_t / (1e-6 + v_t_norm)
+
+    # factor of 2 from integrator doing 1 collision pass every 2 steps
+    dvel = -v_t_dir * jp.amin(
+        jp.array([friction * jp.abs(dlambda) / (2. * self.h), v_t_norm]))
+
+    angw_1 = jp.cross((contact.pos - qp_a.pos), v_t_dir)
+    angw_2 = jp.cross((contact.pos - qp_b.pos), v_t_dir)
+    w1 = (1. / col_a.body.mass) + jp.dot(angw_1, col_a.body.inertia * angw_1)
+    w2 = (1. / col_b.body.mass) + jp.dot(angw_2, col_b.body.inertia * angw_2)
+
+    p_dyn = dvel / (w1 + w2 + 1e-6)
+
+    # restitution calculation
+
+    rel_vel_old = (
+        qp_a_old.vel + jp.cross(qp_a_old.ang, contact.pos - qp_a_old.pos)) - (
+            qp_b_old.vel + jp.cross(qp_b_old.ang, contact.pos - qp_b_old.pos))
+    v_n_old = jp.dot(rel_vel_old, n)
+
+    elasticity = jp.where(
+        jp.safe_norm(v_n) < 2. * self.h * 9.81, 0., elasticity)
+    dv_rest = n * (-v_n + jp.amin(jp.array([-elasticity * v_n_old, 0.])))
+
+    pos_p = contact.pos
+    pos_c = contact.pos + contact.normal * contact.penetration
+    dx = dv_rest
+    pos_p = pos_p - qp_a.pos
+    pos_c = pos_c - qp_b.pos
+
+    c = jp.safe_norm(dx)
+    n = dx / (c + 1e-6)
+
+    # ignoring inertial effects for now
+    cr1 = jp.cross(pos_p, n)
+    w1 = (1. / col_a.body.mass) + jp.dot(cr1, col_a.body.inertia * cr1)
+
+    cr2 = jp.cross(pos_c, n)
+    w2 = (1. / col_b.body.mass) + jp.dot(cr2, col_b.body.inertia * cr2)
+
+    dlambda_rest = c / (w1 + w2 + 1e-6)
+    static_mask = jp.where(contact.penetration > 0, 1., 0.)
+    p = (dlambda_rest * n + p_dyn) * static_mask
+
+    dp_p = P(
+        vel=p / col_a.body.mass,
+        ang=jp.cross(col_a.body.inertia * (contact.pos - qp_a.pos), p))
+
+    dp_c = P(
+        vel=-p / col_a.body.mass,
+        ang=jp.cross(col_b.body.inertia * (contact.pos - qp_b.pos), -p))
+
+    return dp_p, dp_c
 
 
 # Coordinates of the 8 corners of a box.
@@ -523,7 +894,7 @@ def box_heightmap(box: BoxCorner, hm: HeightMap, qp_a: QP, qp_b: QP) -> Contact:
   h2 = hm.height[p2[0], p2[1]]
 
   raw_normal = jp.array([-mu * (h1 - h0), -mu * (h2 - h0), hm.cell_size])
-  normal = raw_normal / jp.norm(raw_normal)
+  normal = raw_normal / jp.safe_norm(raw_normal)
   normal = math.rotate(normal, qp_b.rot)
   height = jp.array([p0[0] * hm.cell_size, p0[1] * hm.cell_size, h0])
   penetration = jp.dot(height - pos, normal)
@@ -550,7 +921,7 @@ def _closest_segment_point(a: math.Vector3, b: math.Vector3,
                            pt: math.Vector3) -> math.Vector3:
   """Returns the closest point to pt on the a-b line segment."""
   ab = b - a
-  t = jp.dot(pt - a, ab) / (jp.dot(ab, ab) + 1e-10)
+  t = jp.dot(pt - a, ab) / (jp.dot(ab, ab) + 1e-6)
   return a + jp.clip(t, 0., 1.) * ab
 
 
@@ -604,12 +975,12 @@ def capsule_capsule(cap_a: Capsule, cap_b: Capsule, qp_a: QP,
   b_best = _closest_segment_point(b0, b1, a_best)
   a_best = _closest_segment_point(a0, a1, b_best)
 
-  penetration_vec = b_best - a_best
+  penetration_vec = a_best - b_best
   dist = jp.safe_norm(penetration_vec)
   normal = penetration_vec / (1e-6 + dist)
   penetration = cap_a.radius + cap_b.radius - dist
   pos = (a_best + b_best) / 2
-  vel = qp_b.world_velocity(pos) - qp_a.world_velocity(pos)
+  vel = qp_a.world_velocity(pos) - qp_b.world_velocity(pos)
   return Contact(pos, vel, normal, penetration)
 
 
@@ -635,7 +1006,7 @@ def capsule_mesh(cap: Capsule, mesh: BaseMesh, qp_a: QP, qp_b: QP) -> Contact:
   pt = qp_b.pos + math.rotate(mesh.faces, qp_b.rot)
   p0, p1, p2 = pt[..., 0, :], pt[..., 1, :], pt[..., 2, :]
 
-  t = jp.dot(normal, (p0 - a) / jp.abs(jp.dot(normal, capsule_normal)))
+  t = jp.dot(normal, (p0 - a) / (1e-6 + jp.abs(jp.dot(normal, capsule_normal))))
   trace_pt = a + capsule_normal * t
 
   # Find the closest point on the triangle to the trace point. If the trace
@@ -671,13 +1042,13 @@ def capsule_mesh(cap: Capsule, mesh: BaseMesh, qp_a: QP, qp_b: QP) -> Contact:
   pos = jp.where(inside, projected_center_p, closest_p)
 
   # The normal should be with respect to the capsule and not the triangle.
-  penetration_vec = pos - center_p
+  penetration_vec = center_p - pos
   dist = jp.safe_norm(penetration_vec)
   normal = penetration_vec / (1e-6 + dist)
   penetration = cap.radius - dist
   penetration = jp.where(intersects_plane & (inside | intersects), penetration,
                          0)
-  vel = qp_b.world_velocity(pos) - qp_a.world_velocity(pos)
+  vel = qp_a.world_velocity(pos) - qp_b.world_velocity(pos)
 
   return Contact(pos, vel, normal, penetration)
 
@@ -691,6 +1062,10 @@ def get(config: config_pb2.Config, body: bodies.Body) -> List[Collider]:
   include = {key_fn(f.first, f.second) for f in config.collide_include}
   # exclude colliders for joint parents and children, unless explicitly included
   ignore = {key_fn(j.parent, j.child) for j in config.joints} - include
+  # exclude self collisions within a body
+  self_collide = {(body.index[b1.name], body.index[b2.name])
+                  for b1, b2 in zip(config.bodies, config.bodies)}
+  ignore.update(self_collide)
   # exclude colliders where both bodies are frozen
   frozen = [b.name for b in config.bodies if b.frozen.all]
   ignore.union({key_fn(x, y) for x, y in itertools.combinations(frozen, 2)})
@@ -791,7 +1166,7 @@ def get(config: config_pb2.Config, body: bodies.Body) -> List[Collider]:
     for i, body_idx in enumerate(col_b.body.idx):
       body_to_collidable_b.setdefault(body_idx, []).append(i)
     mask = []
-    for body_idx_a, body_idx_b in pairs:
+    for body_idx_a, body_idx_b in set(pairs):
       ias = body_to_collidable_a[body_idx_a]
       ibs = body_to_collidable_b[body_idx_b]
       for ia, ib in itertools.product(ias, ibs):

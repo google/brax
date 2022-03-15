@@ -22,8 +22,9 @@ from brax.envs import env
 class InvertedDoublePendulum(env.Env):
   """Trains an inverted pendulum to remain stationary."""
 
-  def __init__(self, **kwargs):
-    super().__init__(_SYSTEM_CONFIG, **kwargs)
+  def __init__(self, legacy_spring=False, **kwargs):
+    config = _SYSTEM_CONFIG_SPRING if legacy_spring else _SYSTEM_CONFIG
+    super().__init__(config=config, **kwargs)
 
   def reset(self, rng: jp.ndarray) -> env.State:
     """Resets the environment to an initial state."""
@@ -88,80 +89,154 @@ class InvertedDoublePendulum(env.Env):
 
 
 _SYSTEM_CONFIG = """
-bodies {
-  name: "cart"
-  colliders {
+  bodies {
+    name: "cart"
+    colliders {
+      rotation {
+      x: 90
+      z: 90
+      }
+      capsule {
+        radius: 0.1
+        length: 0.4
+      }
+    }
+    frozen { position { x:0 y:1 z:1 } rotation { x:1 y:1 z:1 } }
+    mass: 10.471975
+  }
+  bodies {
+    name: "pole"
+    colliders {
+      capsule {
+        radius: 0.049
+        length: 0.69800085
+      }
+    }
+    frozen { position { x: 0 y: 1 z: 0 } rotation { x: 1 y: 0 z: 1 } }
+    mass: 5.0185914
+  }
+  joints {
+    name: "hinge"
+    parent: "cart"
+    child: "pole"
+    child_offset { z: -.3 }
     rotation {
-    x: 90
-    z: 90
+      z: 90.0
     }
-    capsule {
-      radius: 0.1
-      length: 0.4
+    angle_limit { min: 0.0 max: 0.0 }
+  }
+  bodies {
+    name: "pole2"
+    colliders {
+      capsule {
+        radius: 0.049
+        length: 0.69800085
+      }
     }
+    frozen { position { x: 0 y: 1 z: 0 } rotation { x: 1 y: 0 z: 1 } }
+    mass: 5.0185914
   }
-  frozen { position { x:0 y:1 z:1 } rotation { x:1 y:1 z:1 } }
-  mass: 10.471975
-}
-bodies {
-  name: "pole"
-  colliders {
-    capsule {
-      radius: 0.049
-      length: 0.69800085
+  joints {
+    name: "hinge2"
+    parent: "pole"
+    child: "pole2"
+    parent_offset { z: .3 }
+    child_offset { z: -.3 }
+    rotation {
+      z: 90.0
     }
+    angle_limit { min: 0.0 max: 0.0 }
   }
-  frozen { position { x: 0 y: 1 z: 0 } rotation { x: 1 y: 0 z: 1 } }
-  mass: 5.0185914
-}
-joints {
-  name: "hinge"
-  stiffness: 30000.0
-  parent: "cart"
-  child: "pole"
-  child_offset { z: -.3 }
-  rotation {
-    z: 90.0
+  forces {
+    name: "cart_thruster"
+    body: "cart"
+    strength: 500.0
+    thruster {}
   }
-  limit_strength: 0.0
-  spring_damping: 500.0
-  angle_limit { min: 0.0 max: 0.0 }
-}
-bodies {
-  name: "pole2"
-  colliders {
-    capsule {
-      radius: 0.049
-      length: 0.69800085
+  collide_include {}
+  gravity {
+    z: -9.81
+  }
+  dt: 0.05
+  substeps: 12
+  """
+
+_SYSTEM_CONFIG_SPRING = """
+  bodies {
+    name: "cart"
+    colliders {
+      rotation {
+      x: 90
+      z: 90
+      }
+      capsule {
+        radius: 0.1
+        length: 0.4
+      }
     }
+    frozen { position { x:0 y:1 z:1 } rotation { x:1 y:1 z:1 } }
+    mass: 10.471975
   }
-  frozen { position { x: 0 y: 1 z: 0 } rotation { x: 1 y: 0 z: 1 } }
-  mass: 5.0185914
-}
-joints {
-  name: "hinge2"
-  stiffness: 30000.0
-  parent: "pole"
-  child: "pole2"
-  parent_offset { z: .3 }
-  child_offset { z: -.3 }
-  rotation {
-    z: 90.0
+  bodies {
+    name: "pole"
+    colliders {
+      capsule {
+        radius: 0.049
+        length: 0.69800085
+      }
+    }
+    frozen { position { x: 0 y: 1 z: 0 } rotation { x: 1 y: 0 z: 1 } }
+    mass: 5.0185914
   }
-  limit_strength: 0.0
-  spring_damping: 500.0
-  angle_limit { min: 0.0 max: 0.0 }
-}
-forces {
-  name: "cart_thruster"
-  body: "cart"
-  strength: 500.0
-  thruster {}
-}
-collide_include {}
-gravity {
-  z: -9.81
-}
-dt: 0.05
-substeps: 12
-"""
+  joints {
+    name: "hinge"
+    stiffness: 30000.0
+    parent: "cart"
+    child: "pole"
+    child_offset { z: -.3 }
+    rotation {
+      z: 90.0
+    }
+    limit_strength: 0.0
+    spring_damping: 500.0
+    angle_limit { min: 0.0 max: 0.0 }
+  }
+  bodies {
+    name: "pole2"
+    colliders {
+      capsule {
+        radius: 0.049
+        length: 0.69800085
+      }
+    }
+    frozen { position { x: 0 y: 1 z: 0 } rotation { x: 1 y: 0 z: 1 } }
+    mass: 5.0185914
+  }
+  joints {
+    name: "hinge2"
+    stiffness: 30000.0
+    parent: "pole"
+    child: "pole2"
+    parent_offset { z: .3 }
+    child_offset { z: -.3 }
+    rotation {
+      z: 90.0
+    }
+    limit_strength: 0.0
+    spring_damping: 500.0
+    angle_limit { min: 0.0 max: 0.0 }
+  }
+  forces {
+    name: "cart_thruster"
+    body: "cart"
+    strength: 500.0
+    thruster {}
+  }
+  collide_include {}
+  gravity {
+    z: -9.81
+  }
+  dt: 0.05
+  substeps: 12
+  dynamics_mode: "legacy_euler"
+  """

@@ -76,14 +76,13 @@ class Angle(Actuator):
     axis, angle = self.joint.axis_angle(qp_p, qp_c)
     axis, angle = jp.array(axis), jp.array(angle)
 
-    # torque grows as target angle diverges from current angle
     limit_min, limit_max = self.joint.limit[:, 0], self.joint.limit[:, 1]
     act = jp.clip(act * jp.pi / 180, limit_min, limit_max)
     torque = (act - angle) * self.strength
     torque = jp.sum(jp.vmap(jp.multiply)(axis, torque), axis=0)
 
-    dang_p = jp.matmul(self.joint.body_p.inertia, -torque)
-    dang_c = jp.matmul(self.joint.body_c.inertia, torque)
+    dang_p = -self.joint.body_p.inertia * torque
+    dang_c = self.joint.body_c.inertia * torque
 
     return dang_p, dang_c
 
@@ -103,8 +102,8 @@ class Torque(Actuator):
     torque = jp.where(angle > self.joint.limit[:, 1], 0, torque)
     torque = jp.sum(jp.vmap(jp.multiply)(axis, torque), axis=0)
 
-    dang_p = jp.matmul(self.joint.body_p.inertia, torque)
-    dang_c = jp.matmul(self.joint.body_c.inertia, -torque)
+    dang_p = self.joint.body_p.inertia * torque
+    dang_c = -self.joint.body_c.inertia * torque
 
     return dang_p, dang_c
 

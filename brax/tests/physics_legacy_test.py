@@ -38,6 +38,7 @@ class BodyTest(absltest.TestCase):
     gravity { z: -9.8 }
     bodies { name: "Ball" mass: 1 }
     defaults { qps { name: "Ball" vel {x: 1}}}
+    dynamics_mode: "legacy_euler"
     """, brax.Config()))
     qp = sys.default_qp()
     qp, _ = sys.step(qp, jp.array([]))
@@ -51,7 +52,7 @@ class BodyTest(absltest.TestCase):
 class BoxTest(absltest.TestCase):
 
   _CONFIG = """
-    dt: 1.5 substeps: 2000 friction: 0.77459666924
+    dt: 1.5 substeps: 1000 friction: 0.77459666924 baumgarte_erp: 0.1
     gravity { z: -9.8 }
     bodies {
       name: "box" mass: 1
@@ -61,6 +62,7 @@ class BoxTest(absltest.TestCase):
     bodies { name: "Ground" frozen: { all: true } colliders { plane {}}}
     defaults { qps { name: "box" pos { z: 1 }}}
     defaults { qps { name: "box" pos { z: 2 } vel {x: 2}}}
+    dynamics_mode: "legacy_euler"
   """
 
   def test_box_hits_ground(self):
@@ -84,93 +86,44 @@ class BoxTest(absltest.TestCase):
 class BoxCapsuleTest(absltest.TestCase):
 
   _CONFIG = """
-    dt: 0.05 substeps: 20 friction: 1
+    dt: 0.05 substeps: 20 friction: 1 baumgarte_erp: 0.1
     gravity { z: -9.8 }
     bodies {
-      name: "box1" mass: 1
+      name: "box" mass: 1
       colliders { box { halfsize { x: 0.5 y: 0.5 z: 0.5 }}}
       inertia { x: 1 y: 1 z: 1 }
     }
     bodies {
-      name: "capsule1" mass: 1
+      name: "capsule" mass: 1
       colliders { capsule { length: 2 radius: 0.2 } }
       inertia { x: 1 y: 1 z: 1 }
     }
-    bodies {
-      name: "box2" mass: 10
-      colliders { box { halfsize { x: 0.5 y: 0.5 z: 0.5 }}}
-      inertia { x: 1 y: 1 z: 1 }
-    }
-    bodies {
-      name: "capsule2" mass: 1
-      colliders { capsule { length: 2 radius: 0.2 } }
-      inertia { x: 1 y: 1 z: 1 }
-    }
-    bodies {
-      name: "box3"
-      colliders {
-        box {
-          halfsize: { x: 0.5 y: 0.5 z: 0.5 }
-        }
-      }
-      mass: 1.0
-      frozen { all: true }
-    }
-    bodies {
-      name: "capsule3"
-      colliders {
-        capsule { radius: 0.5 length: 1.0 }
-      }
-      inertia { x: 1.0 y: 1.0 z: 1.0 }
-      mass: 1.0
-    }
+
     bodies { name: "Ground" frozen: { all: true } colliders { plane {}}}
     defaults {
-      qps {
-        name: "capsule1"
-        pos { x: 8 y: 0 z: 1 }
-      }
-      qps {
-        name: "box1"
-        pos { x: 8 y: 0 z: 3.5 }
-      }
-      qps {
-        name: "capsule2"
-        pos { x: 2 y: 0 z: 1 }
-      }
-      qps {
-        name: "box2"
-        pos { x: 2 y: 0 z: 3.5 }
-      }
-      qps { name: "capsule3" pos { x: 0 y: 0 z: 3 } }
+      qps { name: "box" pos { z: 2 }}
+      qps { name: "capsule" pos: { z: 0.2 } rot: { y: 90 } }
     }
+    dynamics_mode: "legacy_euler"
   """
 
   def test_box_hits_capsule(self):
     """A box falls onto a capsule and stays above it."""
     sys = brax.System(text_format.Parse(BoxCapsuleTest._CONFIG, brax.Config()))
     qp = sys.default_qp()
-    self.assertAlmostEqual(qp.pos[0, 2], 3.5, 2)
-    self.assertAlmostEqual(qp.pos[2, 2], 3.5, 2)
+    self.assertAlmostEqual(qp.pos[0, 2], 2, 2)
 
     step = jax.jit(sys.step)
     for _ in range(50):
       qp, _ = step(qp, jp.array([]))
-    # Box should be on the capsule, rather than on the ground, for both masses
-    # box falls on capsule
-    self.assertAlmostEqual(qp.pos[0, 2], 2.5, 2)
-    self.assertAlmostEqual(qp.pos[1, 2], 1.0, 2)
-    # box falls on capsule with non-unit mass ratio
-    self.assertAlmostEqual(qp.pos[2, 2], 2.5, 2)
-    self.assertAlmostEqual(qp.pos[3, 2], 1.0, 2)
-    # capsule falls on frozen box
-    self.assertAlmostEqual(qp.pos[5, 2], 1.5, 2)
+    # Box should be on the capsule, rather than on the ground.
+    self.assertAlmostEqual(qp.pos[0, 2], 0.9, 2)
 
 
 class HeightMapTest(absltest.TestCase):
 
   _CONFIG = """
-    dt: 2 substeps: 1000 friction: 1 elasticity: 0
+    dt: 2 substeps: 1000 friction: 1 baumgarte_erp: 0.1 elasticity: 0
     gravity { z: -9.8 }
     bodies {
       name: "box" mass: 1
@@ -188,6 +141,7 @@ class HeightMapTest(absltest.TestCase):
       }
     }
     defaults { qps { name: "box" pos: {x: 5 y: 5 z: 1}}}
+    dynamics_mode: "legacy_euler"
   """
 
   def test_box_stays_on_heightmap(self):
@@ -201,7 +155,7 @@ class HeightMapTest(absltest.TestCase):
 class SphereTest(absltest.TestCase):
 
   _CONFIG = """
-    dt: 5 substeps: 500 friction: 0.6
+    dt: 5 substeps: 50 friction: 0.6 baumgarte_erp: 0.1
     gravity { z: -9.8 }
     bodies {
       name: "Sphere1" mass: 1
@@ -211,6 +165,7 @@ class SphereTest(absltest.TestCase):
     bodies { name: "Ground" frozen: { all: true } colliders { plane {}}}
     defaults {qps { name: "Sphere1" pos {z: 1}}}
     defaults {qps { name: "Sphere1" pos {z: 1} vel {x: 2}}}
+    dynamics_mode: "legacy_euler"
   """
 
   def test_sphere_hits_ground(self):
@@ -231,7 +186,7 @@ class SphereTest(absltest.TestCase):
 class CapsuleTest(absltest.TestCase):
 
   _CONFIG = """
-    dt: 20.0 substeps: 10000 friction: 0.6
+    dt: 20.0 substeps: 10000 friction: 0.6 baumgarte_erp: 0.1
     gravity { z: -9.8 }
     bodies {
       name: "Capsule1" mass: 1
@@ -266,6 +221,7 @@ class CapsuleTest(absltest.TestCase):
       qps { name: "Capsule3" pos {x:3 z: 1}}
       qps { name: "Capsule4" pos {x:5 z: 1}}
     }
+    dynamics_mode: "legacy_euler"
   """
 
   def test_capsule_hits_ground(self):
@@ -282,8 +238,8 @@ class CapsuleTest(absltest.TestCase):
     """A capsule falls onto another capsule and balances on it."""
     config = text_format.Parse(CapsuleTest._CONFIG, brax.Config())
     config.dt = 2.0
-    config.substeps = 400
-    sys = brax.System(config, brax.Config())
+    config.substeps = 1000
+    sys = brax.System(config)
     qp = sys.default_qp(1)
     qp, _ = jax.jit(sys.step)(qp, jp.array([]))
     self.assertAlmostEqual(qp.pos[0, 2], 0.5, 2)  # standing up and down
@@ -294,7 +250,7 @@ class CapsuleTest(absltest.TestCase):
     config = text_format.Parse(CapsuleTest._CONFIG, brax.Config())
     config.collider_cutoff = 1
     config.dt = 2.0
-    config.substeps = 400
+    config.substeps = 1000
     sys = brax.System(config)
     qp = sys.default_qp(1)
     qp, _ = jax.jit(sys.step)(qp, jp.array([]))
@@ -305,7 +261,7 @@ class CapsuleTest(absltest.TestCase):
 class MeshTest(absltest.TestCase):
 
   _CONFIG = """
-    dt: 0.05 substeps: 10 friction: 1.0
+    dt: 0.05 substeps: 10 friction: 1.0 baumgarte_erp: 0.1
     gravity { z: -9.8 }
     bodies {
       name: "Mesh" mass: 1
@@ -329,6 +285,7 @@ class MeshTest(absltest.TestCase):
       name: "Cylinder"
       path: "cylinder.stl"
     }
+    dynamics_mode: "legacy_euler"
   """
 
   def test_mesh_hits_ground(self):
@@ -361,13 +318,13 @@ class MeshTest(absltest.TestCase):
     for _ in range(30):
       qp, _ = step(qp, jp.array([]))
     # Cylinder should be on the capsule, rather than on the ground.
-    self.assertAlmostEqual(qp.pos[0, 2], 0.394, 2)
+    self.assertAlmostEqual(qp.pos[0, 2], 0.38, 2)
 
 
 class JointTest(parameterized.TestCase):
 
   _CONFIG = """
-    substeps: 4000
+    substeps: 100000
     dt: .01
     gravity { z: -9.8 }
     bodies {
@@ -376,11 +333,11 @@ class JointTest(parameterized.TestCase):
     }
     bodies { name: "Bob" mass: 1 inertia { x: 1 y: 1 z: 1 }}
     joints {
-      name: "Joint" parent: "Anchor" child: "Bob"
+      name: "Joint" parent: "Anchor" child: "Bob" stiffness: 10000
       child_offset { z: 1 }
       angle_limit { min: -180 max: 180 }
     }
-    solver_scale_pos: .2
+    dynamics_mode: "legacy_euler"
   """
 
   @parameterized.parameters((2.0, 0.125, 0.0625), (5.0, 0.125, 0.03125),
@@ -433,10 +390,8 @@ class JointTest(parameterized.TestCase):
       # construct appropriate number of angle_limits for this joint
       if l == 0:
         a_l = config.joints[0].angle_limit[0]
-      elif l == 1:
-        a_l = config.joints[0].angle_limit.add()
       else:
-        a_l = config.joints[0].angle_limit[2]
+        a_l = config.joints[0].angle_limit.add()
       # set angle default to either 0 or the offset value
       a_l.min = offset * limit
       a_l.max = offset * limit
@@ -467,10 +422,9 @@ class JointTest(parameterized.TestCase):
       _, angle_default = joint_default.axis_angle(qp_p, qp_c)
       angle_offset = (jp.array(angle_offset) / jp.pi) * 180
       angle_default = (jp.array(angle_default) / jp.pi) * 180
-      num_offsets = l + 1
+      num_offsets = angle_offset.shape[0]
 
-      for a_o, a_d, t_o in zip(angle_offset[:num_offsets],
-                               angle_default[:num_offsets],
+      for a_o, a_d, t_o in zip(angle_offset, angle_default,
                                this_offset[:num_offsets]):
         if limit == 0:
           # default system sees part rotated by offset degrees
@@ -492,13 +446,14 @@ class Actuator1DTest(parameterized.TestCase):
   _CONFIG = """
     substeps: 80
     dt: 4.0
+    gravity { z: -9.8 }
     bodies {
       name: "Anchor" frozen: { all: true } mass: 1
       inertia { x: 1 y: 1 z: 1 }
     }
     bodies { name: "Bob" mass: 1 inertia { x: 1 y: 1 z: 1 }}
     joints {
-      name: "Joint" parent: "Anchor" child: "Bob"
+      name: "Joint" parent: "Anchor" child: "Bob" stiffness: 5000
       child_offset { z: 1 }
       angle_limit { min: -180 max: 180 }
       angular_damping: 20.0
@@ -510,6 +465,7 @@ class Actuator1DTest(parameterized.TestCase):
       angle {}
     }
     defaults { qps { name: "Anchor" pos {z: 2}} qps { name: "Bob" pos {z: 1}}}
+    dynamics_mode: "legacy_euler"
   """
 
   @parameterized.parameters(15., 30., 45., 90.)
@@ -532,6 +488,7 @@ class Actuator2DTest(parameterized.TestCase):
   _CONFIG = """
     substeps: 2000
     dt: 2.0
+    gravity { z: -9.8 }
     bodies {
       name: "Anchor" frozen: { all: true } mass: 1
       inertia { x: 1 y: 1 z: 1 }
@@ -540,19 +497,20 @@ class Actuator2DTest(parameterized.TestCase):
       name: "Bob" mass: 1 inertia { x: 1 y: 1 z: 1 }
     }
     joints {
-      name: "Joint" parent: "Anchor" child: "Bob"
+      name: "Joint" parent: "Anchor" child: "Bob" stiffness: 10000
       child_offset { z: 1 }
       angle_limit { min: -180 max: 180 }
       angle_limit { min: -180 max: 180 }
-      angular_damping: 20.0
+      angular_damping: 200.0
     }
     actuators {
       name: "Joint"
       joint: "Joint"
-      strength: 200.0
+      strength: 2000.0
       angle {}
     }
     defaults { qps { name: "Anchor" pos {z: 2}} qps { name: "Bob" pos {z: 1}}}
+    dynamics_mode: "legacy_euler"
   """
 
   @parameterized.parameters((15., 30.), (-45., 80), (120, -60.), (-35., -52.))
@@ -584,7 +542,7 @@ class Actuator3DTest(parameterized.TestCase):
       colliders { capsule { radius: 0.5 length: 2.0 } }
     }
     joints {
-      name: "Joint" parent: "Anchor" child: "Bob"
+      name: "Joint" parent: "Anchor" child: "Bob" stiffness: 10000
       child_offset { z: 1 }
       angle_limit {
         min: -100
@@ -599,6 +557,7 @@ class Actuator3DTest(parameterized.TestCase):
         max: 100
       }
       angular_damping: 180.0
+      limit_strength: 2000.0
     }
     actuators {
       name: "Joint"
@@ -607,6 +566,7 @@ class Actuator3DTest(parameterized.TestCase):
       torque {}
     }
     defaults { qps { name: "Anchor" pos {z: 2}} qps { name: "Bob" pos {z: 1}}}
+    dynamics_mode: "legacy_euler"
   """
   torques = [(1, 0, 0), (0, 1, 0), (0, 0, 1), (1, 1, 1)]
 

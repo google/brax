@@ -37,6 +37,7 @@ class Hopper(brax_env.Env):
                healthy_z_range: Tuple[float, float] = (0.7, float('inf')),
                exclude_current_positions_from_observation: bool = True,
                system_config: Optional[str] = None,
+               legacy_spring=False,
                **kwargs):
     """Creates a Hopper environment.
 
@@ -62,7 +63,8 @@ class Hopper(brax_env.Env):
     self._exclude_current_positions_from_observation = (
         exclude_current_positions_from_observation)
 
-    super().__init__(system_config or _SYSTEM_CONFIG, **kwargs)
+    config = _SYSTEM_CONFIG_SPRING if legacy_spring else _SYSTEM_CONFIG
+    super().__init__(config=config, **kwargs)
 
     config = self.sys.config
     body = bodies.Body(config)
@@ -138,154 +140,304 @@ class Hopper(brax_env.Env):
 
 
 _SYSTEM_CONFIG = """
-bodies {
-  name: "torso"
-  colliders {
-    position {}
-    rotation {}
-    capsule {
-      radius: 0.05
-      length: 0.5
+  bodies {
+    name: "torso"
+    colliders {
+      position {}
+      rotation {}
+      capsule {
+        radius: 0.05
+        length: 0.5
+      }
     }
+    inertia { x: 1.0 y: 1.0 z: 1.0 }
+    mass: 3.6651914
   }
-  inertia { x: 1.0 y: 1.0 z: 1.0 }
-  mass: 3.6651914
-}
-bodies {
-  name: "thigh"
-  colliders {
-    position { z: -0.225 }
-    rotation {}
-    capsule {
-      radius: 0.05
-      length: 0.55
+  bodies {
+    name: "thigh"
+    colliders {
+      position { z: -0.225 }
+      rotation {}
+      capsule {
+        radius: 0.05
+        length: 0.55
+      }
     }
+    inertia { x: 1.0 y: 1.0 z: 1.0 }
+    mass: 4.0578904
   }
-  inertia { x: 1.0 y: 1.0 z: 1.0 }
-  mass: 4.0578904
-}
-bodies {
-  name: "leg"
-  colliders {
-    position {}
-    rotation {}
-    capsule {
-      radius: 0.04
-      length: 0.58
+  bodies {
+    name: "leg"
+    colliders {
+      position {}
+      rotation {}
+      capsule {
+        radius: 0.04
+        length: 0.58
+      }
     }
+    inertia { x: 1.0 y: 1.0 z: 1.0 }
+    mass: 2.7813568
   }
-  inertia { x: 1.0 y: 1.0 z: 1.0 }
-  mass: 2.7813568
-}
-bodies {
-  name: "foot"
-  colliders {
-    position {
-      x: -0.065
+  bodies {
+    name: "foot"
+    colliders {
+      position {
+        x: -0.065
+        y: -0.13
+        z: -0.03
+      }
+      rotation { y: 90.0 }
+      capsule {
+        radius: 0.06
+        length: 0.51
+      }
+    }
+    inertia { x: 1.0 y: 1.0 z: 1.0 }
+    mass: 5.3155746
+  }
+  bodies {
+    name: "floor"
+    colliders {
+      plane {}
+    }
+    inertia { x: 1.0 y: 1.0 z: 1.0 }
+    frozen { all: true }
+  }
+  joints {
+    name: "thigh_joint"
+    parent: "torso"
+    child: "thigh"
+    parent_offset { z: -0.2 }
+    rotation { z: -90.0 }
+    angle_limit { min: -150.0 }
+    angular_damping: 20.0
+  }
+  joints {
+    name: "leg_joint"
+    parent: "thigh"
+    child: "leg"
+    parent_offset { z: -0.45 }
+    child_offset { z: 0.25 }
+    rotation { z: -90.0 }
+    angle_limit { min: -150.0 }
+    angular_damping: 20.0
+  }
+  joints {
+    name: "foot_joint"
+    parent: "leg"
+    child: "foot"
+    parent_offset { z: -0.25 }
+    child_offset {
+      x: -0.13
       y: -0.13
       z: -0.03
     }
-    rotation { y: 90.0 }
-    capsule {
-      radius: 0.06
-      length: 0.51
+    rotation { z: -90.0 }
+    angle_limit { min: -45.0 max: 45.0 }
+    angular_damping: 20.0
+  }
+  actuators {
+    name: "thigh_joint"
+    joint: "thigh_joint"
+    strength: 200.0
+    torque {}
+  }
+  actuators {
+    name: "leg_joint"
+    joint: "leg_joint"
+    strength: 200.0
+    torque {}
+  }
+  actuators {
+    name: "foot_joint"
+    joint: "foot_joint"
+    strength: 200.0
+    torque {}
+  }
+  friction: 0.94868329805
+  gravity { z: -9.81 }
+  velocity_damping: 1.0
+  angular_damping: -0.05
+  collide_include {
+    first: "floor"
+    second: "torso"
+  }
+  collide_include {
+    first: "floor"
+    second: "thigh"
+  }
+  collide_include {
+    first: "floor"
+    second: "leg"
+  }
+  collide_include {
+    first: "floor"
+    second: "foot"
+  }
+  dt: 0.02
+  substeps: 4
+  frozen {
+    position { y: 1.0 }
+    rotation { x: 1.0 z: 1.0 }
+  }
+  defaults {
+    qps { name: "torso" pos { z: 1.19 } }
+    angles { name: "thigh_joint" angle {} }
+    angles { name: "leg_joint" angle {} }
+  }
+  """
+
+_SYSTEM_CONFIG_SPRING = """
+  bodies {
+    name: "torso"
+    colliders {
+      position {}
+      rotation {}
+      capsule {
+        radius: 0.05
+        length: 0.5
+      }
     }
+    inertia { x: 1.0 y: 1.0 z: 1.0 }
+    mass: 3.6651914
   }
-  inertia { x: 1.0 y: 1.0 z: 1.0 }
-  mass: 5.3155746
-}
-bodies {
-  name: "floor"
-  colliders {
-    plane {}
+  bodies {
+    name: "thigh"
+    colliders {
+      position { z: -0.225 }
+      rotation {}
+      capsule {
+        radius: 0.05
+        length: 0.55
+      }
+    }
+    inertia { x: 1.0 y: 1.0 z: 1.0 }
+    mass: 4.0578904
   }
-  inertia { x: 1.0 y: 1.0 z: 1.0 }
-  frozen { all: true }
-}
-joints {
-  name: "thigh_joint"
-  stiffness: 10000.0
-  parent: "torso"
-  child: "thigh"
-  parent_offset { z: -0.2 }
-  rotation { z: -90.0 }
-  angle_limit { min: -150.0 }
-  angular_damping: 20.0
-}
-joints {
-  name: "leg_joint"
-  stiffness: 10000.0
-  parent: "thigh"
-  child: "leg"
-  parent_offset { z: -0.45 }
-  child_offset { z: 0.25 }
-  rotation { z: -90.0 }
-  angle_limit { min: -150.0 }
-  angular_damping: 20.0
-}
-joints {
-  name: "foot_joint"
-  stiffness: 10000.0
-  parent: "leg"
-  child: "foot"
-  parent_offset { z: -0.25 }
-  child_offset {
-    x: -0.13
-    y: -0.13
-    z: -0.03
+  bodies {
+    name: "leg"
+    colliders {
+      position {}
+      rotation {}
+      capsule {
+        radius: 0.04
+        length: 0.58
+      }
+    }
+    inertia { x: 1.0 y: 1.0 z: 1.0 }
+    mass: 2.7813568
   }
-  rotation { z: -90.0 }
-  angle_limit { min: -45.0 max: 45.0 }
-  angular_damping: 20.0
-}
-actuators {
-  name: "thigh_joint"
-  joint: "thigh_joint"
-  strength: 200.0
-  torque {}
-}
-actuators {
-  name: "leg_joint"
-  joint: "leg_joint"
-  strength: 200.0
-  torque {}
-}
-actuators {
-  name: "foot_joint"
-  joint: "foot_joint"
-  strength: 200.0
-  torque {}
-}
-friction: 0.94868329805
-gravity { z: -9.81 }
-velocity_damping: 1.0
-angular_damping: -0.05
-baumgarte_erp: 0.1
-collide_include {
-  first: "floor"
-  second: "torso"
-}
-collide_include {
-  first: "floor"
-  second: "thigh"
-}
-collide_include {
-  first: "floor"
-  second: "leg"
-}
-collide_include {
-  first: "floor"
-  second: "foot"
-}
-dt: 0.02
-substeps: 4
-frozen {
-  position { y: 1.0 }
-  rotation { x: 1.0 z: 1.0 }
-}
-defaults {
-  qps { name: "torso" pos { z: 1.19 } }
-  angles { name: "thigh_joint" angle {} }
-  angles { name: "leg_joint" angle {} }
-}
-"""
+  bodies {
+    name: "foot"
+    colliders {
+      position {
+        x: -0.065
+        y: -0.13
+        z: -0.03
+      }
+      rotation { y: 90.0 }
+      capsule {
+        radius: 0.06
+        length: 0.51
+      }
+    }
+    inertia { x: 1.0 y: 1.0 z: 1.0 }
+    mass: 5.3155746
+  }
+  bodies {
+    name: "floor"
+    colliders {
+      plane {}
+    }
+    inertia { x: 1.0 y: 1.0 z: 1.0 }
+    frozen { all: true }
+  }
+  joints {
+    name: "thigh_joint"
+    stiffness: 10000.0
+    parent: "torso"
+    child: "thigh"
+    parent_offset { z: -0.2 }
+    rotation { z: -90.0 }
+    angle_limit { min: -150.0 }
+    angular_damping: 20.0
+  }
+  joints {
+    name: "leg_joint"
+    stiffness: 10000.0
+    parent: "thigh"
+    child: "leg"
+    parent_offset { z: -0.45 }
+    child_offset { z: 0.25 }
+    rotation { z: -90.0 }
+    angle_limit { min: -150.0 }
+    angular_damping: 20.0
+  }
+  joints {
+    name: "foot_joint"
+    stiffness: 10000.0
+    parent: "leg"
+    child: "foot"
+    parent_offset { z: -0.25 }
+    child_offset {
+      x: -0.13
+      y: -0.13
+      z: -0.03
+    }
+    rotation { z: -90.0 }
+    angle_limit { min: -45.0 max: 45.0 }
+    angular_damping: 20.0
+  }
+  actuators {
+    name: "thigh_joint"
+    joint: "thigh_joint"
+    strength: 200.0
+    torque {}
+  }
+  actuators {
+    name: "leg_joint"
+    joint: "leg_joint"
+    strength: 200.0
+    torque {}
+  }
+  actuators {
+    name: "foot_joint"
+    joint: "foot_joint"
+    strength: 200.0
+    torque {}
+  }
+  friction: 0.94868329805
+  gravity { z: -9.81 }
+  velocity_damping: 1.0
+  angular_damping: -0.05
+  baumgarte_erp: 0.1
+  collide_include {
+    first: "floor"
+    second: "torso"
+  }
+  collide_include {
+    first: "floor"
+    second: "thigh"
+  }
+  collide_include {
+    first: "floor"
+    second: "leg"
+  }
+  collide_include {
+    first: "floor"
+    second: "foot"
+  }
+  dt: 0.02
+  substeps: 4
+  frozen {
+    position { y: 1.0 }
+    rotation { x: 1.0 z: 1.0 }
+  }
+  defaults {
+    qps { name: "torso" pos { z: 1.19 } }
+    angles { name: "thigh_joint" angle {} }
+    angles { name: "leg_joint" angle {} }
+  }
+  dynamics_mode: "legacy_euler"
+  """

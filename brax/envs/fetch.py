@@ -25,8 +25,9 @@ from brax.envs import env
 class Fetch(env.Env):
   """Fetch trains a dog to run to a target location."""
 
-  def __init__(self, **kwargs):
-    super().__init__(_SYSTEM_CONFIG, **kwargs)
+  def __init__(self, legacy_spring=False, **kwargs):
+    config = _SYSTEM_CONFIG_SPRING if legacy_spring else _SYSTEM_CONFIG
+    super().__init__(config=config, **kwargs)
     self.target_idx = self.sys.body.index['Target']
     self.torso_idx = self.sys.body.index['Torso']
     self.target_radius = 2
@@ -133,6 +134,309 @@ class Fetch(env.Env):
 
 
 _SYSTEM_CONFIG = """
+  bodies {
+    name: "Torso"
+    colliders {
+      box {
+        halfsize { x: 0.75 y: 0.25 z: 0.125 }
+      }
+    }
+    inertia { x: 1 y: 1 z: 1 }
+    mass: 1.0
+  }
+  bodies {
+    name: "Shoulders"
+    colliders {
+      box {
+        halfsize { x: 0.25 y: 0.75 z: 0.125 }
+      }
+    }
+    inertia { x: 1 y: 1 z: 1 }
+    mass: 1.0
+  }
+  bodies {
+    name: "Hips"
+    colliders {
+      box {
+        halfsize { x: 0.25 y: 0.75 z: 0.125 }
+      }
+    }
+    inertia { x: 1 y: 1 z: 1 }
+    mass: 1.0
+  }
+  bodies {
+    name: "Front Right Upper"
+    colliders {
+      box {
+        halfsize { x: 0.25 y: 0.125 z: 0.5 }
+      }
+    }
+    inertia { x: 1 y: 1 z: 1 }
+    mass: 1.0
+  }
+  bodies {
+    name: "Front Right Lower"
+    colliders {
+      box {
+        halfsize { x: 0.25 y: 0.125 z: 0.5 }
+      }
+    }
+    inertia { x: 1 y: 1 z: 1 }
+    mass: 1.0
+  }
+
+  bodies {
+    name: "Front Left Upper"
+    colliders {
+      box {
+        halfsize { x: 0.25 y: 0.125 z: 0.5 }
+      }
+    }
+    inertia { x: 1 y: 1 z: 1 }
+    mass: 1.0
+  }
+  bodies {
+    name: "Front Left Lower"
+    colliders {
+      box {
+        halfsize { x: 0.25 y: 0.125 z: 0.5 }
+      }
+    }
+    inertia { x: 1 y: 1 z: 1 }
+    mass: 1.0
+  }
+  bodies {
+    name: "Back Right Upper"
+    colliders {
+      box {
+        halfsize { x: 0.25 y: 0.125 z: 0.5 }
+      }
+    }
+    inertia { x: 1 y: 1 z: 1 }
+    mass: 1.0
+  }
+  bodies {
+    name: "Back Right Lower"
+    colliders {
+      box {
+        halfsize { x: 0.25 y: 0.125 z: 0.5 }
+      }
+    }
+    inertia { x: 1 y: 1 z: 1 }
+    mass: 1.0
+  }
+  bodies {
+    name: "Back Left Upper"
+    colliders {
+      box {
+        halfsize { x: 0.25 y: 0.125 z: 0.5 }
+      }
+    }
+    inertia { x: 1 y: 1 z: 1 }
+    mass: 1.0
+  }
+  bodies {
+    name: "Back Left Lower"
+    colliders {
+      box {
+        halfsize { x: 0.25 y: 0.125 z: 0.5 }
+      }
+    }
+    inertia { x: 1 y: 1 z: 1 }
+    mass: 1.0
+  }
+  bodies {
+    name: "Ground"
+    colliders { plane {} }
+    frozen { all: true }
+  }
+  bodies {
+    name: "Target"
+    colliders { sphere { radius: 2 }}
+    frozen { all: true }
+  }
+  joints {
+    name: "Torso_Shoulders"
+    angle_limit { min: -60 max: 60 }
+    parent_offset { x: 1.0 }
+    child_offset {}
+    parent: "Torso"
+    child: "Shoulders"
+    angular_damping: 35
+  }
+  joints {
+    name: "Torso_Hips"
+    angle_limit { min: -60 max: 60 }
+    parent_offset { x: -1.0 }
+    child_offset {}
+    parent: "Torso"
+    child: "Hips"
+    angular_damping: 35
+  }
+  joints {
+    name: "Shoulders_Front Right Upper"
+    angle_limit { min: -60 max: 60 }
+    rotation { z: 90 }
+    parent_offset { y: -0.875 }
+    child_offset { z: 0.375 }
+    parent: "Shoulders"
+    child: "Front Right Upper"
+    angular_damping: 35
+  }
+  joints {
+    name: "Front Right Upper_Front Right Lower"
+    angle_limit { min: -60 max: 60 }
+    rotation { z: 90 }
+    parent_offset { y: 0.25 z: -0.25 }
+    child_offset { z: 0.25 }
+    parent: "Front Right Upper"
+    child: "Front Right Lower"
+    angular_damping: 35
+  }
+  joints {
+    name: "Shoulders_Front Left Upper"
+    angle_limit { min: -60 max: 60 }
+    rotation { z: 90 }
+    parent_offset { y: 0.875 }
+    child_offset { z: 0.375 }
+    parent: "Shoulders"
+    child: "Front Left Upper"
+    angular_damping: 35
+  }
+  joints {
+    name: "Front Left Upper_Front Left Lower"
+    angle_limit { min: -60 max: 60 }
+    rotation { z: 90 }
+    parent_offset { y: -0.25 z: -0.25 }
+    child_offset { z: 0.25 }
+    parent: "Front Left Upper"
+    child: "Front Left Lower"
+    angular_damping: 35
+  }
+  joints {
+    name: "Hips_Back Right Upper"
+    angle_limit { min: -60 max: 60 }
+    rotation { z: 90 }
+    parent_offset { y: -0.875 }
+    child_offset { z: 0.375 }
+    parent: "Hips"
+    child: "Back Right Upper"
+    angular_damping: 35
+  }
+  joints {
+    name: "Back Right Upper_Back Right Lower"
+    angle_limit { min: -60 max: 60 }
+    rotation { z: 90 }
+    parent_offset { y: 0.25 z: -0.25 }
+    child_offset { z: 0.25 }
+    parent: "Back Right Upper"
+    child: "Back Right Lower"
+    angular_damping: 35
+  }
+  joints {
+    name: "Hips_Back Left Upper"
+    angle_limit { min: -60 max: 60 }
+    rotation { z: 90 }
+    parent_offset { y: 0.875 }
+    child_offset { z: 0.375 }
+    parent: "Hips"
+    child: "Back Left Upper"
+    angular_damping: 35
+  }
+  joints {
+    name: "Back Left Upper_Back Left Lower"
+    angle_limit { min: -60 max: 60 }
+    rotation { z: 90 }
+    parent_offset { y: -0.25 z: -0.25 }
+    child_offset { z: 0.25 }
+    parent: "Back Left Upper"
+    child: "Back Left Lower"
+    angular_damping: 35
+  }
+  actuators {
+    name: "Torso_Shoulders"
+    torque {}
+    joint: "Torso_Shoulders"
+    strength: 300.0
+  }
+  actuators {
+    name: "Torso_Hips"
+    torque {}
+    joint: "Torso_Hips"
+    strength: 300.0
+  }
+  actuators {
+    name: "Shoulders_Front Right Upper"
+    torque {}
+    joint: "Shoulders_Front Right Upper"
+    strength: 300.0
+  }
+  actuators {
+    name: "Front Right Upper_Front Right Lower"
+    torque {}
+    joint: "Front Right Upper_Front Right Lower"
+    strength: 300.0
+  }
+  actuators {
+    name: "Shoulders_Front Left Upper"
+    torque {}
+    joint: "Shoulders_Front Left Upper"
+    strength: 300.0
+  }
+  actuators {
+    name: "Front Left Upper_Front Left Lower"
+    torque {}
+    joint: "Front Left Upper_Front Left Lower"
+    strength: 300.0
+  }
+  actuators {
+    name: "Hips_Back Right Upper"
+    torque {}
+    joint: "Hips_Back Right Upper"
+    strength: 300.0
+  }
+  actuators {
+    name: "Back Right Upper_Back Right Lower"
+    torque {}
+    joint: "Back Right Upper_Back Right Lower"
+    strength: 300.0
+  }
+  actuators {
+    name: "Hips_Back Left Upper"
+    torque {}
+    joint: "Hips_Back Left Upper"
+    strength: 300.0
+  }
+  actuators {
+    name: "Back Left Upper_Back Left Lower"
+    torque {}
+    joint: "Back Left Upper_Back Left Lower"
+    strength: 300.0
+  }
+  friction: 0.77459666924
+  gravity { z: -9.8 }
+  angular_damping: -0.05
+  collide_include {
+    first: "Front Right Lower"
+    second: "Ground"
+  }
+  collide_include {
+    first: "Front Left Lower"
+    second: "Ground"
+  }
+  collide_include {
+    first: "Back Right Lower"
+    second: "Ground"
+  }
+  collide_include {
+    first: "Back Left Lower"
+    second: "Ground"
+  }
+  dt: 0.02
+  substeps: 4
+  """
+
+_SYSTEM_CONFIG_SPRING = """
 bodies {
   name: "Torso"
   colliders {
@@ -444,4 +748,5 @@ collide_include {
 }
 dt: 0.02
 substeps: 4
+dynamics_mode: "legacy_euler"
 """

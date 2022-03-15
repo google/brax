@@ -19,16 +19,23 @@ from brax import jumpy as jp
 from brax.envs import env
 from brax.physics import bodies
 
+from brax.physics.base import QP
+
+import jax
+import jax.numpy as jnp
+
 
 class Humanoid(env.Env):
   """Trains a humanoid to run in the +x direction."""
 
-  def __init__(self, **kwargs):
-    super().__init__(_SYSTEM_CONFIG, **kwargs)
+  def __init__(self, legacy_spring=False, **kwargs):
+    config = _SYSTEM_CONFIG_SPRING if legacy_spring else _SYSTEM_CONFIG
+    super().__init__(config=config, **kwargs)
     body = bodies.Body(self.sys.config)
     body = jp.take(body, body.idx[:-1])  # skip the floor body
     self.mass = body.mass.reshape(-1, 1)
     self.inertia = body.inertia
+    self.inertia_matrix = jp.array([jp.diag(a) for a in self.inertia])
 
   def reset(self, rng: jp.ndarray) -> env.State:
     """Resets the environment to an initial state."""
@@ -64,7 +71,7 @@ class Humanoid(env.Env):
     alive_bonus = jp.float32(5)
     reward = lin_vel_cost - quad_ctrl_cost - quad_impact_cost + alive_bonus
 
-    done = jp.where(qp.pos[0, 2] < 0.72, jp.float32(1), jp.float32(0))
+    done = jp.where(qp.pos[0, 2] < 0.8, jp.float32(1), jp.float32(0))
     done = jp.where(qp.pos[0, 2] > 2.1, jp.float32(1), done)
     state.metrics.update(
         reward_linvel=lin_vel_cost,
@@ -78,28 +85,27 @@ class Humanoid(env.Env):
                action: jp.ndarray) -> jp.ndarray:
     """Observe humanoid body position, velocities, and angles."""
     # some pre-processing to pull joint angles and velocities
-    joint_1d_angle, joint_1d_vel = self.sys.joints[0].angle_vel(qp)
-    joint_2d_angle, joint_2d_vel = self.sys.joints[1].angle_vel(qp)
-    joint_3d_angle, joint_3d_vel = self.sys.joints[2].angle_vel(qp)
+    joint_obs = [j.angle_vel(qp) for j in self.sys.joints]
 
     # qpos:
     # Z of the torso (1,)
     # orientation of the torso as quaternion (4,)
-    # joint angles (5 + 3 + 3 + 2 + 2 + 2,)
+    # joint angles (8,)
+    joint_angles = [jp.array(j[0]).reshape(-1) for j in joint_obs]
     qpos = [
-        qp.pos[0, 2:], qp.rot[0], joint_1d_angle[0], joint_2d_angle[0],
-        joint_2d_angle[1], joint_3d_angle[0], joint_3d_angle[1],
-        joint_3d_angle[2]
-    ]
+        qp.pos[0, 2:],
+        qp.rot[0],
+    ] + joint_angles
 
     # qvel:
     # velocity of the torso (3,)
     # angular velocity of the torso (3,)
-    # joint angle velocities (5 + 3 + 3 + 2 + 2 + 2,)
+    # joint angle velocities (8,)
+    joint_velocities = [jp.array(j[1]).reshape(-1) for j in joint_obs]
     qvel = [
-        qp.vel[0], qp.ang[0], joint_1d_vel[0], joint_2d_vel[0], joint_2d_vel[1],
-        joint_3d_vel[0], joint_3d_vel[1], joint_3d_vel[2]
-    ]
+        qp.vel[0],
+        qp.ang[0],
+    ] + joint_velocities
 
     # actuator forces
     qfrc_actuator = []
@@ -126,7 +132,7 @@ class Humanoid(env.Env):
     v_cross = jp.vmap(jp.cross)
 
     disp_vec = body_pos - com_vec
-    com_inert = self.inertia + self.mass.reshape(
+    com_inert = self.inertia_matrix + self.mass.reshape(
         (11, 1, 1)) * ((jp.norm(disp_vec, axis=1)**2.).reshape(
             (11, 1, 1)) * jp.stack([jp.eye(3)] * 11) - v_outer(disp_vec))
 
@@ -139,682 +145,1383 @@ class Humanoid(env.Env):
     return jp.concatenate(qpos + qvel + cinert + cvel + qfrc_actuator +
                           cfrc_ext)
 
-
 _SYSTEM_CONFIG = """
-bodies {
-  name: "torso"
-  colliders {
-    position {
+  bodies {
+    name: "torso"
+    colliders {
+      position {
+      }
+      rotation {
+        x: -90.0
+      }
+      capsule {
+        radius: 0.07
+        length: 0.28
+      }
     }
-    rotation {
-      x: -90.0
+    colliders {
+      position {
+        z: 0.19
+      }
+      capsule {
+        radius: 0.09
+        length: 0.18
+      }
     }
-    capsule {
-      radius: 0.07
-      length: 0.28
+    colliders {
+      position {
+        x: -0.01
+        z: -0.12
+      }
+      rotation {
+        x: -90.0
+      }
+      capsule {
+        radius: 0.06
+        length: 0.24
+      }
     }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 8.907463
   }
-  colliders {
-    position {
-      z: 0.19
+  bodies {
+    name: "lwaist"
+    colliders {
+      position {
+      }
+      rotation {
+        x: -90.0
+      }
+      capsule {
+        radius: 0.06
+        length: 0.24
+      }
     }
-    capsule {
-      radius: 0.09
-      length: 0.18
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
     }
+    mass: 2.2619467
   }
-  colliders {
-    position {
+  bodies {
+    name: "pelvis"
+    colliders {
+      position {
+        x: -0.02
+      }
+      rotation {
+        x: -90.0
+      }
+      capsule {
+        radius: 0.09
+        length: 0.32
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 6.6161942
+  }
+  bodies {
+    name: "right_thigh"
+    colliders {
+      position {
+        y: 0.005
+        z: -0.17
+      }
+      rotation {
+        x: -178.31532
+      }
+      capsule {
+        radius: 0.06
+        length: 0.46014702
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 4.751751
+  }
+  bodies {
+    name: "right_shin"
+    colliders {
+      position {
+        z: -0.15
+      }
+      rotation {
+        x: -180.0
+      }
+      capsule {
+        radius: 0.049
+        length: 0.398
+        end: -1
+      }
+    }
+    colliders {
+      position {
+        z: -0.35
+      }
+      capsule {
+        radius: 0.075
+        length: 0.15
+        end: 1
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 4.5228419
+  }
+  bodies {
+    name: "left_thigh"
+    colliders {
+      position {
+        y: -0.005
+        z: -0.17
+      }
+      rotation {
+        x: 178.31532
+      }
+      capsule {
+        radius: 0.06
+        length: 0.46014702
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 4.751751
+  }
+  bodies {
+    name: "left_shin"
+    colliders {
+      position {
+        z: -0.15
+      }
+      rotation {
+        x: -180.0
+      }
+      capsule {
+        radius: 0.049
+        length: 0.398
+        end: -1
+      }
+    }
+    colliders {
+      position {
+        z: -0.35
+      }
+      capsule {
+        radius: 0.075
+        length: 0.15
+        end: 1
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 4.5228419
+  }
+  bodies {
+    name: "right_upper_arm"
+    colliders {
+      position {
+        x: 0.08
+        y: -0.08
+        z: -0.08
+      }
+      rotation {
+        x: 135.0
+        y: 35.26439
+        z: -75.0
+      }
+      capsule {
+        radius: 0.04
+        length: 0.35712814
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 1.6610805
+  }
+  bodies {
+    name: "right_lower_arm"
+    colliders {
+      position {
+        x: 0.09
+        y: 0.09
+        z: 0.09
+      }
+      rotation {
+        x: -45.0
+        y: 35.26439
+        z: 15.0
+      }
+      capsule {
+        radius: 0.031
+        length: 0.33912814
+      }
+    }
+    colliders {
+      position {
+        x: 0.18
+        y: 0.18
+        z: 0.18
+      }
+      capsule {
+        radius: 0.04
+        length: 0.08
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 1.2295402
+  }
+  bodies {
+    name: "left_upper_arm"
+    colliders {
+      position {
+        x: 0.08
+        y: 0.08
+        z: -0.08
+      }
+      rotation {
+        x: -135.0
+        y: 35.26439
+        z: 75.0
+      }
+      capsule {
+        radius: 0.04
+        length: 0.35712814
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 1.6610805
+  }
+  bodies {
+    name: "left_lower_arm"
+    colliders {
+      position {
+        x: 0.09
+        y: -0.09
+        z: 0.09
+      }
+      rotation {
+        x: 45.0
+        y: 35.26439
+        z: -15.0
+      }
+      capsule {
+        radius: 0.031
+        length: 0.33912814
+      }
+    }
+    colliders {
+      position {
+        x: 0.18
+        y: -0.18
+        z: 0.18
+      }
+      capsule {
+        radius: 0.04
+        length: 0.08
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 1.2295402
+  }
+  bodies {
+    name: "floor"
+    colliders {
+      plane {
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 1.0
+    frozen { all: true }
+  }
+  joints {
+    name: "abdomen_z"
+    parent: "torso"
+    child: "lwaist"
+    parent_offset {
       x: -0.01
-      z: -0.12
+      z: -0.195
+    }
+    child_offset {
+      z: 0.065
     }
     rotation {
-      x: -90.0
+      y: -90.0
     }
-    capsule {
-      radius: 0.06
-      length: 0.24
+    angle_limit {
+      min: -45.0
+      max: 45.0
     }
+    angle_limit {
+      min: -65.0
+      max: 30.0
+    }
+      angle_limit {
+      min: 0.0
+      max: 0.0
+    }
+    angular_damping: 30.0
   }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 8.907463
-}
-bodies {
-  name: "lwaist"
-  colliders {
-    position {
+  joints {
+    name: "abdomen_x"
+    parent: "lwaist"
+    child: "pelvis"
+    parent_offset {
+      z: -0.065
+    }
+    child_offset {
+      z: 0.1
     }
     rotation {
-      x: -90.0
+      x: 90.0
     }
-    capsule {
-      radius: 0.06
-      length: 0.24
+    angle_limit {
+      min: -35.0
+      max: 35.0
     }
+      angle_limit {
+      min: 0.0
+      max: 0.0
+    }
+      angle_limit {
+      min: 0.0
+      max: 0.0
+    }
+    angular_damping: 30.0
   }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 2.2619467
-}
-bodies {
-  name: "pelvis"
-  colliders {
-    position {
-      x: -0.02
+  joints {
+    name: "right_hip_x"
+    parent: "pelvis"
+    child: "right_thigh"
+    parent_offset {
+      y: -0.1
+      z: -0.04
+    }
+    child_offset {
     }
     rotation {
-      x: -90.0
     }
-    capsule {
-      radius: 0.09
-      length: 0.32
+    angle_limit {
+      min: -10.0
+      max: 10.0
     }
+    angle_limit {
+      min: -30.0
+      max: 70.0
+    }
+    angle_limit {
+      min: -10.0
+      max: 10.0
+    }
+    angular_damping: 30.0
   }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 6.6161942
-}
-bodies {
-  name: "right_thigh"
-  colliders {
-    position {
-      y: 0.005
-      z: -0.17
+  joints {
+    name: "right_knee"
+    parent: "right_thigh"
+    child: "right_shin"
+    parent_offset {
+      y: 0.01
+      z: -0.383
+    }
+    child_offset {
+      z: 0.02
     }
     rotation {
-      x: -178.31532
+      z: -90.0
     }
-    capsule {
-      radius: 0.06
-      length: 0.46014702
+    angle_limit {
+      min: -160.0
+      max: -2.0
     }
+      angle_limit {
+      min: 0.0
+      max: 0.0
+    }
+      angle_limit {
+      min: 0.0
+      max: 0.0
+    }
+    angular_damping: 30.0
   }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
+  joints {
+    name: "left_hip_x"
+    parent: "pelvis"
+    child: "left_thigh"
+    parent_offset {
+      y: 0.1
+      z: -0.04
+    }
+    child_offset {
+    }
+    angle_limit {
+      min: -10.0
+      max: 10.0
+    }
+    angle_limit {
+      min: -30.0
+      max: 70.0
+    }
+    angle_limit {
+      min: -10.0
+      max: 10.0
+    }
+    angular_damping: 30.0
   }
-  mass: 4.751751
-}
-bodies {
-  name: "right_shin"
-  colliders {
-    position {
-      z: -0.15
+  joints {
+    name: "left_knee"
+    parent: "left_thigh"
+    child: "left_shin"
+    parent_offset {
+      y: -0.01
+      z: -0.383
+    }
+    child_offset {
+      z: 0.02
     }
     rotation {
-      x: -180.0
+      z: -90.0
     }
-    capsule {
-      radius: 0.049
-      length: 0.398
-      end: -1
+    angle_limit {
+      min: -160.0
+      max: -2.0
     }
+      angle_limit {
+      min: 0.0
+      max: 0.0
+    }
+      angle_limit {
+      min: 0.0
+      max: 0.0
+    }
+    angular_damping: 30.0
   }
-  colliders {
-    position {
-      z: -0.35
+  joints {
+    name: "right_shoulder1"
+    parent: "torso"
+    child: "right_upper_arm"
+    parent_offset {
+      y: -0.17
+      z: 0.06
     }
-    capsule {
-      radius: 0.075
-      length: 0.15
-      end: 1
-    }
-  }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 4.5228419
-}
-bodies {
-  name: "left_thigh"
-  colliders {
-    position {
-      y: -0.005
-      z: -0.17
-    }
-    rotation {
-      x: 178.31532
-    }
-    capsule {
-      radius: 0.06
-      length: 0.46014702
-    }
-  }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 4.751751
-}
-bodies {
-  name: "left_shin"
-  colliders {
-    position {
-      z: -0.15
-    }
-    rotation {
-      x: -180.0
-    }
-    capsule {
-      radius: 0.049
-      length: 0.398
-      end: -1
-    }
-  }
-  colliders {
-    position {
-      z: -0.35
-    }
-    capsule {
-      radius: 0.075
-      length: 0.15
-      end: 1
-    }
-  }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 4.5228419
-}
-bodies {
-  name: "right_upper_arm"
-  colliders {
-    position {
-      x: 0.08
-      y: -0.08
-      z: -0.08
+    child_offset {
     }
     rotation {
       x: 135.0
       y: 35.26439
-      z: -75.0
     }
-    capsule {
-      radius: 0.04
-      length: 0.35712814
+    angle_limit {
+      min: -85.0
+      max: 60.0
     }
+    angle_limit {
+      min: -70.0
+      max: 50.0
+    }
+      angle_limit {
+      min: 0.0
+      max: 0.0
+    }
+    angular_damping: 30.0
   }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 1.6610805
-}
-bodies {
-  name: "right_lower_arm"
-  colliders {
-    position {
-      x: 0.09
-      y: 0.09
-      z: 0.09
-    }
-    rotation {
-      x: -45.0
-      y: 35.26439
-      z: 15.0
-    }
-    capsule {
-      radius: 0.031
-      length: 0.33912814
-    }
-  }
-  colliders {
-    position {
+  joints {
+    name: "right_elbow"
+    parent: "right_upper_arm"
+    child: "right_lower_arm"
+    parent_offset {
       x: 0.18
-      y: 0.18
-      z: 0.18
+      y: -0.18
+      z: -0.18
     }
-    capsule {
-      radius: 0.04
-      length: 0.08
-    }
-  }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 1.2295402
-}
-bodies {
-  name: "left_upper_arm"
-  colliders {
-    position {
-      x: 0.08
-      y: 0.08
-      z: -0.08
+    child_offset {
     }
     rotation {
-      x: -135.0
-      y: 35.26439
-      z: 75.0
+      x: 135.0
+      z: 90.0
     }
-    capsule {
-      radius: 0.04
-      length: 0.35712814
+    angle_limit {
+      min: -90.0
+      max: 50.0
     }
+      angle_limit {
+      min: 0.0
+      max: 0.0
+    }
+      angle_limit {
+      min: 0.0
+      max: 0.0
+    }
+    angular_damping: 30.0
   }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 1.6610805
-}
-bodies {
-  name: "left_lower_arm"
-  colliders {
-    position {
-      x: 0.09
-      y: -0.09
-      z: 0.09
+  joints {
+    name: "left_shoulder1"
+    parent: "torso"
+    child: "left_upper_arm"
+    parent_offset {
+      y: 0.17
+      z: 0.06
+    }
+    child_offset {
     }
     rotation {
       x: 45.0
-      y: 35.26439
-      z: -15.0
+      y: -35.26439
     }
-    capsule {
-      radius: 0.031
-      length: 0.33912814
+    angle_limit {
+      min: -60.0
+      max: 85.0
+    }
+    angle_limit {
+      min: -50.0
+      max: 70.0
+    }
+      angle_limit {
+      min: 0.0
+      max: 0.0
+    }
+    angular_damping: 30.0
+  }
+  joints {
+    name: "left_elbow"
+    parent: "left_upper_arm"
+    child: "left_lower_arm"
+    parent_offset {
+      x: 0.18
+      y: 0.18
+      z: -0.18
+    }
+    child_offset {
+    }
+    rotation {
+      x: 45.0
+      z: -90.0
+    }
+    angle_limit {
+      min: -90.0
+      max: 50.0
+    }
+      angle_limit {
+      min: 0.0
+      max: 0.0
+    }
+      angle_limit {
+      min: 0.0
+      max: 0.0
+    }
+    angular_damping: 30.0
+  }
+  actuators {
+    name: "abdomen_z"
+    joint: "abdomen_z"
+    strength: 350.0
+    torque {
     }
   }
-  colliders {
-    position {
+  actuators {
+    name: "abdomen_x"
+    joint: "abdomen_x"
+    strength: 350.0
+    torque {
+    }
+  }
+  actuators {
+    name: "right_hip_x"
+    joint: "right_hip_x"
+    strength: 350.0
+    torque {
+    }
+  }
+  actuators {
+    name: "right_knee"
+    joint: "right_knee"
+    strength: 350.0
+    torque {
+    }
+  }
+  actuators {
+    name: "left_hip_x"
+    joint: "left_hip_x"
+    strength: 350.0
+    torque {
+    }
+  }
+  actuators {
+    name: "left_knee"
+    joint: "left_knee"
+    strength: 350.0
+    torque {
+    }
+  }
+  actuators {
+    name: "right_shoulder1"
+    joint: "right_shoulder1"
+    strength: 100.0
+    torque {
+    }
+  }
+  actuators {
+    name: "right_elbow"
+    joint: "right_elbow"
+    strength: 100.0
+    torque {
+    }
+  }
+  actuators {
+    name: "left_shoulder1"
+    joint: "left_shoulder1"
+    strength: 100.0
+    torque {
+    }
+  }
+  actuators {
+    name: "left_elbow"
+    joint: "left_elbow"
+    strength: 100.0
+    torque {
+    }
+  }
+  collide_include {
+    first: "floor"
+    second: "left_shin"
+  }
+  collide_include {
+    first: "floor"
+    second: "right_shin"
+  }
+  defaults {
+    angles {
+      name: "left_knee"
+      angle { x: -25. y: 0 z: 0 }
+    }
+    angles {
+      name: "right_knee"
+      angle { x: -25. y: 0 z: 0 }
+    }
+  }
+  friction: 1.0
+  gravity {
+    z: -9.81
+  }
+  angular_damping: -0.05
+  dt: 0.015
+  substeps: 8
+  """
+
+_SYSTEM_CONFIG_SPRING = """
+  bodies {
+    name: "torso"
+    colliders {
+      position {
+      }
+      rotation {
+        x: -90.0
+      }
+      capsule {
+        radius: 0.07
+        length: 0.28
+      }
+    }
+    colliders {
+      position {
+        z: 0.19
+      }
+      capsule {
+        radius: 0.09
+        length: 0.18
+      }
+    }
+    colliders {
+      position {
+        x: -0.01
+        z: -0.12
+      }
+      rotation {
+        x: -90.0
+      }
+      capsule {
+        radius: 0.06
+        length: 0.24
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 8.907463
+  }
+  bodies {
+    name: "lwaist"
+    colliders {
+      position {
+      }
+      rotation {
+        x: -90.0
+      }
+      capsule {
+        radius: 0.06
+        length: 0.24
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 2.2619467
+  }
+  bodies {
+    name: "pelvis"
+    colliders {
+      position {
+        x: -0.02
+      }
+      rotation {
+        x: -90.0
+      }
+      capsule {
+        radius: 0.09
+        length: 0.32
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 6.6161942
+  }
+  bodies {
+    name: "right_thigh"
+    colliders {
+      position {
+        y: 0.005
+        z: -0.17
+      }
+      rotation {
+        x: -178.31532
+      }
+      capsule {
+        radius: 0.06
+        length: 0.46014702
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 4.751751
+  }
+  bodies {
+    name: "right_shin"
+    colliders {
+      position {
+        z: -0.15
+      }
+      rotation {
+        x: -180.0
+      }
+      capsule {
+        radius: 0.049
+        length: 0.398
+        end: -1
+      }
+    }
+    colliders {
+      position {
+        z: -0.35
+      }
+      capsule {
+        radius: 0.075
+        length: 0.15
+        end: 1
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 4.5228419
+  }
+  bodies {
+    name: "left_thigh"
+    colliders {
+      position {
+        y: -0.005
+        z: -0.17
+      }
+      rotation {
+        x: 178.31532
+      }
+      capsule {
+        radius: 0.06
+        length: 0.46014702
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 4.751751
+  }
+  bodies {
+    name: "left_shin"
+    colliders {
+      position {
+        z: -0.15
+      }
+      rotation {
+        x: -180.0
+      }
+      capsule {
+        radius: 0.049
+        length: 0.398
+        end: -1
+      }
+    }
+    colliders {
+      position {
+        z: -0.35
+      }
+      capsule {
+        radius: 0.075
+        length: 0.15
+        end: 1
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 4.5228419
+  }
+  bodies {
+    name: "right_upper_arm"
+    colliders {
+      position {
+        x: 0.08
+        y: -0.08
+        z: -0.08
+      }
+      rotation {
+        x: 135.0
+        y: 35.26439
+        z: -75.0
+      }
+      capsule {
+        radius: 0.04
+        length: 0.35712814
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 1.6610805
+  }
+  bodies {
+    name: "right_lower_arm"
+    colliders {
+      position {
+        x: 0.09
+        y: 0.09
+        z: 0.09
+      }
+      rotation {
+        x: -45.0
+        y: 35.26439
+        z: 15.0
+      }
+      capsule {
+        radius: 0.031
+        length: 0.33912814
+      }
+    }
+    colliders {
+      position {
+        x: 0.18
+        y: 0.18
+        z: 0.18
+      }
+      capsule {
+        radius: 0.04
+        length: 0.08
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 1.2295402
+  }
+  bodies {
+    name: "left_upper_arm"
+    colliders {
+      position {
+        x: 0.08
+        y: 0.08
+        z: -0.08
+      }
+      rotation {
+        x: -135.0
+        y: 35.26439
+        z: 75.0
+      }
+      capsule {
+        radius: 0.04
+        length: 0.35712814
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 1.6610805
+  }
+  bodies {
+    name: "left_lower_arm"
+    colliders {
+      position {
+        x: 0.09
+        y: -0.09
+        z: 0.09
+      }
+      rotation {
+        x: 45.0
+        y: 35.26439
+        z: -15.0
+      }
+      capsule {
+        radius: 0.031
+        length: 0.33912814
+      }
+    }
+    colliders {
+      position {
+        x: 0.18
+        y: -0.18
+        z: 0.18
+      }
+      capsule {
+        radius: 0.04
+        length: 0.08
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 1.2295402
+  }
+  bodies {
+    name: "floor"
+    colliders {
+      plane {
+      }
+    }
+    inertia {
+      x: 1.0
+      y: 1.0
+      z: 1.0
+    }
+    mass: 1.0
+    frozen { all: true }
+  }
+  joints {
+    name: "abdomen_z"
+    stiffness: 27000
+    parent: "torso"
+    child: "lwaist"
+    parent_offset {
+      x: -0.01
+      z: -0.195
+    }
+    child_offset {
+      z: 0.065
+    }
+    rotation {
+      y: -90.0
+    }
+    angular_damping: 30
+    spring_damping: 80
+    limit_strength: 2500
+    angle_limit {
+      min: -45.0
+      max: 45.0
+    }
+    angle_limit {
+      min: -75.0
+      max: 30.0
+    }
+  }
+  joints {
+    name: "abdomen_x"
+    stiffness: 27000
+    parent: "lwaist"
+    child: "pelvis"
+    parent_offset {
+      z: -0.065
+    }
+    child_offset {
+      z: 0.1
+    }
+    rotation {
+      x: 90.0
+    }
+    angular_damping: 30
+    spring_damping: 80
+    limit_strength: 2500
+    angle_limit {
+      min: -35.0
+      max: 35.0
+    }
+  }
+  joints {
+    name: "right_hip_x"
+    stiffness: 27000
+    parent: "pelvis"
+    child: "right_thigh"
+    parent_offset {
+      y: -0.1
+      z: -0.04
+    }
+    child_offset {
+    }
+    rotation {
+    }
+    angular_damping: 30
+    spring_damping: 80
+    limit_strength: 2500
+    angle_limit {
+      min: -10.0
+      max: 10.0
+    }
+    angle_limit {
+      min: -30.0
+      max: 70.0
+    }
+    angle_limit {
+      min: -10.0
+      max: 10.0
+    }
+  }
+  joints {
+    name: "right_knee"
+    stiffness: 27000
+    parent: "right_thigh"
+    child: "right_shin"
+    parent_offset {
+      y: 0.01
+      z: -0.383
+    }
+    child_offset {
+      z: 0.02
+    }
+    rotation {
+      z: -90.0
+    }
+    angular_damping: 30
+    spring_damping: 80
+    limit_strength: 2500
+    angle_limit {
+      min: -160.0
+      max: -2.0
+    }
+  }
+  joints {
+    name: "left_hip_x"
+    stiffness: 27000
+    parent: "pelvis"
+    child: "left_thigh"
+    parent_offset {
+      y: 0.1
+      z: -0.04
+    }
+    child_offset {
+    }
+    angular_damping: 30
+    spring_damping: 80
+    limit_strength: 2500
+    angle_limit {
+      min: -10.0
+      max: 10.0
+    }
+    angle_limit {
+      min: -30.0
+      max: 70.0
+    }
+    angle_limit {
+      min: -10.0
+      max: 10.0
+    }
+  }
+  joints {
+    name: "left_knee"
+    stiffness: 27000
+    parent: "left_thigh"
+    child: "left_shin"
+    parent_offset {
+      y: -0.01
+      z: -0.383
+    }
+    child_offset {
+      z: 0.02
+    }
+    rotation {
+      z: -90.0
+    }
+    angular_damping: 30
+    spring_damping: 80
+    limit_strength: 2500
+    angle_limit {
+      min: -160.0
+      max: -2.0
+    }
+  }
+  joints {
+    name: "right_shoulder1"
+    stiffness: 27000
+    parent: "torso"
+    child: "right_upper_arm"
+    parent_offset {
+      y: -0.17
+      z: 0.06
+    }
+    child_offset {
+    }
+    rotation {
+      x: 135.0
+      y: 35.26439
+    }
+    angular_damping: 30
+    spring_damping: 80
+    limit_strength: 2500
+    angle_limit {
+      min: -85.0
+      max: 60.0
+    }
+    angle_limit {
+      min: -85.0
+      max: 60.0
+    }
+  }
+  joints {
+    name: "right_elbow"
+    stiffness: 27000
+    parent: "right_upper_arm"
+    child: "right_lower_arm"
+    parent_offset {
       x: 0.18
       y: -0.18
-      z: 0.18
+      z: -0.18
     }
-    capsule {
-      radius: 0.04
-      length: 0.08
+    child_offset {
     }
-  }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 1.2295402
-}
-bodies {
-  name: "floor"
-  colliders {
-    plane {
+    rotation {
+      x: 135.0
+      z: 90.0
+    }
+    angular_damping: 30
+    spring_damping: 80
+    limit_strength: 2500
+    angle_limit {
+      min: -90.0
+      max: 50.0
     }
   }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
+  joints {
+    name: "left_shoulder1"
+    stiffness: 27000
+    parent: "torso"
+    child: "left_upper_arm"
+    parent_offset {
+      y: 0.17
+      z: 0.06
+    }
+    child_offset {
+    }
+    rotation {
+      x: 45.0
+      y: -35.26439
+    }
+    angular_damping: 30
+    spring_damping: 80
+    limit_strength: 2500
+    angle_limit {
+      min: -60.0
+      max: 85.0
+    }
+    angle_limit {
+      min: -60.0
+      max: 85.0
+    }
   }
-  mass: 1.0
-  frozen { all: true }
-}
-joints {
-  name: "abdomen_z"
-  stiffness: 27000
-  parent: "torso"
-  child: "lwaist"
-  parent_offset {
-    x: -0.01
-    z: -0.195
+  joints {
+    name: "left_elbow"
+    stiffness: 27000
+    parent: "left_upper_arm"
+    child: "left_lower_arm"
+    parent_offset {
+      x: 0.18
+      y: 0.18
+      z: -0.18
+    }
+    child_offset {
+    }
+    rotation {
+      x: 45.0
+      z: -90.0
+    }
+    angular_damping: 30
+    spring_damping: 80
+    limit_strength: 2500
+    angle_limit {
+      min: -90.0
+      max: 50.0
+    }
   }
-  child_offset {
-    z: 0.065
+  actuators {
+    name: "abdomen_z"
+    joint: "abdomen_z"
+    strength: 350.0
+    torque {
+    }
   }
-  rotation {
-    y: -90.0
+  actuators {
+    name: "abdomen_x"
+    joint: "abdomen_x"
+    strength: 350.0
+    torque {
+    }
   }
-  angular_damping: 30
-  spring_damping: 80
-  limit_strength: 2500
-  angle_limit {
-    min: -45.0
-    max: 45.0
+  actuators {
+    name: "right_hip_x"
+    joint: "right_hip_x"
+    strength: 350.0
+    torque {
+    }
   }
-  angle_limit {
-    min: -75.0
-    max: 30.0
-  }
-}
-joints {
-  name: "abdomen_x"
-  stiffness: 27000
-  parent: "lwaist"
-  child: "pelvis"
-  parent_offset {
-    z: -0.065
-  }
-  child_offset {
-    z: 0.1
-  }
-  rotation {
-    x: 90.0
-  }
-  angular_damping: 30
-  spring_damping: 80
-  limit_strength: 2500
-  angle_limit {
-    min: -35.0
-    max: 35.0
-  }
-}
-joints {
-  name: "right_hip_x"
-  stiffness: 27000
-  parent: "pelvis"
-  child: "right_thigh"
-  parent_offset {
-    y: -0.1
-    z: -0.04
-  }
-  child_offset {
-  }
-  rotation {
-  }
-  angular_damping: 30
-  spring_damping: 80
-  limit_strength: 2500
-  angle_limit {
-    min: -10.0
-    max: 10.0
-  }
-  angle_limit {
-    min: -30.0
-    max: 70.0
-  }
-  angle_limit {
-    min: -10.0
-    max: 10.0
-  }
-}
-joints {
-  name: "right_knee"
-  stiffness: 27000
-  parent: "right_thigh"
-  child: "right_shin"
-  parent_offset {
-    y: 0.01
-    z: -0.383
-  }
-  child_offset {
-    z: 0.02
-  }
-  rotation {
-    z: -90.0
-  }
-  angular_damping: 30
-  spring_damping: 80
-  limit_strength: 2500
-  angle_limit {
-    min: -160.0
-    max: -2.0
-  }
-}
-joints {
-  name: "left_hip_x"
-  stiffness: 27000
-  parent: "pelvis"
-  child: "left_thigh"
-  parent_offset {
-    y: 0.1
-    z: -0.04
-  }
-  child_offset {
-  }
-  angular_damping: 30
-  spring_damping: 80
-  limit_strength: 2500
-  angle_limit {
-    min: -10.0
-    max: 10.0
-  }
-  angle_limit {
-    min: -30.0
-    max: 70.0
-  }
-  angle_limit {
-    min: -10.0
-    max: 10.0
-  }
-}
-joints {
-  name: "left_knee"
-  stiffness: 27000
-  parent: "left_thigh"
-  child: "left_shin"
-  parent_offset {
-    y: -0.01
-    z: -0.383
-  }
-  child_offset {
-    z: 0.02
-  }
-  rotation {
-    z: -90.0
-  }
-  angular_damping: 30
-  spring_damping: 80
-  limit_strength: 2500
-  angle_limit {
-    min: -160.0
-    max: -2.0
-  }
-}
-joints {
-  name: "right_shoulder1"
-  stiffness: 27000
-  parent: "torso"
-  child: "right_upper_arm"
-  parent_offset {
-    y: -0.17
-    z: 0.06
-  }
-  child_offset {
-  }
-  rotation {
-    x: 135.0
-    y: 35.26439
-  }
-  angular_damping: 30
-  spring_damping: 80
-  limit_strength: 2500
-  angle_limit {
-    min: -85.0
-    max: 60.0
-  }
-  angle_limit {
-    min: -85.0
-    max: 60.0
-  }
-}
-joints {
-  name: "right_elbow"
-  stiffness: 27000
-  parent: "right_upper_arm"
-  child: "right_lower_arm"
-  parent_offset {
-    x: 0.18
-    y: -0.18
-    z: -0.18
-  }
-  child_offset {
-  }
-  rotation {
-    x: 135.0
-    z: 90.0
-  }
-  angular_damping: 30
-  spring_damping: 80
-  limit_strength: 2500
-  angle_limit {
-    min: -90.0
-    max: 50.0
-  }
-}
-joints {
-  name: "left_shoulder1"
-  stiffness: 27000
-  parent: "torso"
-  child: "left_upper_arm"
-  parent_offset {
-    y: 0.17
-    z: 0.06
-  }
-  child_offset {
-  }
-  rotation {
-    x: 45.0
-    y: -35.26439
-  }
-  angular_damping: 30
-  spring_damping: 80
-  limit_strength: 2500
-  angle_limit {
-    min: -60.0
-    max: 85.0
-  }
-  angle_limit {
-    min: -60.0
-    max: 85.0
-  }
-}
-joints {
-  name: "left_elbow"
-  stiffness: 27000
-  parent: "left_upper_arm"
-  child: "left_lower_arm"
-  parent_offset {
-    x: 0.18
-    y: 0.18
-    z: -0.18
-  }
-  child_offset {
-  }
-  rotation {
-    x: 45.0
-    z: -90.0
-  }
-  angular_damping: 30
-  spring_damping: 80
-  limit_strength: 2500
-  angle_limit {
-    min: -90.0
-    max: 50.0
-  }
-}
-actuators {
-  name: "abdomen_z"
-  joint: "abdomen_z"
-  strength: 350.0
-  torque {
-  }
-}
-actuators {
-  name: "abdomen_x"
-  joint: "abdomen_x"
-  strength: 350.0
-  torque {
-  }
-}
-actuators {
-  name: "right_hip_x"
-  joint: "right_hip_x"
-  strength: 350.0
-  torque {
-  }
-}
-actuators {
-  name: "right_knee"
-  joint: "right_knee"
-  strength: 350.0
-  torque {
-  }
-}
-actuators {
-  name: "left_hip_x"
-  joint: "left_hip_x"
-  strength: 350.0
-  torque {
-  }
-}
-actuators {
-  name: "left_knee"
-  joint: "left_knee"
-  strength: 350.0
-  torque {
-  }
-}
-actuators {
-  name: "right_shoulder1"
-  joint: "right_shoulder1"
-  strength: 100.0
-  torque {
-  }
-}
-actuators {
-  name: "right_elbow"
-  joint: "right_elbow"
-  strength: 100.0
-  torque {
-  }
-}
-actuators {
-  name: "left_shoulder1"
-  joint: "left_shoulder1"
-  strength: 100.0
-  torque {
-  }
-}
-actuators {
-  name: "left_elbow"
-  joint: "left_elbow"
-  strength: 100.0
-  torque {
-  }
-}
-collide_include {
-  first: "floor"
-  second: "left_shin"
-}
-collide_include {
-  first: "floor"
-  second: "right_shin"
-}
-defaults {
-  angles {
-    name: "left_knee"
-    angle { x: -25. y: 0 z: 0 }
-  }
-  angles {
+  actuators {
     name: "right_knee"
-    angle { x: -25. y: 0 z: 0 }
+    joint: "right_knee"
+    strength: 350.0
+    torque {
+    }
   }
-}
-friction: 1.0
-gravity {
-  z: -9.81
-}
-angular_damping: -0.05
-baumgarte_erp: 0.1
-dt: 0.015
-substeps: 8
-"""
+  actuators {
+    name: "left_hip_x"
+    joint: "left_hip_x"
+    strength: 350.0
+    torque {
+    }
+  }
+  actuators {
+    name: "left_knee"
+    joint: "left_knee"
+    strength: 350.0
+    torque {
+    }
+  }
+  actuators {
+    name: "right_shoulder1"
+    joint: "right_shoulder1"
+    strength: 100.0
+    torque {
+    }
+  }
+  actuators {
+    name: "right_elbow"
+    joint: "right_elbow"
+    strength: 100.0
+    torque {
+    }
+  }
+  actuators {
+    name: "left_shoulder1"
+    joint: "left_shoulder1"
+    strength: 100.0
+    torque {
+    }
+  }
+  actuators {
+    name: "left_elbow"
+    joint: "left_elbow"
+    strength: 100.0
+    torque {
+    }
+  }
+  collide_include {
+    first: "floor"
+    second: "left_shin"
+  }
+  collide_include {
+    first: "floor"
+    second: "right_shin"
+  }
+  defaults {
+    angles {
+      name: "left_knee"
+      angle { x: -25. y: 0 z: 0 }
+    }
+    angles {
+      name: "right_knee"
+      angle { x: -25. y: 0 z: 0 }
+    }
+  }
+  friction: 1.0
+  gravity {
+    z: -9.81
+  }
+  angular_damping: -0.05
+  baumgarte_erp: 0.1
+  dt: 0.015
+  substeps: 8
+  dynamics_mode: "legacy_euler"
+  """
+

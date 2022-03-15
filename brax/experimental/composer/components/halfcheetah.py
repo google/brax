@@ -29,7 +29,7 @@ TERM_FN = None
 def get_specs():
   return dict(
       message_str=component_editor.filter_message_str(
-          halfcheetah._SYSTEM_CONFIG, 'floor'),
+          halfcheetah._SYSTEM_CONFIG_SPRING, 'floor'),
       collides=COLLIDES,
       root=ROOT,
       term_fn=TERM_FN,
