@@ -59,9 +59,9 @@ composer.register_env(env_name=env_name, env_desc=env_desc)
 env = composer.create(env_name=env_name)
 ```
 
-Lastly, while less recommended, `desc_edits` can be used for dynamic environment editing by directly modifying `env_desc` dictionary object. For examples, see [envs/ant_descs.py](https://github.com/google/brax/tree/main/brax/experimental/composer/envs/ant_descs.py).
+Lastly, while less recommended, `desc_edits` can be used for dynamic environment editing by directly modifying `env_desc` dictionary object.
 
-*These are illustrative examples. For full examples, see [envs/ant_descs.py](https://github.com/google/brax/tree/main/brax/experimental/composer/envs/ant_descs.py) for standard Brax envs and [envs/ma_descs.py](https://github.com/google/brax/tree/main/brax/experimental/composer/envs/ma_descs.py) for multi-agent RL Brax envs.*
+*These are illustrative examples. For full examples, see [envs/sa_descs.py](https://github.com/google/brax/tree/main/brax/experimental/composer/envs/sa_descs.py) for standard Brax envs and [envs/ma_descs.py](https://github.com/google/brax/tree/main/brax/experimental/composer/envs/ma_descs.py) for multi-agent RL Brax envs.*
 
 ## Colab Notebooks
 
