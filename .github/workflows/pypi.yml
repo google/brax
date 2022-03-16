@@ -24,10 +24,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
         with:
           tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          body: |
-            Please see https://github.com/google/brax/tags for details about
-            this release.
+          release_name: ${{ github.ref }}
+          bodyFile: docs/release-notes/${{ github.ref }}.md
           draft: false
           prerelease: false
 
