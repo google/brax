@@ -25,7 +25,7 @@ jobs:
         with:
           tag_name: ${{ github.ref }}
           release_name: ${{ github.ref }}
-          bodyFile: docs/release-notes/${{ github.ref }}.md
+          body_path: docs/release-notes/${{ github.ref }}.md
           draft: false
           prerelease: false
 
