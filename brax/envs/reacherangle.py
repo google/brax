@@ -261,6 +261,7 @@ _SYSTEM_CONFIG = """
       y: 1.0
     }
   }
+  dynamics_mode: "pbd"
   """
 
 _SYSTEM_CONFIG_SPRING = """
@@ -418,5 +419,5 @@ _SYSTEM_CONFIG_SPRING = """
       y: 1.0
     }
   }
-  dynamics_mode: "legacy_euler"
+  dynamics_mode: "legacy_spring"
   """

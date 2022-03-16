@@ -38,7 +38,7 @@ class BodyTest(absltest.TestCase):
     gravity { z: -9.8 }
     bodies { name: "Ball" mass: 1 }
     defaults { qps { name: "Ball" vel {x: 1}}}
-    dynamics_mode: "legacy_euler"
+    dynamics_mode: "legacy_spring"
     """, brax.Config()))
     qp = sys.default_qp()
     qp, _ = sys.step(qp, jp.array([]))
@@ -62,7 +62,7 @@ class BoxTest(absltest.TestCase):
     bodies { name: "Ground" frozen: { all: true } colliders { plane {}}}
     defaults { qps { name: "box" pos { z: 1 }}}
     defaults { qps { name: "box" pos { z: 2 } vel {x: 2}}}
-    dynamics_mode: "legacy_euler"
+    dynamics_mode: "legacy_spring"
   """
 
   def test_box_hits_ground(self):
@@ -104,7 +104,7 @@ class BoxCapsuleTest(absltest.TestCase):
       qps { name: "box" pos { z: 2 }}
       qps { name: "capsule" pos: { z: 0.2 } rot: { y: 90 } }
     }
-    dynamics_mode: "legacy_euler"
+    dynamics_mode: "legacy_spring"
   """
 
   def test_box_hits_capsule(self):
@@ -141,7 +141,7 @@ class HeightMapTest(absltest.TestCase):
       }
     }
     defaults { qps { name: "box" pos: {x: 5 y: 5 z: 1}}}
-    dynamics_mode: "legacy_euler"
+    dynamics_mode: "legacy_spring"
   """
 
   def test_box_stays_on_heightmap(self):
@@ -165,7 +165,7 @@ class SphereTest(absltest.TestCase):
     bodies { name: "Ground" frozen: { all: true } colliders { plane {}}}
     defaults {qps { name: "Sphere1" pos {z: 1}}}
     defaults {qps { name: "Sphere1" pos {z: 1} vel {x: 2}}}
-    dynamics_mode: "legacy_euler"
+    dynamics_mode: "legacy_spring"
   """
 
   def test_sphere_hits_ground(self):
@@ -221,7 +221,7 @@ class CapsuleTest(absltest.TestCase):
       qps { name: "Capsule3" pos {x:3 z: 1}}
       qps { name: "Capsule4" pos {x:5 z: 1}}
     }
-    dynamics_mode: "legacy_euler"
+    dynamics_mode: "legacy_spring"
   """
 
   def test_capsule_hits_ground(self):
@@ -285,7 +285,7 @@ class MeshTest(absltest.TestCase):
       name: "Cylinder"
       path: "cylinder.stl"
     }
-    dynamics_mode: "legacy_euler"
+    dynamics_mode: "legacy_spring"
   """
 
   def test_mesh_hits_ground(self):
@@ -337,7 +337,7 @@ class JointTest(parameterized.TestCase):
       child_offset { z: 1 }
       angle_limit { min: -180 max: 180 }
     }
-    dynamics_mode: "legacy_euler"
+    dynamics_mode: "legacy_spring"
   """
 
   @parameterized.parameters((2.0, 0.125, 0.0625), (5.0, 0.125, 0.03125),
@@ -465,7 +465,7 @@ class Actuator1DTest(parameterized.TestCase):
       angle {}
     }
     defaults { qps { name: "Anchor" pos {z: 2}} qps { name: "Bob" pos {z: 1}}}
-    dynamics_mode: "legacy_euler"
+    dynamics_mode: "legacy_spring"
   """
 
   @parameterized.parameters(15., 30., 45., 90.)
@@ -510,7 +510,7 @@ class Actuator2DTest(parameterized.TestCase):
       angle {}
     }
     defaults { qps { name: "Anchor" pos {z: 2}} qps { name: "Bob" pos {z: 1}}}
-    dynamics_mode: "legacy_euler"
+    dynamics_mode: "legacy_spring"
   """
 
   @parameterized.parameters((15., 30.), (-45., 80), (120, -60.), (-35., -52.))
@@ -566,7 +566,7 @@ class Actuator3DTest(parameterized.TestCase):
       torque {}
     }
     defaults { qps { name: "Anchor" pos {z: 2}} qps { name: "Bob" pos {z: 1}}}
-    dynamics_mode: "legacy_euler"
+    dynamics_mode: "legacy_spring"
   """
   torques = [(1, 0, 0), (0, 1, 0), (0, 0, 1), (1, 1, 1)]
 

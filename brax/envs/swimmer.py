@@ -278,6 +278,7 @@ _SYSTEM_CONFIG = """
   collide_include { }
   dt: 0.02
   substeps: 12
+  dynamics_mode: "pbd"
   """
 
 _SYSTEM_CONFIG_SPRING = """
@@ -430,5 +431,5 @@ _SYSTEM_CONFIG_SPRING = """
   collide_include { }
   dt: 0.02
   substeps: 12
-  dynamics_mode: "legacy_euler"
+  dynamics_mode: "legacy_spring"
   """

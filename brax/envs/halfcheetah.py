@@ -455,7 +455,9 @@ _SYSTEM_CONFIG = """
       x: 1.0
       z: 1.0
     }
-  }"""
+  }
+  dynamics_mode: "pbd"
+"""
 
 _SYSTEM_CONFIG_SPRING = """
   bodies {
@@ -856,5 +858,5 @@ _SYSTEM_CONFIG_SPRING = """
       z: 1.0
     }
   }
-  dynamics_mode: "legacy_euler"
+  dynamics_mode: "legacy_spring"
   """

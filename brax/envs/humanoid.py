@@ -19,11 +19,6 @@ from brax import jumpy as jp
 from brax.envs import env
 from brax.physics import bodies
 
-from brax.physics.base import QP
-
-import jax
-import jax.numpy as jnp
-
 
 class Humanoid(env.Env):
   """Trains a humanoid to run in the +x direction."""
@@ -843,6 +838,7 @@ _SYSTEM_CONFIG = """
   angular_damping: -0.05
   dt: 0.015
   substeps: 8
+  dynamics_mode: "pbd"
   """
 
 _SYSTEM_CONFIG_SPRING = """
@@ -1522,6 +1518,6 @@ _SYSTEM_CONFIG_SPRING = """
   baumgarte_erp: 0.1
   dt: 0.015
   substeps: 8
-  dynamics_mode: "legacy_euler"
+  dynamics_mode: "legacy_spring"
   """
 

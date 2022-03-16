@@ -53,6 +53,7 @@ class Hopper(brax_env.Env):
         in the observations if true.
       system_config: System config to use. If None, then _SYSTEM_CONFIG defined
         in this file will be used.
+      legacy_spring: if True, reverts to legacy spring dynamics instead of pbd.
       **kwargs: Arguments that are passed to the base class.
     """
     self._forward_reward_weight = forward_reward_weight
@@ -80,7 +81,6 @@ class Hopper(brax_env.Env):
         rng1, (self.sys.num_joint_dof,), -.005, .005)
     qvel = jp.random_uniform(rng2, (self.sys.num_joint_dof,), -.005, .005)
     qp = self.sys.default_qp(joint_angle=qpos, joint_velocity=qvel)
-    info = self.sys.info(qp)
     obs = self._get_obs(qp)
     reward, done, zero = jp.zeros(3)
     metrics = {
@@ -286,6 +286,7 @@ _SYSTEM_CONFIG = """
     angles { name: "thigh_joint" angle {} }
     angles { name: "leg_joint" angle {} }
   }
+  dynamics_mode: "pbd"
   """
 
 _SYSTEM_CONFIG_SPRING = """
@@ -439,5 +440,5 @@ _SYSTEM_CONFIG_SPRING = """
     angles { name: "thigh_joint" angle {} }
     angles { name: "leg_joint" angle {} }
   }
-  dynamics_mode: "legacy_euler"
+  dynamics_mode: "legacy_spring"
   """

@@ -38,7 +38,7 @@ angular_damping: -0.05
 baumgarte_erp: 0.1
 dt: 0.05
 substeps: 10
-dynamics_mode: "legacy_euler"
+dynamics_mode: "legacy_spring"
 """
 
 FIX_XZ_OPTIONS_STR = """

@@ -395,6 +395,7 @@ _SYSTEM_CONFIG = """
     angles { name: "thigh_left_joint" angle {} }
     angles { name: "leg_left_joint" angle {} }
   }
+  dynamics_mode: "pbd"
   """
 
 _SYSTEM_CONFIG_SPRING = """
@@ -659,6 +660,6 @@ _SYSTEM_CONFIG_SPRING = """
     angles { name: "thigh_left_joint" angle {} }
     angles { name: "leg_left_joint" angle {} }
   }
-  dynamics_mode: "legacy_euler"
+  dynamics_mode: "legacy_spring"
   """
 

@@ -159,6 +159,7 @@ _SYSTEM_CONFIG = """
   }
   dt: 0.05
   substeps: 12
+  dynamics_mode: "pbd"
   """
 
 _SYSTEM_CONFIG_SPRING = """
@@ -238,5 +239,5 @@ _SYSTEM_CONFIG_SPRING = """
   }
   dt: 0.05
   substeps: 12
-  dynamics_mode: "legacy_euler"
+  dynamics_mode: "legacy_spring"
   """

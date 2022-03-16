@@ -16,7 +16,6 @@
 """A brax system."""
 
 from typing import Optional, Sequence, Tuple
-import warnings
 
 from brax import jumpy as jp
 from brax import math
@@ -55,27 +54,6 @@ class System:
     self.forces = forces.get(self.config, self.body)
     self.num_forces_dof = sum(f.act_index.shape[-1] for f in self.forces)
     self.integrator = integrators.Euler(self.config)
-
-    if config.dynamics_mode == 'legacy_euler':
-      # check that system is probably compatible
-      for j in config.joints:
-        if j.stiffness == 0:
-          raise RuntimeError(
-              f'Joint {j.name} has 0 stiffness, but you have specified the legacy dynamics mode.  This may cause unexpected behavior.'
-          )
-      self.pbd = False
-    else:
-      if config.dynamics_mode != 'pbd_euler':
-        warnings.warn(
-            """Dynamics mode either not specified or not recognized, defaulting to position based euler.
-            If you wish to preserve legacy behavior used in previous versions of Brax, simply append `dynamics_mode: "legacy_euler"` to your config (without '`'s)."""
-        )
-      if config.baumgarte_erp:
-        raise RuntimeError(
-            'Baumgarte_erp specified by config, but is not compatible with the pbd dynamics mode.'
-        )
-
-      self.pbd = True
 
   def default_angle(self, default_index: int = 0) -> jp.ndarray:
     """Returns the default joint angles for the system."""
@@ -234,24 +212,17 @@ class System:
 
   def step(self, qp: QP, act: jp.ndarray) -> Tuple[QP, Info]:
     """Generic step function.  Overridden with appropriate step at init."""
-    if self.pbd:
-      return self._pbd_step(qp, act)
-    else:
-      return self._spring_step(qp, act)
+    step_funs = {'pbd': self._pbd_step, 'legacy_spring': self._spring_step}
+    return step_funs[self.config.dynamics_mode](qp, act)
 
   def info(self, qp: QP) -> Info:
     """Return info about a system state."""
-    if self.pbd:
-      return self._pbd_info(qp)
-    else:
-      return self._spring_info(qp)
+    info_funs = {'pbd': self._pbd_info, 'legacy_spring': self._spring_info}
+    return info_funs[self.config.dynamics_mode](qp)
 
   def _pbd_step(self, qp: QP, act: jp.ndarray) -> Tuple[QP, Info]:
-    """Position based dynamics stepping scheme.
-
-    At a high level, performs two physics substeps per collision update.
-    Otherwise, follows the XPBD scheme.
-    """
+    """Position based dynamics stepping scheme."""
+    # Just like XPBD except performs two physics substeps per collision update.
 
     def substep(carry, _):
       qp, info = carry
@@ -261,7 +232,7 @@ class System:
 
       # apply acceleration updates for actuators, and forces
       zero = P(jp.zeros((self.num_bodies, 3)), jp.zeros((self.num_bodies, 3)))
-      zeroQ = Q(jp.zeros((self.num_bodies, 3)), jp.zeros((self.num_bodies, 4)))
+      zero_q = Q(jp.zeros((self.num_bodies, 3)), jp.zeros((self.num_bodies, 4)))
       dp_a = sum([a.apply(qp, act) for a in self.actuators], zero)
       dp_f = sum([f.apply(qp, act) for f in self.forces], zero)
       dp_j = sum([j.damp(qp) for j in self.joints], zero)
@@ -271,7 +242,7 @@ class System:
       qp = self.integrator.kinetic(qp)
 
       # apply joint position update
-      dq_j = sum([j.apply(qp) for j in self.joints], zeroQ)
+      dq_j = sum([j.apply(qp) for j in self.joints], zero_q)
       qp = self.integrator.update(qp, pos_q=dq_j)
 
       # apply pbd velocity projection
@@ -281,8 +252,6 @@ class System:
       # second substep with collisions
 
       # apply acceleration updates for actuators, and forces
-      zero = P(jp.zeros((self.num_bodies, 3)), jp.zeros((self.num_bodies, 3)))
-      zeroQ = Q(jp.zeros((self.num_bodies, 3)), jp.zeros((self.num_bodies, 4)))
       dp_a = sum([a.apply(qp, act) for a in self.actuators], zero)
       dp_f = sum([f.apply(qp, act) for f in self.forces], zero)
       dp_j = sum([j.damp(qp) for j in self.joints], zero)
@@ -292,11 +261,11 @@ class System:
       qp = self.integrator.kinetic(qp)
 
       # apply joint position update
-      dq_j = sum([j.apply(qp) for j in self.joints], zeroQ)
+      dq_j = sum([j.apply(qp) for j in self.joints], zero_q)
       qp = self.integrator.update(qp, pos_q=dq_j)
 
       collide_data = [c.position_apply(qp, qprev) for c in self.colliders]
-      dq_c = sum([c[0] for c in collide_data], zeroQ)
+      dq_c = sum([c[0] for c in collide_data], zero_q)
       dlambda = sum([c[1] for c in collide_data])
       contact = [c[2] for c in collide_data]
       qp = self.integrator.update(qp, pos_q=dq_c)
@@ -326,21 +295,19 @@ class System:
 
   def _pbd_info(self, qp: QP) -> Info:
     """Return info about a system state."""
-    zeroQ = Q(jp.zeros((self.num_bodies, 3)), jp.zeros((self.num_bodies, 4)))
+    zero_q = Q(jp.zeros((self.num_bodies, 3)), jp.zeros((self.num_bodies, 4)))
     zero = P(jp.zeros((self.num_bodies, 3)), jp.zeros((self.num_bodies, 3)))
 
     # TODO: sort out a better way to get first-step collider data
     dq_c = sum([c.apply(qp) for c in self.colliders], zero)
-    dq_j = sum([j.apply(qp) for j in self.joints], zeroQ)
+    dq_j = sum([j.apply(qp) for j in self.joints], zero_q)
     info = Info(dq_c, dq_j, zero)
     return info
 
   def _spring_step(self, qp: QP, act: jp.ndarray) -> Tuple[QP, Info]:
-    """An explicit symplectic euler integrator.
-
-    Resolves actuator forces, joints, and forces at acceleration level, and
-    resolves collisions at velocity level with optional baumgarte stabilization.
-    """
+    """Spring-based dynamics stepping scheme."""
+    # Resolves actuator forces, joints, and forces at acceleration level, and
+    # resolves collisions at velocity level with baumgarte stabilization.
 
     def substep(carry, _):
       qp, info = carry
