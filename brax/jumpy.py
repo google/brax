@@ -114,6 +114,19 @@ def scan(f: Callable[[Carry, X], Tuple[Carry, Y]],
     return carry, stacked_y
 
 
+def while_loop(cond_fun: Callable[[X], Any],
+               body_fun: Callable[[X], X],
+               init_val: X) -> X:
+  """Call body function while conditional function is true, starting with state"""
+  if _in_jit():
+    return jax.lax.while_loop(cond_fun, body_fun, init_val)
+  else:
+    val = init_val
+    while cond_fun(val):
+      val = body_fun(val)
+    return val
+
+
 def take(tree: Any, i: Union[ndarray, Sequence[int]], axis: int = 0) -> Any:
   """Returns tree sliced by i."""
   np = _which_np(i)
@@ -347,6 +360,24 @@ def random_split(rng: ndarray, num: int = 2) -> ndarray:
     return rng.integers(low=0, high=2**32, dtype='uint32', size=(num, 2))
 
 
+def randint(rng: ndarray, shape: Tuple[int, ...] = (),
+            low: Optional[int] = 0, high: Optional[int] = 1) -> ndarray:
+  """Sample integers in [low, high) with given shape."""
+  if _which_np(rng) is jnp:
+    return jax.random.randint(rng, shape=shape, minval=low, maxval=high)
+  else:
+    return onp.random.default_rng(rng).integers(low=low, high=high, size=shape)
+
+
+def choice(rng: ndarray, a: Union[int, Any], shape: Tuple[int, ...] = (),
+           replace: bool = True, p: Optional[Any] = None, axis: int = 0) -> ndarray:
+  """Generate sample(s) from given array"""
+  if _which_np(rng) is jnp:
+    return jax.random.choice(rng, a, shape=shape, replace=replace, p=p, axis=axis)
+  else:
+    return onp.random.default_rng(rng).choice(a, size=shape, replace=replace, p=p, axis=axis)
+
+
 def segment_sum(data: ndarray,
                 segment_ids: ndarray,
                 num_segments: Optional[int] = None) -> ndarray:
@@ -390,6 +421,17 @@ def where(condition: ndarray, x: ndarray, y: ndarray) -> ndarray:
   return _which_np(condition, x, y).where(condition, x, y)
 
 
+def cond(pred, true_fun: Callable, false_fun: Callable, *operands: Any):
+  """Conditionally apply true_fun or false_fun to operands"""
+  if _in_jit():
+    return jax.lax.cond(pred, true_fun, false_fun, *operands)
+  else:
+    if pred:
+      return true_fun(operands)
+    else:
+      return false_fun(operands)
+
+
 def diag(v: ndarray, k: int = 0) -> ndarray:
   """Extract a diagonal or construct a diagonal array."""
   return _which_np(v).diag(v, k)
@@ -430,6 +472,21 @@ def reshape(a: ndarray, newshape: Union[Tuple[int, ...], int]) -> ndarray:
   return _which_np(a).reshape(a, newshape)
 
 
+def atleast_1d(*arys) -> ndarray:
+  """Ensure arrays are all at least 1d (dimensions added to beginning)"""
+  return _which_np(*arys).atleast_1d(*arys)
+
+
+def atleast_2d(*arys) -> ndarray:
+  """Ensure arrays are all at least 2d (dimensions added to beginning)"""
+  return _which_np(*arys).atleast_2d(*arys)
+
+
+def atleast_3d(*arys) -> ndarray:
+  """Ensure arrays are all at least 3d (dimensions added to beginning)"""
+  return _which_np(*arys).atleast_3d(*arys)
+
+
 def array(object: Any, dtype=None) -> ndarray:
   """Creates an array given a list."""
   try:
@@ -442,3 +499,10 @@ def array(object: Any, dtype=None) -> ndarray:
 def abs(a: ndarray) -> ndarray:
   """Calculate the absolute value element-wise."""
   return _which_np(a).abs(a)
+
+
+def meshgrid(*xi, copy: bool = True, sparse: bool = False, indexing: str = 'xy') -> ndarray:
+  """Create N-D coordinate matrices from 1D coordinate vectors"""
+  if _which_np(xi[0]) is jnp:
+    return jnp.meshgrid(*xi, copy=copy, sparse=sparse, indexing=indexing)
+  return onp.meshgrid(*xi, copy=copy, sparse=sparse, indexing=indexing)
