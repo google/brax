@@ -68,6 +68,8 @@ NAME_FIELDS = {
         'first',
         'second',
     ),
+    'qps': ('name',),
+    'angles': ('name',),
 }
 
 
