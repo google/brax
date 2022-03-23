@@ -127,6 +127,19 @@ def while_loop(cond_fun: Callable[[X], Any],
     return val
 
 
+def fori_loop(lower: int, upper: int,
+               body_fun: Callable[[X], X],
+               init_val: X) -> X:
+  """Call body function over range from lower to upper, starting with state"""
+  if _in_jit():
+    return jax.lax.fori_loop(lower, upper, body_fun, init_val)
+  else:
+    val = init_val
+    for i in range(lower, upper):
+      val = body_fun(val)
+    return val
+
+
 def take(tree: Any, i: Union[ndarray, Sequence[int]], axis: int = 0) -> Any:
   """Returns tree sliced by i."""
   np = _which_np(i)
@@ -304,6 +317,11 @@ def multiply(x1: ndarray, x2: ndarray) -> ndarray:
 def minimum(x1: ndarray, x2: ndarray) -> ndarray:
   """Element-wise minimum of array elements."""
   return _which_np(x1, x2).minimum(x1, x2)
+
+
+def maximum(x1: ndarray, x2: ndarray) -> ndarray:
+  """Element-wise maximum of array elements."""
+  return _which_np(x1, x2).maximum(x1, x2)
 
 
 def amin(x: ndarray) -> ndarray:
