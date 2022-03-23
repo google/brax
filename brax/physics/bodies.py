@@ -61,6 +61,9 @@ class Body:
 
 def min_z(qp: QP, body: config_pb2.Body) -> float:
   """Returns the lowest z of all the colliders in a body."""
+  if not body.colliders:
+    return 0.0
+
   result = float('inf')
 
   for col in body.colliders:

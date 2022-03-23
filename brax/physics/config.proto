@@ -172,9 +172,12 @@ message Force {
   float strength = 3;
   // Applies a force to the center of the body in the specified direction
   message Thruster {}
+  // Applies a torque to the center of the body around a specified axis
+  message Twister {}
   // A force may only be one type
   oneof type {
     Thruster thruster = 4;
+    Twister twister = 5;
   }
 }
 

@@ -633,5 +633,45 @@ class Actuator3DTest(parameterized.TestCase):
           self.assertAlmostEqual(angle, limit, 1)  # actuated to target angle
 
 
+class ForceTest(parameterized.TestCase):
+
+  _CONFIG = """
+    dt: 0.1
+    substeps: 5000
+    bodies { name: "body" mass: 1 inertia { x: 1 y: 1 z: 1 }}
+    forces {
+      name: "thruster"
+      body: "body"
+      strength: 2.5
+      thruster {}
+    }
+    forces {
+      name: "twister"
+      body: "body"
+      strength: 2.5
+      twister {}
+    }
+  """
+
+  @parameterized.parameters(1, 5, 10)
+  def test_thruster(self, force):
+    """A simple part actuates to a target angle."""
+    config = text_format.Parse(ForceTest._CONFIG, brax.Config())
+    sys = brax.System(config=config)
+    qp = sys.default_qp()
+    qp, _ = sys.step(qp, force * jp.array([1., 0., 0., 0., 0., 0]))
+
+    self.assertAlmostEqual(qp.pos[0][0], 0.5 * 2.5 * force * 0.1**2, 3)
+
+  @parameterized.parameters(1, 5, 10)
+  def test_twister(self, torque):
+    """A simple part actuates to a target angle."""
+    config = text_format.Parse(ForceTest._CONFIG, brax.Config())
+    sys = brax.System(config=config)
+    qp = sys.default_qp()
+    qp, _ = sys.step(qp, torque * jp.array([0., 0., 0., 1., 0., 0]))
+
+    self.assertAlmostEqual(qp.ang[0][0], 2.5 * torque * 0.1, 3)
+
 if __name__ == '__main__':
   absltest.main()

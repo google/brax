@@ -165,14 +165,13 @@ function createScene(system) {
         const eul = new THREE.Euler();
         eul.setFromVector3(rot);
         child.quaternion.setFromEuler(eul);
-        child.quaternion.x = -child.quaternion.x;
         const tmp = child.quaternion.y;
-        child.quaternion.y = -child.quaternion.z;
+        child.quaternion.y = child.quaternion.z;
         child.quaternion.z = -tmp;
       }
       if (collider.position) {
         child.position.set(
-            collider.position.x, collider.position.z, collider.position.y);
+            collider.position.x, collider.position.z, -collider.position.y);
       }
       parent.add(child);
     });
@@ -189,9 +188,9 @@ function createTrajectory(system) {
 
   system.config.bodies.forEach(function(body, bi) {
     const group = body.name.replaceAll('/', '_');  // sanitize node name
-    const pos = system.pos.map(p => [p[bi][0], p[bi][2], p[bi][1]]);
+    const pos = system.pos.map(p => [p[bi][0], p[bi][2], -p[bi][1]]);
     const rot =
-        system.rot.map(r => [-r[bi][1], -r[bi][3], -r[bi][2], r[bi][0]]);
+        system.rot.map(r => [r[bi][1], r[bi][3], -r[bi][2], r[bi][0]]);
     tracks.push(new THREE.VectorKeyframeTrack(
         'scene/' + group + '.position', times, pos.flat()));
     tracks.push(new THREE.QuaternionKeyframeTrack(
