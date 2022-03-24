@@ -309,6 +309,11 @@ def logical_and(x1: ndarray, x2: ndarray) -> ndarray:
   return _which_np(x1, x2).logical_and(x1, x2)
 
 
+def logical_or(x1: ndarray, x2: ndarray) -> ndarray:
+  """Returns the truth value of x1 OR x2 element-wise."""
+  return _which_np(x1, x2).logical_or(x1, x2)
+
+
 def multiply(x1: ndarray, x2: ndarray) -> ndarray:
   """Multiply arguments element-wise."""
   return _which_np(x1, x2).multiply(x1, x2)
