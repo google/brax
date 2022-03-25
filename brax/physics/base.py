@@ -14,6 +14,7 @@
 
 """Core brax structs and some conversion and slicing functions."""
 
+import copy
 import os
 from typing import Optional, Sequence, Tuple, Union
 import warnings
@@ -152,6 +153,8 @@ def validate_config(
     config: config_pb2.Config,
     resource_paths: Optional[Sequence[str]] = None) -> config_pb2.Config:
   """Validate and normalize config settings for use in systems."""
+  config = copy.deepcopy(config)
+
   if config.dt <= 0:
     raise ValueError('config.dt must be positive')
 
@@ -171,21 +174,25 @@ def validate_config(
   find_dupes(config.mesh_geometries)
 
   if config.dynamics_mode == 'legacy_spring':
-    for j in config.joints:
-      if j.stiffness == 0:
-        raise ValueError(
-            f'Joint {j.name} has 0 stiffness, but you have specified the legacy dynamics mode.  This may cause unexpected behavior.'
-        )
-  else:
-    if config.dynamics_mode != 'pbd':
-      warnings.warn(
-          """Dynamics mode either not specified or not recognized, defaulting to position based.  If you wish to preserve legacy behavior used in previous versions of Brax, simply append `dynamics_mode: "legacy_spring"` to your config (without '`'s)."""
-      )
-    if config.baumgarte_erp:
+    if any(j.stiffness == 0 for j in config.joints):
       raise ValueError(
-          'Baumgarte_erp specified by config, but is not compatible with the pbd dynamics mode.'
-      )
+          'joint.stiffness must be >0 when dynamics_mode == legacy_spring')
+  elif config.dynamics_mode == 'pbd':
+    if any(j.stiffness != 0 for j in config.joints):
+      raise ValueError('joint.stiffness is invalid when dynamics_mode == pbd')
+    if config.baumgarte_erp:
+      raise ValueError('baumgarte_erp is invalid when dynamics_mode == pbd')
+  elif any(j.stiffness != 0 for j in config.joints):
+    config.dynamics_mode = 'legacy_spring'
+    warnings.warn('dynamics_mode not specified, but joint.stiffness >0. '
+                  'Setting dynamics_mode="legacy_spring".')
+  else:
     config.dynamics_mode = 'pbd'
+    warnings.warn(
+        'dynamics_mode either not specified or not recognized, defaulting to '
+        '"pbd".  If you wish to preserve legacy behavior used in previous '
+        'versions of Brax, set dynamics_mode="legacy_spring".'
+    )
 
   # Load the meshes.
   if resource_paths is None:

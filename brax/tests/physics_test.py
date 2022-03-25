@@ -84,7 +84,7 @@ class BoxTest(absltest.TestCase):
 class BoxCapsuleTest(absltest.TestCase):
 
   _CONFIG = """
-    dt: 0.05 substeps: 20 friction: 1
+    dt: 0.05 substeps: 30 friction: 1
     gravity { z: -9.8 }
     bodies {
       name: "box1" mass: 1
@@ -433,10 +433,8 @@ class JointTest(parameterized.TestCase):
       # construct appropriate number of angle_limits for this joint
       if l == 0:
         a_l = config.joints[0].angle_limit[0]
-      elif l == 1:
-        a_l = config.joints[0].angle_limit.add()
       else:
-        a_l = config.joints[0].angle_limit[2]
+        a_l = config.joints[0].angle_limit.add()
       # set angle default to either 0 or the offset value
       a_l.min = offset * limit
       a_l.max = offset * limit
@@ -672,6 +670,41 @@ class ForceTest(parameterized.TestCase):
     qp, _ = sys.step(qp, torque * jp.array([0., 0., 0., 1., 0., 0]))
 
     self.assertAlmostEqual(qp.ang[0][0], 2.5 * torque * 0.1, 3)
+
+
+class ElasticityTest(parameterized.TestCase):
+  _CONFIG = """
+  dt: 1. substeps: 1000 friction: 0.0 elasticity: 0.5
+  gravity { z: -9.8 }
+  bodies {
+    name: "sphere" mass: 1
+    colliders { capsule { radius: .5 length: 1.0 } }
+    inertia { x: 1 y: 1 z: 1 }
+    }
+  bodies {
+    name: "boxwall" mass: 1
+    colliders { box { halfsize { x: 1 y: 1 z: 1}}}
+    inertia { x: 1 y: 1 z: 1}
+    frozen { all: true}
+  }
+  bodies { name: "Ground" frozen: { all: true } colliders { plane {}}}
+  defaults { qps { name: "sphere" vel {x: 10}}
+             qps { name: "boxwall" pos { x: 10 } }}
+  """
+
+  @parameterized.parameters(0, .5, 1.)
+  def test_ball_bounce(self, elasticity):
+    """A ball bounces off a wall where ball and wall have some elasticity."""
+    config = text_format.Parse(ElasticityTest._CONFIG, brax.Config())
+    config.elasticity = elasticity
+    sys = brax.System(config=config)
+    qp = sys.default_qp()
+    qp_init = qp
+    qp, _ = sys.step(qp, jp.array([]))
+
+    self.assertAlmostEqual(qp_init.vel[0][0] * (-1) * (elasticity**2.),
+                           qp.vel[0][0], 2)
+
 
 if __name__ == '__main__':
   absltest.main()

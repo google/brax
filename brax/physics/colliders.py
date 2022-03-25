@@ -201,14 +201,13 @@ class Collider(abc.ABC):
     col_a, col_b = self.cull.get()
     qp_a, qp_a_prev = jp.take((qp, qp_prev), col_a.body.idx)
     qp_b, qp_b_prev = jp.take((qp, qp_prev), col_b.body.idx)
-    dlambda_a = jp.take(dlambda, col_a.body.idx)
     dp_a, dp_b = jp.vmap(self._velocity_contact)(
         col_a,
         col_b,
         qp_a,
         qp_b,  # pytype: disable=attribute-error
         contact,
-        dlambda_a,
+        dlambda,
         qp_a_prev,
         qp_b_prev)
 
@@ -260,7 +259,6 @@ class Collider(abc.ABC):
     contact = jp.segment_sum(contact, body_idx, qp.pos.shape[0])
     dq_pos = jp.segment_sum(dq_pos, body_idx, qp.pos.shape[0])
     dq_rot = jp.segment_sum(dq_rot, body_idx, qp.rot.shape[0])
-    dlambda = jp.segment_sum(dlambda, col_a.body.idx, qp.pos.shape[0])
 
     # equally distribute impulse over possible contacts
     contact = jp.reshape(1e-6 + contact, (dq_pos.shape[0], 1))
@@ -419,9 +417,7 @@ class OneWayCollider(Collider):
                                           contact.pos - qp_a_old.pos)
     v_n_old = jp.dot(rel_vel_old, n)
 
-    elasticity = jp.where(
-        jp.safe_norm(v_n) < 2. * self.h * 9.81, 0., elasticity)
-    dv_rest = n * (-v_n + jp.amin(jp.array([-elasticity * v_n_old, 0.])))
+    dv_rest = n * (-v_n - jp.amin(jp.array([elasticity * v_n_old, 0.])))
 
     pos_p = contact.pos
 
@@ -437,7 +433,9 @@ class OneWayCollider(Collider):
 
     dlambda_rest = c / (w1 + 1e-6)
     static_mask = jp.where(contact.penetration > 0, 1., 0.)
-    p = (dlambda_rest * n + p_dyn) * static_mask
+    sinking = jp.where(v_n_old <= 0., 1., 0.)
+
+    p = (dlambda_rest * n * sinking + p_dyn) * static_mask
 
     dp_p = P(
         vel=p / col_a.body.mass,
@@ -605,9 +603,7 @@ class TwoWayCollider(Collider):
             qp_b_old.vel + jp.cross(qp_b_old.ang, contact.pos - qp_b_old.pos))
     v_n_old = jp.dot(rel_vel_old, n)
 
-    elasticity = jp.where(
-        jp.safe_norm(v_n) < 2. * self.h * 9.81, 0., elasticity)
-    dv_rest = n * (-v_n + jp.amin(jp.array([-elasticity * v_n_old, 0.])))
+    dv_rest = n * (-v_n - jp.amin(jp.array([elasticity * v_n_old, 0.])))
 
     pos_p = contact.pos
     pos_c = contact.pos + contact.normal * contact.penetration
@@ -627,7 +623,9 @@ class TwoWayCollider(Collider):
 
     dlambda_rest = c / (w1 + w2 + 1e-6)
     static_mask = jp.where(contact.penetration > 0, 1., 0.)
-    p = (dlambda_rest * n + p_dyn) * static_mask
+    sinking = jp.where(v_n_old <= 0., 1., 0.)
+
+    p = (dlambda_rest * n * sinking + p_dyn) * static_mask
 
     dp_p = P(
         vel=p / col_a.body.mass,

@@ -41,19 +41,20 @@ class System:
   def __init__(self,
                config: config_pb2.Config,
                resource_paths: Optional[Sequence[str]] = None):
-    self.config = validate_config(config, resource_paths=resource_paths)
+    config = validate_config(config, resource_paths=resource_paths)
+    self.config = config
     self.num_bodies = len(config.bodies)
     self.body = bodies.Body(config)
-    self.colliders = colliders.get(self.config, self.body)
+    self.colliders = colliders.get(config, self.body)
     self.num_joints = len(config.joints)
-    self.joints = joints.get(self.config, self.body) + spring_joints.get(
-        self.config, self.body)
+    self.joints = joints.get(config, self.body) + spring_joints.get(
+        config, self.body)
     self.num_actuators = len(config.actuators)
     self.num_joint_dof = sum(len(j.angle_limit) for j in config.joints)
-    self.actuators = actuators.get(self.config, self.joints)
-    self.forces = forces.get(self.config, self.body)
+    self.actuators = actuators.get(config, self.joints)
+    self.forces = forces.get(config, self.body)
     self.num_forces_dof = sum(f.act_index.shape[-1] for f in self.forces)
-    self.integrator = integrators.Euler(self.config)
+    self.integrator = integrators.Euler(config)
 
   def default_angle(self, default_index: int = 0) -> jp.ndarray:
     """Returns the default joint angles for the system."""
@@ -266,7 +267,7 @@ class System:
 
       collide_data = [c.position_apply(qp, qprev) for c in self.colliders]
       dq_c = sum([c[0] for c in collide_data], zero_q)
-      dlambda = sum([c[1] for c in collide_data])
+      dlambda = [c[1] for c in collide_data]
       contact = [c[2] for c in collide_data]
       qp = self.integrator.update(qp, pos_q=dq_c)
 
@@ -275,7 +276,7 @@ class System:
       qp = self.integrator.velocity_projection(qp, qprev)
       # apply collision velocity updates
       dp_c = sum([
-          c.velocity_apply(qp, dlambda, qp_right_before, contact[i])
+          c.velocity_apply(qp, dlambda[i], qp_right_before, contact[i])
           for i, c in enumerate(self.colliders)
       ], zero)
       qp = self.integrator.update(qp, vel_p=dp_c)

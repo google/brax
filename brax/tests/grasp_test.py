@@ -25,20 +25,20 @@ class GraspTest(absltest.TestCase):
   def testGrasp(self):
     env = envs.create('grasp')
     grasp_action = jp.array([
-        -.1, 0., 0., -.35, 0., 0., -1, -0, 0.,  # gripper arm 1
-          .1, 0., 0.,  .35, 0., 0.,  1,  0, 0.,     # gripper arm 2
-          .1, 0., 0.,  .35, 0., 0.,  1,  0, 0.,      # gripper arm 3
-          .1, 0., 0.,  .35, 0., 0.,  1,  0, 0.,      # gripper arm 4
-        0, 0, -.9           # position action
-    ])
+     -.3, 0., 0., -1, 0., 0., -1, -0, 0.,  # gripper arm 1
+      .3, 0., 0.,  1, 0., 0.,  1,  0, 0.,     # gripper arm 2
+      .3, 0., 0.,  1, 0., 0.,  1,  0, 0.,      # gripper arm 3
+      .3, 0., 0.,  1, 0., 0.,  1,  0, 0.,      # gripper arm 4
+      0, 0, -1.0           # position action
+      ])
 
     def raise_action(i):
       return jp.array([
-        -.1, 0., 0., -.35, 0., 0., -1, -0, 0.,  # gripper arm 1
-          .1, 0., 0.,  .35, 0., 0.,  1,  0, 0.,     # gripper arm 2
-          .1, 0., 0.,  .35, 0., 0.,  1,  0, 0.,      # gripper arm 3
-          .1, 0., 0.,  .35, 0., 0.,  1,  0, 0.,      # gripper arm 4
-        0, 0, -.9*((250 - i)/250) + -.5*(i/250)           # position action
+         -.3, 0., 0., -1, 0., 0., -1, -0, 0.,  # gripper arm 1
+          .3, 0., 0.,  1, 0., 0.,  1,  0, 0.,     # gripper arm 2
+          .3, 0., 0.,  1, 0., 0.,  1,  0, 0.,      # gripper arm 3
+          .3, 0., 0.,  1, 0., 0.,  1,  0, 0.,      # gripper arm 4
+        0, 0, -1.0*((250 - i)/250) + -.5*(i/250)           # position action
       ])
 
     state = env.reset(jp.random_prngkey(0))
