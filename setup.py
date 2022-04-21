@@ -49,6 +49,7 @@ setup(
         "pytinyrenderer",
         "tensorboardX",
         "trimesh",
+        "brax-jumpy"
     ],
     extras_require={
         "develop": ["pytest", "transforms3d"],
