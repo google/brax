@@ -15,13 +15,13 @@
 """A brax environment for training and inference."""
 
 import abc
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional
+
+import jumpy as jp
+from flax import struct
+from google.protobuf import text_format
 
 import brax
-from brax import jumpy as jp
-from flax import struct
-
-from google.protobuf import text_format
 
 
 @struct.dataclass

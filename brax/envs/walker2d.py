@@ -16,8 +16,9 @@
 
 from typing import Optional, Tuple
 
+import jumpy as jp
+
 import brax
-from brax import jumpy as jp
 from brax.envs import env as brax_env
 from brax.physics import bodies
 

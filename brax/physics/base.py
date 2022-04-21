@@ -19,7 +19,7 @@ import os
 from typing import Optional, Sequence, Tuple, Union
 import warnings
 
-from brax import jumpy as jp
+import jumpy as jp
 from brax import math
 from brax.io import file
 from brax.physics import config_pb2

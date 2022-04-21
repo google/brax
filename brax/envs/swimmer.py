@@ -17,8 +17,9 @@
 Based on the OpenAI Gym MuJoCo Swimmer environment.
 """
 
+import jumpy as jp
+
 import brax
-from brax import jumpy as jp
 from brax import math
 from brax.envs import env
 

@@ -20,7 +20,7 @@ import time
 from absl.testing import absltest
 from absl.testing import parameterized
 from brax import envs
-from brax import jumpy as jp
+import jumpy as jp
 import jax
 
 _EARLY_TERMINATION = ('ant', 'humanoid')

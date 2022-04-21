@@ -20,7 +20,7 @@ import itertools
 from typing import Any, Callable, List, Optional, Mapping, Tuple
 import warnings
 
-from brax import jumpy as jp
+import jumpy as jp
 from brax import math
 from brax import pytree
 from brax.physics import bodies

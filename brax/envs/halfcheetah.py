@@ -14,8 +14,9 @@
 
 """Trains a halfcheetah to run in the +x direction."""
 
+import jumpy as jp
+
 import brax
-from brax import jumpy as jp
 from brax.envs import env
 
 

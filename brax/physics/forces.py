@@ -17,7 +17,7 @@
 
 from typing import List, Tuple, Union
 
-from brax import jumpy as jp
+import jumpy as jp
 from brax import pytree
 from brax.physics import bodies
 from brax.physics import config_pb2

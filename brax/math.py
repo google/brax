@@ -16,7 +16,7 @@
 """Common math functions used by multiple brax modules."""
 from typing import Tuple
 
-from brax import jumpy as jp
+import jumpy as jp
 
 Vector3 = jp.ndarray
 Quaternion = jp.ndarray

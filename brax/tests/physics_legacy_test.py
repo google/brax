@@ -21,7 +21,7 @@ import os
 from absl.testing import absltest
 from absl.testing import parameterized
 import brax
-from brax import jumpy as jp
+import jumpy as jp
 import jax
 
 from google.protobuf import text_format

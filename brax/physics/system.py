@@ -17,7 +17,7 @@
 
 from typing import Optional, Sequence, Tuple
 
-from brax import jumpy as jp
+import jumpy as jp
 from brax import math
 from brax import pytree
 from brax.physics import actuators

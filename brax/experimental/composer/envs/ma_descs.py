@@ -16,7 +16,7 @@
 import functools
 import itertools
 from typing import Any, Dict, Sequence
-from brax import jumpy as jp
+import jumpy as jp
 from brax import math
 from brax.experimental.composer import component_editor
 from brax.experimental.composer import reward_functions

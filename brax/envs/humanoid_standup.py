@@ -14,8 +14,9 @@
 
 """Trains a humanoid to stand up."""
 
+import jumpy as jp
+
 import brax
-from brax import jumpy as jp
 from brax.envs import env
 from brax.physics import bodies
 

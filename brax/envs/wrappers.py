@@ -16,13 +16,14 @@
 
 from typing import ClassVar, Dict, Optional
 
-from brax import jumpy as jp
-from brax.envs import env as brax_env
 import flax
 import gym
+import jax
+import jumpy as jp
 from gym import spaces
 from gym.vector import utils
-import jax
+
+from brax.envs import env as brax_env
 
 
 class VectorWrapper(brax_env.Wrapper):

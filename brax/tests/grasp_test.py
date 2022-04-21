@@ -16,7 +16,7 @@
 
 from absl.testing import absltest
 from brax import envs
-from brax import jumpy as jp
+import jumpy as jp
 import jax
 
 

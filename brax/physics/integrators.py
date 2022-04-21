@@ -18,7 +18,7 @@
 import abc
 from typing import Optional
 
-from brax import jumpy as jp
+import jumpy as jp
 from brax import math
 from brax.physics import config_pb2
 from brax.physics.base import P, Q, QP, vec_to_arr

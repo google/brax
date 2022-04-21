@@ -19,8 +19,9 @@ Based on the OpenAI Gym MuJoCo Reacher environment.
 
 from typing import Tuple
 
+import jumpy as jp
+
 import brax
-from brax import jumpy as jp
 from brax.envs import env
 
 

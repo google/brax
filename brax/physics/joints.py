@@ -18,7 +18,7 @@
 import abc
 from typing import Any, List, Tuple, Union
 
-from brax import jumpy as jp
+import jumpy as jp
 from brax import math
 from brax import pytree
 from brax.physics import bodies

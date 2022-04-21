@@ -14,8 +14,9 @@
 
 """An inverted pendulum environment."""
 
+import jumpy as jp
+
 import brax
-from brax import jumpy as jp
 from brax.envs import env
 
 

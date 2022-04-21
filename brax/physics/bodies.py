@@ -15,7 +15,7 @@
 # pylint:disable=g-multiple-import
 """Functionality for brax bodies."""
 
-from brax import jumpy as jp
+import jumpy as jp
 from brax import math
 from brax import pytree
 from brax.physics import config_pb2
