@@ -36,6 +36,7 @@ from brax.envs import swimmer
 from brax.envs import ur5e
 from brax.envs import walker2d
 from brax.envs import ball_fetch_ball
+from brax.envs import act_sphere
 from brax.envs import wrappers
 from brax.envs.env import Env, State, Wrapper
 import gym
@@ -58,7 +59,8 @@ _envs = {
     'swimmer': swimmer.Swimmer,
     'ur5e': ur5e.Ur5e,
     'walker2d': walker2d.Walker2d,
-    'ball_fetch_ball': ball_fetch_ball.BallFetch
+    'ball_fetch_ball': ball_fetch_ball.BallFetch,
+    'act_sphere': act_sphere.ActSphere,
 }
 
 
