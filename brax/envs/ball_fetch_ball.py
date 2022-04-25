@@ -166,6 +166,7 @@ bodies {
     capsule {
       radius: 0.5
       length: 1.0
+      end: 1
     }
   }
   mass: 1.0
