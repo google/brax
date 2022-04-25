@@ -29,7 +29,7 @@ class SphereFetch(env.Env):
     config = _SYSTEM_CONFIG_SPRING if legacy_spring else _SYSTEM_CONFIG
     super().__init__(config=config, **kwargs)
     self.target_idx = self.sys.body.index['Target']
-    self.torso_idx = self.sys.body.index['Torso']
+    self.torso_idx = self.sys.body.index['p1']
     self.target_radius = 2
     self.target_distance = 15
 
@@ -70,13 +70,13 @@ class SphereFetch(env.Env):
     # # small reward for torso height
     # torso_height = .1 * self.sys.config.dt * qp.pos[0, 2]
 
-    # big reward for reaching target and facing it
+    # big reward for reaching target (don't care about facing it)
     fwd = jp.array([1., 0., 0.])
-    torso_fwd = math.rotate(fwd, qp.rot[self.torso_idx])
-    torso_facing = jp.dot(target_dir, torso_fwd)
+    # torso_fwd = math.rotate(fwd, qp.rot[self.torso_idx])
+    # torso_facing = jp.dot(target_dir, torso_fwd)
     target_hit = target_dist < self.target_radius
     target_hit = jp.where(target_hit, jp.float32(1), jp.float32(0))
-    weighted_hit = target_hit * torso_facing
+    weighted_hit = target_hit # * torso_facing
 
     reward = moving_to_target + weighted_hit # + torso_is_up + torso_height
 
@@ -99,7 +99,7 @@ class SphereFetch(env.Env):
   def _get_obs(self, qp: brax.QP, info: brax.Info) -> jp.ndarray:
     """Egocentric observation of target and the dog's body."""
     torso_fwd = math.rotate(jp.array([1., 0., 0.]), qp.rot[self.torso_idx])
-    torso_up = math.rotate(jp.array([0., 0., 1.]), qp.rot[self.torso_idx])
+    # torso_up = math.rotate(jp.array([0., 0., 1.]), qp.rot[self.torso_idx])
 
     v_inv_rotate = jp.vmap(math.inv_rotate, include=(True, False))
 
