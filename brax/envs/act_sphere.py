@@ -52,12 +52,13 @@ class ActSphere(env.Env):
     x_before = state.qp.pos[0, 0]
     x_after = qp.pos[0, 0]
     forward_reward = (x_after - x_before) / self.sys.config.dt
-    ctrl_cost = .5 * jp.sum(jp.square(action))
+    ctrl_cost = .5 * jp.sum(jp.square(action)) # dependent on torque
     contact_cost = (0.5 * 1e-3 *
                     jp.sum(jp.square(jp.clip(info.contact.vel, -1, 1))))
     survive_reward = jp.float32(1)
     reward = forward_reward - ctrl_cost - contact_cost + survive_reward
 
+    # termination - these shouldn't matter for our ball
     done = jp.where(qp.pos[0, 2] < 0.2, x=jp.float32(1), y=jp.float32(0))
     done = jp.where(qp.pos[0, 2] > 1.0, x=jp.float32(1), y=done)
     state.metrics.update(
@@ -69,7 +70,7 @@ class ActSphere(env.Env):
     return state.replace(qp=qp, obs=obs, reward=reward, done=done)
 
   def _get_obs(self, qp: brax.QP, info: brax.Info) -> jp.ndarray:
-    """Observe ant body position and velocities."""
+    """Observe sphere body position and velocities."""
     # some pre-processing to pull joint angles and velocities
     (joint_angle,), (joint_vel,) = self.sys.joints[0].angle_vel(qp)
 
@@ -104,22 +105,21 @@ bodies {
     capsule {
       radius: 0.5
       length: 1.0
-      end: 1
     }
   }
-  inertia { x: 1.0 y: 1.0 z: 1.0 }
   mass: 1.0
 }
 bodies {
   name: "p1_roll"
-  mass: 0.1
+  mass: 0.01
 }
 bodies {
   name: "p1_pitch"
-  mass: 0.1
+  mass: 0.01
 }
+
 bodies {
-  name: "Ground"
+  name: "ground"
   colliders {
     plane {
     }
@@ -128,7 +128,6 @@ bodies {
     all: true
   }
 }
-
 joints {
   name: "joint1"
   parent: "p1_roll"
@@ -169,13 +168,8 @@ friction: 3.0
 gravity {
   z: -9.8
 }
-
-collide_include {
-first: "p1"
-second: "Ground"
-}
-
 dt: 0.05
 substeps: 20
 dynamics_mode: "pbd"
+
 """
