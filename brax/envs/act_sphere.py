@@ -70,7 +70,7 @@ class ActSphere(env.Env):
     return state.replace(qp=qp, obs=obs, reward=reward, done=done)
 
   def _get_obs(self, qp: brax.QP, info: brax.Info) -> jp.ndarray:
-    """Observe sphere body position and velocities."""
+    """Observe s body position and velocities."""
     # some pre-processing to pull joint angles and velocities
     (joint_angle,), (joint_vel,) = self.sys.joints[0].angle_vel(qp)
 

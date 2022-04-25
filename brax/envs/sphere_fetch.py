@@ -22,14 +22,14 @@ from brax import math
 from brax.envs import env
 
 
-class BallFetch(env.Env):
-  """BallFetch trains an actuated sphere to chase a ball."""
+class SphereFetch(env.Env):
+  """SphereFetch trains an actuated sphere to run to a target location."""
 
   def __init__(self, legacy_spring=False, **kwargs):
     config = _SYSTEM_CONFIG_SPRING if legacy_spring else _SYSTEM_CONFIG
     super().__init__(config=config, **kwargs)
     self.target_idx = self.sys.body.index['Target']
-    self.torso_idx = self.sys.body.index['p1']
+    self.torso_idx = self.sys.body.index['Torso']
     self.target_radius = 2
     self.target_distance = 15
 
@@ -45,8 +45,8 @@ class BallFetch(env.Env):
         'hits': zero,
         'weightedHits': zero,
         'movingToTarget': zero,
-        # 'torsoIsUp': zero, # doesn't matter...
-        # 'torsoHeight': zero # doesn't matter...
+        # 'torsoIsUp': zero,
+        # 'torsoHeight': zero
     }
     info = {'rng': rng}
     return env.State(qp, obs, reward, done, metrics, info)
@@ -70,7 +70,7 @@ class BallFetch(env.Env):
     # # small reward for torso height
     # torso_height = .1 * self.sys.config.dt * qp.pos[0, 2]
 
-    # big reward for reaching target and facing it - necessary??
+    # big reward for reaching target and facing it
     fwd = jp.array([1., 0., 0.])
     torso_fwd = math.rotate(fwd, qp.rot[self.torso_idx])
     torso_facing = jp.dot(target_dir, torso_fwd)
@@ -78,14 +78,14 @@ class BallFetch(env.Env):
     target_hit = jp.where(target_hit, jp.float32(1), jp.float32(0))
     weighted_hit = target_hit * torso_facing
 
-    reward = moving_to_target + weighted_hit # + torso_height + torso_is_up
+    reward = moving_to_target + weighted_hit # + torso_is_up + torso_height
 
     state.metrics.update(
         hits=target_hit,
         weightedHits=weighted_hit,
         movingToTarget=moving_to_target,
         # torsoIsUp=torso_is_up,
-        # torsoHeight=torso_height
+        # torsoHeight=torso_height,
         )
 
     # teleport any hit targets
@@ -97,9 +97,9 @@ class BallFetch(env.Env):
     return state.replace(qp=qp, obs=obs, reward=reward)
 
   def _get_obs(self, qp: brax.QP, info: brax.Info) -> jp.ndarray:
-    """Egocentric observation of target and *chaser's body."""
+    """Egocentric observation of target and the dog's body."""
     torso_fwd = math.rotate(jp.array([1., 0., 0.]), qp.rot[self.torso_idx])
-    # torso_up = math.rotate(jp.array([0., 0., 1.]), qp.rot[self.torso_idx])
+    torso_up = math.rotate(jp.array([0., 0., 1.]), qp.rot[self.torso_idx])
 
     v_inv_rotate = jp.vmap(math.inv_rotate, include=(True, False))
 
@@ -135,6 +135,30 @@ class BallFetch(env.Env):
     return rng, target
 
 _SYSTEM_CONFIG = """
+
+bodies {
+  name: "p1"
+  colliders {
+    capsule {
+      radius: 0.5
+      length: 1.0
+    }
+  }
+  mass: 1.0
+}
+bodies {
+  name: "p1_roll"
+  mass: 0.01
+}
+bodies {
+  name: "p1_pitch"
+  mass: 0.01
+}
+bodies {
+name: "Target"
+colliders { sphere { radius: 2 }}
+frozen { all: true }
+}
 bodies {
   name: "ground"
   colliders {
@@ -144,32 +168,6 @@ bodies {
   frozen {
     all: true
   }
-}
-
-bodies {
-  name: "Target"
-  colliders { sphere { radius: 2 }}
-  # frozen { all: true }
-  }
-
-bodies {
-  name: "p1_roll"
-  mass: 0.1
-}
-bodies {
-  name: "p1_pitch"
-  mass: 0.1
-}
-bodies {
-  name: "p1"
-  colliders {
-    capsule {
-      radius: 0.5
-      length: 1.0
-      end: 1
-    }
-  }
-  mass: 1.0
 }
 joints {
   name: "joint1"
@@ -214,4 +212,5 @@ gravity {
 dt: 0.05
 substeps: 20
 dynamics_mode: "pbd"
+
 """
