@@ -300,6 +300,12 @@ class OneWayCollider(Collider):
     normal_vel = jp.dot(contact.normal, contact.vel)
     temp1 = col_a.body.inertia * jp.cross(rel_pos, contact.normal)
     ang = jp.dot(contact.normal, jp.cross(temp1, rel_pos))
+    print("""(-1. * (1. + elasticity) * normal_vel + baumgarte_vel) / (
+        (1. / col_a.body.mass) + ang)""")
+    print('col_a, col_b', col_a, col_b)
+    print('col_a.body.mass', col_a.body.mass)
+    print(col_a.__dict__, col_b.__dict__)
+    input()
     impulse = (-1. * (1. + elasticity) * normal_vel + baumgarte_vel) / (
         (1. / col_a.body.mass) + ang)
     dp_n = col_a.body.impulse(qp_a, impulse * contact.normal, contact.pos)
