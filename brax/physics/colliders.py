@@ -302,6 +302,7 @@ class OneWayCollider(Collider):
     ang = jp.dot(contact.normal, jp.cross(temp1, rel_pos))
     impulse = (-1. * (1. + elasticity) * normal_vel + baumgarte_vel) / (
         (1. / col_a.body.mass) + ang)
+    print(col_a, col_a.body.mass)
     dp_n = col_a.body.impulse(qp_a, impulse * contact.normal, contact.pos)
 
     # apply drag due to friction acting parallel to the surface contact
