@@ -134,7 +134,8 @@ class BallFetch(env.Env):
     target = jp.array([target_x, target_y, target_z]).transpose()
     return rng, target
 
-_SYSTEM_CONFIG = bodies {
+_SYSTEM_CONFIG = """
+bodies {
   name: "ground"
   colliders {
     plane {
@@ -213,3 +214,4 @@ dt: 0.05000000074505806
 substeps: 20
 dynamics_mode: "pbd"
 }
+"""
