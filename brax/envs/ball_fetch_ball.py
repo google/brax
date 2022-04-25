@@ -213,5 +213,4 @@ gravity {
 dt: 0.05000000074505806
 substeps: 20
 dynamics_mode: "pbd"
-}
 """
