@@ -154,11 +154,11 @@ bodies {
 
 bodies {
   name: "p1_roll"
-  mass: 9.999999747378752e-05
+  mass: 0.1
 }
 bodies {
   name: "p1_pitch"
-  mass: 9.999999747378752e-05
+  mass: 0.1
 }
 bodies {
   name: "p1"
@@ -208,9 +208,9 @@ actuators {
 elasticity: 1.0
 friction: 3.0
 gravity {
-  z: -9.800000190734863
+  z: -9.8
 }
-dt: 0.05000000074505806
+dt: 0.05
 substeps: 20
 dynamics_mode: "pbd"
 """
