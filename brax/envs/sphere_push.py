@@ -62,8 +62,8 @@ class SpherePush(env.Env):
         'reward_ctrl_cost': zero,
         'reward_contact_cost': zero,
         # 'reward_forward': zero,
-        towards_ball_reward: zero,
-        ball_forward_reward: zero,
+        'towards_ball_reward': zero,
+        'ball_forward_reward': zero,
         'reward_survive': zero,
     }
     return env.State(qp, obs, reward, done, metrics)
