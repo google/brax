@@ -219,6 +219,7 @@ friction: 3.0
 gravity {
   z: -9.8
 }
+angular_damping: -0.05
 dt: 0.05
 substeps: 20
 dynamics_mode: "pbd"
