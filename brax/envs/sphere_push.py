@@ -70,18 +70,21 @@ class SpherePush(env.Env):
     """Run one timestep of the environment's dynamics."""
     qp, info = self.sys.step(state.qp, action)
     obs = self._get_obs(qp, info)
-
-    # move p1 forward - small reward
-    x_before = state.qp.pos[0, 0]
-    x_after = qp.pos[0, 0]
-    forward_reward = (x_after - x_before) / self.sys.config.dt
-    # forward_reward *= 0.1
     
     # push ball forward - big reward
     x_ball_before = state.qp.pos[3, 0]
     x_ball_after = qp.pos[3, 0]
     ball_forward_reward = (x_ball_after - x_ball_before) / self.sys.config.dt
     ball_forward_reward *= 10
+    
+    # move p1 towards ball - small reward
+    x_dist_before = abs(state.qp.pos[0, 0] - state.qp.pos[3, 0])
+    x_dist_after = abs(qp.pos[0, 0] - qp.pos[3, 0])
+    y_dist_before = abs(state.qp.pos[0, 1] - state.qp.pos[3, 1])
+    y_dist_after = abs(qp.pos[0, 1] - qp.pos[3, 1])
+    dist_before = abs((x_dist_before**2 + y_dist_before**2)**0.5)
+    dist_after = abs((x_dist_after**2 + y_dist_after**2)**0.5)
+    towards_ball_reward = (dist_after - dist_before) / self.sys.config.dt
     
     ctrl_cost = .5 * jp.sum(jp.square(action)) # dependent on torque
     
