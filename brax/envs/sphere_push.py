@@ -62,7 +62,7 @@ class SpherePush(env.Env):
         'reward_ctrl_cost': zero,
         'reward_contact_cost': zero,
         # 'reward_forward': zero,
-        'towards_ball_reward': zero,
+        'towards_ball_cost': zero,
         'ball_forward_reward': zero,
         'reward_survive': zero,
     }
@@ -86,7 +86,7 @@ class SpherePush(env.Env):
     y_dist_after = abs(qp.pos[0, 1] - qp.pos[3, 1])
     dist_before = abs((x_dist_before**2 + y_dist_before**2)**0.5)
     dist_after = abs((x_dist_after**2 + y_dist_after**2)**0.5)
-    towards_ball_reward = (dist_after - dist_before) / self.sys.config.dt
+    towards_ball_cost = (dist_after - dist_before) / self.sys.config.dt
     
     ctrl_cost = .5 * jp.sum(jp.square(action)) # dependent on torque
     
@@ -94,7 +94,7 @@ class SpherePush(env.Env):
     contact_cost = jp.float32(0) # (0.5 * 1e-3 * jp.sum(jp.square(jp.clip(info.contact.vel, -1, 1))))
     survive_reward = jp.float32(1)
     
-    reward = towards_ball_reward + ball_forward_reward - ctrl_cost + survive_reward - contact_cost
+    reward = ball_forward_reward - towards_ball_cost - ctrl_cost + survive_reward - contact_cost
 
     # termination - these shouldn't matter for our ball
     done = jp.where(qp.pos[0, 2] < 0.2, x=jp.float32(1), y=jp.float32(0))
@@ -104,7 +104,7 @@ class SpherePush(env.Env):
         reward_contact_cost=contact_cost,
         # reward_forward=forward_reward,
         ball_forward_reward=ball_forward_reward,
-        towards_ball_reward=towards_ball_reward,
+        towards_ball_cost=towards_ball_cost,
         reward_survive=survive_reward)
 
     return state.replace(qp=qp, obs=obs, reward=reward, done=done)
