@@ -34,7 +34,7 @@ class SpherePush(env.Env):
     pos = np.array([[0., 0., .5],                   # p1
                     [0., 0., .5],                   # roll
                     [0., 0., .5],                   # pitch
-                    [ball_init_x., ball_init_y, .5] # ball
+                    [ball_init_x, ball_init_y, .5] # ball
                     [0., 0., 0],]),                 # ground 
     # velocity of each body in 3d (both at rest)
     vel = np.array([[0., 0., 0.],       
