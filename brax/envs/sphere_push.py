@@ -85,12 +85,11 @@ class SpherePush(env.Env):
     
     ctrl_cost = .5 * jp.sum(jp.square(action)) # dependent on torque
     
-    # not sure what this is
-    # contact_cost = (0.5 * 1e-3 *
-    #                 jp.sum(jp.square(jp.clip(info.contact.vel, -1, 1))))
+    # not sure what this is - set to zero for now
+    contact_cost = 0 # (0.5 * 1e-3 * jp.sum(jp.square(jp.clip(info.contact.vel, -1, 1))))
     survive_reward = jp.float32(1)
     
-    reward = forward_reward + ball_forward_reward - ctrl_cost + survive_reward # - contact_cost
+    reward = forward_reward + ball_forward_reward - ctrl_cost + survive_reward - contact_cost
 
     # termination - these shouldn't matter for our ball
     done = jp.where(qp.pos[0, 2] < 0.2, x=jp.float32(1), y=jp.float32(0))
