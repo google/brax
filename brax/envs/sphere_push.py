@@ -75,6 +75,7 @@ class SpherePush(env.Env):
     x_before = state.qp.pos[0, 0]
     x_after = qp.pos[0, 0]
     forward_reward = (x_after - x_before) / self.sys.config.dt
+    # forward_reward *= 0.1
     
     # push ball forward - big reward
     x_ball_before = state.qp.pos[3, 0]
@@ -85,11 +86,11 @@ class SpherePush(env.Env):
     ctrl_cost = .5 * jp.sum(jp.square(action)) # dependent on torque
     
     # not sure what this is
-    contact_cost = (0.5 * 1e-3 *
-                    jp.sum(jp.square(jp.clip(info.contact.vel, -1, 1))))
+    # contact_cost = (0.5 * 1e-3 *
+    #                 jp.sum(jp.square(jp.clip(info.contact.vel, -1, 1))))
     survive_reward = jp.float32(1)
     
-    reward = forward_reward - ctrl_cost - contact_cost + survive_reward
+    reward = forward_reward + ball_forward_reward - ctrl_cost + survive_reward # - contact_cost
 
     # termination - these shouldn't matter for our ball
     done = jp.where(qp.pos[0, 2] < 0.2, x=jp.float32(1), y=jp.float32(0))
