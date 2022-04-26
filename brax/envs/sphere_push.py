@@ -40,14 +40,17 @@ class SpherePush(env.Env):
     vel = jp.array([[0., 0., 0.],       
                     [0., 0., 0.],       
                     [0., 0., 0.],       
-                    [0., 0., 0.],]),     
+                    [0., 0., 0.],
+                    [0., 0., 0.]]),     
     # rotation about center of body, as a quaternion (w, x, y, z)
     rot = jp.array([[1., 0., 0., 0.], 
                     [1., 0., 0., 0.], 
                     [1., 0., 0., 0.], 
+                    [1., 0., 0., 0.],
                     [1., 0., 0., 0.]]), 
     # angular velocity about center of body in 3d
     ang = jp.array([[0., 0., 0.],
+                    [0., 0., 0.],
                     [0., 0., 0.],
                     [0., 0., 0.],
                     [0., 0., 0.]])
