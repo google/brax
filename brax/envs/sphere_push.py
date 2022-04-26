@@ -73,11 +73,15 @@ class SpherePush(env.Env):
     qp, info = self.sys.step(state.qp, action)
     obs = self._get_obs(qp, info)
     
+    
     # push ball forward - big reward
     x_ball_before = state.qp.pos[3, 0]
     x_ball_after = qp.pos[3, 0]
     ball_forward_reward = (x_ball_after - x_ball_before) / self.sys.config.dt
     ball_forward_reward *= 10
+    
+    # ball distance travelled from starting position
+    ball_dist_reward = qp.pos[3,0] - 2.0
     
     # move p1 towards ball - small reward
     x_dist_before = abs(state.qp.pos[0, 0] - state.qp.pos[3, 0])
@@ -87,6 +91,14 @@ class SpherePush(env.Env):
     dist_before = abs((x_dist_before**2 + y_dist_before**2)**0.5)
     dist_after = abs((x_dist_after**2 + y_dist_after**2)**0.5)
     towards_ball_cost = (dist_after - dist_before) / self.sys.config.dt
+    towards_ball_cost *= 0.5
+    
+    # have p1 be near to ball - small reward
+    x_dist = abs(qp.pos[0, 0] - qp.pos[3, 0])
+    y_dist = abs(qp.pos[0, 1] - qp.pos[3, 1])
+    dist = abs((x_dist**2 + y_dist**2)**0.5)
+    near_ball_cost = dist / self.sys.config.dt
+    near_ball_cost *= 0.5
     
     ctrl_cost = .5 * jp.sum(jp.square(action)) # dependent on torque
     
@@ -94,7 +106,9 @@ class SpherePush(env.Env):
     contact_cost = jp.float32(0) # (0.5 * 1e-3 * jp.sum(jp.square(jp.clip(info.contact.vel, -1, 1))))
     survive_reward = jp.float32(1)
     
-    reward = ball_forward_reward - towards_ball_cost - ctrl_cost + survive_reward - contact_cost
+    reward = ball_forward_reward + ball_dist_reward 
+    reward -= towards_ball_cost + near_ball_cost + ctrl_cost
+    reward += survive_reward - contact_cost
 
     # termination - these shouldn't matter for our ball
     done = jp.where(qp.pos[0, 2] < 0.2, x=jp.float32(1), y=jp.float32(0))
@@ -137,7 +151,8 @@ class SpherePush(env.Env):
     # obs = jp.concatenate(qpos + qvel + cfrc)
     
     # Trying something - observe everything?
-    pos, rot, vel, ang = [qp.pos.flatten()], [qp.rot.flatten()], [qp.vel.flatten()], [qp.ang.flatten()]
+    (joint_angle,), (joint_vel,) = self.sys.joints[0].angle_vel(qp)
+    pos, rot, vel, ang = [qp.pos.flatten(), joint_angle], [qp.rot.flatten()], [qp.vel.flatten()], [qp.ang.flatten(), joint_vel]
     obs = jp.concatenate(pos + rot + vel + ang)
 
     return obs
