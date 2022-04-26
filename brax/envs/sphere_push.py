@@ -138,7 +138,7 @@ class SpherePush(env.Env):
     
     # Trying something - observe everything?
     pos, rot, vel, ang = [qp.pos.flatten()], [qp.rot.flatten()], [qp.vel.flatten()], [qp.ang.flatten()]
-    obs = jp.concatenate(pos, rot, vel, ang)
+    obs = jp.concatenate(pos + rot + vel + ang)
 
     return obs
 
