@@ -61,7 +61,9 @@ class SpherePush(env.Env):
     metrics = {
         'reward_ctrl_cost': zero,
         'reward_contact_cost': zero,
-        'reward_forward': zero,
+        # 'reward_forward': zero,
+        towards_ball_reward: zero,
+        ball_forward_reward: zero,
         'reward_survive': zero,
     }
     return env.State(qp, obs, reward, done, metrics)
@@ -100,7 +102,9 @@ class SpherePush(env.Env):
     state.metrics.update(
         reward_ctrl_cost=ctrl_cost,
         reward_contact_cost=contact_cost,
-        reward_forward=forward_reward,
+        # reward_forward=forward_reward,
+        ball_forward_reward=ball_forward_reward,
+        towards_ball_reward=towards_ball_reward,
         reward_survive=survive_reward)
 
     return state.replace(qp=qp, obs=obs, reward=reward, done=done)
