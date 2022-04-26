@@ -28,9 +28,9 @@ class SpherePush(env.Env):
 
   def reset(self, rng: jp.ndarray) -> env.State:
     """Resets the environment to an initial state."""
+    ball_init_x, ball_init_y = 2., 0. # planar starting position of pushable ball
     qp = brax.QP(
-    # position of **each body** in 3d (z is up, right-hand coordinates) -- 2 bodies, ground and ball
-    ball_init_x, ball_init_y = 2., 0. 
+    # position of **each body** in 3d (z is up, right-hand coordinates) -- 2 bodies, ground and ball 
     pos = np.array([[0., 0., .5],                   # p1
                     [0., 0., .5],                   # roll
                     [0., 0., .5],                   # pitch
