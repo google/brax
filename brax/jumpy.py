@@ -135,7 +135,7 @@ def fori_loop(lower: int, upper: int,
     return jax.lax.fori_loop(lower, upper, body_fun, init_val)
   else:
     val = init_val
-    for i in range(lower, upper):
+    for _ in range(lower, upper):
       val = body_fun(val)
     return val
 
