@@ -12,15 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Trains an actuated sphere to roll in the +x direction."""
+"""Trains an actuated sphere to chase ball."""
 
 import brax
 from brax import jumpy as jp
 from brax.envs import env
 
 
-class SpherePush(env.Env):
-  """Trains an actuated sphere to push a ball in the +x direction."""
+class SphereChase(env.Env):
+  """Trains an actuated sphere to charge into a ball."""
 
   def __init__(self, legacy_spring=False, **kwargs):
     config = _SYSTEM_CONFIG_SPRING if legacy_spring else _SYSTEM_CONFIG
@@ -73,16 +73,6 @@ class SpherePush(env.Env):
     """Run one timestep of the environment's dynamics."""
     qp, info = self.sys.step(state.qp, action)
     obs = self._get_obs(qp, info)
-    
-    
-    # push ball forward - big reward
-    x_ball_before = state.qp.pos[3, 0]
-    x_ball_after = qp.pos[3, 0]
-    ball_forward_reward = (x_ball_after - x_ball_before) / self.sys.config.dt
-    ball_forward_reward *= 10
-    
-    # ball distance travelled from starting position
-    ball_dist_reward = qp.pos[3,0] - 2.0
     
     # move p1 towards ball - small reward
     x_dist_before = abs(state.qp.pos[0, 0] - state.qp.pos[3, 0])

@@ -38,6 +38,7 @@ from brax.envs import walker2d
 from brax.envs import act_sphere
 from brax.envs import sphere_fetch
 from brax.envs import sphere_push
+from brax.envs import sphere_chase
 from brax.envs import wrappers
 from brax.envs.env import Env, State, Wrapper
 import gym
@@ -63,6 +64,7 @@ _envs = {
     'act_sphere': act_sphere.ActSphere,
     'sphere_fetch': sphere_fetch.SphereFetch,
     'sphere_push': sphere_push.SpherePush,
+    'sphere_chase': sphere_chase.SphereChase,
 }
 
 

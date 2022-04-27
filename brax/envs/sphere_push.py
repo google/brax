@@ -113,13 +113,12 @@ class SpherePush(env.Env):
     done = jp.where(qp.pos[0, 2] < 0.2, x=jp.float32(1), y=jp.float32(0))
     done = jp.where(qp.pos[0, 2] > 1.0, x=jp.float32(1), y=done)
     state.metrics.update(
-        reward_ctrl_cost=ctrl_cost,
-        reward_contact_cost=contact_cost,
-        # reward_forward=forward_reward,
         ball_forward_reward=ball_forward_reward,
         ball_dist_reward=ball_dist_reward,
-        towards_ball_cost=towards_ball_cost,
+        towards_ball_reward=towards_ball_reward,
         near_ball_cost=near_ball_cost,
+        reward_ctrl_cost=ctrl_cost,
+        reward_contact_cost=contact_cost,
         reward_survive=survive_reward)
 
     return state.replace(qp=qp, obs=obs, reward=reward, done=done)
