@@ -28,7 +28,7 @@ class SphereChase(env.Env):
 
   def reset(self, rng: jp.ndarray) -> env.State:
     """Resets the environment to an initial state."""
-    ball_init_x, ball_init_y = 2., 0. # planar starting position of pushable ball
+    ball_init_x, ball_init_y = 5., 5. # planar starting position of pushable ball
     qp = brax.QP(
     # position of **each body** in 3d (z is up, right-hand coordinates) -- 2 bodies, ground and ball 
     pos = jp.array([[0., 0., .5],                   # p1
@@ -40,7 +40,7 @@ class SphereChase(env.Env):
     vel = jp.array([[0., 0., 0.],       
                     [0., 0., 0.],       
                     [0., 0., 0.],       
-                    [0., 0., 0.],
+                    [2., 2., 0.], # experimenting - the ball has an initial impulse
                     [0., 0., 0.]]),     
     # rotation about center of body, as a quaternion (w, x, y, z)
     rot = jp.array([[1., 0., 0., 0.], 
