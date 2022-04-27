@@ -34,11 +34,13 @@ class SpherePush(env.Env):
     pos = jp.array([[0., 0., .5],                   # p1
                     [0., 0., .5],                   # roll
                     [0., 0., .5],                   # pitch
+                    [0., 0., .5],                   # yaw
                     [ball_init_x, ball_init_y, .5], # ball
                     [0., 0., 0.]]),                 # ground 
     # velocity of each body in 3d (both at rest)
     vel = jp.array([[0., 0., 0.],       
-                    [0., 0., 0.],       
+                    [0., 0., 0.],  
+                    [0., 0., 0.],                      
                     [0., 0., 0.],       
                     [0., 0., 0.],
                     [0., 0., 0.]]),     
@@ -46,10 +48,12 @@ class SpherePush(env.Env):
     rot = jp.array([[1., 0., 0., 0.], 
                     [1., 0., 0., 0.], 
                     [1., 0., 0., 0.], 
+                    [1., 0., 0., 0.], 
                     [1., 0., 0., 0.],
                     [1., 0., 0., 0.]]), 
     # angular velocity about center of body in 3d
     ang = jp.array([[0., 0., 0.],
+                    [0., 0., 0.],
                     [0., 0., 0.],
                     [0., 0., 0.],
                     [0., 0., 0.],
@@ -76,26 +80,26 @@ class SpherePush(env.Env):
     
     
     # push ball forward - big reward
-    x_ball_before = state.qp.pos[3, 0]
-    x_ball_after = qp.pos[3, 0]
+    x_ball_before = state.qp.pos[4, 0]
+    x_ball_after = qp.pos[4, 0]
     ball_forward_reward = (x_ball_after - x_ball_before) / self.sys.config.dt
     ball_forward_reward *= 20
     
     # # ball distance travelled from starting position
-    # ball_dist_reward = qp.pos[3,0] - 2.0
+    # ball_dist_reward = qp.pos[4,0] - 2.0
     
     # move p1 towards ball - small reward
-    x_dist_before = abs(state.qp.pos[0, 0] - state.qp.pos[3, 0])
-    x_dist_after = abs(qp.pos[0, 0] - qp.pos[3, 0])
-    y_dist_before = abs(state.qp.pos[0, 1] - state.qp.pos[3, 1])
-    y_dist_after = abs(qp.pos[0, 1] - qp.pos[3, 1])
+    x_dist_before = abs(state.qp.pos[0, 0] - state.qp.pos[4, 0])
+    x_dist_after = abs(qp.pos[0, 0] - qp.pos[4, 0])
+    y_dist_before = abs(state.qp.pos[0, 1] - state.qp.pos[4, 1])
+    y_dist_after = abs(qp.pos[0, 1] - qp.pos[4, 1])
     dist_before = abs((x_dist_before**2 + y_dist_before**2)**0.5)
     dist_after = abs((x_dist_after**2 + y_dist_after**2)**0.5)
     towards_ball_reward = (dist_before - dist_after) / self.sys.config.dt
     
     # # have p1 be near to ball - small reward
-    # x_dist = abs(qp.pos[0, 0] - qp.pos[3, 0])
-    # y_dist = abs(qp.pos[0, 1] - qp.pos[3, 1])
+    # x_dist = abs(qp.pos[0, 0] - qp.pos[4, 0])
+    # y_dist = abs(qp.pos[0, 1] - qp.pos[4, 1])
     # dist = abs((x_dist**2 + y_dist**2)**0.5)
     # near_ball_cost = dist
     
@@ -168,9 +172,9 @@ class SpherePush(env.Env):
     # # joint angles and joint angle velocities
     # (joint_angle,), (joint_vel,) = self.sys.joints[0].angle_vel(qp)
     # # position (xyz) of the sphere and of the ball
-    # qpos = [qp.pos[0, :], qp.pos[3,:]]
+    # qpos = [qp.pos[0, :], qp.pos[4,:]]
     # # velocity and angular velocity of ball
-    # qvel_ball = [qp.vel[3, :], qp.ang[3, :]]
+    # qvel_ball = [qp.vel[4, :], qp.ang[4, :]]
     # # external contact forces (copied from ant)
     # cfrc = [jp.clip(info.contact.vel, -1, 1), jp.clip(info.contact.ang, -1, 1)]
     # cfrc = [jp.reshape(x, x.shape[:-2] + (-1,)) for x in cfrc] # flatten bottom dimension
