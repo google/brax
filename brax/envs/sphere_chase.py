@@ -61,10 +61,7 @@ class SphereChase(env.Env):
     metrics = {
         'reward_ctrl_cost': zero,
         'reward_contact_cost': zero,
-        # 'reward_forward': zero,
         'towards_ball_cost': zero,
-        'ball_dist_reward': zero
-        'ball_forward_reward': zero,
         'reward_survive': zero,
     }
     return env.State(qp, obs, reward, done, metrics)
@@ -95,7 +92,7 @@ class SphereChase(env.Env):
     contact_cost = jp.float32(0) # (0.5 * 1e-3 * jp.sum(jp.square(jp.clip(info.contact.vel, -1, 1))))
     survive_reward = jp.float32(1)
     
-    reward = ball_forward_reward + ball_dist_reward + towards_ball_reward
+    reward = towards_ball_reward
     reward -= near_ball_cost - ctrl_cost
     reward += survive_reward - contact_cost
 
@@ -105,9 +102,6 @@ class SphereChase(env.Env):
     state.metrics.update(
         reward_ctrl_cost=ctrl_cost,
         reward_contact_cost=contact_cost,
-        # reward_forward=forward_reward,
-        ball_forward_reward=ball_forward_reward,
-        ball_dist_reward=ball_dist_reward,
         towards_ball_cost=towards_ball_cost,
         near_ball_cost=near_ball_cost,
         reward_survive=survive_reward)
