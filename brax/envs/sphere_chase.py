@@ -59,12 +59,12 @@ class SpherePush(env.Env):
     obs = self._get_obs(qp, info)
     reward, done, zero = jp.zeros(3)
     metrics = {
-        'ball_forward_reward': zero,
-        'ball_dist_reward': zero,
-        'towards_ball_reward': zero,
-        'near_ball_cost': zero,
         'reward_ctrl_cost': zero,
         'reward_contact_cost': zero,
+        # 'reward_forward': zero,
+        'towards_ball_cost': zero,
+        'ball_dist_reward': zero
+        'ball_forward_reward': zero,
         'reward_survive': zero,
     }
     return env.State(qp, obs, reward, done, metrics)
