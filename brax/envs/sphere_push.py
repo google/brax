@@ -173,7 +173,7 @@ class SpherePush(env.Env):
     cfrc = [jp.clip(info.contact.vel, -1, 1), jp.clip(info.contact.ang, -1, 1)]
     cfrc = [jp.reshape(x, x.shape[:-2] + (-1,)) for x in cfrc] # flatten bottom dimension
     
-    obs = jp.concatenate([joint_angle, joint_vel], qpos, qvel_ball, cfrc)
+    obs = jp.concatenate([joint_angle, joint_vel] + qpos + qvel_ball + cfrc)
 
     return obs
 
