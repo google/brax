@@ -155,25 +155,27 @@ class SpherePush(env.Env):
     
     ###############################################################################################
     
-    # # Trying something - observe everything?
-    # (joint_angle,), (joint_vel,) = self.sys.joints[0].angle_vel(qp)
-    # pos, rot, vel, ang = [qp.pos.flatten(), joint_angle], [qp.rot.flatten()], [qp.vel.flatten()], [qp.ang.flatten(), joint_vel]
-    # obs = jp.concatenate(pos + rot + vel + ang)
+    # Trying something - observe everything?
+    (joint_angle,), (joint_vel,) = self.sys.joints[0].angle_vel(qp)
+    pos, rot, vel, ang = [qp.pos.flatten(), joint_angle], [qp.rot.flatten()], [qp.vel.flatten()], [qp.ang.flatten(), joint_vel]
+    cfrc = [jp.clip(info.contact.vel, -1, 1), jp.clip(info.contact.ang, -1, 1)]
+    cfrc = [jp.reshape(x, x.shape[:-2] + (-1,)) for x in cfrc] # flatten bottom dimension
+    obs = jp.concatenate(pos + rot + vel + ang + cfrc)
 
     ###############################################################################################
 
-    # # First pass at cutting down observations
-    # joint angles and joint angle velocities
-    (joint_angle,), (joint_vel,) = self.sys.joints[0].angle_vel(qp)
-    # position (xyz) of the sphere and of the ball
-    qpos = [qp.pos[0, :], qp.pos[3,:]]
-    # velocity and angular velocity of ball
-    qvel_ball = [qp.vel[3, :], qp.ang[3, :]]
-    # external contact forces (copied from ant)
-    cfrc = [jp.clip(info.contact.vel, -1, 1), jp.clip(info.contact.ang, -1, 1)]
-    cfrc = [jp.reshape(x, x.shape[:-2] + (-1,)) for x in cfrc] # flatten bottom dimension
+    # # # First pass at cutting down observations
+    # # joint angles and joint angle velocities
+    # (joint_angle,), (joint_vel,) = self.sys.joints[0].angle_vel(qp)
+    # # position (xyz) of the sphere and of the ball
+    # qpos = [qp.pos[0, :], qp.pos[3,:]]
+    # # velocity and angular velocity of ball
+    # qvel_ball = [qp.vel[3, :], qp.ang[3, :]]
+    # # external contact forces (copied from ant)
+    # cfrc = [jp.clip(info.contact.vel, -1, 1), jp.clip(info.contact.ang, -1, 1)]
+    # cfrc = [jp.reshape(x, x.shape[:-2] + (-1,)) for x in cfrc] # flatten bottom dimension
     
-    obs = jp.concatenate([joint_angle, joint_vel] + qpos + qvel_ball + cfrc)
+    # obs = jp.concatenate([joint_angle, joint_vel] + qpos + qvel_ball + cfrc)
 
     return obs
 
@@ -196,6 +198,10 @@ bodies {
 }
 bodies {
   name: "p1_pitch"
+  mass: 0.01
+}
+bodies {
+  name: "p1_yaw"
   mass: 0.01
 }
 
@@ -241,6 +247,18 @@ joints {
     max: 180.0
   }
 }
+joints {
+  name: "joint3"
+  parent: "p1_yaw"
+  child: "p1"
+  rotation {
+    y: -90.0
+  }
+  angle_limit {
+    min: -180.0
+    max: 180.0
+  }
+}
 actuators {
   name: "torque1"
   joint: "joint1"
@@ -251,6 +269,13 @@ actuators {
 actuators {
   name: "torque2"
   joint: "joint2"
+  strength: 100.0
+  torque {
+  }
+}
+actuators {
+  name: "torque3"
+  joint: "joint3"
   strength: 100.0
   torque {
   }
