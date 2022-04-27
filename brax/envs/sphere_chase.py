@@ -40,7 +40,7 @@ class SphereChase(env.Env):
     vel = jp.array([[0., 0., 0.],       
                     [0., 0., 0.],       
                     [0., 0., 0.],       
-                    [2., 2., 0.], # experimenting - the ball has an initial impulse
+                    [0., 0., 0.],
                     [0., 0., 0.]]),     
     # rotation about center of body, as a quaternion (w, x, y, z)
     rot = jp.array([[1., 0., 0., 0.], 
@@ -52,7 +52,7 @@ class SphereChase(env.Env):
     ang = jp.array([[0., 0., 0.],
                     [0., 0., 0.],
                     [0., 0., 0.],
-                    [0., 0., 0.],
+                    [5., 5., 0.], # experimenting - the ball has an initial impulse
                     [0., 0., 0.]])
 )
     info = self.sys.info(qp)
