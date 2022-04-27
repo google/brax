@@ -102,7 +102,7 @@ class SphereChase(env.Env):
     state.metrics.update(
         reward_ctrl_cost=ctrl_cost,
         reward_contact_cost=contact_cost,
-        towards_ball_reward=towards_ball_cost,
+        towards_ball_reward=towards_ball_reward,
         near_ball_cost=near_ball_cost,
         reward_survive=survive_reward)
 
