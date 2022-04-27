@@ -238,12 +238,12 @@ actuators {
   torque {
   }
 }
-elasticity: 0.5
-friction: 3.0
+elasticity: 1.0
+friction: 6.0
 gravity {
   z: -9.8
 }
-angular_damping: -0.15
+angular_damping: -0.05
 dt: 0.05
 substeps: 20
 dynamics_mode: "pbd"
