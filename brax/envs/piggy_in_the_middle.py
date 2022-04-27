@@ -79,7 +79,7 @@ class SpherePush(env.Env):
     x_ball_before = state.qp.pos[3, 0]
     x_ball_after = qp.pos[3, 0]
     ball_forward_reward = (x_ball_after - x_ball_before) / self.sys.config.dt
-    ball_forward_reward *= 20
+    ball_forward_reward *= 30
     
     # # ball distance travelled from starting position
     # ball_dist_reward = qp.pos[3,0] - 2.0
@@ -102,7 +102,7 @@ class SpherePush(env.Env):
     ctrl_cost = .5 * jp.sum(jp.square(action)) # dependent on torque
     
     # not sure what this is - set to zero for now
-    contact_cost = 0.5 * 1e-3 * jp.sum(jp.square(jp.clip(info.contact.vel, -1, 1))))
+    contact_cost = jp.float32(0) # (0.5 * 1e-3 * jp.sum(jp.square(jp.clip(info.contact.vel, -1, 1))))
     survive_reward = jp.float32(1)
     
     reward = ball_forward_reward 
@@ -114,7 +114,7 @@ class SpherePush(env.Env):
 
     # termination - these shouldn't matter for our ball
     done = jp.where(qp.pos[0, 2] < 0.2, x=jp.float32(1), y=jp.float32(0))
-    # done = jp.where(qp.pos[0, 2] > 1.0, x=jp.float32(1), y=done) # don't want it to stop when it bounces...
+    done = jp.where(qp.pos[0, 2] > 1.0, x=jp.float32(1), y=done)
     state.metrics.update(
         ball_forward_reward=ball_forward_reward,
         # ball_dist_reward=ball_dist_reward,
@@ -153,27 +153,10 @@ class SpherePush(env.Env):
     
     # obs = jp.concatenate(qpos + qvel + cfrc)
     
-    ###############################################################################################
-    
-    # # Trying something - observe everything?
-    # (joint_angle,), (joint_vel,) = self.sys.joints[0].angle_vel(qp)
-    # pos, rot, vel, ang = [qp.pos.flatten(), joint_angle], [qp.rot.flatten()], [qp.vel.flatten()], [qp.ang.flatten(), joint_vel]
-    # obs = jp.concatenate(pos + rot + vel + ang)
-
-    ###############################################################################################
-
-    # # First pass at cutting down observations
-    # joint angles and joint angle velocities
+    # Trying something - observe everything?
     (joint_angle,), (joint_vel,) = self.sys.joints[0].angle_vel(qp)
-    # position (xyz) of the sphere and of the ball
-    qpos = [qp.pos[0, :], qp.pos[3,:]]
-    # velocity and angular velocity of ball
-    qvel_ball = [qp.vel[3, :], qp.ang[3, :]]
-    # external contact forces (copied from ant)
-    cfrc = [jp.clip(info.contact.vel, -1, 1), jp.clip(info.contact.ang, -1, 1)]
-    cfrc = [jp.reshape(x, x.shape[:-2] + (-1,)) for x in cfrc] # flatten bottom dimension
-    
-    obs = jp.concatenate([joint_angle, joint_vel], qpos, qvel_ball, cfrc)
+    pos, rot, vel, ang = [qp.pos.flatten(), joint_angle], [qp.rot.flatten()], [qp.vel.flatten()], [qp.ang.flatten(), joint_vel]
+    obs = jp.concatenate(pos + rot + vel + ang)
 
     return obs
 
