@@ -64,9 +64,9 @@ class SpherePush(env.Env):
     reward, done, zero = jp.zeros(3)
     metrics = {
         'ball_forward_reward': zero,
-        # 'ball_dist_reward': zero,
+        'ball_dist_reward': zero,
         'towards_ball_reward': zero,
-        # 'near_ball_cost': zero,
+        'near_ball_cost': zero,
         'reward_ctrl_cost': zero,
         'reward_contact_cost': zero,
         'reward_survive': zero,
@@ -85,8 +85,8 @@ class SpherePush(env.Env):
     ball_forward_reward = (x_ball_after - x_ball_before) / self.sys.config.dt
     ball_forward_reward *= 20
     
-    # # ball distance travelled from starting position
-    # ball_dist_reward = qp.pos[4,0] - 2.0
+    # ball distance travelled from starting position
+    ball_dist_reward = qp.pos[4,0] - 2.0
     
     # move p1 towards ball - small reward
     x_dist_before = abs(state.qp.pos[0, 0] - state.qp.pos[4, 0])
@@ -97,11 +97,11 @@ class SpherePush(env.Env):
     dist_after = abs((x_dist_after**2 + y_dist_after**2)**0.5)
     towards_ball_reward = (dist_before - dist_after) / self.sys.config.dt
     
-    # # have p1 be near to ball - small reward
-    # x_dist = abs(qp.pos[0, 0] - qp.pos[4, 0])
-    # y_dist = abs(qp.pos[0, 1] - qp.pos[4, 1])
-    # dist = abs((x_dist**2 + y_dist**2)**0.5)
-    # near_ball_cost = dist
+    # have p1 be near to ball - small reward
+    x_dist = abs(qp.pos[0, 0] - qp.pos[4, 0])
+    y_dist = abs(qp.pos[0, 1] - qp.pos[4, 1])
+    dist = abs((x_dist**2 + y_dist**2)**0.5)
+    near_ball_cost = dist
     
     ctrl_cost = .5 * jp.sum(jp.square(action)) # dependent on torque
     
@@ -110,9 +110,9 @@ class SpherePush(env.Env):
     survive_reward = jp.float32(1)
     
     reward = ball_forward_reward 
-    # reward += ball_dist_reward 
+    reward += ball_dist_reward 
     reward += towards_ball_reward
-    # reward -= near_ball_cost
+    reward -= near_ball_cost
     reward -= ctrl_cost
     reward += survive_reward - contact_cost
 
@@ -121,9 +121,9 @@ class SpherePush(env.Env):
     # done = jp.where(qp.pos[0, 2] > 1.0, x=jp.float32(1), y=done) # don't want it to stop when it bounces...
     state.metrics.update(
         ball_forward_reward=ball_forward_reward,
-        # ball_dist_reward=ball_dist_reward,
+        ball_dist_reward=ball_dist_reward,
         towards_ball_reward=towards_ball_reward,
-        # near_ball_cost=near_ball_cost,
+        near_ball_cost=near_ball_cost,
         reward_ctrl_cost=ctrl_cost,
         reward_contact_cost=contact_cost,
         reward_survive=survive_reward)
@@ -162,8 +162,9 @@ class SpherePush(env.Env):
     # Trying something - observe everything?
     (joint_angle,), (joint_vel,) = self.sys.joints[0].angle_vel(qp)
     pos, rot, vel, ang = [qp.pos.flatten(), joint_angle], [qp.rot.flatten()], [qp.vel.flatten()], [qp.ang.flatten(), joint_vel]
-    cfrc = [jp.clip(info.contact.vel, -1, 1), jp.clip(info.contact.ang, -1, 1)]
-    cfrc = [jp.reshape(x, x.shape[:-2] + (-1,)) for x in cfrc] # flatten bottom dimension
+    cfrc = []
+    # cfrc = [jp.clip(info.contact.vel, -1, 1), jp.clip(info.contact.ang, -1, 1)]
+    # cfrc = [jp.reshape(x, x.shape[:-2] + (-1,)) for x in cfrc] # flatten bottom dimension
     obs = jp.concatenate(pos + rot + vel + ang + cfrc)
 
     ###############################################################################################
