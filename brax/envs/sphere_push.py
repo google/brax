@@ -79,7 +79,7 @@ class SpherePush(env.Env):
     x_ball_before = state.qp.pos[3, 0]
     x_ball_after = qp.pos[3, 0]
     ball_forward_reward = (x_ball_after - x_ball_before) / self.sys.config.dt
-    ball_forward_reward *= 10
+    ball_forward_reward *= 30
     
     # # ball distance travelled from starting position
     # ball_dist_reward = qp.pos[3,0] - 2.0
@@ -105,8 +105,11 @@ class SpherePush(env.Env):
     contact_cost = jp.float32(0) # (0.5 * 1e-3 * jp.sum(jp.square(jp.clip(info.contact.vel, -1, 1))))
     survive_reward = jp.float32(1)
     
-    reward = ball_forward_reward + ball_dist_reward + towards_ball_reward
-    reward -= near_ball_cost - ctrl_cost
+    reward = ball_forward_reward 
+    # reward += ball_dist_reward 
+    reward += towards_ball_reward
+    # reward -= near_ball_cost
+    reward -= ctrl_cost
     reward += survive_reward - contact_cost
 
     # termination - these shouldn't matter for our ball
