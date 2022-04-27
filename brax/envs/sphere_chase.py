@@ -62,6 +62,7 @@ class SphereChase(env.Env):
         'reward_ctrl_cost': zero,
         'reward_contact_cost': zero,
         'towards_ball_reward': zero,
+        'near_ball_cost': zero,
         'reward_survive': zero,
     }
     return env.State(qp, obs, reward, done, metrics)
