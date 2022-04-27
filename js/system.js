@@ -1,5 +1,5 @@
 import * as THREE from 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r135/build/three.module.js';
-import 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r135/examples/jsm/geometries/ParametricGeometry.js';
+import {ParametricGeometry} from 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r135/examples/jsm/geometries/ParametricGeometry.js';
 
 const basicMaterial = new THREE.MeshPhongMaterial({color: 0x665544});
 const targetMaterial = new THREE.MeshPhongMaterial({color: 0xff2222});

@@ -13,7 +13,6 @@
 # limitations under the License.
 
 """Logging utilities."""
-# Lint as: python3
 
 
 

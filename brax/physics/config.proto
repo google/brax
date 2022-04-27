@@ -240,7 +240,7 @@ message MeshGeometry {
 }
 
 // The configuration of a system for Brax to simulate
-// Next ID: 21
+// Next ID: 22
 message Config {
   message NamePair {
     string first = 1;
@@ -287,4 +287,6 @@ message Config {
   optional float solver_scale_pos = 19;
   // Sets the default magnitude of position based updates for angular data
   optional float solver_scale_ang = 20;
+  // Sets the default magnitude of position based updates for collision data
+  optional float solver_scale_collide = 21;
 }

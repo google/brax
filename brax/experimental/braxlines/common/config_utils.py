@@ -23,7 +23,6 @@ or a dictionary.
 After the first level, all lists are expanded while the rest of structures
 specified by dictionaries are kept the same.
 """
-# Lint as: python3
 import copy
 from typing import Dict, Tuple, Any
 import numpy as np

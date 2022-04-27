@@ -144,6 +144,7 @@ class BoxCapsuleTest(absltest.TestCase):
       }
       qps { name: "capsule3" pos { x: 0 y: 0 z: 3 } }
     }
+    solver_scale_collide: .3
   """
 
   def test_box_hits_capsule(self):

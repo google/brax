@@ -136,7 +136,7 @@ class NearNeighbors(Cull):
 class Collider(abc.ABC):
   """Calculates impulses given contacts from a contact function."""
 
-  __pytree_ignore__ = ('contact_fn', 'cull', 'baumgarte_erp')
+  __pytree_ignore__ = ('contact_fn', 'cull', 'baumgarte_erp', 'collide_scale')
 
   def __init__(self, contact_fn: Callable[[Any, Any, QP, QP], Contact],
                cull: Cull, config: config_pb2.Config):
@@ -152,6 +152,7 @@ class Collider(abc.ABC):
     self.baumgarte_erp = config.baumgarte_erp * config.substeps / config.dt
     self.h = config.dt / config.substeps
     self.substeps = config.substeps
+    self.collide_scale = config.solver_scale_collide or 1.0
 
   def apply(self, qp: QP) -> P:
     """Returns impulse from any potential contacts between collidables.
@@ -349,7 +350,8 @@ class OneWayCollider(Collider):
     dq_p_rot = .5 * math.vec_quat_mul(col_a.body.inertia * jp.cross(pos_p, p),
                                       qp_a.rot)
 
-    dq_p = Q(pos=dq_p_pos, rot=dq_p_rot)
+    dq_p = Q(
+        pos=self.collide_scale * dq_p_pos, rot=self.collide_scale * dq_p_rot)
 
     # static friction
 
@@ -380,7 +382,9 @@ class OneWayCollider(Collider):
     dq_p_rot = .5 * math.vec_quat_mul(col_a.body.inertia * jp.cross(pos_p, p),
                                       qp_a.rot)
 
-    dq_p = Q(pos=dq_p.pos + dq_p_pos, rot=dq_p.rot + dq_p_rot)
+    dq_p = Q(
+        pos=dq_p.pos + self.collide_scale * dq_p_pos,
+        rot=dq_p.rot + self.collide_scale * dq_p_rot)
 
     return dq_p, None, dlambda * coll_mask
 
@@ -513,14 +517,16 @@ class TwoWayCollider(Collider):
 
     dq_p_pos = p / col_a.body.mass
     dq_p_rot = .5 * math.vec_quat_mul(col_a.body.inertia * jp.cross(pos_p, p),
-                                       qp_a.rot)
+                                      qp_a.rot)
 
     dq_c_pos = -p / col_b.body.mass
     dq_c_rot = -.5 * math.vec_quat_mul(col_b.body.inertia * jp.cross(pos_c, p),
-                                      qp_b.rot)
+                                       qp_b.rot)
 
-    dq_p = Q(pos=.3 * dq_p_pos, rot=.3 * dq_p_rot)
-    dq_c = Q(pos=.3 * dq_c_pos, rot=.3 * dq_c_rot)
+    dq_p = Q(
+        pos=self.collide_scale * dq_p_pos, rot=self.collide_scale * dq_p_rot)
+    dq_c = Q(
+        pos=self.collide_scale * dq_c_pos, rot=self.collide_scale * dq_c_rot)
 
     # static friction stuff
 
@@ -562,8 +568,10 @@ class TwoWayCollider(Collider):
     dq_c_rot = .5 * math.vec_quat_mul(col_b.body.inertia * jp.cross(pos_c, -p),
                                       qp_b.rot)
 
-    dq_p += Q(pos=.3 * dq_p_pos, rot=.3 * dq_p_rot)
-    dq_c += Q(pos=.3 * dq_c_pos, rot=.3 * dq_c_rot)
+    dq_p += Q(
+        pos=self.collide_scale * dq_p_pos, rot=self.collide_scale * dq_p_rot)
+    dq_c += Q(
+        pos=self.collide_scale * dq_c_pos, rot=self.collide_scale * dq_c_rot)
 
     return dq_p, dq_c, dlambda  # pytype: disable=bad-return-type
 

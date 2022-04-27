@@ -29,7 +29,7 @@ class PPOTest(parameterized.TestCase):
     """Test PPO with a simple env."""
     _, _, metrics = ppo.train(
         envs.create_fn('fast'),
-        num_timesteps=32768,
+        num_timesteps=65536,
         episode_length=128,
         num_envs=64,
         learning_rate=3e-4,
