@@ -193,10 +193,10 @@ bodies {
   colliders {
     capsule {
       radius: 0.5
-      length: 0.2
+      length: 1.0
     }
   }
-  mass: 1.0
+  mass: 0.2
 }
 bodies {
   name: "p1"
