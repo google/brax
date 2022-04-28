@@ -32,11 +32,11 @@ class SpherePush(env.Env):
     ball_init_x, ball_init_y = 2., 0. # planar starting position of pushable ball
     qp = brax.QP(
     # position of **each body** in 3d (z is up, right-hand coordinates) -- 2 bodies, ground and ball 
-    pos = jp.array([[0., 0., .5],                   # p1
+    pos = jp.array([[ball_init_x, ball_init_y, .5],                   # ball
+                    [0., 0., .5],                   # p1
                     [0., 0., .5],                   # roll
                     [0., 0., .5],                   # pitch
-                    [0., 0., .5],                   # yaw
-                    [ball_init_x, ball_init_y, .5], # ball
+                    [0., 0., .5], # yaw
                     [0., 0., 0.]]),                 # ground 
     # velocity of each body in 3d (both at rest)
     vel = jp.array([[0., 0., 0.],       
