@@ -22,8 +22,9 @@ from brax.envs import env
 class SpherePush(env.Env):
   """Trains an actuated sphere to push a ball in the +x direction."""
 
-  def __init__(self, legacy_spring=False, **kwargs):
-    config = _SYSTEM_CONFIG_SPRING if legacy_spring else _SYSTEM_CONFIG
+  def __init__(self, config=None, legacy_spring=False, **kwargs):
+    if not config: 
+        config = _SYSTEM_CONFIG_SPRING if legacy_spring else _SYSTEM_CONFIG 
     super().__init__(config=config, **kwargs)
 
   def reset(self, rng: jp.ndarray) -> env.State:
@@ -80,26 +81,26 @@ class SpherePush(env.Env):
     
     
     # push ball forward - big reward
-    x_ball_before = state.qp.pos[4, 0]
-    x_ball_after = qp.pos[4, 0]
+    x_ball_before = state.qp.pos[0, 0]
+    x_ball_after = qp.pos[0, 0]
     ball_forward_reward = (x_ball_after - x_ball_before) / self.sys.config.dt
     ball_forward_reward *= 20
     
     # ball distance travelled from starting position
-    ball_dist_reward = qp.pos[4,0] - 2.0
+    ball_dist_reward = qp.pos[0,0] - 2.0
     
     # move p1 towards ball - small reward
-    x_dist_before = abs(state.qp.pos[0, 0] - state.qp.pos[4, 0])
-    x_dist_after = abs(qp.pos[0, 0] - qp.pos[4, 0])
-    y_dist_before = abs(state.qp.pos[0, 1] - state.qp.pos[4, 1])
-    y_dist_after = abs(qp.pos[0, 1] - qp.pos[4, 1])
+    x_dist_before = abs(state.qp.pos[1, 0] - state.qp.pos[0, 0])
+    x_dist_after = abs(qp.pos[1, 0] - qp.pos[0, 0])
+    y_dist_before = abs(state.qp.pos[1, 1] - state.qp.pos[0, 1])
+    y_dist_after = abs(qp.pos[1, 1] - qp.pos[0, 1])
     dist_before = abs((x_dist_before**2 + y_dist_before**2)**0.5)
     dist_after = abs((x_dist_after**2 + y_dist_after**2)**0.5)
     towards_ball_reward = (dist_before - dist_after) / self.sys.config.dt
     
     # have p1 be near to ball - small reward
-    x_dist = abs(qp.pos[0, 0] - qp.pos[4, 0])
-    y_dist = abs(qp.pos[0, 1] - qp.pos[4, 1])
+    x_dist = abs(qp.pos[0, 0] - qp.pos[1, 0])
+    y_dist = abs(qp.pos[0, 1] - qp.pos[1, 1])
     dist = abs((x_dist**2 + y_dist**2)**0.5)
     near_ball_cost = dist
     
@@ -188,6 +189,16 @@ class SpherePush(env.Env):
 _SYSTEM_CONFIG = """
 
 bodies {
+  name: "ball"
+  colliders {
+    capsule {
+      radius: 0.5
+      length: 1.0
+    }
+  }
+  mass: 1.0
+}
+bodies {
   name: "p1"
   colliders {
     capsule {
@@ -208,17 +219,6 @@ bodies {
 bodies {
   name: "p1_yaw"
   mass: 0.01
-}
-
-bodies {
-  name: "ball"
-  colliders {
-    capsule {
-      radius: 0.5
-      length: 1.0
-    }
-  }
-  mass: 1.0
 }
 
 bodies {

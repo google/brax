@@ -78,9 +78,13 @@ def create(env_name: str,
            auto_reset: bool = True,
            batch_size: Optional[int] = None,
            eval_metrics: bool = False,
+           config: Optional[str] = None,
            **kwargs) -> Env:
   """Creates an Env with a specified brax system."""
-  env = _envs[env_name](**kwargs)
+  if config:
+    env = _envs[env_name](config, **kwargs)
+  else:
+    env = _envs[env_name](**kwargs)
   if episode_length is not None:
     env = wrappers.EpisodeWrapper(env, episode_length, action_repeat)
   if batch_size:
@@ -93,9 +97,9 @@ def create(env_name: str,
   return env  # type: ignore
 
 
-def create_fn(env_name: str, **kwargs) -> Callable[..., Env]:
+def create_fn(env_name: str, config=None, **kwargs) -> Callable[..., Env]:
   """Returns a function that when called, creates an Env."""
-  return functools.partial(create, env_name, **kwargs)
+  return functools.partial(create, env_name, config=config, **kwargs)
 
 
 @overload
