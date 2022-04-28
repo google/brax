@@ -299,7 +299,7 @@ class OneWayCollider(Collider):
     baumgarte_vel = self.baumgarte_erp * contact.penetration
     normal_vel = jp.dot(contact.normal, contact.vel)
     temp1 = col_a.body.inertia * jp.cross(rel_pos, contact.normal)
-    ang = jp.dot(contact.normal, jp.cross(temp1, rel_pos))cd 
+    ang = jp.dot(contact.normal, jp.cross(temp1, rel_pos))
     impulse = (-1. * (1. + elasticity) * normal_vel + baumgarte_vel) / (
         (1. / col_a.body.mass) + ang)
     dp_n = col_a.body.impulse(qp_a, impulse * contact.normal, contact.pos)
