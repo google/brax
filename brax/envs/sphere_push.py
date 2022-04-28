@@ -193,7 +193,7 @@ bodies {
   colliders {
     capsule {
       radius: 0.5
-      length: 1.0
+      length: 0.2
     }
   }
   mass: 1.0
@@ -206,19 +206,19 @@ bodies {
       length: 1.0
     }
   }
-  mass: 1.0
+  mass: 2.0
 }
 bodies {
   name: "p1_roll"
-  mass: 0.01
+  mass: 0.001
 }
 bodies {
   name: "p1_pitch"
-  mass: 0.01
+  mass: 0.001
 }
 bodies {
   name: "p1_yaw"
-  mass: 0.01
+  mass: 0.001
 }
 
 bodies {
@@ -286,7 +286,7 @@ actuators {
   }
 }
 elasticity: 1.0
-friction: 6.0
+friction: 10.0
 gravity {
   z: -9.8
 }
