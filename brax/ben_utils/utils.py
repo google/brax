@@ -87,12 +87,12 @@ def make_config(n_players=2, torque=False, walls=False, output_path=False):
     default_qp.pos[-4] += np.array([0, -15, 0])
     # default_qp.rot[-4] += np.array([1, 0, 0, 1])
 
-    print("\"\"\"\n", sys.config, "\n\"\"\"")
-    if output_path:
-        original_stdout = stdout # Save a reference to the original standard output
-        with open(join(output_path, 'config.py'), 'w') as f:
-            stdout = f
-            print("\"\"\"\n", sys.config, "\n\"\"\"")
-            stdout = original_stdout # Reset the standard output to its original value
+  print("\"\"\"\n", sys.config, "\n\"\"\"")
+  if output_path:
+      original_stdout = stdout # Save a reference to the original standard output
+      with open(join(output_path, 'config.py'), 'w') as f:
+          stdout = f
+          print("\"\"\"\n", sys.config, "\n\"\"\"")
+          stdout = original_stdout # Reset the standard output to its original value
 
   return pitm, sys, default_qp
