@@ -1,5 +1,5 @@
 import brax
-from sys import stdout
+import sys
 import numpy as np
 from os.path import join
 
@@ -66,10 +66,10 @@ def make_config(n_players=2, torque=False, walls=False, output_path=False):
   pitm.elasticity = 1.
   pitm.angular_damping = -1.0
 
-  sys = brax.System(pitm)
+  pitm_sys = brax.System(pitm)
 
   # default starting positions
-  default_qp = sys.default_qp()
+  default_qp = pitm_sys.default_qp()
   r = 4. # starting distance of each player from ball
   t = np.linspace(0, 2*np.pi, n_players+1)
   dx, dy = r*np.cos(t), r*np.sin(t)
@@ -87,12 +87,12 @@ def make_config(n_players=2, torque=False, walls=False, output_path=False):
     default_qp.pos[-4] += np.array([0, -15, 0])
     # default_qp.rot[-4] += np.array([1, 0, 0, 1])
 
-  print("\"\"\"\n", sys.config, "\n\"\"\"")
+  print("\"\"\"\n", pitm_sys.config, "\n\"\"\"")
   if output_path:
-      original_stdout = stdout # Save a reference to the original standard output
+      original_stdout = sys.stdout # Save a reference to the original standard output
       with open(join(output_path, 'config.py'), 'w') as f:
-          stdout = f
-          print("\"\"\"\n", sys.config, "\n\"\"\"")
-          stdout = original_stdout # Reset the standard output to its original value
+          sys.stdout = f
+          print("\"\"\"\n", pitm_sys.config, "\n\"\"\"")
+          sys.stdout = original_stdout # Reset the standard output to its original value
 
-  return pitm, sys, default_qp
+  return pitm, pitm_sys, default_qp
