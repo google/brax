@@ -92,7 +92,7 @@ def make_config(n_players=2, torque=False, walls=False, output_path=False):
       original_stdout = sys.stdout # Save a reference to the original standard output
       with open(join(output_path, 'config.py'), 'w') as f:
           sys.stdout = f
-          print("\"\"\"\n", pitm_sys.config, "\n\"\"\"")
+          print("_SYSTEM_CONFIG = \"\"\"\n", pitm_sys.config, "\n\"\"\"")
           sys.stdout = original_stdout # Reset the standard output to its original value
 
   return pitm, pitm_sys, default_qp
