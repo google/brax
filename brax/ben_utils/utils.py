@@ -1,6 +1,7 @@
 import brax
 from sys import stdout
 import numpy as np
+from os.path import join
 
 def make_config(n_players=2, torque=False, walls=False, output_path=False):
   pitm = brax.Config(dt=0.05, substeps=20, dynamics_mode='pbd')
@@ -86,6 +87,7 @@ def make_config(n_players=2, torque=False, walls=False, output_path=False):
     default_qp.pos[-4] += np.array([0, -15, 0])
     # default_qp.rot[-4] += np.array([1, 0, 0, 1])
 
+    print("\"\"\"\n", sys.config, "\n\"\"\"")
     if output_path:
         original_stdout = stdout # Save a reference to the original standard output
         with open(join(output_path, 'config.py'), 'w') as f:
