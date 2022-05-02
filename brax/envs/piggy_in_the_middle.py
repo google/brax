@@ -36,14 +36,14 @@ class PITM(env.Env):
     info = self.sys.info(qp)
     obs = self._get_obs(qp, info)
     reward, done, zero = jp.zeros(3)
-    metrics = {
-        'piggy_to_ball_cost': zero,
-        'piggy_reach_ball_cost': zero,
-        'player_to_ball_cost': zero,
-        'reward_ctrl_cost': zero,
-        'reward_contact_cost': zero,
-        'reward_survive': zero,
-    }
+    metrics = dict(
+        piggy_ball_cost=zero,
+        piggy_reach_ball_cost=zero,
+        player_ball_reward=zero,
+        ctrl_cost=zero,
+        contact_cost=zero,
+        survive_reward=zero,
+    )
     return env.State(qp, obs, reward, done, metrics)
 
   def step(self, state: env.State, action: jp.ndarray) -> env.State:
@@ -105,9 +105,11 @@ class PITM(env.Env):
         piggy_ball_cost=piggy_ball_cost,
         piggy_reach_ball_cost=piggy_reach_ball_cost,
         player_ball_reward=player_ball_reward,
-        reward_ctrl_cost=ctrl_cost,
-        reward_contact_cost=contact_cost,
-        reward_survive=survive_reward)
+        ctrl_cost=ctrl_cost,
+        contact_cost=contact_cost,
+        survive_reward=survive_reward,
+    )
+
 
     return state.replace(qp=qp, obs=obs, reward=reward, done=done)
 
