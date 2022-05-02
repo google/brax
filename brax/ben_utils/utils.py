@@ -42,25 +42,30 @@ def make_config(n_players=2, torque=False, walls=False, output_path=False):
     actuators = []
     if torque:
       actuators = ['roll', 'pitch']
-      for a in actuators:
-        body_str = 'p%d_%s'%(i,a)
-        joint_str = 'p%d_joint_%s'%(i,a)
-        act_str = 'p%d_torque_%s'%(i,a)
-        pitm.bodies.add(name=body_str, mass=1e-4)
-        body_idx[body_str] = n
-        n += 1
-        joint = pitm.joints.add(name=joint_str, 
-                                parent=player.name, child=body_str,
-                                # angular_damping=0,
-                                )
-        joint.angle_limit.add(min = -180, max = 180)
-        if a is 'pitch': joint.rotation.z = -90
-        act = pitm.actuators.add(name=act_str, joint=joint_str,
-                                          strength=100).torque
-        act.SetInParent()  # for setting an empty oneof
-
+    else:
+      actuators = ['x', 'y'] # dummy actuators -- won't be used
+    for a in actuators:
+      body_str = 'p%d_%s'%(i,a)
+      joint_str = 'p%d_joint_%s'%(i,a)
+      act_str = 'p%d_torque_%s'%(i,a)
+      pitm.bodies.add(name=body_str, mass=1e-4)
+      body_idx[body_str] = n
+      n += 1
+      joint = pitm.joints.add(name=joint_str, 
+                              parent=player.name, child=body_str,
+                              # angular_damping=0,
+                              )
+      joint.angle_limit.add(min = -180, max = 180)
+      if a is 'pitch': joint.rotation.z = -90
+      act = pitm.actuators.add(name=act_str, joint=joint_str,
+                                        strength=100).torque
+      act.SetInParent()  # for setting an empty oneof
 
   if walls:
+    # square walls, 30mx30m, 1m thick, 6m tall
+    wall_height = 6
+    wall_thickness = 1
+    wall_length = 30
     for i in range(1,5):
       wall = pitm.bodies.add(name='wall%d'%i)
       body_idx['wall%d'%i] = n
@@ -69,9 +74,9 @@ def make_config(n_players=2, torque=False, walls=False, output_path=False):
       wall_box = wall.colliders.add().box
       dims = wall_box.halfsize
       if i<3:
-        dims.x, dims.y, dims.z = 15, 0.25, 3
+        dims.x, dims.y, dims.z = wall_length/2, wall_thickness/2, wall_height/2
       else:
-        dims.x, dims.y, dims.z = 0.25, 15, 3
+        dims.x, dims.y, dims.z = wall_thickness/2, wall_length/2, wall_height/2
     
     
   pitm.gravity.z = -9.8

@@ -79,7 +79,7 @@ class PITM(env.Env):
 
     # small reward for players approaching the ball
     player_ball_reward = 0
-    for n in range(self.n_players):
+    for n in range(1, self.n_players+1):
       x_dist_before = abs(state.qp.pos[idx['p%d'%n], 0] - state.qp.pos[idx['ball'], 0])
       x_dist_after = abs(qp.pos[idx['p%d'%n], 0] - qp.pos[idx['ball'], 0])
       y_dist_before = abs(state.qp.pos[idx['p%d'%n], 1] - state.qp.pos[idx['ball'], 1])
