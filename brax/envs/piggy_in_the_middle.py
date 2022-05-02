@@ -113,6 +113,10 @@ class PITM(env.Env):
 
     return state.replace(qp=qp, obs=obs, reward=reward, done=done)
 
+  @property
+  def action_size(self):
+    return self.n_players*2 # x and y for each player -- z force always zero, piggy always moves towards ball
+
   def _get_obs(self, qp: brax.QP, info: brax.Info) -> jp.ndarray:
     """Observes body position and velocities."""
     # Trying something - observe everything?
