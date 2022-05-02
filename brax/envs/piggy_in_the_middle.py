@@ -26,7 +26,7 @@ class PITM(env.Env):
   def __init__(self, **kwargs):
     self.default_qp = kwargs.pop('default_qp')
     config = kwargs.pop('config')
-    n_players = kwargs.pop('n_players')
+    self.n_players = kwargs.pop('n_players')
     # if not config: 
     #     config = _SYSTEM_CONFIG 
     super().__init__(config=config, **kwargs)
@@ -66,7 +66,7 @@ class PITM(env.Env):
 
     # small reward for players approaching the ball
     player_ball_reward = 0
-    for n in range(n_players):
+    for n in range(self.n_players):
       x_dist_before = abs(state.qp.pos[idx['p%d'%n], 0] - state.qp.pos[idx['ball'], 0])
       x_dist_after = abs(qp.pos[idx['p%d'%n], 0] - qp.pos[idx['ball'], 0])
       y_dist_before = abs(state.qp.pos[idx['p%d'%n], 1] - state.qp.pos[idx['ball'], 1])
