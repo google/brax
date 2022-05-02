@@ -27,6 +27,11 @@ class PITM(env.Env):
     self.default_qp = kwargs.pop('default_qp')
     config = kwargs.pop('config')
     self.n_players = kwargs.pop('n_players')
+    self.body_idx = kwargs.pop('body_idx')
+    try:
+      self.torque = kwargs.pop('torque')
+    except:
+      self.torque = False
     # if not config: 
     #     config = _SYSTEM_CONFIG 
     super().__init__(config=config, **kwargs)
@@ -49,6 +54,14 @@ class PITM(env.Env):
 
   def step(self, state: env.State, action: jp.ndarray) -> env.State:
     """Run one timestep of the environment's dynamics."""
+    idx = self.body_idx
+    if self.torque:
+      """
+      - artificially pass impulses by editing qp.vel - these come from action.
+      """
+      pass
+
+
     qp, info = self.sys.step(state.qp, action)
     obs = self._get_obs(qp, info)
     
