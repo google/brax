@@ -17,49 +17,21 @@
 import brax
 from brax import jumpy as jp
 from brax.envs import env
+from config import _SYSTEM_CONFIG
 
 
-class SpherePush(env.Env):
-  """Trains an actuated sphere to push a ball in the +x direction."""
+class PITM(env.Env):
+  """Trains a single agent n-player piggy in the middle game"""
 
-  def __init__(self, config=None, legacy_spring=False, **kwargs):
+  def __init__(self, config=None, default_qp=None, legacy_spring=False, **kwargs):
+    self.default_qp = default_qp
     if not config: 
-        config = _SYSTEM_CONFIG_SPRING if legacy_spring else _SYSTEM_CONFIG 
+        config = _SYSTEM_CONFIG 
     super().__init__(config=config, **kwargs)
 
   def reset(self, rng: jp.ndarray) -> env.State:
     """Resets the environment to an initial state."""
-    ball_init_x, ball_init_y = 2., 0. # planar starting position of pushable ball
-    qp = brax.QP(
-    # position of **each body** in 3d (z is up, right-hand coordinates) -- 2 bodies, ground and ball 
-    pos = jp.array([[ball_init_x, ball_init_y, .5],                   # ball
-                    [0., 0., .5],                   # p1
-                    [0., 0., .5],                   # roll
-                    [0., 0., .5],                   # pitch
-                    [0., 0., .5], # yaw
-                    [0., 0., 0.]]),                 # ground 
-    # velocity of each body in 3d (both at rest)
-    vel = jp.array([[0., 0., 0.],       
-                    [0., 0., 0.],  
-                    [0., 0., 0.],                      
-                    [0., 0., 0.],       
-                    [0., 0., 0.],
-                    [0., 0., 0.]]),     
-    # rotation about center of body, as a quaternion (w, x, y, z)
-    rot = jp.array([[1., 0., 0., 0.], 
-                    [1., 0., 0., 0.], 
-                    [1., 0., 0., 0.], 
-                    [1., 0., 0., 0.], 
-                    [1., 0., 0., 0.],
-                    [1., 0., 0., 0.]]), 
-    # angular velocity about center of body in 3d
-    ang = jp.array([[0., 0., 0.],
-                    [0., 0., 0.],
-                    [0., 0., 0.],
-                    [0., 0., 0.],
-                    [0., 0., 0.],
-                    [0., 0., 0.]])
-)
+    qp = self.default_qp
     info = self.sys.info(qp)
     obs = self._get_obs(qp, info)
     reward, done, zero = jp.zeros(3)
@@ -184,115 +156,3 @@ class SpherePush(env.Env):
     # obs = jp.concatenate([joint_angle, joint_vel] + qpos + qvel_ball + cfrc)
 
     return obs
-
-
-_SYSTEM_CONFIG = """
-
-bodies {
-  name: "ball"
-  colliders {
-    capsule {
-      radius: 0.5
-      length: 1.0
-    }
-  }
-  mass: 0.2
-}
-bodies {
-  name: "p1"
-  colliders {
-    capsule {
-      radius: 0.5
-      length: 1.0
-    }
-  }
-  mass: 2.0
-}
-bodies {
-  name: "p1_roll"
-  mass: 0.001
-}
-bodies {
-  name: "p1_pitch"
-  mass: 0.001
-}
-bodies {
-  name: "p1_yaw"
-  mass: 0.001
-}
-
-bodies {
-  name: "ground"
-  colliders {
-    plane {
-    }
-  }
-  frozen {
-    all: true
-  }
-}
-joints {
-  name: "joint1"
-  parent: "p1_roll"
-  child: "p1"
-  angle_limit {
-    min: -180.0
-    max: 180.0
-  }
-}
-joints {
-  name: "joint2"
-  parent: "p1_pitch"
-  child: "p1"
-  rotation {
-    z: -90.0
-  }
-  angle_limit {
-    min: -180.0
-    max: 180.0
-  }
-}
-joints {
-  name: "joint3"
-  parent: "p1_yaw"
-  child: "p1"
-  rotation {
-    y: -90.0
-  }
-  angle_limit {
-    min: -180.0
-    max: 180.0
-  }
-}
-actuators {
-  name: "torque1"
-  joint: "joint1"
-  strength: 100.0
-  torque {
-  }
-}
-actuators {
-  name: "torque2"
-  joint: "joint2"
-  strength: 100.0
-  torque {
-  }
-}
-actuators {
-  name: "torque3"
-  joint: "joint3"
-  strength: 100.0
-  torque {
-  }
-}
-elasticity: 1.0
-friction: 10.0
-gravity {
-  z: -9.8
-}
-angular_damping: -0.05
-dt: 0.05
-substeps: 20
-dynamics_mode: "pbd"
-
-"""

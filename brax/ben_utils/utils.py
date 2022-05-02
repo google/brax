@@ -4,14 +4,19 @@ import numpy as np
 from os.path import join
 
 def make_config(n_players=2, torque=False, walls=False, output_path=False):
+  body_idx, n = {}, 0
   pitm = brax.Config(dt=0.05, substeps=20, dynamics_mode='pbd')
   ground = pitm.bodies.add(name='ground')
+  body_idx['ground'] = n
+  n += 1
   ground.frozen.all = True
   plane = ground.colliders.add().plane
   plane.SetInParent()  # for setting an empty oneof
 
   # make ball
   ball = pitm.bodies.add(name='ball', mass=1)
+  body_idx['ball'] = n
+  n += 1
   # cap = ball.colliders.add().capsule
   # cap.radius, cap.length = 0.5, 1.0
   cap = ball.colliders.add().sphere
@@ -20,6 +25,8 @@ def make_config(n_players=2, torque=False, walls=False, output_path=False):
 
   # make piggy
   piggy = pitm.bodies.add(name='piggy', mass=1)
+  body_idx['piggy'] = n
+  n += 1
   box = piggy.colliders.add().box
   dims = box.halfsize
   dims.x, dims.y, dims.z = .5, .5, .5
@@ -27,6 +34,8 @@ def make_config(n_players=2, torque=False, walls=False, output_path=False):
   # make players
   for i in range(1,n_players+1):
     player = pitm.bodies.add(name='p%d'%i, mass=1)
+    body_idx['p%d'%i] = n
+    n += 1
     cap = player.colliders.add().capsule
     cap.radius, cap.length = 0.5, 1
     # players' actuators
@@ -38,6 +47,8 @@ def make_config(n_players=2, torque=False, walls=False, output_path=False):
         joint_str = 'p%d_joint_%s'%(i,a)
         act_str = 'p%d_torque_%s'%(i,a)
         pitm.bodies.add(name=body_str, mass=1e-4)
+        body_idx[body_str] = n
+        n += 1
         joint = pitm.joints.add(name=joint_str, 
                                 parent=player.name, child=body_str,
                                 # angular_damping=0,
@@ -52,6 +63,8 @@ def make_config(n_players=2, torque=False, walls=False, output_path=False):
   if walls:
     for i in range(1,5):
       wall = pitm.bodies.add(name='wall%d'%i)
+      body_idx['wall%d'%i] = n
+      n += 1
       wall.frozen.all = True
       wall_box = wall.colliders.add().box
       dims = wall_box.halfsize
@@ -73,11 +86,11 @@ def make_config(n_players=2, torque=False, walls=False, output_path=False):
   r = 4. # starting distance of each player from ball
   t = np.linspace(0, 2*np.pi, n_players+1)
   dx, dy = r*np.cos(t), r*np.sin(t)
-  default_qp.pos[2] += np.array([8., 0., 0.]) # default piggy
+  default_qp.pos[body_idx['piggy']] += np.array([8., 0., 0.])
   bodies_per_player = 1+len(actuators)*torque
   for i in range(n_players):
     for j in range(bodies_per_player): # 3 if torque, 1 if not
-      default_qp.pos[3+bodies_per_player*i+j] += np.array([dx[i], dy[i], 0.])
+      default_qp.pos[body_idx['p1']+bodies_per_player*i+j] += np.array([dx[i], dy[i], 0.])
   
   if walls:
     default_qp.pos[-1] += np.array([15, 0, 0])
@@ -92,7 +105,8 @@ def make_config(n_players=2, torque=False, walls=False, output_path=False):
       original_stdout = sys.stdout # Save a reference to the original standard output
       with open(join(output_path, 'config.py'), 'w') as f:
           sys.stdout = f
-          print("_SYSTEM_CONFIG = \"\"\"\n", pitm_sys.config, "\n\"\"\"")
+          print("_SYSTEM_CONFIG = \"\"\"\n", pitm_sys.config, "\n\"\"\"", 
+          '\n\nbody_idx = ', body_idx,)
           sys.stdout = original_stdout # Reset the standard output to its original value
 
   return pitm, pitm_sys, default_qp
