@@ -63,8 +63,7 @@ class PITM(env.Env):
     vec = jp.array([x_dist_before, y_dist_before])
     vec = vec / jp.sum(vec**2)**0.5 # normalize distance vector
     vel = vec * speed
-    state.qp.vel[idx['piggy']] = state.qp.vel[idx['piggy']].at[0].set(vel[0]) # x
-    state.qp.vel[idx['piggy']] = state.qp.vel[idx['piggy']].at[1].set(vel[1]) # y -- requires special jax assignment
+    state.qp.vel = state.qp.vel.at[idx['piggy'], :-1].set(vel)
 
     # applying velocity impulses to all players - not using actuators
     if not self.torque:
