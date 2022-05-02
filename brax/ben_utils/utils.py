@@ -3,7 +3,7 @@ import sys
 import numpy as np
 from os.path import join
 
-def make_config(n_players=2, torque=False, walls=False, output_path=False):
+def make_config(n_players=2, walls=False, output_path=False):
   body_idx, n = {}, 0
   pitm = brax.Config(dt=0.05, substeps=20, dynamics_mode='pbd')
   ground = pitm.bodies.add(name='ground')
@@ -31,7 +31,7 @@ def make_config(n_players=2, torque=False, walls=False, output_path=False):
   dims = box.halfsize
   dims.x, dims.y, dims.z = .5, .5, .5
   # add force (3D)
-  thrust = pitm.forces.add(name='piggy_thrust'%i, body='piggy', strength=1.0).thruster
+  thrust = pitm.forces.add(name='piggy_thrust', body='piggy', strength=1.0).thruster
   thrust.SetInParent()
 
   # make players
