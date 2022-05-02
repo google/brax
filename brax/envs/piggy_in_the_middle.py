@@ -61,15 +61,24 @@ class PITM(env.Env):
       """
       pass
 
+    # adding impulse to piggy - moves towards ball
+    x_dist_before = state.qp.pos[idx['ball'], 0] - state.qp.pos[idx['piggy'], 0]
+    y_dist_before = state.qp.pos[idx['ball'], 1] - state.qp.pos[idx['piggy'], 1]
+    speed = 0.25 # absolute velocity
+    vec = jp.array([x_dist_before, y_dist_before])
+    vec = vec / jp.sum(vel**2)**0.5 # normalize distance vector
+    vel = vec * speed
+
+    state.qp.vel[idx['piggy']][0], qp.vel[idx['piggy']][1]  = vel[0], vel[1]
 
     qp, info = self.sys.step(state.qp, action)
     obs = self._get_obs(qp, info)
     
     # penalty for piggy approaching the ball
-    x_dist_before = abs(state.qp.pos[idx['piggy'], 0] - state.qp.pos[idx['ball'], 0])
-    x_dist_after = abs(qp.pos[idx['piggy'], 0] - qp.pos[idx['ball'], 0])
-    y_dist_before = abs(state.qp.pos[idx['piggy'], 1] - state.qp.pos[idx['ball'], 1])
-    y_dist_after = abs(qp.pos[idx['piggy'], 1] - qp.pos[idx['ball'], 1])
+    x_dist_before = state.qp.pos[idx['ball'], 0] - state.qp.pos[idx['piggy'], 0]
+    x_dist_after = qp.pos[idx['ball'], 0] - qp.pos[idx['piggy'], 0])
+    y_dist_before = state.qp.pos[idx['ball'], 1] - state.qp.pos[idx['piggy'], 1]
+    y_dist_after = qp.pos[idx['ball'], 1] - qp.pos[idx['piggy'], 1]
     dist_before = abs((x_dist_before**2 + y_dist_before**2)**0.5)
     dist_after = abs((x_dist_after**2 + y_dist_after**2)**0.5)
     piggy_ball_cost = (dist_before - dist_after) / self.sys.config.dt  # +ve means ball is closer
