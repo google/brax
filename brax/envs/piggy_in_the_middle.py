@@ -64,6 +64,10 @@ class PITM(env.Env):
       act.append(action[2*i+1]) # y
       act.append(0.)            # z
     act = jp.concatenate([acc, jp.array(act)])
+
+    # temp
+    act = action
+    print('action size is {}'.format(action.shape))
     qp, info = self.sys.step(state.qp, act)
     obs = self._get_obs(qp, info)
     
@@ -109,7 +113,6 @@ class PITM(env.Env):
         contact_cost=contact_cost,
         survive_reward=survive_reward,
     )
-
 
     return state.replace(qp=qp, obs=obs, reward=reward, done=done)
 
