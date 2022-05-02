@@ -14,8 +14,8 @@ def make_config(n_players=2, walls=False, output_path=False):
   plane.SetInParent()  # for setting an empty oneof
 
   # make ball
-  ball = pitm.bodies.add(name='target', mass=1)
-  body_idx['target'] = n
+  ball = pitm.bodies.add(name='Target', mass=1)
+  body_idx['Target'] = n
   n += 1
   cap = ball.colliders.add().capsule
   cap.radius, cap.length = 0.5, 1.0
