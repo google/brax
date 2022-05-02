@@ -55,11 +55,6 @@ class PITM(env.Env):
   def step(self, state: env.State, action: jp.ndarray) -> env.State:
     """Run one timestep of the environment's dynamics."""
     idx = self.body_idx
-    if self.torque:
-      """
-      - artificially pass impulses by editing qp.vel - these come from action.
-      """
-      pass
 
     # adding impulse to piggy - moves towards ball
     x_dist_before = state.qp.pos[idx['ball'], 0] - state.qp.pos[idx['piggy'], 0]
@@ -68,18 +63,21 @@ class PITM(env.Env):
     vec = jp.array([x_dist_before, y_dist_before])
     vec = vec / jp.sum(vec**2)**0.5 # normalize distance vector
     vel = vec * speed
-    state.qp.vel[idx['piggy']][0], qp.vel[idx['piggy']][1]  = vel[0], vel[1]
+    state.qp.vel[idx['piggy']] = state.qp.vel[idx['piggy']].at[0].set(vel[0]) # x
+    state.qp.vel[idx['piggy']] = state.qp.vel[idx['piggy']].at[1].set(vel[1]) # y -- requires special jax assignment
 
-    # applying impulses to all players - not using actuators
-    # what do the actions look like?
+    # applying velocity impulses to all players - not using actuators
+    if not self.torque:
+      for i in range(1,self.n_players+1):
+        state.qp.vel[idx['p%d'%i]][0] += action[2*i-2] # x
+        state.qp.vel[idx['p%d'%i]][1] += action[2*i-1] # y    
+      action = jp.zeros_like(action)
 
     qp, info = self.sys.step(state.qp, action)
     obs = self._get_obs(qp, info)
     
     # penalty for piggy approaching the ball
-    x_dist_before = state.qp.pos[idx['ball'], 0] - state.qp.pos[idx['piggy'], 0]
     x_dist_after = qp.pos[idx['ball'], 0] - qp.pos[idx['piggy'], 0]
-    y_dist_before = state.qp.pos[idx['ball'], 1] - state.qp.pos[idx['piggy'], 1]
     y_dist_after = qp.pos[idx['ball'], 1] - qp.pos[idx['piggy'], 1]
     dist_before = abs((x_dist_before**2 + y_dist_before**2)**0.5)
     dist_after = abs((x_dist_after**2 + y_dist_after**2)**0.5)
