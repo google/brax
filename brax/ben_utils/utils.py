@@ -17,10 +17,10 @@ def make_config(n_players=2, torque=False, walls=False, output_path=False):
   ball = pitm.bodies.add(name='ball', mass=1)
   body_idx['ball'] = n
   n += 1
-  # cap = ball.colliders.add().capsule
-  # cap.radius, cap.length = 0.5, 1.0
-  cap = ball.colliders.add().sphere
-  cap.radius = 0.5
+  cap = ball.colliders.add().capsule
+  cap.radius, cap.length = 0.5, 1.0
+  # cap = ball.colliders.add().sphere
+  # cap.radius = 0.5
 
 
   # make piggy
@@ -30,6 +30,9 @@ def make_config(n_players=2, torque=False, walls=False, output_path=False):
   box = piggy.colliders.add().box
   dims = box.halfsize
   dims.x, dims.y, dims.z = .5, .5, .5
+  # add force (3D)
+  thrust = pitm.forces.add(name='piggy_thrust'%i, body='piggy', strength=1.0).thruster
+  thrust.SetInParent()
 
   # make players
   for i in range(1,n_players+1):
@@ -38,28 +41,11 @@ def make_config(n_players=2, torque=False, walls=False, output_path=False):
     n += 1
     cap = player.colliders.add().capsule
     cap.radius, cap.length = 0.5, 1
-    # players' actuators
-    actuators = []
-    if torque:
-      actuators = ['roll', 'pitch']
-    else:
-      actuators = ['x', 'y'] # dummy actuators -- won't be used
-    for a in actuators:
-      body_str = 'p%d_%s'%(i,a)
-      joint_str = 'p%d_joint_%s'%(i,a)
-      act_str = 'p%d_torque_%s'%(i,a)
-      pitm.bodies.add(name=body_str, mass=1e-4)
-      body_idx[body_str] = n
-      n += 1
-      joint = pitm.joints.add(name=joint_str, 
-                              parent=player.name, child=body_str,
-                              # angular_damping=0,
-                              )
-      joint.angle_limit.add(min = -180, max = 180)
-      if a is 'pitch': joint.rotation.z = -90
-      act = pitm.actuators.add(name=act_str, joint=joint_str,
-                                        strength=100).torque
-      act.SetInParent()  # for setting an empty oneof
+    # add force (3D)
+    thrust = pitm.forces.add(name='p%d_thrust'%i, body='p%d'%i, strength=1.0).thruster
+    # twist = pitm.forces.add(name='p%d_thrust'%i, body='p%d'%i, strength=1.0).twister
+    thrust.SetInParent()
+    # twist.SetInParent()
 
   if walls:
     # square walls, 30mx30m, 1m thick, 6m tall
@@ -92,18 +78,14 @@ def make_config(n_players=2, torque=False, walls=False, output_path=False):
   t = np.linspace(0, 2*np.pi, n_players+1)
   dx, dy = r*np.cos(t), r*np.sin(t)
   default_qp.pos[body_idx['piggy']] += np.array([8., 0., 0.])
-  bodies_per_player = 1+len(actuators)*torque
   for i in range(n_players):
-    for j in range(bodies_per_player): # 3 if torque, 1 if not
-      default_qp.pos[body_idx['p1']+bodies_per_player*i+j] += np.array([dx[i], dy[i], 0.])
+    default_qp.pos[body_idx['p1']+i] += np.array([dx[i], dy[i], 0.])
   
   if walls:
     default_qp.pos[-1] += np.array([15, 0, 0])
     default_qp.pos[-2] += np.array([-15, 0, 0])
     default_qp.pos[-3] += np.array([0, 15, 0])
-    # default_qp.rot[-3] += np.array([1, 0, 0, 1])
     default_qp.pos[-4] += np.array([0, -15, 0])
-    # default_qp.rot[-4] += np.array([1, 0, 0, 1])
 
   if output_path:
       original_stdout = sys.stdout # Save a reference to the original standard output

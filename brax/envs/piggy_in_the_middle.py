@@ -28,12 +28,6 @@ class PITM(env.Env):
     config = kwargs.pop('config')
     self.n_players = kwargs.pop('n_players')
     self.body_idx = kwargs.pop('body_idx')
-    try:
-      self.torque = kwargs.pop('torque')
-    except:
-      self.torque = False
-    # if not config: 
-    #     config = _SYSTEM_CONFIG 
     super().__init__(config=config, **kwargs)
 
   def reset(self, rng: jp.ndarray) -> env.State:
@@ -59,20 +53,18 @@ class PITM(env.Env):
     # adding impulse to piggy - moves towards ball
     x_dist_before = state.qp.pos[idx['ball'], 0] - state.qp.pos[idx['piggy'], 0]
     y_dist_before = state.qp.pos[idx['ball'], 1] - state.qp.pos[idx['piggy'], 1]
-    speed = 0.25 # absolute velocity
-    vec = jp.array([x_dist_before, y_dist_before])
-    vec = vec / jp.sum(vec**2)**0.5 # normalize distance vector
-    vel = vec * speed
-    state.qp.vel = state.qp.vel.at[idx['piggy'], :-1].set(vel)
-
-    # applying velocity impulses to all players - not using actuators
-    if not self.torque:
-      for i in range(1,self.n_players+1):
-        state.qp.vel[idx['p%d'%i]][0] += action[2*i-2] # x
-        state.qp.vel[idx['p%d'%i]][1] += action[2*i-1] # y    
-      action = jp.zeros_like(action)
-
-    qp, info = self.sys.step(state.qp, action)
+    acc = 0.1 # force (acceleration * mass of 1.0)
+    vec = jp.array([x_dist_before, y_dist_before, 0.])
+    vec = vec / jp.sum(vec**2)**0.5 # normalize vector
+    acc = acc * vec
+    # action is an array of length 2*n_players, x and y for each
+    act = [] # list of actions (x,y,z for piggy + each player)
+    for i in range(self.n_players):
+      act.append(action[2*i])   # x
+      act.append(action[2*i+1]) # y
+      act.append(0.)            # z
+    act = jp.concatenate([acc, jp.array(act)])
+    qp, info = self.sys.step(state.qp, act)
     obs = self._get_obs(qp, info)
     
     # penalty for piggy approaching the ball
@@ -81,6 +73,7 @@ class PITM(env.Env):
     dist_before = abs((x_dist_before**2 + y_dist_before**2)**0.5)
     dist_after = abs((x_dist_after**2 + y_dist_after**2)**0.5)
     piggy_ball_cost = (dist_before - dist_after) / self.sys.config.dt  # +ve means ball is closer
+    piggy_ball_cost *= 10.
     
     # big penalty for piggy reaching ball
     piggy_reach_ball_cost =  (dist_after < 1.5) * 100
@@ -95,6 +88,7 @@ class PITM(env.Env):
       dist_before = abs((x_dist_before**2 + y_dist_before**2)**0.5)
       dist_after = abs((x_dist_after**2 + y_dist_after**2)**0.5)
       player_ball_reward += (dist_before - dist_after) / self.sys.config.dt  # +ve means ball is closer
+    player_ball_reward *= 0.1
     
     ctrl_cost = .5 * jp.sum(jp.square(action)) # dependent on torque
     
