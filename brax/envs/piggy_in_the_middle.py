@@ -76,7 +76,7 @@ class PITM(env.Env):
     
     # penalty for piggy approaching the ball
     x_dist_before = state.qp.pos[idx['ball'], 0] - state.qp.pos[idx['piggy'], 0]
-    x_dist_after = qp.pos[idx['ball'], 0] - qp.pos[idx['piggy'], 0])
+    x_dist_after = qp.pos[idx['ball'], 0] - qp.pos[idx['piggy'], 0]
     y_dist_before = state.qp.pos[idx['ball'], 1] - state.qp.pos[idx['piggy'], 1]
     y_dist_after = qp.pos[idx['ball'], 1] - qp.pos[idx['piggy'], 1]
     dist_before = abs((x_dist_before**2 + y_dist_before**2)**0.5)
