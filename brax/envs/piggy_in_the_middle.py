@@ -66,10 +66,12 @@ class PITM(env.Env):
     y_dist_before = state.qp.pos[idx['ball'], 1] - state.qp.pos[idx['piggy'], 1]
     speed = 0.25 # absolute velocity
     vec = jp.array([x_dist_before, y_dist_before])
-    vec = vec / jp.sum(vel**2)**0.5 # normalize distance vector
+    vec = vec / jp.sum(vec**2)**0.5 # normalize distance vector
     vel = vec * speed
-
     state.qp.vel[idx['piggy']][0], qp.vel[idx['piggy']][1]  = vel[0], vel[1]
+
+    # applying impulses to all players - not using actuators
+    # what do the actions look like?
 
     qp, info = self.sys.step(state.qp, action)
     obs = self._get_obs(qp, info)
