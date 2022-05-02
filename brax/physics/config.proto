@@ -91,6 +91,12 @@ message Collider {
     HeightMap heightMap = 7;
     Mesh mesh = 9;
   }
+  // Color of the collider in css notation (e.g. '#ff0000' or 'red')
+  string color = 10;
+  // A hidden collider is not visualized
+  bool hidden = 11;
+  // A no-contact collider doesn't yield any collisions
+  bool no_contact = 12;
 }
 
 // Joints connect two bodies and restrain their movement to a rotational frame.
@@ -280,8 +286,8 @@ message Config {
   int32 collider_cutoff = 15;
   // All of the mesh geometries in the system.
   repeated MeshGeometry mesh_geometries = 17;
-  // The physics used for this config.  Options: ['pbd_euler', 'legacy_euler']
-  // Defaults to 'pbd_euler'
+  // The physics used for this config.  Options: ['pbd', 'legacy_spring']
+  // Defaults to 'pbd'
   string dynamics_mode = 18;
   // Sets the default magnitude of position based updates for position data
   optional float solver_scale_pos = 19;

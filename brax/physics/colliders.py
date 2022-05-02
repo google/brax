@@ -1080,6 +1080,10 @@ def get(config: config_pb2.Config, body: bodies.Body) -> List[Collider]:
   flat_bodies = []
   for b in config.bodies:
     for collider in b.colliders:
+      # ignore no-contact colliders
+      if collider.no_contact:
+        continue
+
       # we treat spheres as sphere-shaped capsules with a single end
       if collider.WhichOneof('type') == 'sphere':
         new_collider = config_pb2.Collider()

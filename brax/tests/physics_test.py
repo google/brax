@@ -56,6 +56,7 @@ class BoxTest(absltest.TestCase):
     bodies {
       name: "box" mass: 1
       colliders { box { halfsize { x: 0.5 y: 0.5 z: 0.5 }}}
+      colliders { box { halfsize { x: 1 y: 1 z: 1 }} no_contact: true }
       inertia { x: 1 y: 1 z: 1 }
     }
     bodies { name: "Ground" frozen: { all: true } colliders { plane {}}}
