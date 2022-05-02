@@ -17,16 +17,18 @@
 import brax
 from brax import jumpy as jp
 from brax.envs import env
-from config import _SYSTEM_CONFIG, body_idx as idx, n_players
+from brax.ben_utils.utils import make_config
 
 
 class PITM(env.Env):
   """Trains a single agent n-player piggy in the middle game"""
 
-  def __init__(self, config=None, default_qp=None, legacy_spring=False, **kwargs):
-    self.default_qp = default_qp
-    if not config: 
-        config = _SYSTEM_CONFIG 
+  def __init__(self, **kwargs):
+    self.default_qp = kwargs.pop('default_qp')
+    config = kwargs.pop('config')
+    n_players = kwargs.pop('n_players')
+    # if not config: 
+    #     config = _SYSTEM_CONFIG 
     super().__init__(config=config, **kwargs)
 
   def reset(self, rng: jp.ndarray) -> env.State:
@@ -37,6 +39,11 @@ class PITM(env.Env):
     reward, done, zero = jp.zeros(3)
     metrics = {
         'piggy_to_ball_cost': zero,
+        'piggy_reach_ball_cost': zero,
+        'player_to_ball_cost': zero,
+        'reward_ctrl_cost': zero,
+        'reward_contact_cost': zero,
+        'reward_survive': zero,
     }
     return env.State(qp, obs, reward, done, metrics)
 
