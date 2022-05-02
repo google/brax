@@ -113,36 +113,8 @@ class PITM(env.Env):
 
   def _get_obs(self, qp: brax.QP, info: brax.Info) -> jp.ndarray:
     """Observes body position and velocities."""
-    # # some pre-processing to pull joint angles and velocities
-    # (joint_angle,), (joint_vel,) = self.sys.joints[0].angle_vel(qp)
-
-    # # qpos:
-    # # Z of the torso (1,)
-    # # orientation of the torso as quaternion (4,)
-    # # joint angles (8,)
-    # qpos = [qp.pos[0, 2:], qp.rot[0], joint_angle]
-
-    # # qvel:
-    # # velocity of the torso (3,)
-    # # angular velocity of the torso (3,)
-    # # joint angle velocities (8,)
-    # qvel = [qp.vel[0], qp.ang[0], joint_vel]
-
-    # # external contact forces:
-    # # delta velocity (3,), delta ang (3,) * 10 bodies in the system
-    # # Note that mujoco has 4 extra bodies tucked inside the Torso that Brax
-    # # ignores
-    # cfrc = [jp.clip(info.contact.vel, -1, 1), jp.clip(info.contact.ang, -1, 1)]
-    # # flatten bottom dimension
-    # cfrc = [jp.reshape(x, x.shape[:-2] + (-1,)) for x in cfrc]
-    
-    # obs = jp.concatenate(qpos + qvel + cfrc)
-    
-    ###############################################################################################
-    
     # Trying something - observe everything?
-    (joint_angle,), (joint_vel,) = self.sys.joints[0].angle_vel(qp)
-    pos, rot, vel, ang = [qp.pos.flatten(), joint_angle], [qp.rot.flatten()], [qp.vel.flatten()], [qp.ang.flatten(), joint_vel]
+    pos, rot, vel, ang = [qp.pos.flatten()], [qp.rot.flatten()], [qp.vel.flatten()], [qp.ang.flatten()]
     cfrc = []
     # cfrc = [jp.clip(info.contact.vel, -1, 1), jp.clip(info.contact.ang, -1, 1)]
     # cfrc = [jp.reshape(x, x.shape[:-2] + (-1,)) for x in cfrc] # flatten bottom dimension
