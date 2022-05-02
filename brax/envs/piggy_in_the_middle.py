@@ -17,7 +17,7 @@
 import brax
 from brax import jumpy as jp
 from brax.envs import env
-from config import _SYSTEM_CONFIG
+from config import _SYSTEM_CONFIG, body_idx as idx, n_players
 
 
 class PITM(env.Env):
@@ -36,13 +36,7 @@ class PITM(env.Env):
     obs = self._get_obs(qp, info)
     reward, done, zero = jp.zeros(3)
     metrics = {
-        'ball_forward_reward': zero,
-        'ball_dist_reward': zero,
-        'towards_ball_reward': zero,
-        'near_ball_cost': zero,
-        'reward_ctrl_cost': zero,
-        'reward_contact_cost': zero,
-        'reward_survive': zero,
+        'piggy_to_ball_cost': zero,
     }
     return env.State(qp, obs, reward, done, metrics)
 
@@ -51,52 +45,44 @@ class PITM(env.Env):
     qp, info = self.sys.step(state.qp, action)
     obs = self._get_obs(qp, info)
     
-    
-    # push ball forward - big reward
-    x_ball_before = state.qp.pos[0, 0]
-    x_ball_after = qp.pos[0, 0]
-    ball_forward_reward = (x_ball_after - x_ball_before) / self.sys.config.dt
-    ball_forward_reward *= 20
-    
-    # ball distance travelled from starting position
-    ball_dist_reward = qp.pos[0,0] - 2.0
-    
-    # move p1 towards ball - small reward
-    x_dist_before = abs(state.qp.pos[1, 0] - state.qp.pos[0, 0])
-    x_dist_after = abs(qp.pos[1, 0] - qp.pos[0, 0])
-    y_dist_before = abs(state.qp.pos[1, 1] - state.qp.pos[0, 1])
-    y_dist_after = abs(qp.pos[1, 1] - qp.pos[0, 1])
+    # penalty for piggy approaching the ball
+    x_dist_before = abs(state.qp.pos[idx['piggy'], 0] - state.qp.pos[idx['ball'], 0])
+    x_dist_after = abs(qp.pos[idx['piggy'], 0] - qp.pos[idx['ball'], 0])
+    y_dist_before = abs(state.qp.pos[idx['piggy'], 1] - state.qp.pos[idx['ball'], 1])
+    y_dist_after = abs(qp.pos[idx['piggy'], 1] - qp.pos[idx['ball'], 1])
     dist_before = abs((x_dist_before**2 + y_dist_before**2)**0.5)
     dist_after = abs((x_dist_after**2 + y_dist_after**2)**0.5)
-    towards_ball_reward = (dist_before - dist_after) / self.sys.config.dt
+    piggy_ball_cost = (dist_before - dist_after) / self.sys.config.dt  # +ve means ball is closer
     
-    # have p1 be near to ball - small reward
-    x_dist = abs(qp.pos[0, 0] - qp.pos[1, 0])
-    y_dist = abs(qp.pos[0, 1] - qp.pos[1, 1])
-    dist = abs((x_dist**2 + y_dist**2)**0.5)
-    near_ball_cost = dist
+    # big penalty for piggy reaching ball
+    piggy_reach_ball_cost =  (dist_after < 1.5) * 100
+
+    # small reward for players approaching the ball
+    player_ball_reward = 0
+    for n in range(n_players):
+      x_dist_before = abs(state.qp.pos[idx['p%d'%n], 0] - state.qp.pos[idx['ball'], 0])
+      x_dist_after = abs(qp.pos[idx['p%d'%n], 0] - qp.pos[idx['ball'], 0])
+      y_dist_before = abs(state.qp.pos[idx['p%d'%n], 1] - state.qp.pos[idx['ball'], 1])
+      y_dist_after = abs(qp.pos[idx['p%d'%n], 1] - qp.pos[idx['ball'], 1])
+      dist_before = abs((x_dist_before**2 + y_dist_before**2)**0.5)
+      dist_after = abs((x_dist_after**2 + y_dist_after**2)**0.5)
+      player_ball_reward += (dist_before - dist_after) / self.sys.config.dt  # +ve means ball is closer
     
     ctrl_cost = .5 * jp.sum(jp.square(action)) # dependent on torque
     
-    # not sure what this is - set to zero for now
+    # contact cost - leave in for now
     contact_cost = 0.5 * 1e-3 * jp.sum(jp.square(jp.clip(info.contact.vel, -1, 1)))
     survive_reward = jp.float32(1)
     
-    reward = ball_forward_reward 
-    reward += ball_dist_reward 
-    reward += towards_ball_reward
-    reward -= near_ball_cost
-    reward -= ctrl_cost
-    reward += survive_reward - contact_cost
+    reward = -piggy_ball_cost - piggy_reach_ball_cost + player_ball_reward - ctrl_cost - contact_cost + survive_reward
 
     # termination - these shouldn't matter for our ball
     done = jp.where(qp.pos[0, 2] < 0.2, x=jp.float32(1), y=jp.float32(0))
     # done = jp.where(qp.pos[0, 2] > 1.0, x=jp.float32(1), y=done) # don't want it to stop when it bounces...
     state.metrics.update(
-        ball_forward_reward=ball_forward_reward,
-        ball_dist_reward=ball_dist_reward,
-        towards_ball_reward=towards_ball_reward,
-        near_ball_cost=near_ball_cost,
+        piggy_ball_cost=piggy_ball_cost,
+        piggy_reach_ball_cost=piggy_reach_ball_cost,
+        player_ball_reward=player_ball_reward,
         reward_ctrl_cost=ctrl_cost,
         reward_contact_cost=contact_cost,
         reward_survive=survive_reward)
@@ -139,20 +125,5 @@ class PITM(env.Env):
     # cfrc = [jp.clip(info.contact.vel, -1, 1), jp.clip(info.contact.ang, -1, 1)]
     # cfrc = [jp.reshape(x, x.shape[:-2] + (-1,)) for x in cfrc] # flatten bottom dimension
     obs = jp.concatenate(pos + rot + vel + ang + cfrc)
-
-    ###############################################################################################
-
-    # # # First pass at cutting down observations
-    # # joint angles and joint angle velocities
-    # (joint_angle,), (joint_vel,) = self.sys.joints[0].angle_vel(qp)
-    # # position (xyz) of the sphere and of the ball
-    # qpos = [qp.pos[0, :], qp.pos[4,:]]
-    # # velocity and angular velocity of ball
-    # qvel_ball = [qp.vel[4, :], qp.ang[4, :]]
-    # # external contact forces (copied from ant)
-    # cfrc = [jp.clip(info.contact.vel, -1, 1), jp.clip(info.contact.ang, -1, 1)]
-    # cfrc = [jp.reshape(x, x.shape[:-2] + (-1,)) for x in cfrc] # flatten bottom dimension
-    
-    # obs = jp.concatenate([joint_angle, joint_vel] + qpos + qvel_ball + cfrc)
 
     return obs
