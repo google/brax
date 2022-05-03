@@ -77,6 +77,8 @@ class PITM(env.Env):
     dist_after = abs((x_dist_after**2 + y_dist_after**2)**0.5)
     piggy_ball_cost = (dist_before - dist_after) / self.sys.config.dt  # +ve means ball is closer
     piggy_ball_cost *= 10.
+
+    print(dist_before, dist_after, state.qp.pos[idx['piggy']], qp.pos[idx['piggy']])
     
     # big penalty for piggy reaching ball
     piggy_reach_ball_cost =  (dist_after < 1.5) * 100.
