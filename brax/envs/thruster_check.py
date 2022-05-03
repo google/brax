@@ -42,7 +42,7 @@ class ThrusterCheck(env.Env):
   def step(self, state: env.State, action: jp.ndarray) -> env.State:
     """Run one timestep of the environment's dynamics."""
 
-    act = jp.concatenate([action, jp.zeros(1)])
+    act = jp.concatenate([action[:2], jp.zeros(1), action[2:], jp.zeros(1)])
     qp, info = self.sys.step(state.qp, act)
     obs = self._get_obs(qp, info)
 
@@ -67,7 +67,7 @@ class ThrusterCheck(env.Env):
 
   @property
   def action_size(self):
-    return 2
+    return 4
 
   def _get_obs(self, qp: brax.QP, info: brax.Info) -> jp.ndarray:
     """Observe ant body position and velocities."""
