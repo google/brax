@@ -79,7 +79,7 @@ class PITM(env.Env):
     piggy_ball_cost *= 10.
     
     # big penalty for piggy reaching ball
-    piggy_reach_ball_cost =  (dist_after < 1.5) * 100
+    piggy_reach_ball_cost =  (dist_after < 1.5) * 100.
 
     # small reward for players approaching the ball
     player_ball_reward = 0
