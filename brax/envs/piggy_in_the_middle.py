@@ -64,9 +64,6 @@ class PITM(env.Env):
       act.append(0.)            # z
     act = jp.concatenate([acc, jp.array(act)])
 
-    # temp
-    act = action
-    print('action size is {}'.format(action.shape))
     qp, info = self.sys.step(state.qp, act)
     obs = self._get_obs(qp, info)
     
@@ -117,7 +114,7 @@ class PITM(env.Env):
 
   @property
   def action_size(self):
-    return (1+self.n_players)*3 # x and y for each player -- z force always zero, piggy always moves towards ball
+    return self.n_players * 2 # x and y for each player -- z force always zero, piggy always moves towards ball
 
   def _get_obs(self, qp: brax.QP, info: brax.Info) -> jp.ndarray:
     """Observes body position and velocities."""
