@@ -64,6 +64,9 @@ class PITM(env.Env):
       act.append(0.)            # z
     act = jp.concatenate([acc, jp.array(act)])
 
+    print('Size of action vec: ', action.shape, action)
+    print('Act vec: ', act.shape, act)
+    
     qp, info = self.sys.step(state.qp, act)
     obs = self._get_obs(qp, info)
     
