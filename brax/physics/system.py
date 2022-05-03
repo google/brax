@@ -235,7 +235,13 @@ class System:
       zero = P(jp.zeros((self.num_bodies, 3)), jp.zeros((self.num_bodies, 3)))
       zero_q = Q(jp.zeros((self.num_bodies, 3)), jp.zeros((self.num_bodies, 4)))
       dp_a = sum([a.apply(qp, act) for a in self.actuators], zero)
+
+      # adding some prints to debug
+      print('act', act)
+      print('self.forces', self.forces)
+
       dp_f = sum([f.apply(qp, act) for f in self.forces], zero)
+      print('dp_f', dp_f)
       dp_j = sum([j.damp(qp) for j in self.joints], zero)
       qp = self.integrator.update(qp, acc_p=dp_a + dp_f + dp_j)
 
