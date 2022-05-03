@@ -66,7 +66,7 @@ def make_config(n_players=2, walls=False, output_path=False):
     
     
   pitm.gravity.z = -9.8
-  pitm.friction = 10.
+  pitm.friction = 0.1
   pitm.elasticity = 1.
   pitm.angular_damping = -1.0
 
