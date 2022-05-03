@@ -17,7 +17,6 @@
 import brax
 from brax import jumpy as jp
 from brax.envs import env
-from brax.ben_utils.utils import make_config
 
 
 class PITM(env.Env):
@@ -51,8 +50,8 @@ class PITM(env.Env):
     idx = self.body_idx
 
     # adding impulse to piggy - moves towards ball
-    x_dist_before = state.qp.pos[idx['ball'], 0] - state.qp.pos[idx['piggy'], 0]
-    y_dist_before = state.qp.pos[idx['ball'], 1] - state.qp.pos[idx['piggy'], 1]
+    x_dist_before = state.qp.pos[idx['Target'], 0] - state.qp.pos[idx['piggy'], 0]
+    y_dist_before = state.qp.pos[idx['Target'], 1] - state.qp.pos[idx['piggy'], 1]
     acc = 0.1 # force (acceleration * mass of 1.0)
     vec = jp.array([x_dist_before, y_dist_before, 0.])
     vec = vec / jp.sum(vec**2)**0.5 # normalize vector
@@ -72,8 +71,8 @@ class PITM(env.Env):
     obs = self._get_obs(qp, info)
     
     # penalty for piggy approaching the ball
-    x_dist_after = qp.pos[idx['ball'], 0] - qp.pos[idx['piggy'], 0]
-    y_dist_after = qp.pos[idx['ball'], 1] - qp.pos[idx['piggy'], 1]
+    x_dist_after = qp.pos[idx['Target'], 0] - qp.pos[idx['piggy'], 0]
+    y_dist_after = qp.pos[idx['Target'], 1] - qp.pos[idx['piggy'], 1]
     dist_before = abs((x_dist_before**2 + y_dist_before**2)**0.5)
     dist_after = abs((x_dist_after**2 + y_dist_after**2)**0.5)
     piggy_ball_cost = (dist_before - dist_after) / self.sys.config.dt  # +ve means ball is closer
@@ -85,10 +84,10 @@ class PITM(env.Env):
     # small reward for players approaching the ball
     player_ball_reward = 0
     for n in range(1, self.n_players+1):
-      x_dist_before = abs(state.qp.pos[idx['p%d'%n], 0] - state.qp.pos[idx['ball'], 0])
-      x_dist_after = abs(qp.pos[idx['p%d'%n], 0] - qp.pos[idx['ball'], 0])
-      y_dist_before = abs(state.qp.pos[idx['p%d'%n], 1] - state.qp.pos[idx['ball'], 1])
-      y_dist_after = abs(qp.pos[idx['p%d'%n], 1] - qp.pos[idx['ball'], 1])
+      x_dist_before = abs(state.qp.pos[idx['p%d'%n], 0] - state.qp.pos[idx['Target'], 0])
+      x_dist_after = abs(qp.pos[idx['p%d'%n], 0] - qp.pos[idx['Target'], 0])
+      y_dist_before = abs(state.qp.pos[idx['p%d'%n], 1] - state.qp.pos[idx['Target'], 1])
+      y_dist_after = abs(qp.pos[idx['p%d'%n], 1] - qp.pos[idx['Target'], 1])
       dist_before = abs((x_dist_before**2 + y_dist_before**2)**0.5)
       dist_after = abs((x_dist_after**2 + y_dist_after**2)**0.5)
       player_ball_reward += (dist_before - dist_after) / self.sys.config.dt  # +ve means ball is closer
