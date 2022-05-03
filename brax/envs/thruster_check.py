@@ -124,6 +124,34 @@ bodies {
     }
   }
 }
+bodies {
+  name: "piggy"
+  colliders {
+    box {
+      halfsize {
+        x: 0.5
+        y: 0.5
+        z: 0.5
+      }
+    }
+    material {
+      elasticity: 1.0
+      friction: 0.10000000149011612
+    }
+  }
+  inertia {
+    x: 1.0
+    y: 1.0
+    z: 1.0
+  }
+  mass: 1.0
+  frozen {
+    position {
+    }
+    rotation {
+    }
+  }
+}
  bodies {
   name: "ground"
   colliders {
@@ -166,6 +194,13 @@ frozen {
 forces {
   name: "p1_thrust"
   body: "p1"
+  strength: 1.0
+  thruster {
+  }
+}
+forces {
+  name: "piggy_thrust"
+  body: "piggy"
   strength: 1.0
   thruster {
   }
