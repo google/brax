@@ -52,17 +52,20 @@ class PITM(env.Env):
     # adding impulse to piggy - moves towards ball
     x_dist_before = state.qp.pos[idx['ball'], 0] - state.qp.pos[idx['piggy'], 0]
     y_dist_before = state.qp.pos[idx['ball'], 1] - state.qp.pos[idx['piggy'], 1]
-    acc = 10 # force (acceleration * mass of 1.0)
-    vec = jp.array([x_dist_before, y_dist_before, 0.])
-    vec = vec / jp.sum(vec**2)**0.5 # normalize vector
-    acc = acc * vec
-    # action is an array of length 2*n_players, x and y for each
-    act = [] # list of actions (x,y,z for piggy + each player)
-    for i in range(self.n_players):
-      act.append(action[2*i])   # x
-      act.append(action[2*i+1]) # y
-      act.append(0.)            # z
-    act = jp.concatenate([acc, jp.array(act)])
+    
+    # acc = 10 # force (acceleration * mass of 1.0)
+    # vec = jp.array([x_dist_before, y_dist_before, 0.])
+    # vec = vec / jp.sum(vec**2)**0.5 # normalize vector
+    # acc = acc * vec
+    # # action is an array of length 2*n_players, x and y for each
+    # act = [] # list of actions (x,y,z for piggy + each player)
+    # for i in range(self.n_players):
+    #   act.append(action[2*i])   # x
+    #   act.append(action[2*i+1]) # y
+    #   act.append(0.)            # z
+    # act = jp.concatenate([acc, jp.array(act)])
+
+    act = action
 
     print('Size of action vec: ', action.shape, action)
     print('Act vec: ', act.shape, act)
@@ -118,9 +121,9 @@ class PITM(env.Env):
 
     return state.replace(qp=qp, obs=obs, reward=reward, done=done)
 
-  @property
-  def action_size(self):
-    return self.n_players * 2 # x and y for each player -- z force always zero, piggy always moves towards ball
+  # @property
+  # def action_size(self):
+  #   return self.n_players * 2 # x and y for each player -- z force always zero, piggy always moves towards ball
 
   def _get_obs(self, qp: brax.QP, info: brax.Info) -> jp.ndarray:
     """Observes body position and velocities."""
