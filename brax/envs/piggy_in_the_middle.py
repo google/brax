@@ -52,7 +52,7 @@ class PITM(env.Env):
     # adding impulse to piggy - moves towards ball
     x_dist_before = state.qp.pos[idx['ball'], 0] - state.qp.pos[idx['piggy'], 0]
     y_dist_before = state.qp.pos[idx['ball'], 1] - state.qp.pos[idx['piggy'], 1]
-    acc = 0.1 # force (acceleration * mass of 1.0)
+    acc = 10 # force (acceleration * mass of 1.0)
     vec = jp.array([x_dist_before, y_dist_before, 0.])
     vec = vec / jp.sum(vec**2)**0.5 # normalize vector
     acc = acc * vec
@@ -66,7 +66,7 @@ class PITM(env.Env):
 
     print('Size of action vec: ', action.shape, action)
     print('Act vec: ', act.shape, act)
-    
+
     qp, info = self.sys.step(state.qp, act)
     obs = self._get_obs(qp, info)
     
