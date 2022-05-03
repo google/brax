@@ -80,16 +80,16 @@ class ThrusterCheck(env.Env):
     # # joint angle velocities (8,)
     # qvel = [qp.vel[0], qp.ang[0], joint_vel]
 
-    # external contact forces:
-    # delta velocity (3,), delta ang (3,) * 10 bodies in the system
-    # Note that mujoco has 4 extra bodies tucked inside the Torso that Brax
-    # ignores
-    cfrc = [jp.clip(info.contact.vel, -1, 1), jp.clip(info.contact.ang, -1, 1)]
-    # flatten bottom dimension
-    cfrc = [jp.reshape(x, x.shape[:-2] + (-1,)) for x in cfrc]
+    # # external contact forces:
+    # # delta velocity (3,), delta ang (3,) * 10 bodies in the system
+    # # Note that mujoco has 4 extra bodies tucked inside the Torso that Brax
+    # # ignores
+    # cfrc = [jp.clip(info.contact.vel, -1, 1), jp.clip(info.contact.ang, -1, 1)]
+    # # flatten bottom dimension
+    # cfrc = [jp.reshape(x, x.shape[:-2] + (-1,)) for x in cfrc]
 
 
-    return jp.concatenate([qp.pos] + [qp.vel] + [qp.rot] + [qp.ang] + cfrc)
+    return jp.concatenate([qp.pos[0]] + [qp.vel[0]] + [qp.rot[0]] + [qp.ang[0]])
 
 
 _SYSTEM_CONFIG = """
