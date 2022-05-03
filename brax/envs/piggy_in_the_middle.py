@@ -112,6 +112,7 @@ class PITM(env.Env):
         contact_cost=contact_cost,
         survive_reward=survive_reward,
     )
+    print(state.metrics)
 
     return state.replace(qp=qp, obs=obs, reward=reward, done=done)
 
