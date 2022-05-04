@@ -30,7 +30,7 @@ class ThrusterCheck(env.Env):
   def reset(self, rng: jp.ndarray) -> env.State:
     """Resets the environment to an initial state."""
     qp = self.sys.default_qp()
-    qp.pos[1,0] = 50 # move piggy init pos
+    qp.pos[1,0] = 20 # move piggy init pos
     qp.pos[2,1] = 3 # move p1 init pos
     qp.pos[3,1] = -3 # move p2 init pos
     info = self.sys.info(qp)
