@@ -17,6 +17,7 @@
 import brax
 from brax import jumpy as jp
 from brax.envs import env
+from brax.jumpy import safe_norm as norm
 
 
 class ThrusterCheck(env.Env):
@@ -48,7 +49,7 @@ class ThrusterCheck(env.Env):
     # vector piggy to ball
     v_piggy_ball = state.qp.pos[0,:2] - state.qp.pos[1,:2]
     piggy_acc = 1. # base piggy acceleration (force/mass)
-    v_piggy_ball /= jp.linalg.norm(v_piggy_ball)
+    v_piggy_ball /= norm(v_piggy_ball)
     piggy_acc *= v_piggy_ball # vector of piggy acceleration
 
     act = jp.concatenate([piggy_acc, jp.zeros(1), action[2:], jp.zeros(1)])
