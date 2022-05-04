@@ -59,7 +59,8 @@ class ThrusterCheck(env.Env):
     # check that this won't make velocity go too high
     piggy_vel = norm(state.qp.vel[0,:2])
     vec_piggy_ball /= piggy_ball_dist_before # normalize
-    piggy_acc *= vec_piggy_ball # vector of piggy acceleration
+    piggy_acc = 1.0 # base acceleration of 1m/s^2
+    piggy_acc *= vec_piggy_ball # convert into acceleration vector
     piggy_acc_x, piggy_acc_y = piggy_acc
 
     # Ensure piggy thrust doesn't cause it to exceed max velocity
