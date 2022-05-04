@@ -32,6 +32,7 @@ class ThrusterCheck(env.Env):
     qp = self.sys.default_qp()
     qp.pos[1,0] = 3 # move piggy init pos
     qp.pos[2,1] = 3 # move p1 init pos
+    qp.pos[3,1] = -3 # move p2 init pos
     info = self.sys.info(qp)
     obs = self._get_obs(qp, info)
     reward, done, zero = jp.zeros(3)
@@ -52,7 +53,7 @@ class ThrusterCheck(env.Env):
     v_piggy_ball /= norm(v_piggy_ball)
     piggy_acc *= v_piggy_ball # vector of piggy acceleration
 
-    act = jp.concatenate([piggy_acc, jp.zeros(1), action, jp.zeros(1)])
+    act = jp.concatenate([piggy_acc, jp.zeros(1), action[:2], jp.zeros(1), action[2:]])
     qp, info = self.sys.step(state.qp, act)
     obs = self._get_obs(qp, info)
 
@@ -77,7 +78,7 @@ class ThrusterCheck(env.Env):
 
   @property
   def action_size(self):
-    return 2
+    return 4
 
   def _get_obs(self, qp: brax.QP, info: brax.Info) -> jp.ndarray:
     """Observe ant body position and velocities."""
@@ -193,6 +194,35 @@ bodies {
   }
 }
 
+bodies {
+  name: "p2"
+  colliders {
+    box {
+      halfsize {
+        x: 0.5
+        y: 0.5
+        z: 0.5
+      }
+    }
+    material {
+      elasticity: 1.0
+      friction: 0.10000000149011612
+    }
+  }
+  inertia {
+    x: 1.0
+    y: 1.0
+    z: 1.0
+  }
+  mass: 1.0
+  frozen {
+    position {
+    }
+    rotation {
+    }
+  }
+}
+
  bodies {
   name: "ground"
   colliders {
@@ -223,7 +253,7 @@ bodies {
   }
 }
 elasticity: 1.0
-friction: 0.10000000149011612
+friction: 0.5
 gravity {
   z: -9.800000190734863
 }
@@ -248,6 +278,15 @@ forces {
   thruster {
   }
 }
+
+forces {
+  name: "p2_thrust"
+  body: "p2"
+  strength: 1.0
+  thruster {
+  }
+}
+
 dynamics_mode: "pbd"
 
 """ 
