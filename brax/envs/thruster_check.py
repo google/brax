@@ -133,9 +133,9 @@ class ThrusterCheck(env.Env):
     """Observe ant body position and velocities."""
 
     #### OBSERVATIONS ####
-    all_body_pos = qp.pos[:-1,:2] # x,y positions of both players, ball and piggy (8,)
-    all_body_vel = qp.vel[:-1,:2] # x,y velocities of both players, ball and piggy (8,)
-    ball_ang  = qp.ang[0]         # ball angular velocities (3,)
+    all_body_pos = qp.pos[:-1,:2].flatten() # x,y positions of both players, ball and piggy (8,)
+    all_body_vel = qp.vel[:-1,:2].flatten() # x,y velocities of both players, ball and piggy (8,)
+    ball_ang  = qp.ang[0]                   # ball angular velocities (3,)
 
     return jp.concatenate([all_body_pos] + [all_body_vel] + [ball_ang])
 
