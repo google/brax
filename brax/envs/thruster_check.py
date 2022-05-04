@@ -57,7 +57,6 @@ class ThrusterCheck(env.Env):
     vec_piggy_ball = ball_pos_before - piggy_pos_before
     piggy_ball_dist_before = norm(vec_piggy_ball)
     # check that this won't make velocity go too high
-    piggy_vel = norm(state.qp.vel[0,:2])
     vec_piggy_ball /= piggy_ball_dist_before # normalize
     piggy_acc = 1.0 # base acceleration of 1m/s^2
     piggy_acc *= vec_piggy_ball # convert into acceleration vector
@@ -74,7 +73,8 @@ class ThrusterCheck(env.Env):
     #                         jp.float32(0))                      # else
 
     # Update step 
-    act = jp.concatenate([jp.array([piggy_acc_x, piggy_acc_y, 0.]), 
+    act = jp.concatenate([piggy_acc, jp.zeros(1),
+                          # jp.array([piggy_acc_x, piggy_acc_y, 0.]), 
                           action[:2], jp.zeros(1), 
                           action[2:], jp.zeros(1)])
     qp, info = self.sys.step(state.qp, act)
