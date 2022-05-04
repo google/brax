@@ -29,6 +29,8 @@ class ThrusterCheck(env.Env):
   def reset(self, rng: jp.ndarray) -> env.State:
     """Resets the environment to an initial state."""
     qp = self.sys.default_qp()
+    qp.pos[1,0] = 3 # move piggy init pos
+    qp.pos[2,1] = 3 # move p1 init pos
     info = self.sys.info(qp)
     obs = self._get_obs(qp, info)
     reward, done, zero = jp.zeros(3)
@@ -43,7 +45,13 @@ class ThrusterCheck(env.Env):
   def step(self, state: env.State, action: jp.ndarray) -> env.State:
     """Run one timestep of the environment's dynamics."""
 
-    act = jp.concatenate([action[:2], jp.zeros(1), action[2:], jp.zeros(1)])
+    # vector piggy to ball
+    v_piggy_ball = state.qp.pos[0,:2] - state.qp.pos[1,:2]
+    piggy_acc = 1. # base piggy acceleration (force/mass)
+    v_piggy_ball /= jp.linalg.norm(v_piggy_ball)
+    piggy_acc *= v_piggy_ball # vector of piggy acceleration
+
+    act = jp.concatenate([piggy_acc, jp.zeros(1), action[2:], jp.zeros(1)])
     qp, info = self.sys.step(state.qp, act)
     obs = self._get_obs(qp, info)
 
@@ -68,7 +76,7 @@ class ThrusterCheck(env.Env):
 
   @property
   def action_size(self):
-    return 4
+    return 2
 
   def _get_obs(self, qp: brax.QP, info: brax.Info) -> jp.ndarray:
     """Observe ant body position and velocities."""
