@@ -56,16 +56,24 @@ class ThrusterCheck(env.Env):
     piggy_pos_before = state.qp.pos[1,:2]
     vec_piggy_ball = ball_pos_before - piggy_pos_before
     piggy_ball_dist_before = norm(vec_piggy_ball)
-    # cap piggy velocity at 1m/s
+    # check that this won't make velocity go too high
     piggy_vel = norm(state.qp.vel[0,:2])
-    piggy_acc = jp.where(piggy_vel < 1.0, # if
-                          jp.float32(1),  # then
-                          jp.float32(0))  # else
     vec_piggy_ball /= piggy_ball_dist_before # normalize
     piggy_acc *= vec_piggy_ball # vector of piggy acceleration
+    piggy_acc_x, piggy_acc_y = piggy_acc
+
+    # Ensure piggy thrust doesn't cause it to exceed max velocity
+    piggy_max_vel = 3.0
+    next_x_vel, next_y_vel = state.qp.vel[0,:2] + piggy_acc * self.sys.config.dt # v = v0 + a * dt
+    piggy_acc_x = jp.where(jp.abs(next_x_vel) < piggy_max_vel,  # if
+                            piggy_acc_x,                        # then
+                            jp.float32(0))                      # else
+    piggy_acc_y = jp.where(jp.abs(next_y_vel) < piggy_max_vel,  # if
+                            piggy_acc_y,                        # then
+                            jp.float32(0))                      # else
 
     # Update step 
-    act = jp.concatenate([piggy_acc, jp.zeros(1), 
+    act = jp.concatenate([piggy_acc_x, piggy_acc_y, jp.zeros(1), 
                           action[:2], jp.zeros(1), 
                           action[2:], jp.zeros(1)])
     qp, info = self.sys.step(state.qp, act)
