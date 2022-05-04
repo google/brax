@@ -169,7 +169,7 @@ bodies {
     }
     material {
       elasticity: 1.0
-      friction: 10.0
+      friction: 0.1
     }
   }
   inertia {
@@ -198,7 +198,7 @@ bodies {
     }
     material {
       elasticity: 1.0
-      friction: 10.0
+      friction: 0.1
     }
   }
   inertia {
@@ -227,7 +227,7 @@ bodies {
     }
     material {
       elasticity: 1.0
-      friction: 10.0
+      friction: 0.1
     }
   }
   inertia {
@@ -256,7 +256,7 @@ bodies {
     }
     material {
       elasticity: 1.0
-      friction: 10.0
+      friction: 0.1
     }
   }
   inertia {
@@ -280,7 +280,7 @@ bodies {
     }
     material {
       elasticity: 1.0
-      friction: 10.0
+      friction: 0.1
     }
   }
   inertia {
@@ -303,7 +303,7 @@ bodies {
   }
 }
 elasticity: 1.0
-friction: 10.0
+friction: 0.1
 gravity {
   z: -9.800000190734863
 }
