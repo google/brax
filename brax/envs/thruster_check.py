@@ -56,11 +56,12 @@ class ThrusterCheck(env.Env):
     piggy_pos_before = state.qp.pos[1,:2]
     vec_piggy_ball = ball_pos_before - piggy_pos_before
     piggy_ball_dist_before = norm(vec_piggy_ball)
-    if norm(state.qp.vel[0,:2]) > 1.0 : # cap ball velocity at 1m/s
-      piggy_acc = 0.
-    else:
-      piggy_acc = 1. # base piggy acceleration (force/mass)
-    vec_piggy_ball /= piggy_ball_dist_before
+    # cap piggy velocity at 1m/s
+    piggy_vel = norm(state.qp.vel[0,:2])
+    piggy_acc = jp.where(piggy_vel < 1.0, # if
+                          jp.float32(1),  # then
+                          jp.float32(0))  # else
+    vec_piggy_ball /= piggy_ball_dist_before # normalize
     piggy_acc *= vec_piggy_ball # vector of piggy acceleration
 
     # Update step 
