@@ -40,9 +40,9 @@ class ThrusterCheck(env.Env):
         'p1_ball_reward': zero,
         'p2_ball_reward': zero,
         'piggy_ball_reward': zero,
-        'piggy_touch_ball_cost': zero,
-        'ctrl_cost': zero,
-        'contact_cost': zero,
+        'piggy_touch_ball_reward': zero,
+        'ctrl_reward': zero,
+        'contact_reward': zero,
         'survive_reward': zero,
         # 'action': jp.zeros(self.action_size),
     }
@@ -126,9 +126,9 @@ class ThrusterCheck(env.Env):
         p1_ball_reward=p1_ball_reward,
         p2_ball_reward=p2_ball_reward,
         piggy_ball_reward=piggy_ball_reward,
-        piggy_touch_ball_cost=piggy_touch_ball_cost,
-        ctrl_cost=ctrl_cost,
-        contact_cost=contact_cost,
+        piggy_touch_ball_reward=-1*piggy_touch_ball_cost,
+        ctrl_reward=-1*ctrl_cost,
+        contact_reward=-1*contact_cost,
         survive_reward=survive_reward,
         # action=action
     )
