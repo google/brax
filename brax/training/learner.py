@@ -96,6 +96,9 @@ flags.DEFINE_float('reward_shift', 0.,
                    'A reward shift to get rid of "stay alive" bonus.')
 flags.DEFINE_enum('head_type', '', ['', 'clip', 'tanh'],
                   'Which policy head to use.')
+# ARS hps.
+flags.DEFINE_integer('truncation_length', None,
+                     'Truncation for gradient propagation in APG.')
 
 
 def main(unused_argv):
@@ -154,6 +157,7 @@ def main(unused_argv):
           normalize_observations=FLAGS.normalize_observations,
           max_gradient_norm=FLAGS.max_gradient_norm,
           episode_length=FLAGS.episode_length,
+          truncation_length=FLAGS.truncation_length,
           progress_fn=writer.write_scalars)
     if FLAGS.learner == 'ppo':
       inference_fn, params, _ = ppo.train(

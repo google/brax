@@ -14,7 +14,7 @@
 
 """Import top-level classes and functions here for encapsulation/clarity."""
 
-__version__ = '0.0.12'
+__version__ = '0.0.13'
 
 from brax.physics.base import Info
 from brax.physics.base import QP
