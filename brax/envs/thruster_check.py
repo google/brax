@@ -72,10 +72,9 @@ class ThrusterCheck(env.Env):
     piggy_acc_y = jp.where(jp.abs(next_y_vel) < piggy_max_vel,  # if
                             piggy_acc_y,                        # then
                             jp.float32(0))                      # else
-    print(piggy_acc_x, piggy_acc_y)
 
     # Update step 
-    act = jp.concatenate([piggy_acc_x, piggy_acc_y, jp.zeros(1), 
+    act = jp.concatenate([jp.array([piggy_acc_x, piggy_acc_y, 0.]), 
                           action[:2], jp.zeros(1), 
                           action[2:], jp.zeros(1)])
     qp, info = self.sys.step(state.qp, act)
