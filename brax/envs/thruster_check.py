@@ -103,7 +103,7 @@ class ThrusterCheck(env.Env):
     # Piggy reach ball, big cost, end episode
     scale = 100.
     piggy_touch_ball_cost = (piggy_ball_dist_after < 1.2) * scale
-    done = jp.where(piggy_ball_dist_after < 1.2, 1, 0) # if, then, else
+    done = jp.where(piggy_ball_dist_after < 1.2, jp.float32(1), jp.float32(0)) # if, then, else
 
     # standard stuff -- contact cost, survive reward, control cost
     ctrl_cost = .5 * jp.sum(jp.square(action))
