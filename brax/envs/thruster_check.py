@@ -41,16 +41,16 @@ class ThrusterCheck(env.Env):
         'p2_ball_reward': zero,
         'piggy_ball_reward': zero,
         'piggy_touch_ball_cost': zero,
-        'reward_ctrl_cost': zero,
-        'reward_contact_cost': zero,
-        'reward_survive': zero,
+        'ctrl_cost': zero,
+        'contact_cost': zero,
+        'survive_reward': zero,
     }
     return env.State(qp, obs, reward, done, metrics)
 
   def step(self, state: env.State, action: jp.ndarray) -> env.State:
     """Run one timestep of the environment's dynamics."""
 
-    # vector piggy to ball
+    # Generating piggy action
     ball_pos_before = state.qp.pos[0,:2]
     piggy_pos_before = state.qp.pos[1,:2]
     vec_piggy_ball = ball_pos_before - piggy_pos_before
@@ -59,7 +59,10 @@ class ThrusterCheck(env.Env):
     vec_piggy_ball /= piggy_ball_dist_before
     piggy_acc *= vec_piggy_ball # vector of piggy acceleration
 
-    act = jp.concatenate([piggy_acc, jp.zeros(1), action[:2], jp.zeros(1), action[2:]])
+    # Update step 
+    act = jp.concatenate([piggy_acc, jp.zeros(1), 
+                          action[:2], jp.zeros(1), 
+                          action[2:], jp.zeros(1)])
     qp, info = self.sys.step(state.qp, act)
     obs = self._get_obs(qp, info)
 
