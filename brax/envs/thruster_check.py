@@ -55,7 +55,10 @@ class ThrusterCheck(env.Env):
     piggy_pos_before = state.qp.pos[1,:2]
     vec_piggy_ball = ball_pos_before - piggy_pos_before
     piggy_ball_dist_before = norm(vec_piggy_ball)
-    piggy_acc = 1. # base piggy acceleration (force/mass)
+    if norm(state.qp.vel[0,:2]) > 1.0 : # cap ball velocity at 1m/s
+      piggy_acc = 0.
+    else:
+      piggy_acc = 1. # base piggy acceleration (force/mass)
     vec_piggy_ball /= piggy_ball_dist_before
     piggy_acc *= vec_piggy_ball # vector of piggy acceleration
 
@@ -102,8 +105,9 @@ class ThrusterCheck(env.Env):
     
     # Piggy reach ball, big cost, end episode
     scale = 100.
-    piggy_touch_ball_cost = (piggy_ball_dist_after < 1.2) * scale
-    done = jp.where(piggy_ball_dist_after < 1.2, jp.float32(1), jp.float32(0)) # if, then, else
+    eps = 1.05 # minimum distance between ball and piggy centres
+    piggy_touch_ball_cost = (piggy_ball_dist_after < eps) * scale
+    done = jp.where(piggy_ball_dist_after < eps, jp.float32(1), jp.float32(0)) # if, then, else
 
     # standard stuff -- contact cost, survive reward, control cost
     ctrl_cost = .5 * jp.sum(jp.square(action))
