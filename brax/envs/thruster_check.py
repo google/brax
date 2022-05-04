@@ -52,7 +52,7 @@ class ThrusterCheck(env.Env):
     v_piggy_ball /= norm(v_piggy_ball)
     piggy_acc *= v_piggy_ball # vector of piggy acceleration
 
-    act = jp.concatenate([piggy_acc, jp.zeros(1), action[2:], jp.zeros(1)])
+    act = jp.concatenate([piggy_acc, jp.zeros(1), action, jp.zeros(1)])
     qp, info = self.sys.step(state.qp, act)
     obs = self._get_obs(qp, info)
 
