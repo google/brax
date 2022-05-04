@@ -44,6 +44,7 @@ class ThrusterCheck(env.Env):
         'ctrl_cost': zero,
         'contact_cost': zero,
         'survive_reward': zero,
+        'action': jp.zeros(self.action_size),
     }
     return env.State(qp, obs, reward, done, metrics)
 
@@ -128,6 +129,7 @@ class ThrusterCheck(env.Env):
         ctrl_cost=ctrl_cost,
         contact_cost=contact_cost,
         survive_reward=survive_reward,
+        action=action
     )
 
     return state.replace(qp=qp, obs=obs, reward=reward, done=done)
