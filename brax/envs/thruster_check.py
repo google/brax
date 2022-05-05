@@ -91,7 +91,7 @@ class ThrusterCheck(env.Env):
     #   `survive_reward`                    : +ve fixed reward for episode not ending
 
     # Each player move towards ball, small reward
-    scale = 0.1
+    scale = 5.0
     p1_pos_before, p1_pos_after = state.qp.pos[2,:2], qp.pos[2,:2]
     p2_pos_before, p2_pos_after = state.qp.pos[3,:2], qp.pos[3,:2]
     ball_pos_after = qp.pos[0,:2]
@@ -107,7 +107,7 @@ class ThrusterCheck(env.Env):
     p2_ball_reward *= scale
 
     # Ball move away from piggy, reward
-    scale = 1.0
+    scale = 5.0
     piggy_pos_after = qp.pos[1,:2]
     piggy_ball_dist_after = norm(ball_pos_after - piggy_pos_after)
     # +ve means piggy is further away from ball
@@ -115,13 +115,13 @@ class ThrusterCheck(env.Env):
     piggy_ball_reward = piggy_ball_dist_change * scale
     
     # Piggy reach ball, big cost, end episode
-    scale = 100.
+    scale = 1000.
     eps = 1.05 # minimum distance between ball and piggy centres
     piggy_touch_ball_cost = (piggy_ball_dist_after < eps) * scale
     done = jp.where(piggy_ball_dist_after < eps, jp.float32(1), jp.float32(0)) # if, then, else
 
     # standard stuff -- contact cost, survive reward, control cost
-    ctrl_cost = .5 * jp.sum(jp.square(action))
+    ctrl_cost = 0. # .5 * jp.sum(jp.square(action)) # let's encourage movement
     contact_cost = (0.5 * 1e-3 *
                     jp.sum(jp.square(jp.clip(info.contact.vel, -1, 1))))
     survive_reward = jp.float32(1)
