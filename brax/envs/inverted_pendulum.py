@@ -100,7 +100,7 @@ _SYSTEM_CONFIG = """
     rotation {
       z: 90.0
     }
-    angle_limit { min: 0.0 max: 0.0 }
+    angle_limit { min: -360 max: 360 }
   }
   forces {
     name: "cart_thruster"
