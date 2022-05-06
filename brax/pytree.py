@@ -39,11 +39,11 @@ def register(cls):
     pytree_data = []
     pytree_fields = []
     static_data = {}
+    static_fields = set()
+    for c in inspect.getmro(cls):
+      if hasattr(c, '__pytree_ignore__'):
+        static_fields.update(cls.__pytree_ignore__)
     for k, v in vars(obj).items():
-      static_fields = set()
-      for c in inspect.getmro(cls):
-        if hasattr(c, '__pytree_ignore__'):
-          static_fields.update(cls.__pytree_ignore__)
       if k in static_fields:
         static_data[k] = v
       else:
