@@ -12,3 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Objects which specify the input/output spaces of an environment.
+
+
+This file was taken from acme and modified to simplify dependencies:
+
+https://github.com/deepmind/acme/blob/master/acme/specs.py
+"""
+import dataclasses
+from typing import Tuple
+
+import jax.numpy as jnp
+
+
+@dataclasses.dataclass(frozen=True)
+class Array:
+  """Describes a numpy array or scalar shape and dtype.
+
+  Similar to dm_env.specs.Array.
+  """
+  shape: Tuple[int, ...]
+  dtype: jnp.dtype

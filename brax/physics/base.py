@@ -15,16 +15,14 @@
 """Core brax structs and some conversion and slicing functions."""
 
 import copy
-import os
 from typing import Optional, Sequence, Tuple, Union
 import warnings
 
 from brax import jumpy as jp
 from brax import math
-from brax.io import file
+from brax.io import mesh
 from brax.physics import config_pb2
 from flax import struct
-from trimesh.exchange.load import load_mesh
 
 
 @struct.dataclass
@@ -197,29 +195,12 @@ def validate_config(
   # Load the meshes.
   if resource_paths is None:
     resource_paths = ['']
-  for mesh_geom in config.mesh_geometries:
-    if mesh_geom.path:
-      # Clear the vertices and faces, if any.
-      del mesh_geom.vertices[:]
-      del mesh_geom.faces[:]
-      found = False
-      for resource_path in resource_paths:
-        path = os.path.join(resource_path, mesh_geom.path)
-        if not file.Exists(path):
-          continue
-        with file.File(path, 'rb') as f:
-          trimesh = load_mesh(f, file_type=str(mesh_geom.path))
-          for v in trimesh.vertices:
-            mesh_geom.vertices.add(x=v[0], y=v[1], z=v[2])
-          mesh_geom.faces.extend(trimesh.faces.flatten())
-          for v in trimesh.vertex_normals:
-            mesh_geom.vertex_normals.add(x=v[0], y=v[1], z=v[2])
-          for v in trimesh.face_normals:
-            mesh_geom.face_normals.add(x=v[0], y=v[1], z=v[2])
-        found = True
-        break
-      assert found, f'{mesh_geom.path} is missing.'
-      mesh_geom.ClearField('path')  # Clear the path.
+  for i in range(len(config.mesh_geometries)):
+    path = config.mesh_geometries[i].path
+    if not path:
+      continue
+    mesh_geom = mesh.load(config.mesh_geometries[i].name, path, resource_paths)
+    config.mesh_geometries[i].CopyFrom(mesh_geom)
 
   # TODO: more config validation
 

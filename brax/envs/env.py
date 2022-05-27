@@ -15,7 +15,7 @@
 """A brax environment for training and inference."""
 
 import abc
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional
 
 import brax
 from brax import jumpy as jp
@@ -37,7 +37,6 @@ class State:
 
 class Env(abc.ABC):
   """API for driving a brax system for training and inference."""
-
 
   def __init__(self, config: Optional[str]):
     if config:

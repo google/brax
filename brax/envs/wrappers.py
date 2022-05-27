@@ -110,10 +110,19 @@ class AutoResetWrapper(brax_env.Wrapper):
 
 @flax.struct.dataclass
 class EvalMetrics:
-  current_episode_metrics: Dict[str, jp.ndarray]
-  completed_episodes_metrics: Dict[str, jp.ndarray]
-  completed_episodes: jp.ndarray
-  completed_episodes_steps: jp.ndarray
+  """Dataclass holding evaluation metrics for Brax.
+
+    Args:
+        episode_metrics: Aggregated episode metrics since the beginning of the
+          episode.
+        active_episodes: Boolean vector tracking which episodes are not done
+          yet.
+        episode_steps: Integer vector tracking the number of steps in
+          the episode.
+  """
+  episode_metrics: Dict[str, jp.ndarray]
+  active_episodes: jp.ndarray
+  episode_steps: jp.ndarray
 
 
 class EvalWrapper(brax_env.Wrapper):
@@ -123,12 +132,9 @@ class EvalWrapper(brax_env.Wrapper):
     reset_state = self.env.reset(rng)
     reset_state.metrics['reward'] = reset_state.reward
     eval_metrics = EvalMetrics(
-        current_episode_metrics=jax.tree_map(jp.zeros_like,
-                                             reset_state.metrics),
-        completed_episodes_metrics=jax.tree_map(
-            lambda x: jp.zeros_like(jp.sum(x)), reset_state.metrics),
-        completed_episodes=jp.zeros(()),
-        completed_episodes_steps=jp.zeros(()))
+        episode_metrics=jax.tree_map(jp.zeros_like, reset_state.metrics),
+        active_episodes=jp.ones_like(reset_state.reward),
+        episode_steps=jp.zeros_like(reset_state.reward))
     reset_state.info['eval_metrics'] = eval_metrics
     return reset_state
 
@@ -140,26 +146,17 @@ class EvalWrapper(brax_env.Wrapper):
     del state.info['eval_metrics']
     nstate = self.env.step(state, action)
     nstate.metrics['reward'] = nstate.reward
-    # steps stores the highest step reached when done = True, and then
-    # the next steps becomes action_repeat
-    completed_episodes_steps = state_metrics.completed_episodes_steps + jp.sum(
-        nstate.info['steps'] * nstate.done)
-    current_episode_metrics = jax.tree_multimap(
-        lambda a, b: a + b, state_metrics.current_episode_metrics,
-        nstate.metrics)
-    completed_episodes = state_metrics.completed_episodes + jp.sum(nstate.done)
-    completed_episodes_metrics = jax.tree_multimap(
-        lambda a, b: a + jp.sum(b * nstate.done),
-        state_metrics.completed_episodes_metrics, current_episode_metrics)
-    current_episode_metrics = jax.tree_multimap(
-        lambda a, b: a * (1 - nstate.done) + b * nstate.done,
-        current_episode_metrics, nstate.metrics)
+    episode_steps = jp.where(state_metrics.active_episodes,
+                             nstate.info['steps'], state_metrics.episode_steps)
+    episode_metrics = jax.tree_map(
+        lambda a, b: a + b * state_metrics.active_episodes,
+        state_metrics.episode_metrics, nstate.metrics)
+    active_episodes = state_metrics.active_episodes * (1 - nstate.done)
 
     eval_metrics = EvalMetrics(
-        current_episode_metrics=current_episode_metrics,
-        completed_episodes_metrics=completed_episodes_metrics,
-        completed_episodes=completed_episodes,
-        completed_episodes_steps=completed_episodes_steps)
+        episode_metrics=episode_metrics,
+        active_episodes=active_episodes,
+        episode_steps=episode_steps)
     nstate.info['eval_metrics'] = eval_metrics
     return nstate
 

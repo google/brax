@@ -32,6 +32,8 @@ def rotate(vec: Vector3, quat: Quaternion):
   Returns:
     ndarray(3) containing vec rotated by quat.
   """
+  if len(vec.shape) != 1:
+    raise AssertionError('vec must have no batch dimensions.')
   s, u = quat[0], quat[1:]
   r = 2 * (jp.dot(u, vec) * u) + (s * s - jp.dot(u, u)) * vec
   r = r + 2 * s * jp.cross(u, vec)

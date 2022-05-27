@@ -66,6 +66,10 @@ def get_environment(env_name, **kwargs):
   return _envs[env_name](**kwargs)
 
 
+def register_environment(env_name: str, env_class: Callable):
+  _envs[env_name] = env_class
+
+
 def create(env_name: str,
            episode_length: int = 1000,
            action_repeat: int = 1,

@@ -34,7 +34,6 @@ import flax
 from flax import linen
 import jax
 import jax.numpy as jnp
-import numpy as onp
 import optax
 
 Metrics = Mapping[str, jnp.ndarray]
@@ -520,26 +519,22 @@ def train(
                                        training_state.policy_params,
                                        training_state.normalizer_params)
       eval_metrics = eval_state.info['eval_metrics']
-      eval_metrics.completed_episodes.block_until_ready()
+      eval_metrics.active_episodes.block_until_ready()
       eval_walltime += time.time() - t
       eval_sps = (
           episode_length * eval_first_state.reward.shape[0] /
           (time.time() - t))
-      avg_episode_length = (
-          eval_metrics.completed_episodes_steps /
-          eval_metrics.completed_episodes)
       metrics = dict(
           dict({
-              f'eval/episode_{name}': value / eval_metrics.completed_episodes
-              for name, value in eval_metrics.completed_episodes_metrics.items()
+              f'eval/episode_{name}': jnp.mean(value)
+              for name, value in eval_metrics.episode_metrics.items()
           }),
           **dict({
-              f'training/{name}': onp.mean(value)
+              f'training/{name}': jnp.mean(value)
               for name, value in training_metrics.items()
           }),
           **dict({
-              'eval/completed_episodes': eval_metrics.completed_episodes,
-              'eval/avg_episode_length': avg_episode_length,
+              'eval/avg_episode_length': jnp.mean(eval_metrics.episode_steps),
               'speed/sps': sps,
               'speed/eval_sps': eval_sps,
               'speed/training_walltime': training_walltime,

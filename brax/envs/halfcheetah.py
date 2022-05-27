@@ -67,7 +67,6 @@ class Halfcheetah(env.Env):
     # orientation of the torso as quaternion on non zero dimensions (2,)
     # joint angles (6,)
     qpos = [qp.pos[0, 2:], qp.rot[0, (0, 2)], joint_angle]
-    # return jp.concatenate(qpos)
 
     # qvel:
     # velocity of the torso on x and z (2,)

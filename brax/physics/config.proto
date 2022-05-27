@@ -260,9 +260,11 @@ message Config {
   repeated Actuator actuators = 3;
   // Forces to apply to bodies
   repeated Force forces = 16;
-  // Bounciness of all collisions
+  // Default bounciness of collisions, for colliders that don't specify
+  // elasticity.
   float elasticity = 4;
-  // How much surfaces in contact resist translation
+  // Default friction (how much surfaces in contact resist translation),
+  // for colliders that don't specify friction.
   float friction = 5;
   // Uniform force applied to each body
   Vector3 gravity = 6;

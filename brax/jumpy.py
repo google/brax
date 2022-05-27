@@ -273,6 +273,16 @@ def arctan2(x1: ndarray, x2: ndarray) -> ndarray:
   return _which_np(x1, x2).arctan2(x1, x2)
 
 
+def arctanh(x: ndarray) -> ndarray:
+  """Returns element-wise arctanh of x."""
+  return _which_np(x).arctanh(x)
+
+
+def tanh(x: ndarray) -> ndarray:
+  """Returns element-wise tanh of x."""
+  return _which_np(x).tanh(x)
+
+
 def arccos(x: ndarray) -> ndarray:
   """Trigonometric inverse cosine, element-wise."""
   return _which_np(x).arccos(x)

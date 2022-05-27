@@ -28,6 +28,7 @@ from brax.physics import config_pb2
 from brax.physics.base import P, Q, QP, vec_to_arr
 
 
+@pytree.register
 class Collidable:
   """Part of a body (with geometry and mass/inertia) that can collide.
 
@@ -940,6 +941,60 @@ def _closest_segment_point_and_dist(
   return p, jp.dot(v, v)
 
 
+def _closest_segment_to_segment_points(
+    a0: math.Vector3, a1: math.Vector3, b0: math.Vector3,
+    b1: math.Vector3) -> Tuple[math.Vector3, math.Vector3]:
+  """Returns closest points on two line segments."""
+  # Gets the closest segment points by first finding the closest points
+  # between two lines. Points are then clipped to be on the line segments
+  # and edge cases with clipping are handled.
+  dir_a = a1 - a0
+  len_a = jp.safe_norm(dir_a)
+  dir_a = dir_a / (len_a + 1e-6)
+  half_len_a = len_a / 2
+
+  dir_b = b1 - b0
+  len_b = jp.safe_norm(dir_b)
+  dir_b = dir_b / (len_b + 1e-6)
+  half_len_b = len_b / 2
+
+  # Segment mid-points.
+  a_mid = a0 + dir_a * half_len_a
+  b_mid = b0 + dir_b * half_len_b
+
+  # Translation between two segment mid-points.
+  trans = a_mid - b_mid
+
+  # Parametrize points on each line as follows:
+  #  point_on_a = a_mid + t_a * dir_a
+  #  point_on_b = b_mid + t_b * dir_b
+  # and analytically minimize the distance between the two points.
+  dira_dot_dirb = dir_a.dot(dir_b)
+  dira_dot_trans = dir_a.dot(trans)
+  dirb_dot_trans = dir_b.dot(trans)
+  denom = 1 - dira_dot_dirb * dira_dot_dirb
+
+  t_a = (-dira_dot_trans + dira_dot_dirb * dirb_dot_trans) / (denom + 1e-6)
+  t_b = dirb_dot_trans + t_a * dira_dot_dirb
+  t_a = jp.clip(t_a, -half_len_a, half_len_a)
+  t_b = jp.clip(t_b, -half_len_b, half_len_b)
+
+  best_a = a_mid + dir_a * t_a
+  best_b = b_mid + dir_b * t_b
+
+  # Resolve edge cases where both closest points are clipped to the segment
+  # endpoints by recalculating the closest segment points for the current
+  # clipped points, and then picking the pair of points with smallest
+  # distance. An example of this edge case is when lines intersect but line
+  # segments don't.
+  new_a, d1 = _closest_segment_point_and_dist(a0, a1, best_b)
+  new_b, d2 = _closest_segment_point_and_dist(b0, b1, best_a)
+  best_a = jp.where(d1 < d2, new_a, best_a)
+  best_b = jp.where(d1 < d2, best_b, new_b)
+
+  return best_a, best_b
+
+
 def _is_point_inside_triangle(p0: math.Vector3, p1: math.Vector3,
                               p2: math.Vector3, pt: math.Vector3,
                               normal: math.Vector3) -> jp.ndarray:
@@ -971,15 +1026,9 @@ def _closest_triangle_point_and_dist(
 def capsule_capsule(cap_a: Capsule, cap_b: Capsule, qp_a: QP,
                     qp_b: QP) -> Contact:
   """Returns contact between two capsules."""
-
   a0, a1 = _endpoints(cap_a.end, qp_a, cap_a.pos)
   b0, b1 = _endpoints(cap_b.end, qp_b, cap_b.pos)
-  v0, v1, v2, v3 = b0 - a0, b1 - a0, b0 - a1, b1 - a1
-  d0, d1 = jp.dot(v0, v0), jp.dot(v1, v1)
-  d2, d3 = jp.dot(v2, v2), jp.dot(v3, v3)
-  a_best = jp.where((d2 < d0) | (d2 < d1) | (d3 < d0) | (d3 < d1), a1, a0)
-  b_best = _closest_segment_point(b0, b1, a_best)
-  a_best = _closest_segment_point(a0, a1, b_best)
+  a_best, b_best = _closest_segment_to_segment_points(a0, a1, b0, b1)
 
   penetration_vec = a_best - b_best
   dist = jp.safe_norm(penetration_vec)
@@ -1009,7 +1058,8 @@ def capsule_mesh(cap: Capsule, mesh: BaseMesh, qp_a: QP, qp_b: QP) -> Contact:
   # plane of the triangle.
   normal = math.rotate(mesh.face_normals, qp_b.rot)
 
-  pt = qp_b.pos + math.rotate(mesh.faces, qp_b.rot)
+  pt = qp_b.pos + jp.vmap(
+      math.rotate, include=[True, False])(mesh.faces, qp_b.rot)
   p0, p1, p2 = pt[..., 0, :], pt[..., 1, :], pt[..., 2, :]
 
   t = jp.dot(normal, (p0 - a) / (1e-6 + jp.abs(jp.dot(normal, capsule_normal))))
