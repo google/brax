@@ -155,8 +155,8 @@ def norm(x: ndarray,
 
 def index_update(x: ndarray, idx: ndarray, y: ndarray) -> ndarray:
   """Pure equivalent of x[idx] = y."""
-  if _which_np(x) is jnp:
-    return x.at[idx].set(y)
+  if _which_np(x, idx, y) is jnp:
+    return jnp.array(x).at[idx].set(jnp.array(y))
   x = onp.copy(x)
   x[idx] = y
   return x
