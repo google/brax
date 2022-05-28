@@ -16,12 +16,14 @@
 """Numpy backend for JAX that is called for non-jit/non-jax arrays."""
 
 from typing import Any, Callable, List, Optional, Sequence, Tuple, TypeVar, Union
+import builtins
 
 import jax
 from jax import core
 from jax import custom_jvp
 from jax import numpy as jnp
 import numpy as onp
+import tree
 
 ndarray = Union[onp.ndarray, jnp.ndarray]  # pylint:disable=invalid-name
 tree_map = jax.tree_map  # works great with jax or numpy as-is
@@ -37,10 +39,11 @@ def _in_jit() -> bool:
 
 
 def _which_np(*args):
-  """Returns np or jnp depending on args."""
-  for a in args:
-    if isinstance(a, jnp.ndarray) and not isinstance(a, onp.ndarray):
-      return jnp
+  checker = lambda a: (
+    isinstance(a, (jnp.ndarray, jax.interpreters.batching.BatchTracer))
+    and not isinstance(a, onp.ndarray))
+  if builtins.any(tree.flatten(tree.map_structure(checker, args))):
+    return jnp
   return onp
 
 
