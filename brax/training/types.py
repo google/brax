@@ -12,10 +12,68 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Common types used throughout Brax training code."""
+"""Brax training types."""
 
-from typing import Any
+from typing import Any, Mapping, NamedTuple, Protocol, Tuple, TypeVar
+
+from brax.training.acme.types import NestedArray
 import jax.numpy as jnp
 
 Params = Any
 PRNGKey = jnp.ndarray
+Metrics = Mapping[str, jnp.ndarray]
+Observation = jnp.ndarray
+Action = jnp.ndarray
+Extra = Mapping[str, Any]
+PolicyParams = Any
+PreprocessorParams = Any
+PolicyParams = Tuple[PreprocessorParams, Params]
+NetworkType = TypeVar('NetworkType')
+
+
+class Transition(NamedTuple):
+  """Container for a transition."""
+  observation: NestedArray
+  action: NestedArray
+  reward: NestedArray
+  discount: NestedArray
+  next_observation: NestedArray
+  extras: NestedArray = ()
+
+
+class Policy(Protocol):
+
+  def __call__(
+      self,
+      observation: Observation,
+      key: PRNGKey,
+  ) -> Tuple[Action, Extra]:
+    pass
+
+
+class PreprocessObservationFn(Protocol):
+
+  def __call__(
+      self,
+      observation: Observation,
+      preprocessor_params: PreprocessorParams,
+  ) -> jnp.ndarray:
+    pass
+
+
+def identity_observation_preprocessor(observation: Observation,
+                                      preprocessor_params: PreprocessorParams):
+  del preprocessor_params
+  return observation
+
+
+class NetworkFactory(Protocol[NetworkType]):
+
+  def __call__(
+      self,
+      observation_size: int,
+      action_size: int,
+      preprocess_observations_fn:
+      PreprocessObservationFn = identity_observation_preprocessor
+  ) -> NetworkType:
+    pass

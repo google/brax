@@ -14,7 +14,7 @@
 
 """Trains a 2D walker to run in the +x direction."""
 
-from typing import Optional, Tuple
+from typing import Tuple
 
 import brax
 from brax import jumpy as jp
@@ -37,8 +37,7 @@ class Walker2d(brax_env.Env):
                healthy_reward: float = 1.0,
                terminate_when_unhealthy: bool = True,
                healthy_z_range: Tuple[float, float] = (0.7, 2.0),
-               exclude_current_positions_from_observation: bool = True,
-               system_config: Optional[str] = None,
+               include_current_positions_in_observation: bool = False,
                legacy_spring=False,
                **kwargs):
     """Creates a Walker environment.
@@ -51,10 +50,9 @@ class Walker2d(brax_env.Env):
         constraints.
       terminate_when_unhealthy: Done bit will be set when unhealthy if true.
       healthy_z_range: Range of the z-position for being healthy.
-      exclude_current_positions_from_observation: x-position will not be exposed
-        in the observations if true.
-      system_config: System config to use. If None, then _SYSTEM_CONFIG defined
-        in this file will be used.
+      include_current_positions_in_observation: x-position will be exposed in
+        the observations if true.
+      legacy_spring: if True, reverts to legacy spring dynamics instead of pbd.
       **kwargs: Arguments that are passed to the base class.
     """
     self._forward_reward_weight = forward_reward_weight
@@ -62,8 +60,8 @@ class Walker2d(brax_env.Env):
     self._healthy_reward = healthy_reward
     self._terminate_when_unhealthy = terminate_when_unhealthy
     self._healthy_z_range = healthy_z_range
-    self._exclude_current_positions_from_observation = (
-        exclude_current_positions_from_observation)
+    self._include_current_positions_in_observation = (
+        include_current_positions_in_observation)
 
     config = _SYSTEM_CONFIG_SPRING if legacy_spring else _SYSTEM_CONFIG
     super().__init__(config=config, **kwargs)
@@ -132,8 +130,8 @@ class Walker2d(brax_env.Env):
     """Returns the environment observations."""
     (joint_angle,), (joint_vel,) = self.sys.joints[0].angle_vel(qp)
     # qpos: position and orientation of the torso and the joint angles.
-    qpos = ([] if self._exclude_current_positions_from_observation else
-            [qp.pos[0, 0:1]])
+    qpos = ([qp.pos[0, 0:1]]
+            if self._include_current_positions_in_observation else [])
     qpos += [qp.pos[0, 2:], qp.rot[0], joint_angle]
     # qvel: velocity of the torso and the joint angle velocities.
     qvel = [qp.vel[0], joint_vel]
@@ -662,4 +660,3 @@ _SYSTEM_CONFIG_SPRING = """
   }
   dynamics_mode: "legacy_spring"
   """
-

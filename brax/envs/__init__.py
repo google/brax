@@ -16,7 +16,7 @@
 """Some example environments to help get started quickly with brax."""
 
 import functools
-from typing import Callable, Optional, Union, overload
+from typing import Callable, Optional, Type, Union, overload
 
 import brax
 from brax.envs import acrobot
@@ -62,11 +62,11 @@ _envs = {
 }
 
 
-def get_environment(env_name, **kwargs):
+def get_environment(env_name, **kwargs) -> Env:
   return _envs[env_name](**kwargs)
 
 
-def register_environment(env_name: str, env_class: Callable):
+def register_environment(env_name: str, env_class: Type[Env]):
   _envs[env_name] = env_class
 
 

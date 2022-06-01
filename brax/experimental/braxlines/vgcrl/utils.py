@@ -24,11 +24,11 @@ import functools
 from typing import Any, Callable, Dict, Optional, List, Tuple
 from brax.envs.env import Env
 from brax.envs.env import State
+from brax.experimental import normalization
 from brax.experimental.braxlines.common import dist_utils
 from brax.experimental.composer import composer
 from brax.experimental.composer import observers
 from brax.training import networks
-from brax.training import normalization
 from brax.training.ppo import StepData
 import jax
 import jax.numpy as jnp

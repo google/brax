@@ -17,7 +17,7 @@
 from absl.testing import absltest
 from absl.testing import parameterized
 from brax import envs
-from brax.training import apg
+from brax.training.agents.apg import train as apg
 
 
 class APGTest(parameterized.TestCase):
@@ -25,16 +25,16 @@ class APGTest(parameterized.TestCase):
 
   def testTraining(self):
     _, _, metrics = apg.train(
-        environment_fn=envs.create_fn('reacherangle'),
+        environment=envs.get_environment('maze'),
         episode_length=100,
         action_repeat=4,
         num_envs=16,
         learning_rate=3e-3,
         normalize_observations=True,
-        log_frequency=200,
+        num_evals=200,
         truncation_length=10,
     )
-    self.assertGreater(metrics['eval/episode_reward'], -2)
+    self.assertGreater(metrics['eval/episode_reward'], 3.5)
 
 
 if __name__ == '__main__':

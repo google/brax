@@ -25,18 +25,29 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 from absl import logging
 from brax import envs
+from brax.experimental import normalization
 from brax.experimental.braxlines.training import env
 from brax.training import distribution
 from brax.training import networks
-from brax.training import normalization
 from brax.training import pmap
-from brax.training import ppo
+from brax.training.agents.ppo import losses as ppo_losses
 from brax.training.types import Params
 from brax.training.types import PRNGKey
 import flax
 import jax
 import jax.numpy as jnp
 import optax
+
+
+@flax.struct.dataclass
+class StepData:
+  """Contains data for one environment step."""
+  obs: jnp.ndarray
+  rewards: jnp.ndarray
+  dones: jnp.ndarray
+  truncation: jnp.ndarray
+  actions: jnp.ndarray
+  logits: jnp.ndarray
 
 
 @flax.struct.dataclass
@@ -50,8 +61,8 @@ class TrainingState:
 
 def compute_ppo_loss(
     models: Dict[str, Params],
-    data: ppo.StepData,
-    udata: ppo.StepData,
+    data: StepData,
+    udata: StepData,
     rng: PRNGKey,
     parametric_action_distribution: distribution.ParametricDistribution,
     policy_apply: Any,
@@ -62,7 +73,7 @@ def compute_ppo_loss(
     lambda_: float = 0.95,
     ppo_epsilon: float = 0.3,
     extra_loss_update_ratios: Optional[Dict[str, float]] = None,
-    extra_loss_fns: Optional[Dict[str, Callable[[ppo.StepData],
+    extra_loss_fns: Optional[Dict[str, Callable[[StepData],
                                                 jnp.ndarray]]] = None):
   """Computes PPO loss."""
   policy_params, value_params = models['policy'], models['value']
@@ -91,7 +102,7 @@ def compute_ppo_loss(
   behaviour_action_log_probs = parametric_action_distribution.log_prob(
       data.logits, data.actions)
 
-  vs, advantages = ppo.compute_gae(
+  vs, advantages = ppo_losses.compute_gae(
       truncation=truncation,
       termination=termination,
       rewards=rewards,
@@ -171,7 +182,7 @@ def train(environment_fn: Callable[..., envs.Env],
           extra_params: Optional[Dict[str, Dict[str, jnp.ndarray]]] = None,
           extra_step_kwargs: bool = True,
           extra_loss_update_ratios: Optional[Dict[str, float]] = None,
-          extra_loss_fns: Optional[Dict[str, Callable[[ppo.StepData],
+          extra_loss_fns: Optional[Dict[str, Callable[[StepData],
                                                       jnp.ndarray]]] = None):
   """PPO training."""
   assert batch_size * num_minibatches % num_envs == 0
@@ -287,7 +298,7 @@ def train(environment_fn: Callable[..., envs.Env],
     nstate = step_fn(state, postprocessed_actions, normalizer_params,
                      extra_params)
     return (nstate, normalizer_params, policy_params, extra_params,
-            key), ppo.StepData(
+            key), StepData(
                 obs=state.core.obs,
                 rewards=state.core.reward,
                 dones=state.core.done,

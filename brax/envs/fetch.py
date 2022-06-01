@@ -748,5 +748,5 @@ collide_include {
 }
 dt: 0.02
 substeps: 4
-dynamics_mode: "legacy_euler"
+dynamics_mode: "legacy_spring"
 """

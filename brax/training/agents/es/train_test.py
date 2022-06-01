@@ -18,7 +18,9 @@ import pickle
 from absl.testing import absltest
 from absl.testing import parameterized
 from brax import envs
-from brax.training import es
+from brax.training.acme import running_statistics
+from brax.training.agents.es import networks as es_networks
+from brax.training.agents.es import train as es
 import jax
 
 
@@ -28,28 +30,32 @@ class ESTest(parameterized.TestCase):
   def testTrain(self):
     """Test ES with a simple env."""
     _, _, metrics = es.train(
-        environment_fn=envs.create_fn('fast'),
-        num_timesteps=32768,
+        environment=envs.get_environment('fast'),
+        num_timesteps=65536,
         episode_length=128,
         learning_rate=0.1)
-    self.assertGreater(metrics['eval/episode_reward'], 100 * 0.995)
+    self.assertGreater(metrics['eval/episode_reward'], 140)
 
   @parameterized.parameters(True, False)
   def testModelEncoding(self, normalize_observations):
-    env_fn = envs.create_fn('fast')
+    env = envs.get_environment('fast')
     _, params, _ = es.train(
-        env_fn,
+        env,
         num_timesteps=128,
-        episode_length=128)
-    env = env_fn()
-    inference = es.make_inference_fn(
-        env.observation_size, env.action_size, normalize_observations)
+        episode_length=128,
+        normalize_observations=normalize_observations)
+    normalize_fn = lambda x, y: x
+    if normalize_observations:
+      normalize_fn = running_statistics.normalize
+    es_network = es_networks.make_es_networks(env.observation_size,
+                                              env.action_size, normalize_fn)
+    inference = es_networks.make_inference_fn(es_network)
     byte_encoding = pickle.dumps(params)
     decoded_params = pickle.loads(byte_encoding)
 
     # Compute one action.
     state = env.reset(jax.random.PRNGKey(0))
-    action = inference(decoded_params, state.obs, jax.random.PRNGKey(0))
+    action = inference(decoded_params)(state.obs, jax.random.PRNGKey(0))[0]
     env.step(state, action)
 
 
