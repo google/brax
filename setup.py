@@ -49,6 +49,7 @@ setup(
         "pytinyrenderer",
         "tensorboardX",
         "trimesh",
+        "typing-extensions",
     ],
     extras_require={
         "develop": ["pytest", "transforms3d"],

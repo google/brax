@@ -14,10 +14,18 @@
 
 """Brax training types."""
 
-from typing import Any, Mapping, NamedTuple, Protocol, Tuple, TypeVar
+from typing import Any, Mapping, NamedTuple, Tuple, TypeVar
 
 from brax.training.acme.types import NestedArray
 import jax.numpy as jnp
+
+# Protocol was introduced into typing in Python >=3.8
+# via https://www.python.org/dev/peps/pep-0544/
+# Before that, its status was DRAFT and available via typing_extensions
+try:
+  from typing import Protocol  # pylint:disable=g-import-not-at-top
+except ImportError:
+  from typing_extensions import Protocol  # pylint:disable=g-import-not-at-top
 
 Params = Any
 PRNGKey = jnp.ndarray
