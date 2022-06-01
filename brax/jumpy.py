@@ -24,7 +24,6 @@ from jax import core
 from jax import custom_jvp
 from jax import numpy as jnp
 import numpy as onp
-import tree
 
 ndarray = Union[onp.ndarray, jnp.ndarray]  # pylint:disable=invalid-name
 tree_map = jax.tree_map  # works great with jax or numpy as-is
@@ -46,7 +45,7 @@ def _which_np(*args):
   checker = lambda a: (
     isinstance(a, (jnp.ndarray, jax.interpreters.batching.BatchTracer))
     and not isinstance(a, onp.ndarray))
-  if builtins.any(tree.flatten(tree.map_structure(checker, args))):
+  if builtins.any(jax.tree_flatten(tree_map(checker, args))[0]):
     return jnp
   return onp
 
