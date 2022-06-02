@@ -22,8 +22,6 @@ from brax.training import types
 from brax.training.types import PRNGKey
 import flax
 from flax import linen
-import jax
-import jax.numpy as jnp
 
 
 @flax.struct.dataclass
@@ -31,66 +29,6 @@ class SACNetworks:
   policy_network: networks.FeedForwardModel
   q_network: networks.FeedForwardModel
   parametric_action_distribution: distribution.ParametricDistribution
-
-
-def make_policy_network(
-    param_size: int,
-    obs_size: int,
-    preprocess_observations_fn: types.PreprocessObservationFn = types
-    .identity_observation_preprocessor,
-    hidden_layer_sizes: Sequence[int] = (256, 256)
-) -> networks.FeedForwardModel:
-  """Creates a policy network."""
-  policy_module = networks.MLP(
-      layer_sizes=list(hidden_layer_sizes) + [param_size],
-      activation=linen.relu,
-      kernel_init=jax.nn.initializers.lecun_uniform())
-
-  def apply(processor_params, policy_params, obs):
-    obs = preprocess_observations_fn(obs, processor_params)
-    return policy_module.apply(policy_params, obs)
-
-  dummy_obs = jnp.zeros((1, obs_size))
-  return networks.FeedForwardModel(
-      init=lambda key: policy_module.init(key, dummy_obs), apply=apply)
-
-
-def make_q_network(
-    obs_size: int,
-    action_size: int,
-    preprocess_observations_fn: types.PreprocessObservationFn = types
-    .identity_observation_preprocessor,
-    hidden_layer_sizes: Sequence[int] = (256, 256)
-) -> networks.FeedForwardModel:
-  """Creates a value network."""
-
-  class QModule(linen.Module):
-    """Q Module."""
-    n_critics: int = 2
-
-    @linen.compact
-    def __call__(self, obs: jnp.ndarray, actions: jnp.ndarray):
-      hidden = jnp.concatenate([obs, actions], axis=-1)
-      res = []
-      for _ in range(self.n_critics):
-        q = networks.MLP(
-            layer_sizes=list(hidden_layer_sizes) + [1],
-            activation=linen.relu,
-            kernel_init=jax.nn.initializers.lecun_uniform())(
-                hidden)
-        res.append(q)
-      return jnp.concatenate(res, axis=-1)
-
-  q_module = QModule()
-
-  def apply(processor_params, q_params, obs, actions):
-    obs = preprocess_observations_fn(obs, processor_params)
-    return q_module.apply(q_params, obs, actions)
-
-  dummy_obs = jnp.zeros((1, obs_size))
-  dummy_action = jnp.zeros((1, action_size))
-  return networks.FeedForwardModel(
-      init=lambda key: q_module.init(key, dummy_obs, dummy_action), apply=apply)
 
 
 def make_inference_fn(sac_networks: SACNetworks):
@@ -114,21 +52,23 @@ def make_sac_networks(
     action_size: int,
     preprocess_observations_fn: types.PreprocessObservationFn = types
     .identity_observation_preprocessor,
-    hidden_layer_sizes: Sequence[int] = (256, 256)
-) -> SACNetworks:
+    hidden_layer_sizes: Sequence[int] = (256, 256),
+    activation: networks.ActivationFn = linen.relu) -> SACNetworks:
   """Make SAC networks."""
   parametric_action_distribution = distribution.NormalTanhDistribution(
       event_size=action_size)
-  policy_network = make_policy_network(
+  policy_network = networks.make_policy_network(
       parametric_action_distribution.param_size,
       observation_size,
       preprocess_observations_fn=preprocess_observations_fn,
-      hidden_layer_sizes=hidden_layer_sizes)
-  q_network = make_q_network(
+      hidden_layer_sizes=hidden_layer_sizes,
+      activation=activation)
+  q_network = networks.make_q_network(
       observation_size,
       action_size,
       preprocess_observations_fn=preprocess_observations_fn,
-      hidden_layer_sizes=hidden_layer_sizes)
+      hidden_layer_sizes=hidden_layer_sizes,
+      activation=activation)
   return SACNetworks(
       policy_network=policy_network,
       q_network=q_network,

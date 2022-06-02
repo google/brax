@@ -14,14 +14,14 @@
 
 """PPO networks."""
 
-from typing import Tuple
+from typing import Sequence, Tuple
 
 from brax.training import distribution
 from brax.training import networks
 from brax.training import types
 from brax.training.types import PRNGKey
 import flax
-import jax.numpy as jnp
+from flax import linen
 
 
 @flax.struct.dataclass
@@ -61,23 +61,25 @@ def make_ppo_networks(
     action_size: int,
     preprocess_observations_fn: types.PreprocessObservationFn = types
     .identity_observation_preprocessor,
-) -> PPONetworks:
+    policy_hidden_layer_sizes: Sequence[int] = (32,) * 4,
+    value_hidden_layer_sizes: Sequence[int] = (256,) * 5,
+    activation: networks.ActivationFn = linen.swish) -> PPONetworks:
   """Make PPO networks with preprocessor."""
   parametric_action_distribution = distribution.NormalTanhDistribution(
       event_size=action_size)
-  policy_network, value_network = networks.make_models(
-      parametric_action_distribution.param_size, observation_size)
-
-  def policy_apply(processor_params, policy_params, obs):
-    obs = preprocess_observations_fn(obs, processor_params)
-    return policy_network.apply(policy_params, obs)
-
-  def value_apply(processor_params, value_params, obs):
-    obs = preprocess_observations_fn(obs, processor_params)
-    return jnp.squeeze(value_network.apply(value_params, obs), axis=-1)
+  policy_network = networks.make_policy_network(
+      parametric_action_distribution.param_size,
+      observation_size,
+      preprocess_observations_fn=preprocess_observations_fn,
+      hidden_layer_sizes=policy_hidden_layer_sizes,
+      activation=activation)
+  value_network = networks.make_value_network(
+      observation_size,
+      preprocess_observations_fn=preprocess_observations_fn,
+      hidden_layer_sizes=value_hidden_layer_sizes,
+      activation=activation)
 
   return PPONetworks(
-      policy_network=networks.FeedForwardModel(policy_network.init,
-                                               policy_apply),
-      value_network=networks.FeedForwardModel(value_network.init, value_apply),
+      policy_network=policy_network,
+      value_network=value_network,
       parametric_action_distribution=parametric_action_distribution)

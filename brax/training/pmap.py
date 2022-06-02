@@ -58,12 +58,13 @@ def is_replicated(x: Any, axis_name: str) -> jnp.ndarray:
           fp, axis_name=axis_name)
 
 
-def assert_is_replicated(x: Any):
+def assert_is_replicated(x: Any, debug: Any = None):
   """Returns whether x is replicated.
 
   Should be called from a non-jitted code.
   Args:
     x: Object to check replication.
+    debug: Debug message in case of failure.
   """
   f = functools.partial(is_replicated, axis_name='i')
-  assert jax.pmap(f, axis_name='i')(x)[0]
+  assert jax.pmap(f, axis_name='i')(x)[0], debug

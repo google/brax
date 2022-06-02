@@ -24,7 +24,9 @@ from typing import Any, Callable, Tuple
 
 from brax.training.types import PRNGKey
 from flax import linen
-from flax.linen.initializers import lecun_normal, normal, zeros
+from flax.linen.initializers import lecun_normal
+from flax.linen.initializers import normal
+from flax.linen.initializers import zeros
 from jax import lax
 import jax.numpy as jnp
 
@@ -36,6 +38,7 @@ Dtype = Any
 
 def _l2_normalize(x, axis=None, eps=1e-12):
   """Normalizes along dimension `axis` using an L2 norm.
+
   This specialized function exists for numerical stability reasons.
   Args:
     x: An input ndarray.
@@ -50,7 +53,9 @@ def _l2_normalize(x, axis=None, eps=1e-12):
 
 
 class SNDense(linen.Module):
-  """A linear transformation applied over the last dimension of the input
+  """Dense Spectral Normalization.
+
+  A linear transformation applied over the last dimension of the input
   with spectral normalization (https://arxiv.org/abs/1802.05957).
 
   Attributes:
@@ -90,17 +95,17 @@ class SNDense(linen.Module):
                         (inputs.shape[-1], self.features))
     kernel = jnp.asarray(kernel, self.dtype)
 
-    """for spectral normalization"""
     kernel_shape = kernel.shape
     # Handle scalars.
     if kernel.ndim <= 1:
-      raise ValueError("Spectral normalization is not well defined for "
-                       "scalar inputs.")
+      raise ValueError('Spectral normalization is not well defined for '
+                       'scalar inputs.')
     # Handle higher-order tensors.
     elif kernel.ndim > 2:
       kernel = jnp.reshape(kernel, [-1, kernel.shape[-1]])
     key = self.make_rng('sing_vec')
-    u0_state = self.variable('sing_vec', 'u0', normal(stddev=1.), key, (1, kernel.shape[-1]))
+    u0_state = self.variable('sing_vec', 'u0', normal(stddev=1.), key,
+                             (1, kernel.shape[-1]))
     u0 = u0_state.value
 
     # Power iteration for the weight's singular value.

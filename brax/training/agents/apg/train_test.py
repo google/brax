@@ -13,28 +13,62 @@
 # limitations under the License.
 
 """Analytic policy gradient tests."""
+import pickle
 
 from absl.testing import absltest
 from absl.testing import parameterized
 from brax import envs
+from brax.training.acme import running_statistics
+from brax.training.agents.apg import networks as apg_networks
 from brax.training.agents.apg import train as apg
+import jax
 
 
 class APGTest(parameterized.TestCase):
   """Tests for APG module."""
 
-  def testTraining(self):
+
+  def testTrain(self):
+    """Test APG with a simple env."""
     _, _, metrics = apg.train(
-        environment=envs.get_environment('maze'),
+        envs.get_environment('fast'),
+        episode_length=128,
+        num_envs=64,
+        num_evals=200,
+        learning_rate=3e-3,
+        normalize_observations=True,
+    )
+    # TODO: can you make this 135?
+    self.assertGreater(metrics['eval/episode_reward'], 50)
+
+  @parameterized.parameters(True, False)
+  def testNetworkEncoding(self, normalize_observations):
+    env = envs.get_environment('fast')
+    original_inference, params, _ = apg.train(
+        envs.get_environment('fast'),
         episode_length=100,
         action_repeat=4,
         num_envs=16,
         learning_rate=3e-3,
-        normalize_observations=True,
+        normalize_observations=normalize_observations,
         num_evals=200,
-        truncation_length=10,
-    )
-    self.assertGreater(metrics['eval/episode_reward'], 3.5)
+        truncation_length=10)
+    normalize_fn = lambda x, y: x
+    if normalize_observations:
+      normalize_fn = running_statistics.normalize
+    apg_network = apg_networks.make_apg_networks(env.observation_size,
+                                                 env.action_size, normalize_fn)
+    inference = apg_networks.make_inference_fn(apg_network)
+    byte_encoding = pickle.dumps(params)
+    decoded_params = pickle.loads(byte_encoding)
+
+    # Compute one action.
+    state = env.reset(jax.random.PRNGKey(0))
+    original_action = original_inference(decoded_params)(
+        state.obs, jax.random.PRNGKey(0))[0]
+    action = inference(decoded_params)(state.obs, jax.random.PRNGKey(0))[0]
+    self.assertSequenceEqual(original_action, action)
+    env.step(state, action)
 
 
 if __name__ == '__main__':
