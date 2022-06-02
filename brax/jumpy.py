@@ -17,7 +17,6 @@
 
 from typing import Any, Callable, List, Optional, Sequence, Tuple, TypeVar, Union
 import builtins
-import os
 
 import jax
 from jax import core
@@ -32,11 +31,10 @@ inf = onp.inf
 float32 = onp.float32
 int32 = onp.int32
 
-FORCE_JNP = os.getenv("JUMPY_FORCE_JNP", 'False').lower() in ('true', '1', 't')
 
 def _in_jit() -> bool:
-  """Returns true if currently inside a jax.jit call."""
-  if FORCE_JNP:
+  """Returns true if currently inside a jax.jit call or jit is disabled."""
+  if jax.config.jax_disable_jit:
     return True
   return core.cur_sublevel().level > 0
 
