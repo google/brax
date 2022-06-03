@@ -15,7 +15,6 @@
 """RL training with an environment running entirely on an accelerator."""
 
 import os
-import uuid
 
 from absl import app
 from absl import flags
@@ -23,6 +22,7 @@ from brax import envs
 from brax.io import html
 from brax.io import metrics
 from brax.io import model
+from brax.io import npy_file
 from brax.training.agents.apg import train as apg
 from brax.training.agents.ars import train as ars
 from brax.training.agents.es import train as es
@@ -65,7 +65,8 @@ flags.DEFINE_integer(
     'defaults to use as much as it can.')
 flags.DEFINE_integer('num_videos', 1,
                      'Number of videos to record after training.')
-
+flags.DEFINE_integer('num_trajectories_npy', 0,
+                     'Number of rollouts to write to disk as raw QP states.')
 # Evolution Strategy related flags
 flags.DEFINE_integer(
     'population_size', 1,
@@ -215,17 +216,28 @@ def main(unused_argv):
     act = make_policy(params)(state.obs, tmp_key)[0]
     return env.step(state, act), new_key
 
-  for i in range(FLAGS.num_videos):
-    rng = jax.random.PRNGKey(FLAGS.seed + i)
+  def do_rollout(rng):
     rng, env_key = jax.random.split(rng)
     state = env.reset(env_key)
     qps = []
     while not state.done:
       qps.append(state.qp)
       state, rng = jit_next_state(state, rng)
+    return qps, rng
 
-    html_path = f'{FLAGS.logdir}/trajectory_{uuid.uuid4()}.html'
-    html.save_html(html_path, env.sys, qps)
+  trajectories = []
+  rng = jax.random.PRNGKey(FLAGS.seed)
+  for _ in range(max(FLAGS.num_videos, FLAGS.num_trajectories_npy)):
+    qps, rng = do_rollout(rng)
+    trajectories.append(qps)
+
+  for i in range(FLAGS.num_videos):
+    html_path = f'{FLAGS.logdir}/saved_videos/trajectory_{i:04d}.html'
+    html.save_html(html_path, env.sys, trajectories[i], make_dir=True)
+
+  for i in range(FLAGS.num_trajectories_npy):
+    qp_path = f'{FLAGS.logdir}/saved_qps/trajectory_{i:04d}.npy'
+    npy_file.save(qp_path, trajectories[i], make_dir=True)
 
 
 

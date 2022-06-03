@@ -185,19 +185,20 @@ class HeightMapTest(absltest.TestCase):
       colliders {
         heightMap {
           size: 10
-          data: [0, 0, 0, 0, 0, 0, 0, 0, 0]
+          data: [1, 2, 3, 1, 2, 3, 1, 2, 3]
         }
       }
     }
-    defaults { qps { name: "box" pos: {x: 5 y: 5 z: 1}}}
+    # Place a box in the bottom left quadrant of a height map.
+    defaults { qps { name: "box" pos: {x: 1.5 y: -7.5 z: 4}}}
   """
 
   def test_box_stays_on_heightmap(self):
-    """A box falls onto the height map and stjp."""
+    """A box falls onto the bottom left of the height map."""
     sys = brax.System(text_format.Parse(HeightMapTest._CONFIG, brax.Config()))
     qp = sys.default_qp()
     qp, _ = jax.jit(sys.step)(qp, jp.array([]))
-    self.assertAlmostEqual(qp.pos[0, 2], 0.3, 2)
+    self.assertGreater(qp.pos[0, 2], 2.0)
 
 
 class SphereTest(absltest.TestCase):

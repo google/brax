@@ -192,7 +192,7 @@ def train(environment_fn: Callable[..., envs.Env],
           .NormalTanhDistribution,
           make_models_fn: Optional[Callable[
               [int, int],
-              Tuple[networks.FeedForwardModel]]] = networks.make_models,
+              Tuple[networks.FeedForwardNetwork]]] = networks.make_models,
           policy_params: Optional[Dict[str, jnp.ndarray]] = None,
           value_params: Optional[Dict[str, jnp.ndarray]] = None,
           extra_params: Optional[Dict[str, Dict[str, jnp.ndarray]]] = None,
@@ -564,7 +564,7 @@ def make_inference_fn(
     ], distribution.ParametricDistribution]] = distribution
     .NormalTanhDistribution,
     make_models_fn: Optional[Callable[
-        [int, int], Tuple[networks.FeedForwardModel]]] = networks.make_models):
+        [int, int], Tuple[networks.FeedForwardNetwork]]] = networks.make_models):
   """Creates params and inference function for the multi-agent PPO agent."""
   action_size = sum([s['size'] for s in action_shapes.values()])
   _, obs_normalizer_apply_fn = normalization.make_data_and_apply_fn(

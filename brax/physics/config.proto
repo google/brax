@@ -65,7 +65,10 @@ message Collider {
   }
   // A height map aligned with the x-y plane
   message HeightMap {
+    // The width and length of the square height map.
     float size = 1;
+    // A flattened square matrix of the height data in row major order where
+    // the row index is the x-position and the column index is the y-position.
     repeated float data = 2;
   }
   // Physical material of the collider

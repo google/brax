@@ -43,7 +43,7 @@ def _which_np(*args):
   checker = lambda a: (
     isinstance(a, (jnp.ndarray, jax.interpreters.batching.BatchTracer))
     and not isinstance(a, onp.ndarray))
-  if builtins.any(jax.tree_flatten(tree_map(checker, args))[0]):
+  if builtins.any(jax.tree_leaves(tree_map(checker, args))):
     return jnp
   return onp
 
@@ -169,14 +169,11 @@ def index_update(x: ndarray, idx: ndarray, y: ndarray) -> ndarray:
 def safe_norm(x: ndarray,
               axis: Optional[Union[Tuple[int, ...], int]] = None) -> ndarray:
   """Calculates a linalg.norm(x) that's safe for gradients at x=0.
-
   Avoids a poorly defined gradient for jnp.linal.norm(0) see
   https://github.com/google/jax/issues/3058 for details
-
   Args:
     x: A jnp.array
     axis: The axis along which to compute the norm
-
   Returns:
     Norm of the array x.
   """

@@ -26,8 +26,8 @@ from flax import linen
 
 @flax.struct.dataclass
 class SACNetworks:
-  policy_network: networks.FeedForwardModel
-  q_network: networks.FeedForwardModel
+  policy_network: networks.FeedForwardNetwork
+  q_network: networks.FeedForwardNetwork
   parametric_action_distribution: distribution.ParametricDistribution
 
 

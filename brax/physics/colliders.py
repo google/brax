@@ -876,36 +876,40 @@ def box_plane(box: BoxCorner, _: Plane, qp_a: QP, qp_b: QP) -> Contact:
 
 def box_heightmap(box: BoxCorner, hm: HeightMap, qp_a: QP, qp_b: QP) -> Contact:
   """Returns contact between a box corner and a height map."""
-  # Note that this only checks box corners against height map surfaces, and is
-  # missing box planes against height map points.
-  pos, vel = qp_a.to_world(box.corner)
-  pos = math.inv_rotate(pos - qp_b.pos, qp_b.rot)
+  # TODO: this only checks box corners against height map surfaces,
+  # and is missing box planes against height map points.
+  # TODO: collisions are not well defined outside of the height
+  # map coordinates.
+  box_pos, vel = qp_a.to_world(box.corner)
+  pos = math.inv_rotate(box_pos - qp_b.pos, qp_b.rot)
   uv_pos = pos[:2] / hm.cell_size
-  # find the square in the mesh that enclose the candidate point, with mesh
-  # indices ux_idx, ux_udx_u, uv_idx_v, uv_idx_uv.
-  uv_idx = jp.floor(uv_pos).astype(int)
-  uv_idx_u = uv_idx + jp.array([1, 0])
-  uv_idx_v = uv_idx + jp.array([0, 1])
-  uv_idx_uv = uv_idx + jp.array([1, 1])
-  # find the orientation of the triangle of this square that encloses the
-  # candidate point
-  delta_uv = uv_pos - uv_idx
-  # whether the corner lies on the first or secound triangle:
-  mu = jp.where(delta_uv[0] + delta_uv[1] < 1, 1, -1)
-  # compute the mesh indices of the vertices of this triangle
-  p0 = jp.where(delta_uv[0] + delta_uv[1] < 1, uv_idx, uv_idx_uv)
-  p1 = jp.where(delta_uv[0] + delta_uv[1] < 1, uv_idx_u, uv_idx_v)
-  p2 = jp.where(delta_uv[0] + delta_uv[1] < 1, uv_idx_v, uv_idx_u)
-  h0 = hm.height[p0[0], p0[1]]
-  h1 = hm.height[p1[0], p1[1]]
-  h2 = hm.height[p2[0], p2[1]]
 
-  raw_normal = jp.array([-mu * (h1 - h0), -mu * (h2 - h0), hm.cell_size])
+  # Find the square mesh that enclose the candidate point, which we split into
+  # two triangles.
+  uv_idx = jp.floor(uv_pos).astype(int)
+  delta_uv = uv_pos - uv_idx
+  lower_triangle = jp.sum(delta_uv) < 1
+  mu = jp.where(lower_triangle, -1, 1)
+
+  # Compute the triangle vertices (u, v) that enclose the candidate point.
+  triangle_u = uv_idx[0] + jp.where(lower_triangle, jp.array([0, 1, 0]),
+                                    jp.array([1, 0, 1]))
+  triangle_v = uv_idx[1] + jp.where(lower_triangle, jp.array([0, 0, 1]),
+                                    jp.array([1, 1, 0]))
+
+  # Get the heights for each triangle vertice. The height data is stored in row
+  # major order where the row index is the x-position and the column index is
+  # the y-position. The heightmap origin (u, v) is at the top-left corner.
+  h = hm.height[triangle_u, -triangle_v]
+
+  raw_normal = jp.array([mu * (h[1] - h[0]), mu * (h[2] - h[0]), hm.cell_size])
   normal = raw_normal / jp.safe_norm(raw_normal)
+  p0 = jp.array(
+      [triangle_u[0] * hm.cell_size, triangle_v[0] * hm.cell_size, h[0]])
+  penetration = jp.dot(p0 - pos, normal)
+  # Rotate back to the world frame.
   normal = math.rotate(normal, qp_b.rot)
-  height = jp.array([p0[0] * hm.cell_size, p0[1] * hm.cell_size, h0])
-  penetration = jp.dot(height - pos, normal)
-  return Contact(pos, vel, normal, penetration)
+  return Contact(box_pos, vel, normal, penetration)
 
 
 def capsule_plane(cap: CapsuleEnd, _: Plane, qp_a: QP, qp_b: QP) -> Contact:

@@ -202,5 +202,51 @@ class CapsuleCapsuleColliderFnTest(absltest.TestCase):
     self.assertSequenceAlmostEqual(contact.pos, [0., 0., (0.15 + 0.2) / 2.0], 4)
 
 
+class BoxHeightMapColliderFnTest(absltest.TestCase):
+  """Tests the box-heightmap collision function."""
+  _CONFIG = """
+    dt: .01 substeps: 4 friction: 0.6
+    gravity { z: -9.8 }
+    bodies {
+      name: "box" mass: 1
+      colliders { box { halfsize { x: 0.3 y: 0.3 z: 0.3 }}}
+      inertia { x: 0.1 y: 0.1 z: 0.1 }
+    }
+    bodies {
+      name: "ground"
+      frozen: { all: true }
+      colliders {
+        heightMap {
+          size: 10
+          data: [2, 2, 2, 2, 2, 2, 2, 2, 2]
+        }
+      }
+    }
+    # Place the box in the first quadrant of the height map.
+    defaults { qps { name: "box" pos: {x: 2 y: -2 z: 1.7}}}
+  """
+
+  def test_collision_position(self):
+    """Tests collision occurs at the correct position on the heightmap."""
+    config = text_format.Parse(BoxHeightMapColliderFnTest._CONFIG,
+                               brax.Config())
+    sys = brax.System(config)
+    box_collider = brax.physics.colliders.BoxCorner([jp.take(config.bodies, 0)],
+                                                    sys.body)
+    box_collider = jp.take(box_collider, 0)
+    heightmap_collider = brax.physics.colliders.HeightMap(
+        [jp.take(config.bodies, 1)], sys.body)
+    heightmap_collider = jp.take(heightmap_collider, 0)
+    box_qp = jp.take(sys.default_qp(), 0)
+    hm_qp = jp.take(sys.default_qp(), 1)
+
+    contact = brax.physics.colliders.box_heightmap(box_collider,
+                                                   heightmap_collider, box_qp,
+                                                   hm_qp)
+    self.assertSequenceAlmostEqual(contact.pos, [2 - 0.3, -2 - 0.3, 1.7 - 0.3],
+                                   3)
+    self.assertGreater(contact.penetration, 0.0)
+
+
 if __name__ == '__main__':
   absltest.main()

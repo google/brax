@@ -21,7 +21,7 @@ from brax.training import types
 from brax.training.types import PRNGKey
 import jax.numpy as jnp
 
-ARSNetwork = networks.FeedForwardModel
+ARSNetwork = networks.FeedForwardNetwork
 
 
 def make_policy_network(

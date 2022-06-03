@@ -24,13 +24,12 @@ from flax import linen
 import jax
 import jax.numpy as jnp
 
-
 ActivationFn = Callable[[jnp.ndarray], jnp.ndarray]
 Initializer = Callable[..., Any]
 
 
 @dataclasses.dataclass
-class FeedForwardModel:
+class FeedForwardNetwork:
   init: Callable[..., Any]
   apply: Callable[..., Any]
 
@@ -87,8 +86,7 @@ def make_policy_network(
     preprocess_observations_fn: types.PreprocessObservationFn = types
     .identity_observation_preprocessor,
     hidden_layer_sizes: Sequence[int] = (256, 256),
-    activation: ActivationFn = linen.relu
-) -> FeedForwardModel:
+    activation: ActivationFn = linen.relu) -> FeedForwardNetwork:
   """Creates a policy network."""
   policy_module = MLP(
       layer_sizes=list(hidden_layer_sizes) + [param_size],
@@ -100,7 +98,7 @@ def make_policy_network(
     return policy_module.apply(policy_params, obs)
 
   dummy_obs = jnp.zeros((1, obs_size))
-  return FeedForwardModel(
+  return FeedForwardNetwork(
       init=lambda key: policy_module.init(key, dummy_obs), apply=apply)
 
 
@@ -109,8 +107,7 @@ def make_value_network(
     preprocess_observations_fn: types.PreprocessObservationFn = types
     .identity_observation_preprocessor,
     hidden_layer_sizes: Sequence[int] = (256, 256),
-    activation: ActivationFn = linen.relu
-) -> FeedForwardModel:
+    activation: ActivationFn = linen.relu) -> FeedForwardNetwork:
   """Creates a policy network."""
   value_module = MLP(
       layer_sizes=list(hidden_layer_sizes) + [1],
@@ -122,7 +119,7 @@ def make_value_network(
     return jnp.squeeze(value_module.apply(policy_params, obs), axis=-1)
 
   dummy_obs = jnp.zeros((1, obs_size))
-  return FeedForwardModel(
+  return FeedForwardNetwork(
       init=lambda key: value_module.init(key, dummy_obs), apply=apply)
 
 
@@ -133,8 +130,7 @@ def make_q_network(
     .identity_observation_preprocessor,
     hidden_layer_sizes: Sequence[int] = (256, 256),
     activation: ActivationFn = linen.relu,
-    n_critics: int = 2
-) -> FeedForwardModel:
+    n_critics: int = 2) -> FeedForwardNetwork:
   """Creates a value network."""
 
   class QModule(linen.Module):
@@ -162,15 +158,16 @@ def make_q_network(
 
   dummy_obs = jnp.zeros((1, obs_size))
   dummy_action = jnp.zeros((1, action_size))
-  return FeedForwardModel(
+  return FeedForwardNetwork(
       init=lambda key: q_module.init(key, dummy_obs, dummy_action), apply=apply)
 
 
-def make_model(layer_sizes: Sequence[int],
-               obs_size: int,
-               activation: Callable[[jnp.ndarray], jnp.ndarray] = linen.swish,
-               spectral_norm: bool = False,
-               ) -> FeedForwardModel:
+def make_model(
+    layer_sizes: Sequence[int],
+    obs_size: int,
+    activation: Callable[[jnp.ndarray], jnp.ndarray] = linen.swish,
+    spectral_norm: bool = False,
+) -> FeedForwardNetwork:
   """Creates a model.
 
   Args:
@@ -187,19 +184,21 @@ def make_model(layer_sizes: Sequence[int],
   dummy_obs = jnp.zeros((1, obs_size))
   if spectral_norm:
     module = SNMLP(layer_sizes=layer_sizes, activation=activation)
-    model = FeedForwardModel(
-        init=lambda rng1, rng2: module.init(
-            {'params': rng1, 'sing_vec': rng2}, dummy_obs),
+    model = FeedForwardNetwork(
+        init=lambda rng1, rng2: module.init({
+            'params': rng1,
+            'sing_vec': rng2
+        }, dummy_obs),
         apply=module.apply)
   else:
     module = MLP(layer_sizes=layer_sizes, activation=activation)
-    model = FeedForwardModel(
+    model = FeedForwardNetwork(
         init=lambda rng: module.init(rng, dummy_obs), apply=module.apply)
   return model
 
 
 def make_models(policy_params_size: int,
-                obs_size: int) -> Tuple[FeedForwardModel, FeedForwardModel]:
+                obs_size: int) -> Tuple[FeedForwardNetwork, FeedForwardNetwork]:
   """Creates models for policy and value functions.
 
   Args:
