@@ -14,7 +14,7 @@
 
 """Halfcheetah."""
 # pylint:disable=protected-access
-from brax.envs import halfcheetah
+from brax.envs import half_cheetah
 from brax.experimental.composer import component_editor
 
 COLLIDES = ('torso', 'bfoot', 'ffoot')
@@ -29,7 +29,7 @@ TERM_FN = None
 def get_specs():
   return dict(
       message_str=component_editor.filter_message_str(
-          halfcheetah._SYSTEM_CONFIG_SPRING, 'floor'),
+          half_cheetah._SYSTEM_CONFIG_SPRING, 'floor'),
       collides=COLLIDES,
       root=ROOT,
       term_fn=TERM_FN,

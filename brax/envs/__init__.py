@@ -24,7 +24,7 @@ from brax.envs import ant
 from brax.envs import fast
 from brax.envs import fetch
 from brax.envs import grasp
-from brax.envs import halfcheetah
+from brax.envs import half_cheetah
 from brax.envs import hopper
 from brax.envs import humanoid
 from brax.envs import humanoid_standup
@@ -43,11 +43,11 @@ import gym
 
 _envs = {
     'acrobot': acrobot.Acrobot,
-    'ant': ant.Ant,
+    'ant': functools.partial(ant.Ant, use_contact_forces=True),
     'fast': fast.Fast,
     'fetch': fetch.Fetch,
     'grasp': grasp.Grasp,
-    'halfcheetah': halfcheetah.Halfcheetah,
+    'halfcheetah': half_cheetah.Halfcheetah,
     'hopper': hopper.Hopper,
     'humanoid': humanoid.Humanoid,
     'humanoidstandup': humanoid_standup.HumanoidStandup,
