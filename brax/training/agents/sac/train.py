@@ -361,8 +361,8 @@ def train(environment: envs.Env,
     t = time.time()
     (training_state, env_state, buffer_state,
      metrics) = training_epoch(training_state, env_state, buffer_state, key)
-    # This line also guarantees the values are ready.
     metrics = jax.tree_map(jnp.mean, metrics)
+    jax.tree_map(lambda x: x.block_until_ready(), metrics)
 
     epoch_training_time = time.time() - t
     training_walltime += epoch_training_time
@@ -425,7 +425,8 @@ def train(environment: envs.Env,
   training_state, env_state, buffer_state, _ = prefill_replay_buffer(
       training_state, env_state, buffer_state, prefill_keys)
 
-  replay_size = jnp.sum(jax.vmap(replay_buffer.size)(buffer_state))
+  replay_size = jnp.sum(jax.vmap(
+      replay_buffer.size)(buffer_state)) * jax.process_count()
   logging.info('replay size after prefill %s', replay_size)
   assert replay_size >= min_replay_size
   training_walltime = time.time() - t

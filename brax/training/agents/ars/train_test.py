@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Evolution Strategy training tests."""
+"""Augmented Random Search training tests."""
 import pickle
 
 from absl.testing import absltest

@@ -17,76 +17,7 @@
 from absl.testing import absltest
 import brax
 from brax import jumpy as jp
-
 from google.protobuf import text_format
-
-
-class ClosestSegmentPointsTest(absltest.TestCase):
-  """Tests for closest segment points."""
-
-  def test_closest_segments_points(self):
-    a0 = jp.array([0.73432405, 0.12372768, 0.20272314])
-    a1 = jp.array([1.10600128, 0.88555209, 0.65209485])
-    b0 = jp.array([0.85599262, 0.61736299, 0.9843583])
-    b1 = jp.array([1.84270939, 0.92891793, 1.36343326])
-    best_a, best_b = brax.physics.colliders._closest_segment_to_segment_points(
-        a0, a1, b0, b1)
-    self.assertSequenceAlmostEqual(best_a, [1.09063, 0.85404, 0.63351], 5)
-    self.assertSequenceAlmostEqual(best_b, [0.99596, 0.66156, 1.03813], 5)
-
-  def test_intersecting_segments(self):
-    """Tests segments that intersect."""
-    a0, a1 = jp.array([0., 0., -1.]), jp.array([0., 0., 1.])
-    b0, b1 = jp.array([-1., 0., 0.]), jp.array([1., 0., 0.])
-    best_a, best_b = brax.physics.colliders._closest_segment_to_segment_points(
-        a0, a1, b0, b1)
-    self.assertSequenceAlmostEqual(best_a, [0., 0., 0.], 5)
-    self.assertSequenceAlmostEqual(best_b, [0., 0., 0.], 5)
-
-  def test_intersecting_lines(self):
-    """Tests that intersecting lines (not segments) get clipped."""
-    a0, a1 = jp.array([0.2, 0.2, 0.]), jp.array([1., 1., 0.])
-    b0, b1 = jp.array([0.2, 0.4, 0.]), jp.array([1., 2., 0.])
-    best_a, best_b = brax.physics.colliders._closest_segment_to_segment_points(
-        a0, a1, b0, b1)
-    self.assertSequenceAlmostEqual(best_a, [0.3, 0.3, 0.], 2)
-    self.assertSequenceAlmostEqual(best_b, [0.2, 0.4, 0.], 2)
-
-  def test_parallel_segments(self):
-    """Tests that parallel segments have closest points at the midpoint."""
-    a0, a1 = jp.array([0., 0., -1.]), jp.array([0., 0., 1.])
-    b0, b1 = jp.array([1., 0., -1.]), jp.array([1., 0., 1.])
-    best_a, best_b = brax.physics.colliders._closest_segment_to_segment_points(
-        a0, a1, b0, b1)
-    self.assertSequenceAlmostEqual(best_a, [0., 0., 0.], 5)
-    self.assertSequenceAlmostEqual(best_b, [1., 0., 0.], 5)
-
-  def test_parallel_offset_segments(self):
-    """Tests that offset parallel segments are close at segment endpoints."""
-    a0, a1 = jp.array([0., 0., -1.]), jp.array([0., 0., 1.])
-    b0, b1 = jp.array([1., 0., 1.]), jp.array([1., 0., 3.])
-    best_a, best_b = brax.physics.colliders._closest_segment_to_segment_points(
-        a0, a1, b0, b1)
-    self.assertSequenceAlmostEqual(best_a, [0., 0., 1.], 5)
-    self.assertSequenceAlmostEqual(best_b, [1., 0., 1.], 5)
-
-  def test_zero_length_segments(self):
-    """Test that zero length segments don't return NaNs."""
-    a0, a1 = jp.array([0., 0., -1.]), jp.array([0., 0., -1.])
-    b0, b1 = jp.array([1., 0., 0.1]), jp.array([1., 0., 0.1])
-    best_a, best_b = brax.physics.colliders._closest_segment_to_segment_points(
-        a0, a1, b0, b1)
-    self.assertSequenceAlmostEqual(best_a, [0., 0., -1.], 5)
-    self.assertSequenceAlmostEqual(best_b, [1., 0., 0.1], 5)
-
-  def test_overlapping_segments(self):
-    """Tests that perfectly overlapping segments intersect at the midpoints."""
-    a0, a1 = jp.array([0., 0., -1.]), jp.array([0., 0., 1.])
-    b0, b1 = jp.array([0., 0., -1.]), jp.array([0., 0., 1.])
-    best_a, best_b = brax.physics.colliders._closest_segment_to_segment_points(
-        a0, a1, b0, b1)
-    self.assertSequenceAlmostEqual(best_a, [0., 0., 0.], 5)
-    self.assertSequenceAlmostEqual(best_b, [0., 0., 0.], 5)
 
 
 class CapsuleCapsuleColliderFnTest(absltest.TestCase):
@@ -125,7 +56,7 @@ class CapsuleCapsuleColliderFnTest(absltest.TestCase):
     config = text_format.Parse(CapsuleCapsuleColliderFnTest._CONFIG,
                                brax.Config())
     sys = brax.System(config)
-    capsules = brax.physics.colliders.Capsule(config.bodies, sys.body)
+    capsules = brax.physics.geometry.Capsule(config.bodies, sys.body)
     capsule1 = jp.take(capsules, 0)
     capsule2 = jp.take(capsules, 1)
     qp1 = jp.take(sys.default_qp(), 0)
@@ -171,7 +102,7 @@ class CapsuleCapsuleColliderFnTest(absltest.TestCase):
     config = text_format.Parse(CapsuleCapsuleColliderFnTest._CONFIG2,
                                brax.Config())
     sys = brax.System(config)
-    capsules = brax.physics.colliders.Capsule(config.bodies, sys.body)
+    capsules = brax.physics.geometry.Capsule(config.bodies, sys.body)
     capsule1 = jp.take(capsules, 0)
     capsule2 = jp.take(capsules, 1)
     qp1 = jp.take(sys.default_qp(), 0)
@@ -187,7 +118,7 @@ class CapsuleCapsuleColliderFnTest(absltest.TestCase):
     config = text_format.Parse(CapsuleCapsuleColliderFnTest._CONFIG2,
                                brax.Config())
     sys = brax.System(config)
-    capsules = brax.physics.colliders.Capsule(config.bodies, sys.body)
+    capsules = brax.physics.geometry.Capsule(config.bodies, sys.body)
     capsule1 = jp.take(capsules, 0)
     capsule2 = jp.take(capsules, 1)
     # Set capsule ends such that the capsule lengths are zero.
@@ -231,10 +162,10 @@ class BoxHeightMapColliderFnTest(absltest.TestCase):
     config = text_format.Parse(BoxHeightMapColliderFnTest._CONFIG,
                                brax.Config())
     sys = brax.System(config)
-    box_collider = brax.physics.colliders.BoxCorner([jp.take(config.bodies, 0)],
-                                                    sys.body)
+    box_collider = brax.physics.geometry.BoxCorner([jp.take(config.bodies, 0)],
+                                                   sys.body)
     box_collider = jp.take(box_collider, 0)
-    heightmap_collider = brax.physics.colliders.HeightMap(
+    heightmap_collider = brax.physics.geometry.HeightMap(
         [jp.take(config.bodies, 1)], sys.body)
     heightmap_collider = jp.take(heightmap_collider, 0)
     box_qp = jp.take(sys.default_qp(), 0)
@@ -245,6 +176,56 @@ class BoxHeightMapColliderFnTest(absltest.TestCase):
                                                    hm_qp)
     self.assertSequenceAlmostEqual(contact.pos, [2 - 0.3, -2 - 0.3, 1.7 - 0.3],
                                    3)
+    self.assertGreater(contact.penetration, 0.0)
+
+
+class CapsuleMeshTest(absltest.TestCase):
+  """Tests the capsule-mesh collision function."""
+  _CONFIG = """
+    dt: .01 substeps: 4 friction: 0.6
+    gravity { z: -9.8 }
+    bodies {
+      name: "Capsule1" mass: 1
+      colliders { capsule { radius: 0.5 length: 3.14 } }
+      inertia { x: 1 y: 1 z: 1 }
+    }
+    bodies {
+      name: "Mesh" mass: 1
+      colliders { mesh { name: "Mesh1" scale: 1 } }
+      inertia { x: 1 y: 1 z: 1 }
+    }
+    mesh_geometries {
+      name: "Mesh1"
+      vertices { x: 0.47 y: -0.68 z: 0.24 }
+      vertices { x: -1.70 y: 0.75 z: -1.53 }
+      vertices { x: 0.01 y: -0.12 z: -0.81 }
+      face_normals { x: 0.51 y: 1.45 z: 0.55 }
+      faces: [0, 1, 2]
+    }
+    defaults {
+      qps { name: "Capsule1" pos {x: 0} rot { x: 113 y: 74 z: 152 } }
+      qps { name: "Mesh" pos {x: 0} }
+    }
+  """
+
+  def test_collision_position(self):
+    """Tests collision occurs between capsule and triangle."""
+    config = text_format.Parse(CapsuleMeshTest._CONFIG, brax.Config())
+    sys = brax.System(config)
+
+    capsules = brax.physics.geometry.Capsule(config.bodies, sys.body)
+    mesh_geoms = {
+        mesh_geom.name: mesh_geom for mesh_geom in config.mesh_geometries
+    }
+    mesh = brax.physics.geometry.Mesh(
+        jp.array([jp.take(config.bodies, 1)]), sys.body, mesh_geoms)
+    capsule1 = jp.take(capsules, 0)
+    mesh = jp.take(mesh, 0)
+    qp = sys.default_qp(0)
+    contact = brax.physics.colliders.capsule_mesh(capsule1,
+                                                  mesh, jp.take(qp, 0),
+                                                  jp.take(qp, 1))
+
     self.assertGreater(contact.penetration, 0.0)
 
 

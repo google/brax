@@ -156,7 +156,7 @@ class BoxCapsuleTest(absltest.TestCase):
     self.assertAlmostEqual(qp.pos[2, 2], 3.5, 2)
 
     step = jax.jit(sys.step)
-    for _ in range(50):
+    for _ in range(30):
       qp, _ = step(qp, jp.array([]))
     # Box should be on the capsule, rather than on the ground, for both masses
     # box falls on capsule

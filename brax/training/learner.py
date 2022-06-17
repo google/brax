@@ -18,6 +18,7 @@ import os
 
 from absl import app
 from absl import flags
+from absl import logging
 from brax import envs
 from brax.io import html
 from brax.io import metrics
@@ -231,9 +232,12 @@ def main(unused_argv):
     qps, rng = do_rollout(rng)
     trajectories.append(qps)
 
-  for i in range(FLAGS.num_videos):
-    html_path = f'{FLAGS.logdir}/saved_videos/trajectory_{i:04d}.html'
-    html.save_html(html_path, env.sys, trajectories[i], make_dir=True)
+  if hasattr(env, 'sys'):
+    for i in range(FLAGS.num_videos):
+      html_path = f'{FLAGS.logdir}/saved_videos/trajectory_{i:04d}.html'
+      html.save_html(html_path, env.sys, trajectories[i], make_dir=True)
+  elif FLAGS.num_videos > 0:
+    logging.warn('Cannot save videos for non physics environments.')
 
   for i in range(FLAGS.num_trajectories_npy):
     qp_path = f'{FLAGS.logdir}/saved_qps/trajectory_{i:04d}.npy'

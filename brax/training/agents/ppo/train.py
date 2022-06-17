@@ -230,8 +230,8 @@ def train(environment: envs.Env,
     t = time.time()
     (training_state, env_state,
      metrics) = training_epoch(training_state, env_state, key)
-    # This line also guarantees the values are ready.
     metrics = jax.tree_map(jnp.mean, metrics)
+    jax.tree_map(lambda x: x.block_until_ready(), metrics)
 
     epoch_training_time = time.time() - t
     training_walltime += epoch_training_time

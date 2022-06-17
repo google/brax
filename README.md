@@ -65,7 +65,7 @@ Training on NVidia GPU is supported, but you must first install
 
 For a deep dive into Brax's design and performance characteristics, please see
 our paper, [Brax -- A Differentiable Physics Engine for Large Scale Rigid Body Simulation
-](https://arxiv.org/abs/2106.13281), to appear in the [Datasets and Benchmarks Track](https://neurips.cc/Conferences/2021/CallForDatasetsBenchmarks) at [NeurIPS 2021](https://nips.cc/Conferences/2021).
+](https://arxiv.org/abs/2106.13281), which appeared in the [Datasets and Benchmarks Track](https://neurips.cc/Conferences/2021/CallForDatasetsBenchmarks) at [NeurIPS 2021](https://nips.cc/Conferences/2021).
 
 ## Citing Brax
 
@@ -80,3 +80,16 @@ If you would like to reference Brax in a publication, please use:
   year = {2021},
 }
 ```
+
+## Acknowledgements
+
+Brax has come a long way since its original publication.  We offer gratitude and
+effusive praise to the following people:
+
+* Manu Orsini and Nikola Momchev who provided a major refactor of Brax's
+training algorithms to make them more accessible and reusable.
+* Erwin Coumans who has graciously offered advice and mentorship, and many
+useful references from [Tiny Differentiable Simulator](https://github.com/erwincoumans/tiny-differentiable-simulator).
+* Baruch Tabanpour, a colleague who is making Brax much more reliable and feature-complete.
+* [Shixiang Shane Gu](https://sites.google.com/corp/view/gugurus) and [Hiroki Furuta](https://frt03.github.io/), who contributed BIG-Gym and Braxlines, and a scene composer to Brax.
+* Our awesome [open source collaborators and contributors](https://github.com/google/brax/graphs/contributors).  Thank you!

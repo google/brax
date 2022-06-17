@@ -150,7 +150,6 @@ class Walker2d(env.Env):
   """
 
 
-  # TODO: Add healthy_angle_range.
   def __init__(self,
                forward_reward_weight: float = 1.0,
                ctrl_cost_weight: float = 1e-3,
