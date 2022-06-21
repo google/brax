@@ -50,6 +50,9 @@ setup(
         "tensorboardX",
         "trimesh",
         "typing-extensions",
+        # TODO: remove when
+        #   https://github.com/google/flax/issues/2190 is fixed.
+        "PyYAML>=6.0",
     ],
     extras_require={
         "develop": ["pytest", "transforms3d"],
