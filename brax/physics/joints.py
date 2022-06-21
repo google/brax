@@ -16,7 +16,7 @@
 """Joints connect bodies and constrain their movement."""
 
 import abc
-from typing import Any, List, Tuple, Union
+from typing import Any, List, Tuple, Union, Optional
 
 from brax import jumpy as jp
 from brax import math
@@ -33,13 +33,15 @@ class Joint(abc.ABC):
   relation to one-another.
   """
 
-  __pytree_ignore__ = ('index', 'dof')
+  __pytree_ignore__ = ('index', 'dof', 'free_dofs', 'dof_indices',
+                       'sphericalized')
 
   def __init__(self,
                joints: List[config_pb2.Joint],
                body: bodies.Body,
                solver_scale_pos: float = 0.6,
-               solver_scale_ang: float = 0.25):
+               solver_scale_ang: float = 0.25,
+               free_dofs: Optional[List[int]] = None):
     """Creates a Joint that connects two bodies and constrains their movement.
 
     Args:
@@ -48,6 +50,7 @@ class Joint(abc.ABC):
       solver_scale_pos: Magnitude of jacobi update for position based updates
       solver_scale_ang: Magnitude of jacobi update for angular position based
         update
+      free_dofs: Number of free (not-fixed) degrees of freedom per joint
     """
     self.angular_damping = jp.array([j.angular_damping for j in joints])
     self.scale_pos = jp.array([solver_scale_pos for j in joints])
@@ -71,6 +74,8 @@ class Joint(abc.ABC):
     ])
     self.axis_p = jp.array(
         [v_rot(j, r) for j, r in zip(self.axis_c, relative_quats)])
+
+    self.free_dofs = free_dofs
 
   def apply(self, qp: QP) -> Q:
     """Returns position-based update to constrain bodies connected by a joint.
@@ -205,12 +210,20 @@ class Joint(abc.ABC):
     def op(joint, qp_p, qp_c):
       axes, angles = joint.axis_angle(qp_p, qp_c)
       vels = tuple([jp.dot(qp_p.ang - qp_c.ang, axis) for axis in axes])
-      return angles, vels
+      return jp.array(angles), jp.array(vels)
 
     qp_p = jp.take(qp, self.body_p.idx)
     qp_c = jp.take(qp, self.body_c.idx)
     angles, vels = op(self, qp_p, qp_c)
+    angles, vels = angles.reshape(-1), vels.reshape(-1)
 
+    if self.free_dofs is not None:
+      # constructs a flat list of indices that don't have [0, 0] angle limits
+      dof_indices = jp.concatenate([
+          jp.arange(i * self.dof, i * self.dof + dw)
+          for i, dw in enumerate(self.free_dofs)
+      ])
+      angles, vels = jp.take((angles, vels), dof_indices)
     return angles, vels
 
   @abc.abstractmethod
@@ -406,15 +419,23 @@ class Spherical(Joint):
 def get(config: config_pb2.Config, body: bodies.Body) -> List[Joint]:
   """Creates all joints given a config."""
   joints = {}
+
+  dofs = {len(j.angle_limit) for j in config.joints}
+  # check to see if we should make all joints spherical
+  sphericalize = len(dofs) > 1  # multiple joint types present
+  sphericalize |= 2 in dofs  # ... or 2-dof joints present
+  sphericalize &= config.dynamics_mode == 'pbd'  # only sphericalize if pbd
   for joint in config.joints:
     dof = len(joint.angle_limit)
-    springy = joint.stiffness > 0
-    if not springy:
-      if dof not in joints:
-        joints[dof] = []
-      if dof == 2:
+    if config.dynamics_mode == 'pbd':
+      free_dofs = dof
+      while sphericalize and dof < 3:
         joint.angle_limit.add()
-      joints[dof].append(joint)
+        dof += 1
+      if dof not in joints:
+        joints[dof] = {'joint': [], 'free_dofs': []}
+      joints[dof]['joint'].append(joint)
+      joints[dof]['free_dofs'].append(free_dofs)
 
   # ensure stable order for joint application: dof
   joints = sorted(joints.items(), key=lambda kv: kv[0])
@@ -427,22 +448,25 @@ def get(config: config_pb2.Config, body: bodies.Body) -> List[Joint]:
     if dof == 1:
       ret.append(
           Revolute(
-              v,
+              v['joint'],
               body,
+              free_dofs=None,
               solver_scale_pos=solver_scale_pos,
               solver_scale_ang=solver_scale_ang))
     elif dof == 2:
       ret.append(
           Spherical(
-              v,
+              v['joint'],
               body,
+              free_dofs=None,
               solver_scale_pos=solver_scale_pos,
               solver_scale_ang=solver_scale_ang))
     elif dof == 3:
       ret.append(
           Spherical(
-              v,
+              v['joint'],
               body,
+              free_dofs=v.get('free_dofs'),
               solver_scale_pos=solver_scale_pos,
               solver_scale_ang=solver_scale_ang))
     else:

@@ -285,14 +285,14 @@ class Humanoid(env.Env):
     angle_vels = [j.angle_vel(qp) for j in self.sys.joints]
 
     # qpos: position and orientation of the torso and the joint angles.
-    joint_angles = [jp.array(angle).reshape(-1) for angle, _ in angle_vels]
+    joint_angles = [angle for angle, _ in angle_vels]
     if self._exclude_current_positions_from_observation:
       qpos = [qp.pos[0, 2:], qp.rot[0]] + joint_angles
     else:
       qpos = [qp.pos[0], qp.rot[0]] + joint_angles
 
     # qvel: velocity of the torso and the joint angle velocities.
-    joint_velocities = [jp.array(vel).reshape(-1) for _, vel in angle_vels]
+    joint_velocities = [vel for _, vel in angle_vels]
     qvel = [qp.vel[0], qp.ang[0]] + joint_velocities
 
     # center of mass obs:
@@ -692,10 +692,6 @@ _SYSTEM_CONFIG = """
       min: -65.0
       max: 30.0
     }
-    angle_limit {
-      min: 0.0
-      max: 0.0
-    }
     angular_damping: 30.0
   }
   joints {
@@ -714,14 +710,6 @@ _SYSTEM_CONFIG = """
     angle_limit {
       min: -35.0
       max: 35.0
-    }
-      angle_limit {
-      min: 0.0
-      max: 0.0
-    }
-      angle_limit {
-      min: 0.0
-      max: 0.0
     }
     angular_damping: 30.0
   }
@@ -769,14 +757,6 @@ _SYSTEM_CONFIG = """
       min: -160.0
       max: -2.0
     }
-      angle_limit {
-      min: 0.0
-      max: 0.0
-    }
-      angle_limit {
-      min: 0.0
-      max: 0.0
-    }
     angular_damping: 30.0
   }
   joints {
@@ -821,14 +801,6 @@ _SYSTEM_CONFIG = """
       min: -160.0
       max: -2.0
     }
-      angle_limit {
-      min: 0.0
-      max: 0.0
-    }
-      angle_limit {
-      min: 0.0
-      max: 0.0
-    }
     angular_damping: 30.0
   }
   joints {
@@ -853,10 +825,6 @@ _SYSTEM_CONFIG = """
       min: -70.0
       max: 50.0
     }
-    angle_limit {
-      min: 0.0
-      max: 0.0
-    }
     angular_damping: 30.0
   }
   joints {
@@ -877,14 +845,6 @@ _SYSTEM_CONFIG = """
     angle_limit {
       min: -90.0
       max: 50.0
-    }
-      angle_limit {
-      min: 0.0
-      max: 0.0
-    }
-    angle_limit {
-      min: 0.0
-      max: 0.0
     }
     angular_damping: 30.0
   }
@@ -910,10 +870,6 @@ _SYSTEM_CONFIG = """
       min: -50.0
       max: 70.0
     }
-    angle_limit {
-      min: 0.0
-      max: 0.0
-    }
     angular_damping: 30.0
   }
   joints {
@@ -934,14 +890,6 @@ _SYSTEM_CONFIG = """
     angle_limit {
       min: -90.0
       max: 50.0
-    }
-    angle_limit {
-      min: 0.0
-      max: 0.0
-    }
-    angle_limit {
-      min: 0.0
-      max: 0.0
     }
     angular_damping: 30.0
   }
@@ -1722,4 +1670,3 @@ _SYSTEM_CONFIG_SPRING = """
   substeps: 8
   dynamics_mode: "legacy_spring"
 """
-

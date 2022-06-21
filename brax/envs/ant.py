@@ -256,7 +256,7 @@ class Ant(env.Env):
 
   def _get_obs(self, qp: brax.QP, info: brax.Info) -> jp.ndarray:
     """Observe ant body position and velocities."""
-    (joint_angle,), (joint_vel,) = self.sys.joints[0].angle_vel(qp)
+    joint_angle, joint_vel = self.sys.joints[0].angle_vel(qp)
 
     # qpos: position and orientation of the torso and the joint angles.
     if self._exclude_current_positions_from_observation:

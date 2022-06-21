@@ -154,7 +154,7 @@ class InvertedPendulum(env.Env):
 
   def _get_obs(self, qp: brax.QP, info: brax.Info) -> jp.ndarray:
     """Observe cartpole body position and velocities."""
-    (joint_angle,), (joint_vel,) = self.sys.joints[0].angle_vel(qp)
+    joint_angle, joint_vel = self.sys.joints[0].angle_vel(qp)
 
     # [cart pos, joint angle, cart vel, joint vel]
     obs = [qp.pos[0, :1], joint_angle, qp.vel[0, :1], joint_vel]

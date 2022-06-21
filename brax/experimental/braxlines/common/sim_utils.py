@@ -16,10 +16,11 @@
 
 import collections
 import functools
-from typing import List
+from typing import List, Tuple, Any
 import brax
 import jax
 from jax import numpy as jnp
+from brax import jumpy as jp
 
 lim_to_dof = {0: 1, 1: 1, 2: 2, 3: 3}
 
@@ -58,15 +59,48 @@ def get_names(config, datatype: str = 'body'):
   return [b.name for b in objs]
 
 
+def _legacy_angle_vel(joint, qp) -> Tuple[Any, Any]:
+  """Returns joint angle and velocity using the legacy format.
+
+  Args:
+    joint: Joint to operate over
+    qp: State data for system
+
+  Returns:
+    angle: n-tuple of joint angles where n = # DoF of the joint
+    vel: n-tuple of joint velocities where n = # DoF of the joint
+  """
+
+  @jax.vmap
+  def op(joint, qp_p, qp_c):
+    axes, angles = joint.axis_angle(qp_p, qp_c)
+    vels = tuple([jnp.dot(qp_p.ang - qp_c.ang, axis) for axis in axes])
+    return angles, vels
+
+  qp_p = jp.take(qp, joint.body_p.idx)
+  qp_c = jp.take(qp, joint.body_c.idx)
+  angles, vels = op(joint, qp_p, qp_c)
+
+  return angles, vels
+
+
 def get_joint_value(sys, qp, info: collections.OrderedDict):
   """Get joint values."""
   values = collections.OrderedDict()
-  angles_vels = {j.dof: j.angle_vel(qp) for j in sys.joints}
+  angles_vels = {j.dof: _legacy_angle_vel(j, qp) for j in sys.joints}
   for k, v in info.items():
     for i, type_ in zip((0, 1), ('pos', 'vel')):
       vvv = jnp.array([vv[v['index']] for vv in angles_vels[v['dof']][i]])
       values[f'joint_{type_}:{k}'] = vvv
   return values
+
+
+def _check_active_dofs(joint):
+  active_dof = 0
+  for l in joint.angle_limit:
+    if not (l.min == 0 and l.max == 0):
+      active_dof += 1
+  return active_dof
 
 
 def names2indices(config, names: List[str], datatype: str = 'body'):
@@ -87,10 +121,16 @@ def names2indices(config, names: List[str], datatype: str = 'body'):
   actuator_counter = 0
   for i, b in enumerate(objs):
     if datatype == 'joint':
-      dof = lim_to_dof[len(b.angle_limit)]
+      if config.dynamics_mode == 'pbd':
+        dof = _check_active_dofs(b)
+      else:
+        dof = lim_to_dof[len(b.angle_limit)]
     elif datatype == 'actuator':
       joint = [j for j in config.joints if j.name == b.joint][0]
-      dof = lim_to_dof[len(joint.angle_limit)]
+      if config.dynamics_mode == 'pbd':
+        dof = _check_active_dofs(joint)
+      else:
+        dof = lim_to_dof[len(joint.angle_limit)]
     if b.name in names:
       indices[b.name] = i
       if datatype in ('joint',):

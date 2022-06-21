@@ -244,7 +244,7 @@ class Walker2d(env.Env):
 
   def _get_obs(self, qp: brax.QP) -> jp.ndarray:
     """Returns the environment observations."""
-    (joint_angle,), (joint_vel,) = self.sys.joints[0].angle_vel(qp)
+    joint_angle, joint_vel = self.sys.joints[0].angle_vel(qp)
     ang_y = math.quat_to_euler(qp.rot[0])[1:2]
 
     # qpos: position and orientation of the torso and the joint angles

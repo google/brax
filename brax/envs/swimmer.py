@@ -263,7 +263,7 @@ class Swimmer(env.Env):
 
   def _get_obs(self, qp: brax.QP, info: brax.Info) -> jp.ndarray:
     """Observe swimmer body position and velocities."""
-    (joint_angle,), (joint_vel,) = self.sys.joints[0].angle_vel(qp)
+    joint_angle, joint_vel = self.sys.joints[0].angle_vel(qp)
 
     # convert quaternion to rotation angle about z axis
     ang_z = math.quat_to_euler(qp.rot[0])[2:3]

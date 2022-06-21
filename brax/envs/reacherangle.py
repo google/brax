@@ -81,7 +81,7 @@ class ReacherAngle(env.Env):
     """Egocentric observation of target and arm body."""
 
     # some pre-processing to pull joint angles and velocities
-    (joint_angle,), _ = self.sys.joints[0].angle_vel(qp)
+    joint_angle, _ = self.sys.joints[0].angle_vel(qp)
 
     # qpos:
     # x,y coord of target

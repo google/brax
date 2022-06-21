@@ -84,6 +84,7 @@ class Joint(joints.Joint):
     ])
     self.axis_p = jp.array(
         [v_rot(j, r) for j, r in zip(self.axis_c, relative_quats)])
+    self.free_dofs = None  # property used by pbd joints
 
   def apply(self, qp: QP) -> P:
     """Returns impulses to constrain and align bodies connected by a joint.

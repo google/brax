@@ -634,6 +634,54 @@ class Actuator3DTest(parameterized.TestCase):
           self.assertAlmostEqual(angle, limit, 1)  # actuated to target angle
 
 
+class SphericalizeTest(parameterized.TestCase):
+
+  _CONFIG = """
+    substeps: 2
+    dt: .01
+    gravity { z: 0.0 }
+    bodies { name: "Segment_1" mass: 1 inertia { x: 1 y: 1 z: 1 }}
+    bodies { name: "Segment_2" mass: 1 inertia { x: 1 y: 1 z: 1 }}
+    bodies { name: "Segment_3" mass: 1 inertia { x: 1 y: 1 z: 1 }}
+    bodies { name: "Segment_4" mass: 1 inertia { x: 1 y: 1 z: 1 }}
+    joints {
+      name: "Joint_1_2" parent: "Segment_1" child: "Segment_2"
+      child_offset { z: 1 }
+      angle_limit { min: -180 max: 180 }
+    }
+    joints {
+      name: "Joint_2_3" parent: "Segment_2" child: "Segment_3"
+      child_offset { z: 1 }
+      angle_limit { min: -180 max: 180 }
+      angle_limit { min: -180 max: 180 }
+    }
+    joints {
+      name: "Joint_3_4" parent: "Segment_3" child: "Segment_4"
+      child_offset { z: 1 }
+      angle_limit { min: -180 max: 180 }
+      angle_limit { min: -180 max: 180 }
+      angle_limit { min: -180 max: 180 }
+    }
+  """
+
+  def test_free_dofs(self):
+    """Constructs a sphericalized joint with differing free dofs per joint."""
+    config = text_format.Parse(SphericalizeTest._CONFIG, brax.Config())
+    sys = brax.System(config)
+
+    # 3 joints have been sphericalized into 1 spherical joint
+    self.assertLen(sys.joints, 1)
+    # correct number of free dofs for each joint
+    self.assertEqual(sys.joints[0].free_dofs, [1, 2, 3])
+    # correct indices are tracked as free
+    joint = sys.joints[0]
+    dof_indices = jp.concatenate([
+        jp.arange(i * joint.dof, i * joint.dof + dw)
+        for i, dw in enumerate(joint.free_dofs)
+    ])
+    self.assertListEqual(list(dof_indices), [0, 3, 4, 6, 7, 8])
+
+
 class ForceTest(parameterized.TestCase):
 
   _CONFIG = """

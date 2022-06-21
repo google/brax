@@ -149,7 +149,7 @@ class InvertedDoublePendulum(env.Env):
   def step(self, state: env.State, action: jp.ndarray) -> env.State:
     """Run one timestep of the environment's dynamics."""
     qp, _ = self.sys.step(state.qp, action)
-    _, (joint_vel,) = self.sys.joints[0].angle_vel(qp)
+    _, joint_vel = self.sys.joints[0].angle_vel(qp)
 
     tip_pos = jp.take(qp, 2).to_world(jp.array([0, 0, .3]))
     (x, _, y), _ = tip_pos
@@ -170,7 +170,7 @@ class InvertedDoublePendulum(env.Env):
 
   def _get_obs(self, qp: brax.QP) -> jp.ndarray:
     """Observe cartpole body position and velocities."""
-    (joint_angle,), (joint_vel,) = self.sys.joints[0].angle_vel(qp)
+    joint_angle, joint_vel = self.sys.joints[0].angle_vel(qp)
 
     # qpos: position and orientation of the torso and the joint angles
     qpos = [qp.pos[0, :1], jp.sin(joint_angle), jp.cos(joint_angle)]

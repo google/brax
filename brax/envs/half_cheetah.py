@@ -199,7 +199,7 @@ class Halfcheetah(env.Env):
 
   def _get_obs(self, qp: brax.QP, info: brax.Info) -> jp.ndarray:
     """Observe halfcheetah body position and velocities."""
-    (joint_angle,), (joint_vel,) = self.sys.joints[0].angle_vel(qp)
+    joint_angle, joint_vel = self.sys.joints[0].angle_vel(qp)
 
     # qpos: position and orientation of the torso and the joint angles
     # TODO: convert rot to just y-ang component

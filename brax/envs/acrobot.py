@@ -44,7 +44,7 @@ class Acrobot(env.Env):
     qp = self.sys.default_qp(joint_angle=qpos, joint_velocity=qvel)
     #    qp = self.sys.default_qp()
     info = self.sys.info(qp)
-    (joint_angle,), (joint_vel,) = self.sys.joints[0].angle_vel(qp)
+    joint_angle, joint_vel = self.sys.joints[0].angle_vel(qp)
     obs = self._get_obs(qp, info, joint_angle, joint_vel)
     reward, done, zero = jp.zeros(3)
     metrics = {
@@ -58,7 +58,7 @@ class Acrobot(env.Env):
   def step(self, state: env.State, action: jp.ndarray) -> env.State:
     """Run one timestep of the environment's dynamics."""
     qp, info = self.sys.step(state.qp, action)
-    (joint_angle,), (joint_vel,) = self.sys.joints[0].angle_vel(qp)
+    joint_angle, joint_vel = self.sys.joints[0].angle_vel(qp)
     obs = self._get_obs(qp, info, joint_angle, joint_vel)
 
     alive_bonus = 10.0

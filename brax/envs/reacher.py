@@ -191,7 +191,7 @@ class Reacher(env.Env):
 
   def _get_obs(self, qp: brax.QP, info: brax.Info) -> jp.ndarray:
     """Egocentric observation of target and arm body."""
-    (joint_angle,), _ = self.sys.joints[0].angle_vel(qp)
+    joint_angle, _ = self.sys.joints[0].angle_vel(qp)
 
     # qpos:
     # x,y coord of target

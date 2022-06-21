@@ -229,7 +229,7 @@ class Pusher(env.Env):
 
   def _get_obs(self, qp: brax.QP) -> jp.ndarray:
     """Observe pusher body position and velocities."""
-    (joint_angle,), (joint_vel,) = self.sys.joints[0].angle_vel(qp)
+    joint_angle, joint_vel = self.sys.joints[0].angle_vel(qp)
 
     return jp.concatenate([
         joint_angle,
