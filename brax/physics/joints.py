@@ -33,8 +33,7 @@ class Joint(abc.ABC):
   relation to one-another.
   """
 
-  __pytree_ignore__ = ('index', 'dof', 'free_dofs', 'dof_indices',
-                       'sphericalized')
+  __pytree_ignore__ = ('index', 'dof', 'free_dofs')
 
   def __init__(self,
                joints: List[config_pb2.Joint],
