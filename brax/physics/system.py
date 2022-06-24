@@ -56,21 +56,14 @@ class System:
     self.num_forces_dof = sum(f.act_index.shape[-1] for f in self.forces)
     self.integrator = integrators.Euler(config)
 
-  def default_angle(self,
-                    default_index: int = 0,
-                    ignore_fixed: bool = True) -> jp.ndarray:
+  def default_angle(self, default_index: int = 0) -> jp.ndarray:
     """Returns the default joint angles for the system."""
     if not self.config.joints:
       return jp.array([])
 
-    if ignore_fixed:
-      dofs = {}
-      for j in self.config.joints:
-        dofs[j.name] = sum([
-            1 if not (l.min == 0 and l.max == 0) else 0 for l in j.angle_limit
-        ])
-    else:
-      dofs = {j.name: len(j.angle_limit) for j in self.config.joints}
+    dofs = {}
+    for j in self.config.joints:
+      dofs[j.name] = sum([l.min != 0 or l.max != 0 for l in j.angle_limit])
     angles = {}
 
     # check overrides in config defaults
@@ -111,14 +104,13 @@ class System:
 
     # build joints and joint -> array lookup, and order by depth
     if joint_angle is None:
-      # need all default angles to set full kinematic tree
-      joint_angle = self.default_angle(default_index, ignore_fixed=False)
+      joint_angle = self.default_angle(default_index)
     if joint_velocity is None:
       joint_velocity = jp.zeros_like(joint_angle)
     joint_idxs = []
     for j in self.config.joints:
       beg = joint_idxs[-1][1][1] if joint_idxs else 0
-      dof = len(j.angle_limit)
+      dof = sum([l.min != 0 or l.max != 0 for l in j.angle_limit])
       joint_idxs.append((j, (beg, beg + dof)))
     lineage = {j.child: j.parent for j in self.config.joints}
     depth = {}

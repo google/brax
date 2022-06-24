@@ -79,7 +79,7 @@ def _euler(q: Optional[Quaternion]) -> config_pb2.Vector3:
   """Converts the quaternion to Euler angles in degrees."""
   if q is None:
     q = quaternions.qeye()
-  return _vec(np.degrees(euler.quat2euler(q)))
+  return _vec(np.degrees(euler.quat2euler(q, axes='rxyz')))
 
 
 def _maybe_qmult(q1: Optional[Quaternion],
@@ -234,7 +234,7 @@ class MujocoConverter(object):
     """Converts the angle to radian."""
     return a if self._uses_radian else np.radians(a)
 
-  def _get_rotation(self, elem: MjcfElement) -> Quaternion:
+  def _get_rotation(self, elem: MjcfElement, axes: str = 'rxyz') -> Quaternion:
     """Returns the rotation quaternion of the Mujoco element."""
     if _is_worldbody(elem):
       return quaternions.qeye()
@@ -242,7 +242,10 @@ class MujocoConverter(object):
       return euler.euler2quat(
           self._maybe_to_radian(elem.euler[0]),
           self._maybe_to_radian(elem.euler[1]),
-          self._maybe_to_radian(elem.euler[2]))
+          self._maybe_to_radian(elem.euler[2]),
+          axes=axes)
+    if elem.quat is not None:
+      return np.array([elem.quat[0], elem.quat[1], elem.quat[2], elem.quat[3]])
     if elem.axisangle is not None:
       axisangle = elem.axisangle
       return quaternions.axangle2quat(axisangle[0:3],
@@ -346,7 +349,8 @@ class MujocoConverter(object):
       raise ValueError(f'Unsupported geom {geom.type}.')
     return geom_collider
 
-  def _add_body(self, mujoco_body: MjcfElement, parent_body: Optional[config_pb2.Body]):
+  def _add_body(self, mujoco_body: MjcfElement,
+                parent_body: Optional[config_pb2.Body]):
     """Adds the body, its children bodies and joints to the config."""
     config = self._config
     body_idx = len(config.bodies)
@@ -382,29 +386,13 @@ class MujocoConverter(object):
         contype=self._get_contype(geom),
         conaffinity=self._get_conaffinity(geom),
         parent_name=parent_body.name if parent_body else '')
-    # The remaining geometries are represented as child bodies.
+    # The remaining geometries are added as extra colliders
     for idx, geom in enumerate(geoms[1:]):
       geom_name = geom.name if geom.name else f'${body.name}.{idx}'
       child_geom_collider = self._geom_to_collider(geom)
-      config.bodies.append(
-          config_pb2.Body(
-              name=geom_name,
-              colliders=[child_geom_collider.collider],
-              mass=child_geom_collider.mass,
-              inertia=_vec(DEFAULT_INERTIA)))
-      config.joints.append(
-          _create_fixed_joint(
-              geom_name,
-              body.name,
-              geom_name,
-              reference_rotation=reference_rotation))
+      body.colliders.append(child_geom_collider.collider)
+      body.mass += child_geom_collider.mass
       geom_colliders.append(child_geom_collider)
-      # We use the same parent body name to ensure that multiple geometries of a
-      # body do not collide with each other.
-      self._collisions[geom_name] = Collision(
-          contype=self._get_contype(geom),
-          conaffinity=self._get_conaffinity(geom),
-          parent_name=parent_body.name if parent_body else '')
 
     if not parent_body:
       # Worldbody cannot have joints.
@@ -445,7 +433,6 @@ class MujocoConverter(object):
         raise ValueError(
             f'Unsupported joint type {joint.type} for {joint.name}')
       min_i = 0
-      local_joint_pos = self._get_position(joint)
       if self._add_joint_to_nearest_body:
         # When a body has multiple geometries, all except the first one to are
         # moved to auxiliary child bodies (above), therefore we need to find the
@@ -453,13 +440,14 @@ class MujocoConverter(object):
         # distance as a proxy.
         min_d = None
         for i, geom_collider in enumerate(geom_colliders):
-          d = np.linalg.norm(local_joint_pos -
+          d = np.linalg.norm(self._get_position(joint) -
                              _np_vec(geom_collider.collider.position))
           if min_d is None or min_d > d:
             min_i, min_d = i, d
             logging.info('Distance to %s is %g.', geom_bodies[min_i].name,
                          min_d)
       attachment_body = geom_bodies[min_i]
+      local_joint_pos = self._maybe_to_local(joint.pos, mujoco_body)
       logging.info('Joint %s connects %s to %s.', joint.name, parent_body.name,
                    attachment_body.name)
       # The joint position is relative to the Mujoco body. To find the offset

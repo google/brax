@@ -26,7 +26,7 @@ from brax import pytree
 from brax.physics import bodies
 from brax.physics import config_pb2
 from brax.physics import geometry
-from brax.physics.base import P, Q, QP
+from brax.physics.base import P, Q, QP, vec_to_arr
 
 
 class Cull(abc.ABC):
@@ -94,7 +94,8 @@ class NearNeighbors(Cull):
 class Collider(abc.ABC):
   """Calculates impulses given contacts from a contact function."""
 
-  __pytree_ignore__ = ('contact_fn', 'cull', 'baumgarte_erp', 'collide_scale')
+  __pytree_ignore__ = ('contact_fn', 'cull', 'baumgarte_erp', 'collide_scale',
+                       'velocity_threshold')
 
   def __init__(self, contact_fn: Callable[[Any, Any, QP, QP], geometry.Contact],
                cull: Cull, config: config_pb2.Config):
@@ -111,6 +112,8 @@ class Collider(abc.ABC):
     self.h = config.dt / config.substeps
     self.substeps = config.substeps
     self.collide_scale = config.solver_scale_collide or 1.0
+    # updates only applied if velocity differences exceed this threshold
+    self.velocity_threshold = jp.norm(vec_to_arr(config.gravity)) * self.h * 4.0
 
   def apply(self, qp: QP) -> P:
     """Returns impulse from any potential contacts between collidables.
@@ -401,7 +404,7 @@ class OneWayCollider(Collider):
 
     dlambda_rest = c / (w1 + 1e-6)
     static_mask = jp.where(contact.penetration > 0, 1., 0.)
-    sinking = jp.where(v_n_old <= 0., 1., 0.)
+    sinking = jp.where(v_n_old <= -self.velocity_threshold, 1., 0.)
 
     p = (dlambda_rest * n * sinking + p_dyn) * static_mask
 
@@ -868,3 +871,4 @@ def get(config: config_pb2.Config, body: bodies.Body) -> List[Collider]:
     ret.append(collider)
 
   return ret
+

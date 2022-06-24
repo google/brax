@@ -725,10 +725,15 @@ class ForceTest(parameterized.TestCase):
 
 class ElasticityTest(parameterized.TestCase):
   _CONFIG = """
-  dt: 1. substeps: 1000 friction: 0.0 elasticity: 0.5
+  dt: 0.01 substeps: 10 friction: 0.0 elasticity: 1.0
   gravity { z: -9.8 }
   bodies {
     name: "sphere" mass: 1
+    colliders { capsule { radius: .5 length: 1.0 } }
+    inertia { x: 1 y: 1 z: 1 }
+    }
+  bodies {
+    name: "sphere_stationary" mass: 1
     colliders { capsule { radius: .5 length: 1.0 } }
     inertia { x: 1 y: 1 z: 1 }
     }
@@ -739,8 +744,12 @@ class ElasticityTest(parameterized.TestCase):
     frozen { all: true}
   }
   bodies { name: "Ground" frozen: { all: true } colliders { plane {}}}
-  defaults { qps { name: "sphere" vel {x: 10}}
-             qps { name: "boxwall" pos { x: 10 } }}
+  defaults { qps { name: "sphere" vel {x: 10 y: 0 z: 0} pos {z: .5} }
+              qps { name: "sphere_stationary" pos { x: -20 y: 0 z: .5 } }
+              qps { name: "boxwall" pos { x: 10 } } }
+  defaults { qps { name: "sphere" pos { z: 1.5 } vel { z: 5.0 } }
+              qps { name: "sphere_stationary" pos { x: 0 y: 0 z: .5 } }
+              qps { name: "boxwall" pos { x: 10 } } }
   """
 
   @parameterized.parameters(0, .5, 1.)
@@ -749,12 +758,30 @@ class ElasticityTest(parameterized.TestCase):
     config = text_format.Parse(ElasticityTest._CONFIG, brax.Config())
     config.elasticity = elasticity
     sys = brax.System(config=config)
-    qp = sys.default_qp()
+    qp = sys.default_qp(0)
     qp_init = qp
-    qp, _ = sys.step(qp, jp.array([]))
+    for _ in range(100):
+      qp, _ = jax.jit(sys.step)(qp, jp.array([]))
 
     self.assertAlmostEqual(qp_init.vel[0][0] * (-1) * (elasticity**2.),
                            qp.vel[0][0], 2)
+
+  @parameterized.parameters(0, 1.)
+  def test_ball_bounce_vertical(self, elasticity):
+    """A ball bounces off another ball, with gravity."""
+    config = text_format.Parse(ElasticityTest._CONFIG, brax.Config())
+    config.elasticity = elasticity
+    # time to reach the ball again.
+    impact_time = 2 * 5 / 9.8
+    config.dt = impact_time / 100.
+    sys = brax.System(config=config)
+    qp = sys.default_qp(1)
+    qp_init = qp
+    for _ in range(400):
+      qp, _ = jax.jit(sys.step)(qp, jp.array([]))
+
+    self.assertAlmostEqual(qp_init.vel[0][2] * (elasticity**2.), qp.vel[0][2],
+                           delta=.02)
 
 
 if __name__ == '__main__':
