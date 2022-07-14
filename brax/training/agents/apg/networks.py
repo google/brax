@@ -33,11 +33,14 @@ class APGNetworks:
 def make_inference_fn(apg_networks: APGNetworks):
   """Creates params and inference function for the APG agent."""
 
-  def make_policy(params: types.PolicyParams) -> types.Policy:
+  def make_policy(params: types.PolicyParams,
+                  deterministic: bool = False) -> types.Policy:
 
     def policy(observations: types.Observation,
                key_sample: PRNGKey) -> Tuple[types.Action, types.Extra]:
       logits = apg_networks.policy_network.apply(*params, observations)
+      if deterministic:
+        return apg_networks.parametric_action_distribution.mode(logits), {}
       return apg_networks.parametric_action_distribution.sample(
           logits, key_sample), {}
 

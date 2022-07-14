@@ -309,6 +309,21 @@ def arcsin(x: ndarray) -> ndarray:
   return _which_np(x).arcsin(x)
 
 
+@custom_jvp
+def safe_arcsin(x: ndarray) -> ndarray:
+  """Trigonometric inverse sine, element-wise with safety clipping in grad."""
+  return _which_np(x).arcsin(x)
+
+
+@safe_arcsin.defjvp
+def _safe_arcsin_jvp(primal, tangent):
+  x, = primal
+  x_dot, = tangent
+  primal_out = safe_arccos(x)
+  tangent_out = x_dot / sqrt(1. - clip(x, -1 + 1e-7, 1 - 1e-7)**2.)
+  return primal_out, tangent_out
+
+
 def logical_not(x: ndarray) -> ndarray:
   """Returns the truth value of NOT x element-wise."""
   return _which_np(x).logical_not(x)

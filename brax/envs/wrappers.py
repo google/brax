@@ -16,8 +16,11 @@
 
 from typing import ClassVar, Dict, Optional
 
+from acme.wrappers import video as video_wrappers
 from brax import jumpy as jp
 from brax.envs import env as brax_env
+import dm_env
+from dm_env import specs
 import flax
 import gym
 from gym import spaces
@@ -294,3 +297,103 @@ class VectorGymWrapper(gym.vector.VectorEnv):
       return image.render_array(sys, qp, 256, 256)
     else:
       return super().render(mode=mode)  # just raise an exception
+
+
+class DmEnvWrapper(dm_env.Environment):
+  """A wrapper that converts Brax Env to one that follows Dm Env API."""
+
+  def __init__(self,
+               env: brax_env.Env,
+               seed: int = 0,
+               backend: Optional[str] = None):
+    self._env = env
+    self.seed(seed)
+    self.backend = backend
+    self._state = None
+
+    if hasattr(self._env, 'observation_spec'):
+      self._observation_spec = self._env.observation_spec()
+    else:
+      obs_high = jp.inf * jp.ones(self._env.observation_size, dtype='float32')
+      self._observation_spec = specs.BoundedArray((self._env.observation_size,),
+                                                  minimum=-obs_high,
+                                                  maximum=obs_high,
+                                                  dtype=float,
+                                                  name='observation')
+
+    if hasattr(self._env, 'action_spec'):
+      self._action_spec = self._env.action_spec()
+    else:
+      action_high = jp.ones(self._env.action_size, dtype='float32')
+      self._action_spec = specs.BoundedArray((self._env.action_size,),
+                                             minimum=-action_high,
+                                             maximum=action_high,
+                                             dtype=float,
+                                             name='action')
+
+    self._reward_spec = specs.Array(shape=(), dtype=float, name='reward')
+    self._discount_spec = specs.BoundedArray(
+        shape=(), dtype=float, minimum=0., maximum=1., name='discount')
+
+    def reset(key):
+      key1, key2 = jp.random_split(key)
+      state = self._env.reset(key2)
+      return state, state.obs, key1
+
+    self._reset = jax.jit(reset, backend=self.backend)
+
+    def step(state, action):
+      state = self._env.step(state, action)
+      info = {**state.metrics, **state.info}
+      return state, state.obs, state.reward, state.done, info
+
+    self._step = jax.jit(step, backend=self.backend)
+
+  def reset(self):
+    self._state, obs, self._key = self._reset(self._key)
+    return dm_env.TimeStep(
+        step_type=dm_env.StepType.FIRST,
+        reward=None,
+        discount=None,
+        observation=obs)
+
+  def step(self, action):
+    self._state, obs, reward, done, info = self._step(self._state, action)
+    del info
+    return dm_env.TimeStep(
+        step_type=dm_env.StepType.MID if not done else dm_env.StepType.LAST,
+        reward=reward,
+        discount=None,
+        observation=obs)
+
+  def seed(self, seed: int = 0):
+    self._key = jax.random.PRNGKey(seed)
+
+  def observation_spec(self):
+    return self._observation_spec
+
+  def action_spec(self):
+    return self._action_spec
+
+  def reward_spec(self):
+    return self._reward_spec
+
+  def discount_spec(self):
+    return self._discount_spec
+
+  def render(self):
+    # pylint:disable=g-import-not-at-top
+    from brax.io import image
+    sys, qp = self._env.sys, self._state.qp
+    return image.render_array(sys, qp, 256, 256)
+
+
+class VideoWrapper(video_wrappers.VideoWrapper):
+  """Environment wrapper that records videos to a directory."""
+
+  def _render_frame(self, observation):
+    if hasattr(self, '_env') and hasattr(self._env, 'render'):
+      return self._env.render()
+    if hasattr(self, '_environment') and hasattr(self._environment, 'render'):
+      return self._environment.render()
+    raise Exception('No render method in underlying environment.')

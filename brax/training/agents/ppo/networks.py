@@ -34,13 +34,16 @@ class PPONetworks:
 def make_inference_fn(ppo_networks: PPONetworks):
   """Creates params and inference function for the PPO agent."""
 
-  def make_policy(params: types.PolicyParams) -> types.Policy:
+  def make_policy(params: types.PolicyParams,
+                  deterministic: bool = False) -> types.Policy:
     policy_network = ppo_networks.policy_network
     parametric_action_distribution = ppo_networks.parametric_action_distribution
 
     def policy(observations: types.Observation,
                key_sample: PRNGKey) -> Tuple[types.Action, types.Extra]:
       logits = policy_network.apply(*params, observations)
+      if deterministic:
+        return ppo_networks.parametric_action_distribution.mode(logits), {}
       raw_actions = parametric_action_distribution.sample_no_postprocessing(
           logits, key_sample)
       log_prob = parametric_action_distribution.log_prob(logits, raw_actions)

@@ -17,6 +17,7 @@
 See: https://arxiv.org/pdf/1812.05905.pdf
 """
 
+import functools
 import time
 from typing import Any, Callable, Optional, Tuple
 
@@ -120,6 +121,7 @@ def train(environment: envs.Env,
           min_replay_size: int = 0,
           max_replay_size: Optional[int] = None,
           grad_updates_per_step: int = 1,
+          deterministic_eval: bool = False,
           network_factory: types.NetworkFactory[
               sac_networks.SACNetworks] = sac_networks.make_sac_networks,
           progress_fn: Callable[[int, Metrics], None] = lambda *args: None,
@@ -403,7 +405,7 @@ def train(environment: envs.Env,
 
   evaluator = acting.Evaluator(
       env,
-      make_policy,
+      functools.partial(make_policy, deterministic=deterministic_eval),
       num_eval_envs=num_eval_envs,
       episode_length=episode_length,
       action_repeat=action_repeat,

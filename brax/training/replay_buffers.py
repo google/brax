@@ -132,7 +132,7 @@ class UniformSamplingQueue(ReplayBuffer, Generic[Sample]):
 
   def sample(
       self, buffer_state: _ReplayBufferState
-  ) -> Tuple[_ReplayBufferState, jnp.ndarray]:
+  ) -> Tuple[_ReplayBufferState, Sample]:
     """Sample a batch of data.
 
     Args:

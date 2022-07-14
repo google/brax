@@ -102,23 +102,23 @@ def compute_ppo_loss(
     entropy_cost: float = 1e-4,
     discounting: float = 0.9,
     reward_scaling: float = 1.0,
-    lambda_: float = 0.95,
-    ppo_epsilon: float = 0.3) -> Tuple[jnp.ndarray, types.Metrics]:
+    gae_lambda: float = 0.95,
+    clipping_epsilon: float = 0.3) -> Tuple[jnp.ndarray, types.Metrics]:
   """Computes PPO loss.
 
   Args:
     params: Network parameters,
     normalizer_params: Parameters of the normalizer.
     data: Transition that with leading dimension [B, T]. extra fields required
-      are: ['state_extras']['truncation'] ['policy_extras']['raw_action']
+      are ['state_extras']['truncation'] ['policy_extras']['raw_action']
         ['policy_extras']['log_prob']
     rng: Random key
     ppo_network: PPO networks.
     entropy_cost: entropy cost.
     discounting: discounting,
     reward_scaling: reward multiplier.
-    lambda_: General advantage estimation lambda.
-    ppo_epsilon: PPO epsilon
+    gae_lambda: General advantage estimation lambda.
+    clipping_epsilon: Policy loss clipping epsilon
 
   Returns:
     A tuple (loss, metrics)
@@ -151,13 +151,13 @@ def compute_ppo_loss(
       rewards=rewards,
       values=baseline,
       bootstrap_value=bootstrap_value,
-      lambda_=lambda_,
+      lambda_=gae_lambda,
       discount=discounting)
   rho_s = jnp.exp(target_action_log_probs - behaviour_action_log_probs)
 
   surrogate_loss1 = rho_s * advantages
-  surrogate_loss2 = jnp.clip(rho_s, 1 - ppo_epsilon,
-                             1 + ppo_epsilon) * advantages
+  surrogate_loss2 = jnp.clip(rho_s, 1 - clipping_epsilon,
+                             1 + clipping_epsilon) * advantages
 
   policy_loss = -jnp.mean(jnp.minimum(surrogate_loss1, surrogate_loss2))
 

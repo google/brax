@@ -90,6 +90,9 @@ flags.DEFINE_float(
     'grad_updates_per_step', 1.0,
     'How many SAC gradient updates to run per one step in the '
     'environment.')
+# PPO hps.
+flags.DEFINE_float('gae_lambda', .95, 'General advantage estimation lambda.')
+flags.DEFINE_float('clipping_epsilon', .3, 'Policy loss clipping epsilon.')
 # ARS hps.
 flags.DEFINE_integer(
     'number_of_directions', 60,
@@ -171,6 +174,8 @@ def main(unused_argv):
           num_updates_per_batch=FLAGS.num_updates_per_batch,
           num_evals=FLAGS.num_evals,
           reward_scaling=FLAGS.reward_scaling,
+          gae_lambda=FLAGS.gae_lambda,
+          clipping_epsilon=FLAGS.clipping_epsilon,
           progress_fn=writer.write_scalars)
     if FLAGS.learner == 'apg':
       make_policy, params, _ = apg.train(

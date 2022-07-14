@@ -247,7 +247,7 @@ def train(environment_fn: Callable[..., envs.Env],
     first_state, step_fn = env.wrap(
         core_env, key, extra_step_kwargs=extra_step_kwargs)
     tmp_env_states.append(first_state)
-  first_state = jax.tree_multimap(lambda *args: jnp.stack(args),
+  first_state = jax.tree_map(lambda *args: jnp.stack(args),
                                   *tmp_env_states)
 
   normalizer_params, obs_normalizer_update_fn, obs_normalizer_apply_fn = (

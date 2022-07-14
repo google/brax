@@ -155,9 +155,9 @@ class BoxCapsuleTest(absltest.TestCase):
     self.assertAlmostEqual(qp.pos[0, 2], 3.5, 2)
     self.assertAlmostEqual(qp.pos[2, 2], 3.5, 2)
 
-    step = jax.jit(sys.step)
+    step_fn = jax.jit(sys.step)
     for _ in range(30):
-      qp, _ = step(qp, jp.array([]))
+      qp, _ = step_fn(qp, jp.array([]))
     # Box should be on the capsule, rather than on the ground, for both masses
     # box falls on capsule
     self.assertAlmostEqual(qp.pos[0, 2], 2.5, 2)
@@ -344,9 +344,9 @@ class MeshTest(absltest.TestCase):
     # Cylinder should be up in the air.
     self.assertAlmostEqual(qp.pos[0, 2], 1.5, 2)
 
-    step = jax.jit(sys.step)
+    step_fn = jax.jit(sys.step)
     for _ in range(30):
-      qp, _ = step(qp, jp.array([]))
+      qp, _ = step_fn(qp, jp.array([]))
     # Cylinder should be on the ground.
     self.assertAlmostEqual(qp.pos[0, 2], 0, 2)
 
@@ -360,9 +360,9 @@ class MeshTest(absltest.TestCase):
     qp = sys.default_qp()
     self.assertAlmostEqual(qp.pos[0, 2], 1.5, 2)
 
-    step = jax.jit(sys.step)
+    step_fn = jax.jit(sys.step)
     for _ in range(30):
-      qp, _ = step(qp, jp.array([]))
+      qp, _ = step_fn(qp, jp.array([]))
     # Cylinder should be on the capsule, rather than on the ground.
     self.assertAlmostEqual(qp.pos[0, 2], 0.394, 2)
 
@@ -760,8 +760,9 @@ class ElasticityTest(parameterized.TestCase):
     sys = brax.System(config=config)
     qp = sys.default_qp(0)
     qp_init = qp
+    step_fn = jax.jit(sys.step)
     for _ in range(100):
-      qp, _ = jax.jit(sys.step)(qp, jp.array([]))
+      qp, _ = step_fn(qp, jp.array([]))
 
     self.assertAlmostEqual(qp_init.vel[0][0] * (-1) * (elasticity**2.),
                            qp.vel[0][0], 2)
@@ -777,8 +778,9 @@ class ElasticityTest(parameterized.TestCase):
     sys = brax.System(config=config)
     qp = sys.default_qp(1)
     qp_init = qp
+    step_fn = jax.jit(sys.step)
     for _ in range(400):
-      qp, _ = jax.jit(sys.step)(qp, jp.array([]))
+      qp, _ = step_fn(qp, jp.array([]))
 
     self.assertAlmostEqual(qp_init.vel[0][2] * (elasticity**2.), qp.vel[0][2],
                            delta=.02)

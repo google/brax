@@ -33,11 +33,14 @@ class ESNetworks:
 def make_inference_fn(es_networks: ESNetworks):
   """Creates params and inference function for the ES agent."""
 
-  def make_policy(params: types.PolicyParams) -> types.Policy:
+  def make_policy(params: types.PolicyParams,
+                  deterministic: bool = False) -> types.Policy:
 
     def policy(observations: types.Observation,
                key_sample: PRNGKey) -> Tuple[types.Action, types.Extra]:
       logits = es_networks.policy_network.apply(*params, observations)
+      if deterministic:
+        return es_networks.parametric_action_distribution.mode(logits), {}
       return es_networks.parametric_action_distribution.sample(
           logits, key_sample), {}
 

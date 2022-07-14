@@ -67,6 +67,10 @@ class ParametricDistribution(abc.ABC):
     """Returns a sample from the postprocessed distribution."""
     return self.postprocess(self.sample_no_postprocessing(parameters, seed))
 
+  def mode(self, parameters):
+    """Returns the mode of the postprocessed distribution."""
+    return self.postprocess(self.create_dist(parameters).mode())
+
   def log_prob(self, parameters, actions):
     """Compute the log probability of actions."""
     dist = self.create_dist(parameters)
@@ -96,6 +100,9 @@ class NormalDistribution:
 
   def sample(self, seed):
     return jax.random.normal(seed, shape=self.loc.shape) * self.scale + self.loc
+
+  def mode(self):
+    return self.loc
 
   def log_prob(self, x):
     log_unnormalized = -0.5 * jnp.square(x / self.scale - self.loc / self.scale)
@@ -148,5 +155,4 @@ class NormalTanhDistribution(ParametricDistribution):
   def create_dist(self, parameters):
     loc, scale = jnp.split(parameters, 2, axis=-1)
     scale = jax.nn.softplus(scale) + self._min_std
-    dist = NormalDistribution(loc=loc, scale=scale)
-    return dist
+    return NormalDistribution(loc=loc, scale=scale)

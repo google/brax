@@ -88,6 +88,7 @@ def train(
     normalize_observations: bool = False,
     num_evals: int = 1,
     center_fitness: bool = False,
+    deterministic_eval: bool = False,
     network_factory: types.NetworkFactory[
         es_networks.ESNetworks] = es_networks.make_es_networks,
     progress_fn: Callable[[int, Metrics], None] = lambda *args: None,
@@ -107,8 +108,11 @@ def train(
                'devices to be used count: %d', local_device_count,
                local_devices_to_use)
 
-  num_env_steps_between_evals = num_timesteps // num_evals
-  next_eval_step = num_timesteps - (num_evals - 1) * num_env_steps_between_evals
+  num_evals_after_init = max(num_evals - 1, 1)
+
+  num_env_steps_between_evals = num_timesteps // num_evals_after_init
+  next_eval_step = num_timesteps - (num_evals_after_init -
+                                    1) * num_env_steps_between_evals
 
   assert num_envs % local_devices_to_use == 0
   env = environment
@@ -302,11 +306,18 @@ def train(
   # Evaluator function
   evaluator = acting.Evaluator(
       env,
-      make_policy,
+      functools.partial(make_policy, deterministic=deterministic_eval),
       num_eval_envs=num_eval_envs,
       episode_length=episode_length,
       action_repeat=action_repeat,
       key=eval_key)
+
+  if num_evals > 1:
+    metrics = evaluator.run_evaluation(
+        (training_state.normalizer_params, training_state.policy_params),
+        training_metrics={})
+    logging.info(metrics)
+    progress_fn(0, metrics)
 
   while training_state.num_env_steps < num_timesteps:
     # optimization
