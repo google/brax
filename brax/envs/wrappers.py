@@ -16,7 +16,6 @@
 
 from typing import ClassVar, Dict, Optional
 
-from acme.wrappers import video as video_wrappers
 from brax import jumpy as jp
 from brax.envs import env as brax_env
 import dm_env
@@ -386,14 +385,3 @@ class DmEnvWrapper(dm_env.Environment):
     from brax.io import image
     sys, qp = self._env.sys, self._state.qp
     return image.render_array(sys, qp, 256, 256)
-
-
-class VideoWrapper(video_wrappers.VideoWrapper):
-  """Environment wrapper that records videos to a directory."""
-
-  def _render_frame(self, observation):
-    if hasattr(self, '_env') and hasattr(self._env, 'render'):
-      return self._env.render()
-    if hasattr(self, '_environment') and hasattr(self._environment, 'render'):
-      return self._environment.render()
-    raise Exception('No render method in underlying environment.')

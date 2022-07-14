@@ -37,7 +37,6 @@ setup(
     scripts=["bin/learn"],
     install_requires=[
         "absl-py",
-        "dm-acme",
         "dataclasses",
         "dm_env",
         "flax",
