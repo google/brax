@@ -267,6 +267,7 @@ def make_train_space(environment: envs.Env,
   train_space.training_epoch_with_timing = training_epoch_with_timing
   train_space.num_timesteps = num_timesteps
   train_space.seed = seed
+  train_space.max_devices_per_host = max_devices_per_host
 
   key = jax.random.PRNGKey(seed)
   _, local_key = jax.random.split(key)
@@ -293,9 +294,8 @@ def init_training_state(train_space):
   optimizer = train_space.optimizer
   seed = train_space.seed
 
-  #TODO: we should probs uncomment this!
-  # if max_devices_per_host:
-  #   local_devices_to_use = min(local_devices_to_use, max_devices_per_host)
+  if train_space.max_devices_per_host:
+    local_devices_to_use = min(local_devices_to_use, train_space.max_devices_per_host)
 
   key = jax.random.PRNGKey(seed)
   global_key, local_key = jax.random.split(key)
