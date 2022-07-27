@@ -327,6 +327,10 @@ def init_env_state(train_space):
   process_id = jax.process_index()
   local_device_count = jax.local_device_count()
   local_devices_to_use = local_device_count
+  
+  if train_space.max_devices_per_host:
+    local_devices_to_use = min(local_devices_to_use, train_space.max_devices_per_host)
+
 
   key = jax.random.PRNGKey(seed)
   global_key, local_key = jax.random.split(key)
@@ -364,8 +368,9 @@ def train_run(train_space, training_state, env_state):
   process_id = jax.process_index()
   local_device_count = jax.local_device_count()
   local_devices_to_use = local_device_count
-  # if max_devices_per_host:
-  #   local_devices_to_use = min(local_devices_to_use, max_devices_per_host)
+  
+  if train_space.max_devices_per_host:
+    local_devices_to_use = min(local_devices_to_use, train_space.max_devices_per_host)
   logging.info(
       'Device count: %d, process count: %d (id %d), local device count: %d, '
       'devices to be used count: %d', jax.device_count(), process_count,
