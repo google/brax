@@ -25,7 +25,7 @@ from jax import numpy as jnp
 import numpy as onp
 
 ndarray = Union[onp.ndarray, jnp.ndarray]  # pylint:disable=invalid-name
-tree_map = jax.tree_map  # works great with jax or numpy as-is
+tree_map = jax.tree_util.tree_map  # works great with jax or numpy as-is
 pi = onp.pi
 inf = onp.inf
 float32 = onp.float32
@@ -86,7 +86,7 @@ def vmap(fun: F, include: Optional[Sequence[bool]] = None) -> F:
           b_args.append(a)
       rets.append(fun(*b_args))
 
-    return jax.tree_map(lambda *x: onp.stack(x), *rets)
+    return jax.tree_util.tree_map(lambda *x: onp.stack(x), *rets)
 
   return _batched
 
@@ -114,7 +114,7 @@ def scan(f: Callable[[Carry, X], Tuple[Carry, Y]],
       xs_slice = [x[i] for x in xs_flat]
       carry, y = f(carry, jax.tree_unflatten(xs_tree, xs_slice))
       ys.append(y)
-    stacked_y = jax.tree_map(lambda *y: onp.vstack(y), *maybe_reversed(ys))
+    stacked_y = jax.tree_util.tree_map(lambda *y: onp.vstack(y), *maybe_reversed(ys))
     return carry, stacked_y
 
 
@@ -148,7 +148,7 @@ def take(tree: Any, i: Union[ndarray, Sequence[int]], axis: int = 0) -> Any:
   np = _which_np(i)
   if isinstance(i, list) or isinstance(i, tuple):
     i = np.array(i, dtype=int)
-  return jax.tree_map(lambda x: np.take(x, i, axis=axis, mode='clip'), tree)
+  return jax.tree_util.tree_map(lambda x: np.take(x, i, axis=axis, mode='clip'), tree)
 
 
 def norm(x: ndarray,

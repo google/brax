@@ -128,7 +128,7 @@ def compute_ppo_loss(
   value_apply = ppo_network.value_network.apply
 
   # Put the time dimension first.
-  data = jax.tree_map(lambda x: jnp.swapaxes(x, 0, 1), data)
+  data = jax.tree_util.tree_map(lambda x: jnp.swapaxes(x, 0, 1), data)
   policy_logits = policy_apply(normalizer_params, params.policy,
                                data.observation)
 

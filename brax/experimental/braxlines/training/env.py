@@ -48,7 +48,7 @@ def wrap(core_env: envs.Env,
       'score', jnp.zeros_like(first_core.reward))
   first_core.metrics.update(
       {f'score/{k}': v for k, v in first_core.info.get('scores', {}).items()})
-  first_total_metrics = jax.tree_map(jnp.sum, first_core.metrics)
+  first_total_metrics = jax.tree_util.tree_map(jnp.sum, first_core.metrics)
   first_total_episodes = jnp.zeros(())
 
   first_state = EnvState(
@@ -74,8 +74,8 @@ def wrap(core_env: envs.Env,
     core.metrics['score'] = core.info.get('score', jnp.zeros_like(core.reward))
     core.metrics.update(
         {f'score/{k}': v for k, v in core.info.get('scores', {}).items()})
-    total_metrics = jax.tree_map(lambda a, b: a + jnp.sum(b),
-                                      state.total_metrics, core.metrics)
+    total_metrics = jax.tree_util.tree_map(lambda a, b: a + jnp.sum(b),
+                                           state.total_metrics, core.metrics)
     total_episodes = state.total_episodes + jnp.sum(core.done)
     return EnvState(
         core=core, total_metrics=total_metrics, total_episodes=total_episodes)

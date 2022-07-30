@@ -242,8 +242,8 @@ def train(environment_fn: Callable[..., envs.Env],
     first_state, step_fn = env.wrap(
         core_env, key, extra_step_kwargs=extra_step_kwargs)
     tmp_env_states.append(first_state)
-  first_state = jax.tree_map(lambda *args: jnp.stack(args),
-                                  *tmp_env_states)
+  first_state = jax.tree_util.tree_map(lambda *args: jnp.stack(args),
+                                       *tmp_env_states)
 
   normalizer_params, obs_normalizer_update_fn, obs_normalizer_apply_fn = (
       normalization.create_observation_normalizer(
@@ -278,9 +278,9 @@ def train(environment_fn: Callable[..., envs.Env],
 
   @jax.jit
   def run_eval(state, key, policy_params, normalizer_params, extra_params):
-    policy_params = jax.tree_map(lambda x: x[0], policy_params)
-    normalizer_params = jax.tree_map(lambda x: x[0], normalizer_params)
-    extra_params = jax.tree_map(lambda x: x[0], extra_params)
+    policy_params = jax.tree_util.tree_map(lambda x: x[0], policy_params)
+    normalizer_params = jax.tree_util.tree_map(lambda x: x[0], normalizer_params)
+    extra_params = jax.tree_util.tree_map(lambda x: x[0], extra_params)
     (state, _, _, _, key), _ = jax.lax.scan(
         do_one_step_eval,
         (state, policy_params, normalizer_params, extra_params, key), (),
@@ -349,8 +349,8 @@ def train(environment_fn: Callable[..., envs.Env],
       data = jnp.swapaxes(data, 0, 1)
       return data
 
-    ndata = jax.tree_map(lambda x: convert_data(x, permutation), data)
-    u_ndata = jax.tree_map(lambda x: convert_data(x, permutation), udata)
+    ndata = jax.tree_util.tree_map(lambda x: convert_data(x, permutation), data)
+    u_ndata = jax.tree_util.tree_map(lambda x: convert_data(x, permutation), udata)
     (optimizer_state, params, _), metrics = jax.lax.scan(
         update_model, (optimizer_state, params, key_grad), (ndata, u_ndata),
         length=num_minibatches)
@@ -368,8 +368,8 @@ def train(environment_fn: Callable[..., envs.Env],
         (),
         length=batch_size * num_minibatches // num_envs)
     # make unroll first
-    data = jax.tree_map(lambda x: jnp.swapaxes(x, 0, 1), data)
-    data = jax.tree_map(
+    data = jax.tree_util.tree_map(lambda x: jnp.swapaxes(x, 0, 1), data)
+    data = jax.tree_util.tree_map(
         lambda x: jnp.reshape(x, [x.shape[0], -1] + list(x.shape[3:])), data)
 
     # Update normalization params and normalize observations.
@@ -397,7 +397,7 @@ def train(environment_fn: Callable[..., envs.Env],
     (training_state, state), losses = jax.lax.scan(
         run_epoch, (training_state, state), (),
         length=num_epochs // log_frequency)
-    losses = jax.tree_map(jnp.mean, losses)
+    losses = jax.tree_util.tree_map(jnp.mean, losses)
     return (training_state, state), losses
 
   minimize_loop = jax.pmap(_minimize_loop, axis_name='i')
@@ -450,11 +450,12 @@ def train(environment_fn: Callable[..., envs.Env],
       logging.info(metrics)
       if progress_fn:
         params = dict(
-            normalizer=jax.tree_map(lambda x: x[0],
-                                    training_state.normalizer_params),
-            policy=jax.tree_map(lambda x: x[0],
-                                training_state.params['policy']),
-            extra=jax.tree_map(lambda x: x[0], training_state.params['extra']))
+            normalizer=jax.tree_util.tree_map(lambda x: x[0],
+                                              training_state.normalizer_params),
+            policy=jax.tree_util.tree_map(lambda x: x[0],
+                                          training_state.params['policy']),
+            extra=jax.tree_util.tree_map(lambda x: x[0], 
+                                         training_state.params['extra']))
         progress_fn(
             int(training_state.normalizer_params[0][0]) * action_repeat,
             metrics, params)
@@ -466,18 +467,18 @@ def train(environment_fn: Callable[..., envs.Env],
     previous_step = training_state.normalizer_params[0][0]
     # optimization
     (training_state, state), losses = minimize_loop(training_state, state)
-    jax.tree_map(lambda x: x.block_until_ready(), losses)
+    jax.tree_util.tree_map(lambda x: x.block_until_ready(), losses)
     sps = ((training_state.normalizer_params[0][0] - previous_step) /
            (time.time() - t)) * action_repeat
     training_walltime += time.time() - t
 
   # To undo the pmap.
-  normalizer_params = jax.tree_map(lambda x: x[0],
-                                   training_state.normalizer_params)
-  policy_params = jax.tree_map(lambda x: x[0],
-                               training_state.params['policy'])
-  extra_params = jax.tree_map(lambda x: x[0],
-                              training_state.params.get('extra', {}))
+  normalizer_params = jax.tree_util.tree_map(lambda x: x[0],
+                                             training_state.normalizer_params)
+  policy_params = jax.tree_util.tree_map(lambda x: x[0],
+                                         training_state.params['policy'])
+  extra_params = jax.tree_util.tree_map(lambda x: x[0],
+                                        training_state.params.get('extra', {}))
 
   logging.info('total steps: %s', normalizer_params[0] * action_repeat)
 

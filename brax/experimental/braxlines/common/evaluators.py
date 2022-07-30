@@ -119,7 +119,7 @@ def visualize_env(batch_size: int = 0,
         html.save_html(
             filename,
             env.sys, [
-                jax.tree_map(functools.partial(jnp.take, indices=i), state.qp)
+                jax.tree_util.tree_map(functools.partial(jnp.take, indices=i), state.qp)
                 for state in states
             ],
             make_dir=True)

@@ -37,7 +37,7 @@ def synchronize_hosts():
 
 
 def _fingerprint(x: Any) -> float:
-  sums = jax.tree_map(jnp.sum, x)
+  sums = jax.tree_util.tree_map(jnp.sum, x)
   return jax.tree_util.tree_reduce(lambda x, y: x + y, sums)
 
 

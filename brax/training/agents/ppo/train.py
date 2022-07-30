@@ -55,7 +55,7 @@ class TrainingState:
 
 
 def _unpmap(v):
-  return jax.tree_map(lambda x: x[0], v)
+  return jax.tree_util.tree_map(lambda x: x[0], v)
 
 
 def train(environment: envs.Env,
@@ -161,7 +161,7 @@ def train(environment: envs.Env,
       x = jnp.reshape(x, (num_minibatches, -1) + x.shape[1:])
       return x
 
-    shuffled_data = jax.tree_map(convert_data, data)
+    shuffled_data = jax.tree_util.tree_map(convert_data, data)
     (optimizer_state, params, _), metrics = jax.lax.scan(
         functools.partial(minibatch_step, normalizer_params=normalizer_params),
         (optimizer_state, params, key_grad),
@@ -194,8 +194,8 @@ def train(environment: envs.Env,
         f, (state, key_generate_unroll), (),
         length=batch_size * num_minibatches // num_envs)
     # Have leading dimentions (batch_size * num_minibatches, unroll_length)
-    data = jax.tree_map(lambda x: jnp.swapaxes(x, 1, 2), data)
-    data = jax.tree_map(lambda x: jnp.reshape(x, (-1,) + x.shape[2:]), data)
+    data = jax.tree_util.tree_map(lambda x: jnp.swapaxes(x, 1, 2), data)
+    data = jax.tree_util.tree_map(lambda x: jnp.reshape(x, (-1,) + x.shape[2:]), data)
     assert data.discount.shape[1:] == (unroll_length,)
 
     # Update normalization params and normalize observations.
@@ -222,7 +222,7 @@ def train(environment: envs.Env,
     (training_state, state, _), loss_metrics = jax.lax.scan(
         training_step, (training_state, state, key), (),
         length=num_training_steps_per_epoch)
-    loss_metrics = jax.tree_map(jnp.mean, loss_metrics)
+    loss_metrics = jax.tree_util.tree_map(jnp.mean, loss_metrics)
     return training_state, state, loss_metrics
 
   training_epoch = jax.pmap(training_epoch, axis_name=_PMAP_AXIS_NAME)
@@ -235,8 +235,8 @@ def train(environment: envs.Env,
     t = time.time()
     (training_state, env_state,
      metrics) = training_epoch(training_state, env_state, key)
-    metrics = jax.tree_map(jnp.mean, metrics)
-    jax.tree_map(lambda x: x.block_until_ready(), metrics)
+    metrics = jax.tree_util.tree_map(jnp.mean, metrics)
+    jax.tree_util.tree_map(lambda x: x.block_until_ready(), metrics)
 
     epoch_training_time = time.time() - t
     training_walltime += epoch_training_time

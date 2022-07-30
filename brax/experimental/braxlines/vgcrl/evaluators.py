@@ -301,7 +301,7 @@ def visualize_skills(output_path: str = None,
         html.save_html(
             f'{output_path}/{output_name}_skill{i:02}.html',
             env.sys, [
-                jax.tree_map(
+                jax.tree_util.tree_map(
                     functools.partial(index_fn, i=i * num_samples_per_z),
                     state.qp) for state in states
             ],
