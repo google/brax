@@ -44,7 +44,8 @@ class PPOTest(parameterized.TestCase):
         num_updates_per_batch=4,
         normalize_observations=True,
         seed=2,
-        reward_scaling=10)
+        reward_scaling=10,
+        normalize_advantage=False)
     self.assertGreater(metrics['eval/episode_reward'], 135)
 
   @parameterized.parameters(True, False)
