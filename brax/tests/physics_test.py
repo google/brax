@@ -782,8 +782,28 @@ class ElasticityTest(parameterized.TestCase):
     for _ in range(400):
       qp, _ = step_fn(qp, jp.array([]))
 
-    self.assertAlmostEqual(qp_init.vel[0][2] * (elasticity**2.), qp.vel[0][2],
-                           delta=.02)
+    self.assertAlmostEqual(
+        qp_init.vel[0][2] * (elasticity**2.), qp.vel[0][2], delta=.02)
+
+  @parameterized.parameters(0, 1.)
+  def test_ball_bounce_vertical_frozen(self, elasticity):
+    """A ball bounces off another frozen ball, with gravity."""
+    config = text_format.Parse(ElasticityTest._CONFIG, brax.Config())
+    config.elasticity = elasticity
+    # freeze the ground ball
+    config.bodies[1].frozen.all = True
+    # time to reach the ball again.
+    impact_time = 2 * 5 / 9.8
+    config.dt = impact_time / 100.
+    sys = brax.System(config=config)
+    qp = sys.default_qp(1)
+    qp_init = qp
+    step_fn = jax.jit(sys.step)
+    for _ in range(100):
+      qp, _ = step_fn(qp, jp.array([]))
+
+    self.assertAlmostEqual(
+        qp_init.vel[0][2] * (elasticity**2.), qp.vel[0][2], delta=.04)
 
 
 if __name__ == '__main__':

@@ -103,11 +103,11 @@ class Contact:
 
 
 @pytree.register
-class BoxCorner(Collidable):
-  """A box corner."""
+class Box(Collidable):
+  """A box."""
 
   def __init__(self, boxes: List[config_pb2.Body], body: bodies.Body):
-    super().__init__([boxes[i // 8] for i in range(len(boxes) * 8)], body)
+    super().__init__(boxes, body)
     corners = []
     for b in boxes:
       col = b.colliders[0]
@@ -115,7 +115,7 @@ class BoxCorner(Collidable):
       box = _BOX_CORNERS * vec_to_arr(col.box.halfsize)
       box = jp.vmap(math.rotate, include=(True, False))(box, rot)
       box = box + vec_to_arr(col.position)
-      corners.extend(box)
+      corners.append(box)
     self.corner = jp.array(corners)
 
 
@@ -146,20 +146,19 @@ class TriangulatedBox(BaseMesh):
       vertex = _BOX_CORNERS * vec_to_arr(col.box.halfsize)
       vertex = jp.vmap(math.rotate, include=(True, False))(vertex, rot)
       vertex = vertex + vec_to_arr(col.position)
-      vertices.extend(vertex)
+      vertices.append(vertex)
 
       # Each face consists of two triangles.
       face = jp.reshape(jp.take(vertex, _BOX_FACES), (-1, 3, 3))
-      faces.extend(face)
+      faces.append(face)
 
       # Apply rotation to face normals.
       face_normal = jp.vmap(
           math.rotate, include=(True, False))(_BOX_FACE_NORMALS, rot)
-      face_normals.extend(face_normal)
+      face_normals.append(face_normal)
 
     # Each triangle is a collidable.
-    super().__init__([boxes[i // 12] for i in range(len(boxes) * 12)], body,
-                     jp.array(vertices), jp.array(faces),
+    super().__init__(boxes, body, jp.array(vertices), jp.array(faces),
                      jp.array(face_normals))
 
 
@@ -192,8 +191,7 @@ class CapsuleEnd(Collidable):
   """A capsule with variable ends either in the +z or -z directions."""
 
   def __init__(self, capsules: List[config_pb2.Body], body: bodies.Body):
-    var_caps = [[c] if c.colliders[0].capsule.end else [c, c] for c in capsules]
-    super().__init__(sum(var_caps, []), body)
+    super().__init__(capsules, body)
     ends = []
     radii = []
     for c in capsules:
@@ -201,9 +199,19 @@ class CapsuleEnd(Collidable):
       axis = math.rotate(
           jp.array([0., 0., 1.]), math.euler_to_quat(vec_to_arr(col.rotation)))
       segment_length = col.capsule.length / 2. - col.capsule.radius
+      caps = []
       for end in [col.capsule.end] if col.capsule.end else [-1, 1]:
-        ends.append(vec_to_arr(col.position) + end * axis * segment_length)
-        radii.append(col.capsule.radius)
+        caps.append(vec_to_arr(col.position) + end * axis * segment_length)
+      ends.append(caps)
+      radii.append(col.capsule.radius)
+    # if there's a mix of 1 and 2 end capsules, pad the 1-end capsules
+    # with a dummy cap that has 0 radius with the same end-location.
+    # this facilitates vectorizing over the cap dimension
+    if len(set([len(e) for e in ends])) != 1:
+      for e in ends:
+        if len(e) == 1:
+          e.append(e[0])
+
     self.end = jp.array(ends)
     self.radius = jp.array(radii)
 
@@ -261,23 +269,20 @@ class Mesh(BaseMesh):
           [[v.x * scale, v.y * scale, v.z * scale] for v in g.vertices])
       vertex = jp.vmap(math.rotate, include=(True, False))(vertex, rot)
       vertex = vertex + vec_to_arr(col.position)
-      vertices.extend(vertex)
+      vertices.append(vertex)
 
       # Each face is a triangle.
       face = jp.reshape(jp.take(vertex, g.faces), (-1, 3, 3))
-      faces.extend(face)
+      faces.append(face)
 
       # Apply rotation to face normals.
       face_normal = jp.array([vec_to_arr(n) for n in g.face_normals])
       face_normal = jp.vmap(
           math.rotate, include=(True, False))(face_normal, rot)
-      face_normals.extend(face_normal)
+      face_normals.append(face_normal)
 
-    collidables = [[m] * len(g.vertices if use_points else g.faces)
-                   for m, g in zip(meshes, geoms)]
-    super().__init__(
-        sum(collidables, []), body, jp.array(vertices), jp.array(faces),
-        jp.array(face_normals))
+    super().__init__(meshes, body, jp.array(vertices), jp.array(faces),
+                     jp.array(face_normals))
 
 
 @pytree.register

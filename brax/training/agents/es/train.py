@@ -164,15 +164,15 @@ def train(
     return cumulative_reward, obs, obs_weights
 
   def add_noise(params: Params, key: PRNGKey) -> Tuple[Params, Params, Params]:
-    num_vars = len(jax.tree_leaves(params))
-    treedef = jax.tree_structure(params)
+    num_vars = len(jax.tree_util.tree_leaves(params))
+    treedef = jax.tree_util.tree_structure(params)
     all_keys = jax.random.split(key, num=num_vars)
-    noise = jax.tree_map(
+    noise = jax.tree_util.tree_map(
         lambda g, k: jax.random.normal(k, shape=g.shape, dtype=g.dtype), params,
-        jax.tree_unflatten(treedef, all_keys))
-    params_with_noise = jax.tree_map(lambda g, n: g + n * perturbation_std,
+        jax.tree_util.tree_unflatten(treedef, all_keys))
+    params_with_noise = jax.tree_util.tree_map(lambda g, n: g + n * perturbation_std,
                                      params, noise)
-    params_with_anti_noise = jax.tree_map(lambda g, n: g - n * perturbation_std,
+    params_with_anti_noise = jax.tree_util.tree_map(lambda g, n: g - n * perturbation_std,
                                           params, noise)
     return params_with_noise, params_with_anti_noise, noise
 
@@ -209,7 +209,7 @@ def train(
   @jax.jit
   def training_epoch(training_state: TrainingState,
                      key: PRNGKey) -> Tuple[TrainingState, Metrics]:
-    params = jax.tree_map(
+    params = jax.tree_util.tree_map(
         lambda x: jnp.repeat(
             jnp.expand_dims(x, axis=0), population_size, axis=0),
         training_state.policy_params)
@@ -218,10 +218,10 @@ def train(
     params_with_noise, params_with_anti_noise, noise = add_noise(
         params, key_noise)
 
-    pparams = jax.tree_map(lambda a, b: jnp.concatenate([a, b], axis=0),
+    pparams = jax.tree_util.tree_map(lambda a, b: jnp.concatenate([a, b], axis=0),
                            params_with_noise, params_with_anti_noise)
 
-    pparams = jax.tree_map(
+    pparams = jax.tree_util.tree_map(
         lambda x: jnp.reshape(x, (local_devices_to_use, -1) + x.shape[1:]),
         pparams)
 
@@ -245,7 +245,7 @@ def train(
     weights1, weights2 = jnp.split(weights, 2)
     weights = weights1 - weights2
 
-    delta = jax.tree_map(
+    delta = jax.tree_util.tree_map(
         functools.partial(compute_delta, weights=weights),
         training_state.policy_params, noise)
 
@@ -277,8 +277,8 @@ def train(
     nonlocal training_walltime
     t = time.time()
     (training_state, metrics) = training_epoch(training_state, key)
-    metrics = jax.tree_map(jnp.mean, metrics)
-    jax.tree_map(lambda x: x.block_until_ready(), metrics)
+    metrics = jax.tree_util.tree_map(jnp.mean, metrics)
+    jax.tree_util.tree_map(lambda x: x.block_until_ready(), metrics)
 
     epoch_training_time = time.time() - t
     training_walltime += epoch_training_time

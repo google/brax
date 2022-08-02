@@ -65,7 +65,7 @@ class CapsuleCapsuleColliderFnTest(absltest.TestCase):
     contact = brax.physics.colliders.capsule_capsule(capsule1, capsule2, qp1,
                                                      qp2)
 
-    self.assertGreaterEqual(contact.penetration, 0)
+    self.assertGreaterEqual(contact.penetration[0], 0)
 
   # Parallel capsule collision.
   _CONFIG2 = """
@@ -110,8 +110,9 @@ class CapsuleCapsuleColliderFnTest(absltest.TestCase):
 
     contact = brax.physics.colliders.capsule_capsule(capsule1, capsule2, qp1,
                                                      qp2)
-    self.assertAlmostEqual(contact.penetration, 0.05)
-    self.assertSequenceAlmostEqual(contact.pos, [0., 0., (0.15 + 0.2) / 2.0], 4)
+    self.assertAlmostEqual(contact.penetration[0], 0.05)
+    self.assertSequenceAlmostEqual(contact.pos[0], [0., 0., (0.15 + 0.2) / 2.0],
+                                   4)
 
   def test_collision_with_zero_capsule_length(self):
     """Tests collisions with capsules that have zero length (i.e. spheres)."""
@@ -129,8 +130,9 @@ class CapsuleCapsuleColliderFnTest(absltest.TestCase):
 
     contact = brax.physics.colliders.capsule_capsule(capsule1, capsule2, qp1,
                                                      qp2)
-    self.assertAlmostEqual(contact.penetration, 0.05)
-    self.assertSequenceAlmostEqual(contact.pos, [0., 0., (0.15 + 0.2) / 2.0], 4)
+    self.assertAlmostEqual(contact.penetration[0], 0.05)
+    self.assertSequenceAlmostEqual(contact.pos[0], [0., 0., (0.15 + 0.2) / 2.0],
+                                   4)
 
 
 class BoxHeightMapColliderFnTest(absltest.TestCase):
@@ -162,8 +164,8 @@ class BoxHeightMapColliderFnTest(absltest.TestCase):
     config = text_format.Parse(BoxHeightMapColliderFnTest._CONFIG,
                                brax.Config())
     sys = brax.System(config)
-    box_collider = brax.physics.geometry.BoxCorner([jp.take(config.bodies, 0)],
-                                                   sys.body)
+    box_collider = brax.physics.geometry.Box([jp.take(config.bodies, 0)],
+                                             sys.body)
     box_collider = jp.take(box_collider, 0)
     heightmap_collider = brax.physics.geometry.HeightMap(
         [jp.take(config.bodies, 1)], sys.body)
@@ -174,9 +176,9 @@ class BoxHeightMapColliderFnTest(absltest.TestCase):
     contact = brax.physics.colliders.box_heightmap(box_collider,
                                                    heightmap_collider, box_qp,
                                                    hm_qp)
-    self.assertSequenceAlmostEqual(contact.pos, [2 - 0.3, -2 - 0.3, 1.7 - 0.3],
-                                   3)
-    self.assertGreater(contact.penetration, 0.0)
+    self.assertSequenceAlmostEqual(contact.pos[0],
+                                   [2 - 0.3, -2 - 0.3, 1.7 - 0.3], 3)
+    self.assertGreater(contact.penetration[0], 0.0)
 
 
 class CapsuleMeshTest(absltest.TestCase):
@@ -226,7 +228,63 @@ class CapsuleMeshTest(absltest.TestCase):
                                                   mesh, jp.take(qp, 0),
                                                   jp.take(qp, 1))
 
-    self.assertGreater(contact.penetration, 0.0)
+    self.assertGreater(contact.penetration[0], 0.0)
+
+
+class MultiMeshTest(absltest.TestCase):
+  """Tests scene with multiple meshes."""
+  _CONFIG = """
+    dt: .01 substeps: 4 friction: 0.6
+    gravity { z: -9.8 }
+    bodies {
+      name: "Capsule1" mass: 1
+      colliders { capsule { radius: 0.5 length: 3.14 } }
+      inertia { x: 1 y: 1 z: 1 }
+    }
+    bodies {
+      name: "Mesh_1" mass: 1
+      colliders { mesh { name: "Mesh1" scale: 1 } }
+      inertia { x: 1 y: 1 z: 1 }
+    }
+    mesh_geometries {
+      name: "Mesh1"
+      vertices { x: 0.47 y: -0.68 z: 0.24 }
+      vertices { x: -1.70 y: 0.75 z: -1.53 }
+      vertices { x: 0.01 y: -0.12 z: -0.81 }
+      face_normals { x: 0.51 y: 1.45 z: 0.55 }
+      faces: [0, 1, 2]
+    }
+    bodies {
+      name: "Mesh_2" mass: 1
+      colliders { mesh { name: "Mesh2" scale: 1 } }
+      inertia { x: 1 y: 1 z: 1 }
+    }
+    mesh_geometries {
+      name: "Mesh2"
+      vertices { x: 0.47 y: -0.68 z: 0.24 }
+      vertices { x: -1.70 y: 0.75 z: -1.53 }
+      vertices { x: 0.01 y: -0.12 z: -0.81 }
+      face_normals { x: 0.51 y: 1.45 z: 0.55 }
+      faces: [0, 1, 2]
+    }
+    defaults {
+      qps { name: "Capsule1" pos {x: 0} rot { x: 113 y: 74 z: 152 } }
+      qps { name: "Mesh_1" pos {x: 0} }
+      qps { name: "Mesh_2" pos {x: 3} }
+    }
+  """
+
+  def test_mesh_collider_construction(self):
+    """Tests collision occurs between capsule and triangle."""
+    config = text_format.Parse(MultiMeshTest._CONFIG, brax.Config())
+    sys = brax.System(config)
+    # builds two collision primitives for each different mesh
+    self.assertLen(sys.colliders, 2)
+    # checks that collision bodies have correct body indices
+    self.assertEqual(sys.colliders[0].cull.col_a.body.idx[0], 0)
+    self.assertEqual(sys.colliders[0].cull.col_b.body.idx[0], 1)
+    self.assertEqual(sys.colliders[1].cull.col_a.body.idx[0], 0)
+    self.assertEqual(sys.colliders[1].cull.col_b.body.idx[0], 2)
 
 
 if __name__ == '__main__':

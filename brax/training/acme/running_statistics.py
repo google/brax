@@ -44,11 +44,11 @@ def _is_prefix(a: Path, b: Path) -> bool:
 
 
 def _zeros_like(nest: types.Nest, dtype=None) -> types.NestedArray:
-  return jax.tree_map(lambda x: jnp.zeros(x.shape, dtype or x.dtype), nest)
+  return jax.tree_util.tree_map(lambda x: jnp.zeros(x.shape, dtype or x.dtype), nest)
 
 
 def _ones_like(nest: types.Nest, dtype=None) -> types.NestedArray:
-  return jax.tree_map(lambda x: jnp.ones(x.shape, dtype or x.dtype), nest)
+  return jax.tree_util.tree_map(lambda x: jnp.ones(x.shape, dtype or x.dtype), nest)
 
 
 @struct.dataclass
@@ -100,7 +100,7 @@ def _validate_batch_shapes(batch: types.NestedArray,
     expected_shape = batch_dims + reference_sample.shape
     assert batch.shape == expected_shape, f'{batch.shape} != {expected_shape}'
 
-  jax.tree_map(validate_node_shape, reference_sample, batch)
+  jax.tree_util.tree_map(validate_node_shape, reference_sample, batch)
 
 
 def update(state: RunningStatisticsState,
@@ -139,11 +139,11 @@ def update(state: RunningStatisticsState,
   """
   # We require exactly the same structure to avoid issues when flattened
   # batch and state have different order of elements.
-  assert jax.tree_structure(batch) == jax.tree_structure(state.mean)
-  batch_shape = jax.tree_leaves(batch)[0].shape
+  assert jax.tree_util.tree_structure(batch) == jax.tree_util.tree_structure(state.mean)
+  batch_shape = jax.tree_util.tree_leaves(batch)[0].shape
   # We assume the batch dimensions always go first.
   batch_dims = batch_shape[:len(batch_shape) -
-                           jax.tree_leaves(state.mean)[0].ndim]
+                           jax.tree_util.tree_leaves(state.mean)[0].ndim]
   batch_axis = range(len(batch_dims))
   if weights is None:
     step_increment = jnp.prod(jnp.array(batch_dims))
@@ -189,7 +189,7 @@ def update(state: RunningStatisticsState,
     summed_variance = summed_variance + variance_update
     return mean, summed_variance
 
-  updated_stats = jax.tree_map(_compute_node_statistics, state.mean,
+  updated_stats = jax.tree_util.tree_map(_compute_node_statistics, state.mean,
                                state.summed_variance, batch)
   mean, summed_variance = updated_stats
 
@@ -202,7 +202,7 @@ def update(state: RunningStatisticsState,
     std = jnp.clip(std, std_min_value, std_max_value)
     return std
 
-  std = jax.tree_map(compute_std, summed_variance, state.std)
+  std = jax.tree_util.tree_map(compute_std, summed_variance, state.std)
 
   return RunningStatisticsState(
       count=count, mean=mean, summed_variance=summed_variance, std=std)
@@ -224,7 +224,7 @@ def normalize(batch: types.NestedArray,
       data = jnp.clip(data, -max_abs_value, +max_abs_value)
     return data
 
-  return jax.tree_map(normalize_leaf, batch, mean_std.mean, mean_std.std)
+  return jax.tree_util.tree_map(normalize_leaf, batch, mean_std.mean, mean_std.std)
 
 
 def denormalize(batch: types.NestedArray,
@@ -250,5 +250,5 @@ def denormalize(batch: types.NestedArray,
       return data
     return data * std + mean
 
-  return jax.tree_map(denormalize_leaf, batch, mean_std.mean, mean_std.std)
+  return jax.tree_util.tree_map(denormalize_leaf, batch, mean_std.mean, mean_std.std)
 

@@ -15,8 +15,8 @@
 # pylint:disable=redefined-builtin
 """Numpy backend for JAX that is called for non-jit/non-jax arrays."""
 
-from typing import Any, Callable, List, Optional, Sequence, Tuple, TypeVar, Union
 import builtins
+from typing import Any, Callable, List, Optional, Sequence, Tuple, TypeVar, Union
 
 import jax
 from jax import core
@@ -25,7 +25,7 @@ from jax import numpy as jnp
 import numpy as onp
 
 ndarray = Union[onp.ndarray, jnp.ndarray]  # pylint:disable=invalid-name
-tree_map = jax.tree_map  # works great with jax or numpy as-is
+tree_map = jax.tree_util.tree_map  # works great with jax or numpy as-is
 pi = onp.pi
 inf = onp.inf
 float32 = onp.float32
@@ -41,9 +41,9 @@ def _in_jit() -> bool:
 
 def _which_np(*args):
   checker = lambda a: (
-    isinstance(a, (jnp.ndarray, jax.interpreters.batching.BatchTracer))
-    and not isinstance(a, onp.ndarray))
-  if builtins.any(jax.tree_leaves(tree_map(checker, args))):
+      isinstance(a, (jnp.ndarray, jax.interpreters.batching.BatchTracer)) and
+      not isinstance(a, onp.ndarray))
+  if builtins.any(jax.tree_util.tree_leaves(tree_map(checker, args))):
     return jnp
   return onp
 
@@ -71,7 +71,7 @@ def vmap(fun: F, include: Optional[Sequence[bool]] = None) -> F:
     batch_size = None
     for a, inc in zip(args, include):
       if inc:
-        flat_args, _ = jax.tree_flatten(a)
+        flat_args, _ = jax.tree_util.tree_flatten(a)
         batch_size = flat_args[0].shape[0]
         break
 
@@ -86,7 +86,7 @@ def vmap(fun: F, include: Optional[Sequence[bool]] = None) -> F:
           b_args.append(a)
       rets.append(fun(*b_args))
 
-    return jax.tree_map(lambda *x: onp.stack(x), *rets)
+    return jax.tree_util.tree_map(lambda *x: onp.stack(x), *rets)
 
   return _batched
 
@@ -106,20 +106,20 @@ def scan(f: Callable[[Carry, X], Tuple[Carry, Y]],
   if _in_jit():
     return jax.lax.scan(f, init, xs, length, reverse, unroll)
   else:
-    xs_flat, xs_tree = jax.tree_flatten(xs)
+    xs_flat, xs_tree = jax.tree_util.tree_flatten(xs)
     carry = init
     ys = []
     maybe_reversed = reversed if reverse else lambda x: x
     for i in maybe_reversed(range(length)):
       xs_slice = [x[i] for x in xs_flat]
-      carry, y = f(carry, jax.tree_unflatten(xs_tree, xs_slice))
+      carry, y = f(carry, jax.tree_util.tree_unflatten(xs_tree, xs_slice))
       ys.append(y)
-    stacked_y = jax.tree_map(lambda *y: onp.vstack(y), *maybe_reversed(ys))
+    stacked_y = jax.tree_util.tree_map(lambda *y: onp.vstack(y),
+                                       *maybe_reversed(ys))
     return carry, stacked_y
 
 
-def while_loop(cond_fun: Callable[[X], Any],
-               body_fun: Callable[[X], X],
+def while_loop(cond_fun: Callable[[X], Any], body_fun: Callable[[X], X],
                init_val: X) -> X:
   """Call body_fun while cond_fun is true, starting with init_val."""
   if _in_jit():
@@ -148,7 +148,8 @@ def take(tree: Any, i: Union[ndarray, Sequence[int]], axis: int = 0) -> Any:
   np = _which_np(i)
   if isinstance(i, list) or isinstance(i, tuple):
     i = np.array(i, dtype=int)
-  return jax.tree_map(lambda x: np.take(x, i, axis=axis, mode='clip'), tree)
+  return jax.tree_util.tree_map(lambda x: np.take(x, i, axis=axis, mode='clip'),
+                                tree)
 
 
 def norm(x: ndarray,
@@ -169,11 +170,13 @@ def index_update(x: ndarray, idx: ndarray, y: ndarray) -> ndarray:
 def safe_norm(x: ndarray,
               axis: Optional[Union[Tuple[int, ...], int]] = None) -> ndarray:
   """Calculates a linalg.norm(x) that's safe for gradients at x=0.
+
   Avoids a poorly defined gradient for jnp.linal.norm(0) see
   https://github.com/google/jax/issues/3058 for details
   Args:
     x: A jnp.array
     axis: The axis along which to compute the norm
+
   Returns:
     Norm of the array x.
   """
@@ -187,6 +190,13 @@ def safe_norm(x: ndarray,
   else:
     n = onp.linalg.norm(x, axis=axis)
   return n
+
+
+def expand_dims(x: ndarray,
+                axis: Union[Tuple[int, ...], int] = 0) -> ndarray:
+  """Increases batch dimensionality along axis."""
+
+  return _which_np(x).expand_dims(x, axis=axis)
 
 
 def any(a: ndarray, axis: Optional[int] = None) -> ndarray:
@@ -408,8 +418,10 @@ def random_split(rng: ndarray, num: int = 2) -> ndarray:
     return rng.integers(low=0, high=2**32, dtype='uint32', size=(num, 2))
 
 
-def randint(rng: ndarray, shape: Tuple[int, ...] = (),
-            low: Optional[int] = 0, high: Optional[int] = 1) -> ndarray:
+def randint(rng: ndarray,
+            shape: Tuple[int, ...] = (),
+            low: Optional[int] = 0,
+            high: Optional[int] = 1) -> ndarray:
   """Sample integers in [low, high) with given shape."""
   if _which_np(rng) is jnp:
     return jax.random.randint(rng, shape=shape, minval=low, maxval=high)

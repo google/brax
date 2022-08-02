@@ -49,7 +49,7 @@ class TrainingState:
 
 
 def _unpmap(v):
-  return jax.tree_map(lambda x: x[0], v)
+  return jax.tree_util.tree_map(lambda x: x[0], v)
 
 
 def train(environment: envs.Env,
@@ -134,7 +134,7 @@ def train(environment: envs.Env,
   def clip_by_global_norm(updates):
     g_norm = optax.global_norm(updates)
     trigger = g_norm < max_gradient_norm
-    return jax.tree_map(
+    return jax.tree_util.tree_map(
         lambda t: jnp.where(trigger, t, (t / g_norm) * max_gradient_norm),
         updates)
 
@@ -171,8 +171,8 @@ def train(environment: envs.Env,
     nonlocal training_walltime
     t = time.time()
     (training_state, metrics) = training_epoch(training_state, key)
-    metrics = jax.tree_map(jnp.mean, metrics)
-    jax.tree_map(lambda x: x.block_until_ready(), metrics)
+    metrics = jax.tree_util.tree_map(jnp.mean, metrics)
+    jax.tree_util.tree_map(lambda x: x.block_until_ready(), metrics)
 
     epoch_training_time = time.time() - t
     training_walltime += epoch_training_time

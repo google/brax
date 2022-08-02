@@ -58,6 +58,9 @@ flags.DEFINE_float('learning_rate', 5e-4, 'Learning rate.')
 flags.DEFINE_float('max_gradient_norm', 1e9,
                    'Maximal norm of a gradient update.')
 flags.DEFINE_string('logdir', '', 'Logdir.')
+flags.DEFINE_integer('num_rlds_episodes', 0,
+                     'Number of episodes to output to RLDS.')
+
 flags.DEFINE_bool('normalize_observations', True,
                   'Whether to apply observation normalization.')
 flags.DEFINE_integer(
@@ -220,7 +223,7 @@ def main(unused_argv):
   def jit_next_state(state, key):
     new_key, tmp_key = jax.random.split(key)
     act = make_policy(params)(state.obs, tmp_key)[0]
-    return env.step(state, act), new_key
+    return env.step(state, act), act, new_key
 
   def do_rollout(rng):
     rng, env_key = jax.random.split(rng)
@@ -228,7 +231,7 @@ def main(unused_argv):
     qps = []
     while not state.done:
       qps.append(state.qp)
-      state, rng = jit_next_state(state, rng)
+      state, _, rng = jit_next_state(state, rng)
     return qps, rng
 
   trajectories = []
