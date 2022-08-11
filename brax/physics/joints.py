@@ -468,7 +468,7 @@ def get(config: config_pb2.Config, body: bodies.Body) -> List[Joint]:
               free_dofs=v.get('free_dofs'),
               solver_scale_pos=solver_scale_pos,
               solver_scale_ang=solver_scale_ang))
-    else:
-      raise RuntimeError(f'invalid number of joint limits: {dof}')
+    # else:
+    #   raise RuntimeError(f'invalid number of joint limits: {dof}')
 
   return ret

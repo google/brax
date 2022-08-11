@@ -53,7 +53,7 @@ class System:
         config, self.body)
     self.actuators = actuators.get(config, self.joints)
     self.forces = forces.get(config, self.body)
-    self.num_forces_dof = sum(f.act_index.shape[-1] for f in self.forces)
+    self.num_forces_dof = self.forces[0].act_index.shape[0]* self.forces[0].act_index.shape[1]
     self.integrator = integrators.Euler(config)
 
   def default_angle(self, default_index: int = 0) -> jp.ndarray:
