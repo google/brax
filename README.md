@@ -16,11 +16,11 @@ Brax also includes a suite of learning algorithms that train agents in seconds
 to minutes:
 
 *   Baseline learning algorithms such as
-    [PPO](https://github.com/google/brax/blob/main/brax/training/ppo.py),
-    [SAC](https://github.com/google/brax/blob/main/brax/training/sac.py),
-    [ARS](https://github.com/google/brax/blob/main/brax/training/ars.py), and
-    [evolutionary strategies](https://github.com/google/brax/blob/main/brax/training/es.py).
-*   Learning algorithms that leverage the differentiability of the simulator, such as [analytic policy gradients](https://github.com/google/brax/blob/main/brax/training/apg.py).
+    [PPO](https://github.com/google/brax/blob/main/brax/training/agents/ppo),
+    [SAC](https://github.com/google/brax/blob/main/brax/training/agents/sac),
+    [ARS](https://github.com/google/brax/blob/main/brax/training/agents/ars), and
+    [evolutionary strategies](https://github.com/google/brax/blob/main/brax/training/agents/es).
+*   Learning algorithms that leverage the differentiability of the simulator, such as [analytic policy gradients](https://github.com/google/brax/blob/main/brax/training/agents/apg).
 
 ## Quickstart: Colab in the Cloud
 
