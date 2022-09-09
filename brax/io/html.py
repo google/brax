@@ -69,7 +69,7 @@ _HTML = """
     </script>
     <div id="brax-viewer"></div>
     <script type="module">
-      import {Viewer} from 'https://cdn.jsdelivr.net/gh/google/brax@v0.0.14/js/viewer.js';
+      import {Viewer} from 'https://cdn.jsdelivr.net/gh/google/brax@v0.0.15/js/viewer.js';
       const domElement = document.getElementById('brax-viewer');
       var viewer = new Viewer(domElement, system);
     </script>
