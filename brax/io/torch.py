@@ -18,7 +18,7 @@ import functools
 from typing import Any, Dict, Union
 import warnings
 
-from jax._src import dlpack as jax_dlpack
+import jax
 from jax.interpreters.xla import DeviceArray
 
 try:
@@ -49,7 +49,7 @@ def torch_to_jax(value: Any) -> Any:
 def _tensor_to_jax(value: torch.Tensor) -> DeviceArray:
   """Converts a PyTorch Tensor into a Jax DeviceArray."""
   tensor = torch_dlpack.to_dlpack(value)
-  tensor = jax_dlpack.from_dlpack(tensor)
+  tensor = jax.dlpack.from_dlpack(tensor)
   return tensor
 
 
@@ -80,7 +80,7 @@ def jax_to_torch(value: Any, device: Device = None) -> Any:
 def _devicearray_to_tensor(value: DeviceArray,
                            device: Device = None) -> torch.Tensor:
   """Converts a Jax DeviceArray into PyTorch Tensor."""
-  dpack = jax_dlpack.to_dlpack(value.astype("float32"))
+  dpack = jax.dlpack.to_dlpack(value.astype("float32"))
   tensor = torch_dlpack.from_dlpack(dpack)
   if device:
     return tensor.to(device=device)

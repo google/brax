@@ -244,6 +244,11 @@ def inv(a: ndarray) -> ndarray:
   return _which_np(a).linalg.inv(a)
 
 
+def roll(x: ndarray, shift, axis=None) -> ndarray:
+  """Rolls array elements along a given axis."""
+  return _which_np(x).roll(x, shift, axis=axis)
+
+
 def square(x: ndarray) -> ndarray:
   """Return the element-wise square of the input."""
   return _which_np(x).square(x)
@@ -254,9 +259,10 @@ def tile(x: ndarray, reps: Union[Tuple[int, ...], int]) -> ndarray:
   return _which_np(x).tile(x, reps)
 
 
-def repeat(a: ndarray, repeats: Union[int, ndarray]) -> ndarray:
+def repeat(a: ndarray, repeats: Union[int, ndarray], *args,
+           **kwargs) -> ndarray:
   """Repeat elements of an array."""
-  return _which_np(a, repeats).repeat(a, repeats=repeats)
+  return _which_np(a, repeats).repeat(a, repeats=repeats, *args, **kwargs)
 
 
 def floor(x: ndarray) -> ndarray:
@@ -364,14 +370,24 @@ def maximum(x1: ndarray, x2: ndarray) -> ndarray:
   return _which_np(x1, x2).maximum(x1, x2)
 
 
-def amin(x: ndarray) -> ndarray:
+def amin(x: ndarray, *args, **kwargs) -> ndarray:
   """Returns the minimum along a given axis."""
-  return _which_np(x).amin(x)
+  return _which_np(x).amin(x, *args, **kwargs)
 
 
-def amax(x: ndarray) -> ndarray:
+def amax(x: ndarray, *args, **kwargs) -> ndarray:
   """Returns the maximum along a given axis."""
-  return _which_np(x).amax(x)
+  return _which_np(x).amax(x, *args, **kwargs)
+
+
+def argmin(x: ndarray, *args, **kwargs) -> ndarray:
+  """Returns the argmin along a given axis."""
+  return _which_np(x).argmin(x, *args, **kwargs)
+
+
+def argmax(x: ndarray, *args, **kwargs) -> ndarray:
+  """Returns the argmax along a given axis."""
+  return _which_np(x).argmax(x, *args, **kwargs)
 
 
 def exp(x: ndarray) -> ndarray:

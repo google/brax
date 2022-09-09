@@ -110,8 +110,10 @@ class Evaluator:
     self._generate_eval_unroll = jax.jit(generate_eval_unroll)
     self._steps_per_unroll = episode_length * num_eval_envs
 
-  def run_evaluation(self, policy_params: PolicyParams,
-                     training_metrics: Metrics) -> Metrics:
+  def run_evaluation(self,
+                     policy_params: PolicyParams,
+                     training_metrics: Metrics,
+                     aggregate_episodes: bool = True) -> Metrics:
     """Run one epoch of evaluation."""
     self._key, unroll_key = jax.random.split(self._key)
 
@@ -121,7 +123,7 @@ class Evaluator:
     eval_metrics.active_episodes.block_until_ready()
     epoch_eval_time = time.time() - t
     metrics = {
-        f'eval/episode_{name}': np.mean(value)
+        f'eval/episode_{name}': np.mean(value) if aggregate_episodes else value
         for name, value in eval_metrics.episode_metrics.items()
     }
     metrics['eval/avg_episode_length'] = np.mean(eval_metrics.episode_steps)

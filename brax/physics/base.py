@@ -141,10 +141,16 @@ class Info(object):
     contact: External contact forces applied at a step
     joint: Joint constraint forces applied at a step
     actuator: Actuator forces applied at a step
+    contact_pos: Contact point position in world coordinates.
+    contact_normal: Contact normal.
+    contact_penetration: Contact penetration.
   """
   contact: P
   joint: Union[P, Q]
   actuator: P
+  contact_pos: jp.ndarray
+  contact_normal: jp.ndarray
+  contact_penetration: jp.ndarray
 
 
 def validate_config(

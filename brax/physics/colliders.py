@@ -63,8 +63,6 @@ class NearNeighbors(Cull):
     dist_off = jp.zeros(col_a.body.idx.shape + col_b.body.idx.shape)
     # TODO: consider accounting for bounds/radius of a collidable
     dist_mask = dist_off + float('inf')
-    self.col_a = col_a
-    self.col_b = col_b
     dist_off += jp.index_update(dist_mask, mask, 0)
     self.dist_off = dist_off
     self.cutoff = cutoff
@@ -114,7 +112,7 @@ class Collider(abc.ABC):
     # updates only applied if velocity differences exceed this threshold
     self.velocity_threshold = jp.norm(vec_to_arr(config.gravity)) * self.h * 4.0
 
-  def apply(self, qp: QP) -> P:
+  def apply(self, qp: QP) -> Tuple[P, geometry.Contact]:
     """Returns impulse from any potential contacts between collidables.
 
     Args:
@@ -127,6 +125,7 @@ class Collider(abc.ABC):
     qp_a = jp.take(qp, col_a.body.idx)
     qp_b = jp.take(qp, col_b.body.idx)
     contact = jp.vmap(self.contact_fn)(col_a, col_b, qp_a, qp_b)
+    pre_contact = contact
     dp_a, dp_b = jp.vmap(self._contact)(col_a, col_b, qp_a, qp_b, contact)
 
     rep_a = dp_a.vel.shape[1]
@@ -150,7 +149,7 @@ class Collider(abc.ABC):
     contact = jp.reshape(1e-8 + contact, (dp_vel.shape[0], 1))
     dp_vel = dp_vel / contact
     dp_ang = dp_ang / contact
-    return P(vel=dp_vel, ang=dp_ang)
+    return P(vel=dp_vel, ang=dp_ang), pre_contact
 
   def velocity_apply(self, qp: QP, dlambda: jp.ndarray, qp_prev: QP,
                      contact) -> P:
@@ -805,6 +804,46 @@ def capsule_mesh(cap: geometry.Capsule, mesh: geometry.BaseMesh, qp_a: QP,
   return geometry.Contact(pos, vel, normal, penetration)
 
 
+def hull_hull(mesh_a: geometry.Box, mesh_b: geometry.Box, qp_a: QP,
+              qp_b: QP) -> geometry.Contact:
+  """Gets hull-hull contacts."""
+
+  @jp.vmap
+  def get_faces(faces_a, faces_b, normals_a, normals_b):
+    faces_a = qp_a.pos + jp.vmap(
+        math.rotate, include=[True, False])(faces_a, qp_a.rot)
+    faces_b = qp_b.pos + jp.vmap(
+        math.rotate, include=[True, False])(faces_b, qp_b.rot)
+    normals_a = math.rotate(normals_a, qp_a.rot)
+    normals_b = math.rotate(normals_b, qp_b.rot)
+    return faces_a, faces_b, normals_a, normals_b
+
+  @jp.vmap
+  def get_verts(vertices_a, vertices_b):
+    vertices_a = qp_a.pos + math.rotate(vertices_a, qp_a.rot)
+    vertices_b = qp_b.pos + math.rotate(vertices_b, qp_b.rot)
+    return vertices_a, vertices_b
+
+  faces_a, faces_b, normals_a, normals_b = get_faces(mesh_a.faces, mesh_b.faces,
+                                                     mesh_a.face_normals,
+                                                     mesh_b.face_normals)
+  vertices_a, vertices_b = get_verts(mesh_a.vertices, mesh_b.vertices)
+
+  # Create a potential face and edge contact using SAT.
+  edge_contact, face_contact = geometry.sat_hull_hull(faces_a, faces_b,
+                                                      vertices_a, vertices_b,
+                                                      normals_a, normals_b)
+
+  # Pick a face or edge as the final contact.
+  contact = jp.cond(edge_contact.penetration[0] > 0, lambda *x: edge_contact,
+                    lambda *x: face_contact)
+
+  get_vel = lambda p: qp_a.world_velocity(p) - qp_b.world_velocity(p)
+  contact.vel = jp.vmap(get_vel)(contact.pos)
+
+  return contact
+
+
 def get(config: config_pb2.Config, body: bodies.Body) -> List[Collider]:
   """Creates all colliders given a config."""
 
@@ -823,8 +862,9 @@ def get(config: config_pb2.Config, body: bodies.Body) -> List[Collider]:
            functools.partial(geometry.Mesh,
                              mesh_geoms=mesh_geoms), capsule_mesh),
       ('mesh', 'plane'):
-          (functools.partial(geometry.PointMesh,
-                             mesh_geoms=mesh_geoms), geometry.Plane, mesh_plane)
+          (functools.partial(geometry.PointMesh, mesh_geoms=mesh_geoms),
+           geometry.Plane, mesh_plane),
+      ('box', 'box'): (geometry.HullBox, geometry.HullBox, hull_hull),
   }
   supported_near_neighbors = {('capsule', 'capsule')}
   unique_meshes = {}

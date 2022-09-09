@@ -25,10 +25,21 @@ from brax.physics import bodies
 from brax.physics import colliders
 from brax.physics import config_pb2
 from brax.physics import forces
+from brax.physics import geometry
 from brax.physics import integrators
 from brax.physics import joints
 from brax.physics import spring_joints
 from brax.physics.base import Info, P, Q, QP, validate_config, vec_to_arr
+
+
+def _get_contact_info(
+    contact: Sequence[geometry.Contact]
+) -> Tuple[jp.ndarray, jp.ndarray, jp.ndarray]:
+  if not contact:
+    return jp.array([]), jp.array([]), jp.array([])
+  contact = jp.tree_map(jp.concatenate, contact)
+  contact = jp.tree_map(lambda *x: jp.concatenate(x), *contact)
+  return contact.pos, contact.normal, contact.penetration
 
 
 @pytree.register
@@ -55,6 +66,15 @@ class System:
     self.forces = forces.get(config, self.body)
     self.num_forces_dof = sum(f.act_index.shape[-1] for f in self.forces)
     self.integrator = integrators.Euler(config)
+    zero_p = P(jp.zeros((self.num_bodies, 3)), jp.zeros((self.num_bodies, 3)))
+    info = self.info(self.default_qp())
+    self.zero_info = Info(
+        contact=zero_p,
+        joint=zero_p,
+        actuator=zero_p,
+        contact_pos=jp.zeros_like(info.contact_pos),
+        contact_normal=jp.zeros_like(info.contact_normal),
+        contact_penetration=-jp.ones_like(info.contact_penetration))
 
   def default_angle(self, default_index: int = 0) -> jp.ndarray:
     """Returns the default joint angles for the system."""
@@ -285,16 +305,15 @@ class System:
       ], zero)
       qp = self.integrator.update(qp, vel_p=dp_c)
 
-      info = Info(info.contact + dp_c, info.joint, info.actuator + dp_a)
+      info = Info(info.contact + dp_c, info.joint, info.actuator + dp_a,
+                  *_get_contact_info(contact))
       return (qp, info), ()
 
     # update collider statistics for culling
     for c in self.colliders:
       c.cull.update(qp)
 
-    zero = P(jp.zeros((self.num_bodies, 3)), jp.zeros((self.num_bodies, 3)))
-    info = Info(contact=zero, joint=zero, actuator=zero)
-
+    info = self.zero_info
     (qp, info), _ = jp.scan(substep, (qp, info), (), self.config.substeps // 2)
     return qp, info
 
@@ -304,9 +323,13 @@ class System:
     zero = P(jp.zeros((self.num_bodies, 3)), jp.zeros((self.num_bodies, 3)))
 
     # TODO: sort out a better way to get first-step collider data
-    dq_c = sum([c.apply(qp) for c in self.colliders], zero)
+    for c in self.colliders:
+      c.cull.update(qp)
+    collider_data = [c.apply(qp) for c in self.colliders]
+    contact = [c[1] for c in collider_data]
+    dq_c = sum([c[0] for c in collider_data], zero)
     dq_j = sum([j.apply(qp) for j in self.joints], zero_q)
-    info = Info(dq_c, dq_j, zero)
+    info = Info(dq_c, dq_j, zero, *_get_contact_info(contact))
     return info
 
   def _spring_step(self, qp: QP, act: jp.ndarray) -> Tuple[QP, Info]:
@@ -329,19 +352,20 @@ class System:
       qp = self.integrator.update(qp, acc_p=dp_j + dp_a + dp_f)
 
       # apply velocity level updates for collisions
-      dp_c = sum([c.apply(qp) for c in self.colliders], zero)
+      collider_data = [c.apply(qp) for c in self.colliders]
+      dp_c = sum([c[0] for c in collider_data], zero)
+      contact = [c[1] for c in collider_data]
       qp = self.integrator.update(qp, vel_p=dp_c)
 
-      info = Info(info.contact + dp_c, info.joint + dp_j, info.actuator + dp_a)
+      info = Info(info.contact + dp_c, info.joint + dp_j, info.actuator + dp_a,
+                  *_get_contact_info(contact))
       return (qp, info), ()
 
     # update collider statistics for culling
     for c in self.colliders:
       c.cull.update(qp)
 
-    zero = P(jp.zeros((self.num_bodies, 3)), jp.zeros((self.num_bodies, 3)))
-    info = Info(contact=zero, joint=zero, actuator=zero)
-
+    info = self.zero_info
     (qp, info), _ = jp.scan(substep, (qp, info), (), self.config.substeps)
     return qp, info
 
@@ -349,7 +373,11 @@ class System:
     """Return info about a system state."""
     zero = P(jp.zeros((self.num_bodies, 3)), jp.zeros((self.num_bodies, 3)))
 
-    dp_c = sum([c.apply(qp) for c in self.colliders], zero)
+    for c in self.colliders:
+      c.cull.update(qp)
+    collider_data = [c.apply(qp) for c in self.colliders]
+    contact = [c[1] for c in collider_data]
+    dp_c = sum([c[0] for c in collider_data], zero)
     dp_j = sum([j.apply(qp) for j in self.joints], zero)
-    info = Info(dp_c, dp_j, zero)
+    info = Info(dp_c, dp_j, zero, *_get_contact_info(contact))
     return info

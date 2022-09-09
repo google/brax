@@ -89,8 +89,8 @@ flags.DEFINE_float('l2coeff', 0,
 flags.DEFINE_integer('min_replay_size', 8192,
                      'Minimal replay buffer size before the training starts.')
 flags.DEFINE_integer('max_replay_size', 1048576, 'Maximal replay buffer size.')
-flags.DEFINE_float(
-    'grad_updates_per_step', 1.0,
+flags.DEFINE_integer(
+    'grad_updates_per_step', 1,
     'How many SAC gradient updates to run per one step in the '
     'environment.')
 # PPO hps.

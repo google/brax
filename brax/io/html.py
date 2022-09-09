@@ -14,16 +14,13 @@
 
 """Exports a system config and trajectory as an html view."""
 
-import json
 import os
-from typing import List
+from typing import List, Optional
 
 import brax
 from brax.io.file import File
 from brax.io.file import MakeDirs
-from brax.io.json import JaxEncoder
-
-from google.protobuf import json_format
+from brax.io.json import dumps
 
 
 def save_html(path: str,
@@ -37,16 +34,14 @@ def save_html(path: str,
     fout.write(render(sys, qps))
 
 
-def render(sys: brax.System, qps: List[brax.QP], height: int = 480) -> str:
+def render(sys: brax.System,
+           qps: List[brax.QP],
+           height: int = 480,
+           info: Optional[brax.Info] = None) -> str:
   """Returns an HTML page that visualizes the system and qps trajectory."""
   if any((len(qp.pos.shape), len(qp.rot.shape)) != (2, 2) for qp in qps):
     raise RuntimeError('unexpected shape in qp.')
-  d = {
-      'config': json_format.MessageToDict(sys.config, True),
-      'pos': [qp.pos for qp in qps],
-      'rot': [qp.rot for qp in qps],
-  }
-  system = json.dumps(d, cls=JaxEncoder)
+  system = dumps(sys, qps, info)
   html = _HTML.replace('<!-- system json goes here -->', system)
   html = html.replace('<!-- viewer height goes here -->', f'{height}px')
   return html

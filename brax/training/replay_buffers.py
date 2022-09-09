@@ -48,7 +48,7 @@ class ReplayBuffer(abc.ABC, Generic[State, Sample]):
 
 
 @flax.struct.dataclass
-class _ReplayBufferState:
+class ReplayBufferState:
   """Contains data related to a replay buffer."""
   data: jnp.ndarray
   current_position: jnp.ndarray
@@ -56,14 +56,15 @@ class _ReplayBufferState:
   key: PRNGKey
 
 
-class UniformSamplingQueue(ReplayBuffer, Generic[Sample]):
-  """Replay buffer with uniform sampling.
+class QueueBase(ReplayBuffer[ReplayBufferState, Sample], Generic[Sample]):
+  """Base class for limited-size FIFO reply buffers.
 
-  * It behaves as a limited size queue (if buffer is full it removes the oldest
-    elements when new one is inserted).
-  * It supports batch insertion only (no single element)
-  * It performs uniform random sampling with replacement of a batch of size
-    `sample_batch_size`
+  Implements an `insert()` method which behaves like a limited-size queue.
+  I.e. it adds samples to the end of the queue and, if necessary, removes the
+  oldest samples form the queue in order to keep the maximum size within the
+  specified limit.
+
+  Derived classes must implement the `sample()` method.
   """
 
   def __init__(self, max_replay_size: int, dummy_data_sample: Sample,
@@ -79,15 +80,15 @@ class UniformSamplingQueue(ReplayBuffer, Generic[Sample]):
     self._data_dtype = dummy_flatten.dtype
     self._sample_batch_size = sample_batch_size
 
-  def init(self, key: PRNGKey) -> _ReplayBufferState:
-    return _ReplayBufferState(
+  def init(self, key: PRNGKey) -> ReplayBufferState:
+    return ReplayBufferState(
         data=jnp.zeros(self._data_shape, self._data_dtype),
         current_size=jnp.zeros((), jnp.int32),
         current_position=jnp.zeros((), jnp.int32),
         key=key)
 
-  def insert(self, buffer_state: _ReplayBufferState,
-             samples: Sample) -> _ReplayBufferState:
+  def insert(self, buffer_state: ReplayBufferState,
+             samples: Sample) -> ReplayBufferState:
     """Insert data in the replay buffer.
 
     Args:
@@ -124,15 +125,24 @@ class UniformSamplingQueue(ReplayBuffer, Generic[Sample]):
     position = (position + len(update)) % len(data)
     size = jnp.minimum(buffer_state.current_size + len(update), len(data))
 
-    return _ReplayBufferState(
-        data=data,
-        current_position=position,
-        current_size=size,
-        key=buffer_state.key)
+    return buffer_state.replace(
+        data=data, current_position=position, current_size=size)
 
   def sample(
-      self, buffer_state: _ReplayBufferState
-  ) -> Tuple[_ReplayBufferState, Sample]:
+      self,
+      buffer_state: ReplayBufferState) -> Tuple[ReplayBufferState, Sample]:
+    raise NotImplementedError(f'{self.__class__}.sample() is not implemented.')
+
+  def size(self, buffer_state: ReplayBufferState) -> int:
+    return buffer_state.current_size
+
+
+class Queue(QueueBase[Sample], Generic[Sample]):
+  """Implements a limited-size queue replay buffer."""
+
+  def sample(
+      self,
+      buffer_state: ReplayBufferState) -> Tuple[ReplayBufferState, Sample]:
     """Sample a batch of data.
 
     Args:
@@ -141,14 +151,63 @@ class UniformSamplingQueue(ReplayBuffer, Generic[Sample]):
     Returns:
       New buffer state and a batch with leading dimension 'sample_batch_size'.
     """
-    assert buffer_state.data.shape == self._data_shape
+    if buffer_state.data.shape != self._data_shape:
+      raise ValueError(
+          f'Data shape expected by the replay buffer ({self._data_shape}) does '
+          f'not match the shape of the buffer state ({buffer_state.data.shape})'
+      )
+
+    # Note that this may be out of bound, but the operations below would still
+    # work fine as they take this number modulo the buffer size.
+    first_element_idx = (
+        buffer_state.current_position - buffer_state.current_size)
+    idx = jnp.arange(self._sample_batch_size) + first_element_idx
+
+    flat_batch = jnp.take(buffer_state.data, idx, axis=0, mode='wrap')
+
+    # TODO: Raise an error instad of padding with zeros
+    #                    when the buffer does not contain enough elements.
+    # If the sample batch size is larger than the number of elements in the
+    # queue, `mask` would contain 0s for all elements that are past the current
+    # position. Otherwise, `mask` will be only ones.
+    # mask.shape = (self._sample_batch_size,)
+    mask = idx < buffer_state.current_position
+    # mask.shape = (self._sample_batch_size, 1)
+    mask = jnp.expand_dims(mask, axis=range(1, flat_batch.ndim))
+    flat_batch = flat_batch * mask
+
+    # The effective size of the sampled batch.
+    sample_size = jnp.minimum(self._sample_batch_size,
+                              buffer_state.current_size)
+    # Remove the sampled batch from the queue.
+    new_state = buffer_state.replace(current_size=buffer_state.current_size -
+                                     sample_size)
+    return new_state, self._unflatten_fn(flat_batch)
+
+
+class UniformSamplingQueue(QueueBase[Sample], Generic[Sample]):
+  """Implements an uniform sampling limited-size replay queue.
+
+  * It behaves as a limited size queue (if buffer is full it removes the oldest
+    elements when new one is inserted).
+  * It supports batch insertion only (no single element)
+  * It performs uniform random sampling with replacement of a batch of size
+    `sample_batch_size`
+  """
+
+  def sample(
+      self,
+      buffer_state: ReplayBufferState) -> Tuple[ReplayBufferState, Sample]:
+    if buffer_state.data.shape != self._data_shape:
+      raise ValueError(
+          f'Data shape expected by the replay buffer ({self._data_shape}) does '
+          f'not match the shape of the buffer state ({buffer_state.data.shape})'
+      )
+
     key, sample_key = jax.random.split(buffer_state.key)
     idx = jax.random.randint(
         sample_key, (self._sample_batch_size,),
-        minval=0,
-        maxval=buffer_state.current_size)
-    batch = jnp.take(buffer_state.data, idx, axis=0, mode='clip')
+        minval=buffer_state.current_position - buffer_state.current_size,
+        maxval=buffer_state.current_position)
+    batch = jnp.take(buffer_state.data, idx, axis=0, mode='wrap')
     return buffer_state.replace(key=key), self._unflatten_fn(batch)
-
-  def size(self, buffer_state: _ReplayBufferState) -> int:
-    return buffer_state.current_size

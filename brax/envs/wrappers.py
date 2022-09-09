@@ -14,6 +14,7 @@
 
 """Wrappers for Brax and Gym env."""
 
+import copy
 from typing import ClassVar, Dict, Optional
 
 from brax import jumpy as jp
@@ -58,9 +59,13 @@ class EpisodeWrapper(brax_env.Wrapper):
   def __init__(self, env: brax_env.Env, episode_length: int,
                action_repeat: int):
     super().__init__(env)
-    if hasattr(self.unwrapped, 'sys'):
-      self.unwrapped.sys.config.dt *= action_repeat
-      self.unwrapped.sys.config.substeps *= action_repeat
+    # For proper video speed.
+    # TODO: Fix dt book keeping with action repeats so there isn't
+    # async between sys and env steps.
+    if hasattr(env, 'sys'):
+      self.sys = copy.deepcopy(env.sys)
+      self.sys.config.dt *= action_repeat
+      self.sys.config.substeps *= action_repeat
     self.episode_length = episode_length
     self.action_repeat = action_repeat
 
@@ -71,7 +76,12 @@ class EpisodeWrapper(brax_env.Wrapper):
     return state
 
   def step(self, state: brax_env.State, action: jp.ndarray) -> brax_env.State:
-    state = self.env.step(state, action)
+    def f(state, _):
+      nstate = self.env.step(state, action)
+      return nstate, nstate.reward
+
+    state, rewards = jax.lax.scan(f, state, (), self.action_repeat)
+    state = state.replace(reward=jp.sum(rewards, axis=0))
     steps = state.info['steps'] + self.action_repeat
     one = jp.ones_like(state.done)
     zero = jp.zeros_like(state.done)
@@ -134,7 +144,8 @@ class EvalWrapper(brax_env.Wrapper):
     reset_state = self.env.reset(rng)
     reset_state.metrics['reward'] = reset_state.reward
     eval_metrics = EvalMetrics(
-        episode_metrics=jax.tree_util.tree_map(jp.zeros_like, reset_state.metrics),
+        episode_metrics=jax.tree_util.tree_map(jp.zeros_like,
+                                               reset_state.metrics),
         active_episodes=jp.ones_like(reset_state.reward),
         episode_steps=jp.zeros_like(reset_state.reward))
     reset_state.info['eval_metrics'] = eval_metrics
@@ -317,7 +328,7 @@ class DmEnvWrapper(dm_env.Environment):
       self._observation_spec = specs.BoundedArray((self._env.observation_size,),
                                                   minimum=-obs_high,
                                                   maximum=obs_high,
-                                                  dtype=float,
+                                                  dtype='float32',
                                                   name='observation')
 
     if hasattr(self._env, 'action_spec'):
@@ -327,12 +338,14 @@ class DmEnvWrapper(dm_env.Environment):
       self._action_spec = specs.BoundedArray((self._env.action_size,),
                                              minimum=-action_high,
                                              maximum=action_high,
-                                             dtype=float,
+                                             dtype='float32',
                                              name='action')
 
-    self._reward_spec = specs.Array(shape=(), dtype=float, name='reward')
+    self._reward_spec = specs.Array(shape=(), dtype='float32', name='reward')
     self._discount_spec = specs.BoundedArray(
-        shape=(), dtype=float, minimum=0., maximum=1., name='discount')
+        shape=(), dtype='float32', minimum=0., maximum=1., name='discount')
+    if hasattr(self._env, 'discount_spec'):
+      self._discount_spec = self._env.discount_spec()
 
     def reset(key):
       key1, key2 = jp.random_split(key)
@@ -353,7 +366,7 @@ class DmEnvWrapper(dm_env.Environment):
     return dm_env.TimeStep(
         step_type=dm_env.StepType.FIRST,
         reward=None,
-        discount=None,
+        discount=jp.float32(1.),
         observation=obs)
 
   def step(self, action):
@@ -362,7 +375,7 @@ class DmEnvWrapper(dm_env.Environment):
     return dm_env.TimeStep(
         step_type=dm_env.StepType.MID if not done else dm_env.StepType.LAST,
         reward=reward,
-        discount=None,
+        discount=jp.float32(1.),
         observation=obs)
 
   def seed(self, seed: int = 0):

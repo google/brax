@@ -83,6 +83,64 @@ class BoxTest(absltest.TestCase):
     self.assertLess(qp.pos[0, 0], 1.5)  # ... and keeps it from travelling 2m
 
 
+class BoxBoxTest(absltest.TestCase):
+  _CONFIG = """
+    dt: 0.5 substeps: 200 friction: 0.8 elasticity: 0.5
+    gravity { z: -9.8 }
+    bodies {
+      name: "box1" mass: 1
+      colliders { box { halfsize { x: 0.2 y: 0.2 z: 0.2 }}}
+      inertia { x: 1 y: 1 z: 1 }
+    }
+    bodies {
+      name: "box2" mass: 1
+      colliders { box { halfsize { x: 0.1 y: 0.1 z: 0.1 }}}
+      inertia { x: 1 y: 1 z: 1 }
+    }
+    bodies { name: "Ground" frozen: { all: true } colliders { plane {}}}
+    defaults {
+      qps { name: "box1" pos { x: 0 y: 1 z: .2 } rot {z: 0} }
+      qps { name: "box2" pos { x: 0.1 y: 1 z: .6 } rot {z: 45} }
+    }
+    dynamics_mode: "legacy_spring"
+  """
+
+  def test_box_box(self):
+    """A box falls onto another box."""
+    sys = brax.System(text_format.Parse(BoxBoxTest._CONFIG, brax.Config()))
+    qp = sys.default_qp()
+    qp, _ = sys.step(qp, jp.array([]))
+    # Boxes are stacked.
+    self.assertAlmostEqual(qp.pos[0, 2], 0.2, delta=0.03)
+    self.assertAlmostEqual(qp.pos[1, 2], 0.5, delta=0.03)
+    # x-y position of the top box is unchanged.
+    self.assertAlmostEqual(qp.pos[1, 0], 0.1, delta=0.03)
+    self.assertAlmostEqual(qp.pos[1, 1], 1.0, delta=0.03)
+
+
+class CollisionDebuggerTest(absltest.TestCase):
+  _CONFIG = """
+    dt: 0.01 substeps: 4 friction: 1
+    gravity { z: -9.8 }
+    bodies {
+      name: "box" mass: 1
+      colliders { box { halfsize { x: 0.5 y: 0.5 z: 0.5 }}}
+      inertia { x: 1 y: 1 z: 1 }
+    }
+    bodies { name: "Ground" frozen: { all: true } colliders { plane {}}}
+    defaults { qps { name: "box" pos { z: 0.49 }}}
+    dynamics_mode: "legacy_spring"
+  """
+
+  def test_system_runs_with_debug_on(self):
+    """Tests that the simulation runs with debug_contacts."""
+    sys = brax.System(
+        text_format.Parse(CollisionDebuggerTest._CONFIG, brax.Config()))
+    qp = sys.default_qp(0)
+    qp, info = sys.step(qp, jp.array([]))
+    self.assertGreater(info.contact_pos.shape[0], 0)
+
+
 class BoxCapsuleTest(absltest.TestCase):
 
   _CONFIG = """

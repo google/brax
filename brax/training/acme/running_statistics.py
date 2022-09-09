@@ -19,7 +19,7 @@ This file was taken from acme and modified to simplify dependencies:
 https://github.com/deepmind/acme/blob/master/acme/jax/running_statistics.py
 """
 
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Optional, Tuple
 
 from brax.training.acme import types
 from flax import struct
@@ -27,42 +27,26 @@ import jax
 import jax.numpy as jnp
 
 
-Path = Tuple[Any, ...]
-"""Path in a nested structure.
-
-  A path is a tuple of indices (normally strings for maps and integers for
-  arrays and tuples) that uniquely identifies a subtree in the nested structure.
-  See
-  https://tree.readthedocs.io/en/latest/api.html#tree.map_structure_with_path
-  for more details.
-"""
-
-
-def _is_prefix(a: Path, b: Path) -> bool:
-  """Returns whether `a` is a prefix of `b`."""
-  return b[:len(a)] == a
-
-
-def _zeros_like(nest: types.Nest, dtype=None) -> types.NestedArray:
+def _zeros_like(nest: types.Nest, dtype=None) -> types.Nest:
   return jax.tree_util.tree_map(lambda x: jnp.zeros(x.shape, dtype or x.dtype), nest)
 
 
-def _ones_like(nest: types.Nest, dtype=None) -> types.NestedArray:
+def _ones_like(nest: types.Nest, dtype=None) -> types.Nest:
   return jax.tree_util.tree_map(lambda x: jnp.ones(x.shape, dtype or x.dtype), nest)
 
 
 @struct.dataclass
 class NestedMeanStd:
   """A container for running statistics (mean, std) of possibly nested data."""
-  mean: types.NestedArray
-  std: types.NestedArray
+  mean: types.Nest
+  std: types.Nest
 
 
 @struct.dataclass
 class RunningStatisticsState(NestedMeanStd):
   """Full state of running statistics computation."""
-  count: Union[int, jnp.ndarray]
-  summed_variance: types.NestedArray
+  count: jnp.ndarray
+  summed_variance: types.Nest
 
 
 def init_state(nest: types.Nest) -> RunningStatisticsState:
@@ -70,7 +54,7 @@ def init_state(nest: types.Nest) -> RunningStatisticsState:
   dtype = jnp.float64 if jax.config.jax_enable_x64 else jnp.float32
 
   return RunningStatisticsState(
-      count=0.,
+      count=jnp.zeros((), dtype=dtype),
       mean=_zeros_like(nest, dtype=dtype),
       summed_variance=_zeros_like(nest, dtype=dtype),
       # Initialize with ones to make sure normalization works correctly
@@ -104,7 +88,7 @@ def _validate_batch_shapes(batch: types.NestedArray,
 
 
 def update(state: RunningStatisticsState,
-           batch: types.NestedArray,
+           batch: types.Nest,
            *,
            weights: Optional[jnp.ndarray] = None,
            std_min_value: float = 1e-6,
@@ -190,8 +174,11 @@ def update(state: RunningStatisticsState,
     return mean, summed_variance
 
   updated_stats = jax.tree_util.tree_map(_compute_node_statistics, state.mean,
-                               state.summed_variance, batch)
-  mean, summed_variance = updated_stats
+                                         state.summed_variance, batch)
+  # Extract `mean` and `summed_variance` from `updated_stats` nest.
+  mean = jax.tree_util.tree_map(lambda _, x: x[0], state.mean, updated_stats)
+  summed_variance = jax.tree_util.tree_map(lambda _, x: x[1], state.mean,
+                                           updated_stats)
 
   def compute_std(summed_variance: jnp.ndarray,
                   std: jnp.ndarray) -> jnp.ndarray:

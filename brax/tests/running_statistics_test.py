@@ -154,6 +154,21 @@ class RunningStatisticsTest(absltest.TestCase):
     denormalized = running_statistics.denormalize(normalized, state)
     self.assert_allclose(denormalized, x)
 
+  def test_nest(self):
+    state = running_statistics.init_state(
+        dict(dummy=specs.Array((5,), jnp.float32)))
+
+    x = dict(dummy=jnp.arange(10, dtype=jnp.float32).reshape(2, 5))
+
+    state = update_and_validate(state, x)
+    normalized = running_statistics.normalize(x, state)
+
+    mean = jnp.mean(normalized['dummy'], axis=0)
+    std = jnp.std(normalized['dummy'], axis=0)
+
+    self.assert_allclose(mean, jnp.zeros_like(mean))
+    self.assert_allclose(std, jnp.ones_like(std))
+
 
 if __name__ == '__main__':
   absltest.main()

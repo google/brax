@@ -244,8 +244,9 @@ def train(environment: envs.Env,
         key_actor,
         optimizer_state=training_state.policy_optimizer_state)
 
-    new_target_q_params = jax.tree_util.tree_map(lambda x, y: x * (1 - tau) + y * tau,
-                                       training_state.target_q_params, q_params)
+    new_target_q_params = jax.tree_util.tree_map(
+        lambda x, y: x * (1 - tau) + y * tau, training_state.target_q_params,
+        q_params)
 
     metrics = {
         'critic_loss': critic_loss,

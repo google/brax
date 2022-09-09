@@ -43,6 +43,9 @@ const selectMaterial = new THREE.MeshPhongMaterial({color: 0x2194ce});
 
 class Viewer {
   constructor(domElement, system) {
+    // Set +z as pointing up, instead of +y which is the default.
+    THREE.Object3D.DefaultUp.set(0, 0, 1);
+
     this.domElement = domElement;
     this.system = system;
     this.scene = createScene(system);
@@ -58,11 +61,11 @@ class Viewer {
 
     this.camera = new THREE.PerspectiveCamera(40, 1, 0.01, 100);
     if (system.config.frozen?.position?.z) {
-      this.camera.position.set(0, 1, 0);
+      this.camera.position.set(0, 0, 1);
     } else if (system.config.frozen?.position?.y) {
-      this.camera.position.set(0, 1, 2);
+      this.camera.position.set(0, 2, 1);
     } else {
-      this.camera.position.set(5, 2, 8);
+      this.camera.position.set(5, 8, 2);
     }
     this.camera.follow = true;
     this.camera.freezeAngle = false;
@@ -117,14 +120,14 @@ class Viewer {
     this.animator = new Animator(this);
     this.animator.load(this.trajectory, {});
 
-    /* add body insepctors */
+    /* add body inspectors */
     const bodiesFolder = this.gui.addFolder('Bodies');
     bodiesFolder.close();
 
     this.bodyFolders = {};
 
     for (let c of this.scene.children) {
-      if (!c.name) continue;
+      if (!c.name || c.name.startsWith('contact')) continue;
       const folder = bodiesFolder.addFolder(c.name);
       this.bodyFolders[c.name] = folder;
       folder.close();

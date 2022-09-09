@@ -27,7 +27,6 @@ import jax
 class APGTest(parameterized.TestCase):
   """Tests for APG module."""
 
-
   def testTrain(self):
     """Test APG with a simple env."""
     _, _, metrics = apg.train(
@@ -38,7 +37,7 @@ class APGTest(parameterized.TestCase):
         learning_rate=3e-3,
         normalize_observations=True,
     )
-    # TODO: can you make this 135?
+    # TODO: Can you make this 135?
     self.assertGreater(metrics['eval/episode_reward'], 50)
 
   @parameterized.parameters(True, False)
