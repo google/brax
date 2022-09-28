@@ -67,7 +67,8 @@ def train(environment: envs.Env,
           deterministic_eval: bool = False,
           network_factory: types.NetworkFactory[
               apg_networks.APGNetworks] = apg_networks.make_apg_networks,
-          progress_fn: Callable[[int, Metrics], None] = lambda *args: None):
+          progress_fn: Callable[[int, Metrics], None] = lambda *args: None,
+          eval_env: Optional[envs.Env] = None):
   """Direct trajectory optimization training."""
   xt = time.time()
 
@@ -90,9 +91,8 @@ def train(environment: envs.Env,
 
   assert num_envs % device_count == 0
   env = environment
-  env = wrappers.EpisodeWrapper(env, episode_length, action_repeat)
-  env = wrappers.VmapWrapper(env)
-  env = wrappers.AutoResetWrapper(env)
+  env = wrappers.wrap_for_training(
+      env, episode_length=episode_length, action_repeat=action_repeat)
 
   normalize = lambda x, y: x
   if normalize_observations:
@@ -204,8 +204,14 @@ def train(environment: envs.Env,
       training_state,
       jax.local_devices()[:local_devices_to_use])
 
+  if not eval_env:
+    eval_env = env
+  else:
+    eval_env = wrappers.wrap_for_training(
+        eval_env, episode_length=episode_length, action_repeat=action_repeat)
+
   evaluator = acting.Evaluator(
-      env,
+      eval_env,
       functools.partial(make_policy, deterministic=deterministic_eval),
       num_eval_envs=num_eval_envs,
       episode_length=episode_length,

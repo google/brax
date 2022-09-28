@@ -28,6 +28,33 @@ from gym.vector import utils
 import jax
 
 
+def wrap_for_training(env: brax_env.Env,
+                      episode_length: int = 1000,
+                      action_repeat: int = 1) -> brax_env.Wrapper:
+  """Common wrapper pattern for all training agents.
+
+  Args:
+    env: environment to be wrapped
+    episode_length: length of episode
+    action_repeat: how many repeated actions to take per step
+
+  Returns:
+    An environment that is wrapped with Episode and AutoReset wrappers.  If the
+    environment did not already have batch dimensions, it is additional Vmap
+    wrapped.
+  """
+  env = EpisodeWrapper(env, episode_length, action_repeat)
+  batched = False
+  if hasattr(env, 'custom_tree_in_axes'):
+    batch_indices, _ = jax.tree_util.tree_flatten(env.custom_tree_in_axes)
+    if 0 in batch_indices:
+      batched = True
+  if not batched:
+    env = VmapWrapper(env)
+  env = AutoResetWrapper(env)
+  return env
+
+
 class VectorWrapper(brax_env.Wrapper):
   """DEPRECATED Vectorizes Brax env. Use VmapWrapper instead."""
 
@@ -71,8 +98,8 @@ class EpisodeWrapper(brax_env.Wrapper):
 
   def reset(self, rng: jp.ndarray) -> brax_env.State:
     state = self.env.reset(rng)
-    state.info['steps'] = jp.zeros(())
-    state.info['truncation'] = jp.zeros(())
+    state.info['steps'] = jp.zeros(rng.shape[:-1])
+    state.info['truncation'] = jp.zeros(rng.shape[:-1])
     return state
 
   def step(self, state: brax_env.State, action: jp.ndarray) -> brax_env.State:
@@ -80,13 +107,14 @@ class EpisodeWrapper(brax_env.Wrapper):
       nstate = self.env.step(state, action)
       return nstate, nstate.reward
 
-    state, rewards = jax.lax.scan(f, state, (), self.action_repeat)
+    state, rewards = jp.scan(f, state, (), self.action_repeat)
     state = state.replace(reward=jp.sum(rewards, axis=0))
     steps = state.info['steps'] + self.action_repeat
     one = jp.ones_like(state.done)
     zero = jp.zeros_like(state.done)
-    done = jp.where(steps >= self.episode_length, one, state.done)
-    state.info['truncation'] = jp.where(steps >= self.episode_length,
+    episode_length = jp.array(self.episode_length, dtype=jp.int32)
+    done = jp.where(steps >= episode_length, one, state.done)
+    state.info['truncation'] = jp.where(steps >= episode_length,
                                         1 - state.done, zero)
     state.info['steps'] = steps
     return state.replace(done=done)

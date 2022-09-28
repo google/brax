@@ -66,6 +66,7 @@ def train(
     network_factory: types.NetworkFactory[
         ars_networks.ARSNetwork] = ars_networks.make_policy_network,
     progress_fn: Callable[[int, Metrics], None] = lambda *args: None,
+    eval_env: Optional[envs.Env] = None,
 ):
   """ARS."""
   top_directions = min(top_directions, number_of_directions)
@@ -88,9 +89,8 @@ def train(
 
   assert num_envs % local_devices_to_use == 0
   env = environment
-  env = wrappers.EpisodeWrapper(env, episode_length, action_repeat)
-  env = wrappers.VmapWrapper(env)
-  env = wrappers.AutoResetWrapper(env)
+  env = wrappers.wrap_for_training(
+      env, episode_length=episode_length, action_repeat=action_repeat)
 
   obs_size = env.observation_size
 
@@ -240,9 +240,15 @@ def train(
       policy_params=policy_params,
       num_env_steps=0)
 
+  if not eval_env:
+    eval_env = env
+  else:
+    eval_env = wrappers.wrap_for_training(
+        eval_env, episode_length=episode_length, action_repeat=action_repeat)
+
   # Evaluator function
   evaluator = acting.Evaluator(
-      env,
+      eval_env,
       make_policy,
       num_eval_envs=num_eval_envs,
       episode_length=episode_length,

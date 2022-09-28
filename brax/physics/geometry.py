@@ -212,6 +212,34 @@ class Plane(Collidable):
 
 
 @pytree.register
+class ClippedPlane(Collidable):
+  """A clipped plane with the normal pointing in a user specified direction."""
+
+  def  __init__(self, planes: List[config_pb2.Body], body: bodies.Body):
+    super().__init__(planes, body)
+    normals, xdir, ydir = [], [], []
+    halfsize_x, halfsize_y, pos = [], [], []
+    for p in planes:
+      col = p.colliders[0]
+      rot = math.euler_to_quat(vec_to_arr(col.rotation))
+      normal = math.rotate(jp.array([0., 0., 1.]), rot)
+      x = math.rotate(jp.array([1., 0., 0.]), rot)
+      y = math.rotate(jp.array([0., 1., 0.]), rot)
+      normals.append(normal)
+      xdir.append(x)
+      ydir.append(y)
+      halfsize_x.append(col.clipped_plane.halfsize_x)
+      halfsize_y.append(col.clipped_plane.halfsize_y)
+      pos.append(vec_to_arr(col.position))
+
+    self.normal = jp.array(normals)
+    self.x, self.y = jp.array(xdir), jp.array(ydir)
+    self.halfsize_x = jp.array(halfsize_x)
+    self.halfsize_y = jp.array(halfsize_y)
+    self.pos = jp.array(pos)
+
+
+@pytree.register
 class Capsule(Collidable):
   """A capsule with an ends pointing in the +z, -z directions."""
 

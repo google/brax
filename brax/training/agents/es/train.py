@@ -92,6 +92,7 @@ def train(
     network_factory: types.NetworkFactory[
         es_networks.ESNetworks] = es_networks.make_es_networks,
     progress_fn: Callable[[int, Metrics], None] = lambda *args: None,
+    eval_env: Optional[envs.Env] = None,
 ):
   """ES training (from https://arxiv.org/pdf/1703.03864.pdf)."""
   num_envs = population_size * 2  # noise + anti noise
@@ -116,9 +117,8 @@ def train(
 
   assert num_envs % local_devices_to_use == 0
   env = environment
-  env = wrappers.EpisodeWrapper(env, episode_length, action_repeat)
-  env = wrappers.VmapWrapper(env)
-  env = wrappers.AutoResetWrapper(env)
+  env = wrappers.wrap_for_training(
+      env, episode_length=episode_length, action_repeat=action_repeat)
 
   obs_size = env.observation_size
 
@@ -303,9 +303,15 @@ def train(
       policy_params=policy_params,
       num_env_steps=0)
 
+  if not eval_env:
+    eval_env = env
+  else:
+    eval_env = wrappers.wrap_for_training(
+        eval_env, episode_length=episode_length, action_repeat=action_repeat)
+
   # Evaluator function
   evaluator = acting.Evaluator(
-      env,
+      eval_env,
       functools.partial(make_policy, deterministic=deterministic_eval),
       num_eval_envs=num_eval_envs,
       episode_length=episode_length,

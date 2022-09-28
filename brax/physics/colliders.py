@@ -22,6 +22,7 @@ from typing import Any, Callable, List, Optional, Tuple
 from brax import jumpy as jp
 from brax import math
 from brax import pytree
+from brax.experimental.tracing import customize
 from brax.physics import bodies
 from brax.physics import config_pb2
 from brax.physics import geometry
@@ -649,7 +650,7 @@ class TwoWayCollider(Collider):
           ang=jp.cross(col_a.body.inertia * (contact.pos - qp_a.pos), p))
 
       dp_c = P(
-          vel=-p / col_a.body.mass,
+          vel=-p / col_b.body.mass,
           ang=jp.cross(col_b.body.inertia * (contact.pos - qp_b.pos), -p))
 
       return dp_p, dp_c
@@ -758,6 +759,43 @@ def capsule_plane(cap: geometry.CapsuleEnd, _: geometry.Plane, qp_a: QP,
   return geometry.Contact(pos, vel, normal, penetration)
 
 
+def capsule_clippedplane(cap: geometry.CapsuleEnd, plane: geometry.ClippedPlane,
+                         qp_a: QP, qp_b: QP) -> geometry.Contact:
+  """Returns contact between a capsule and a clipped plane."""
+
+  @jp.vmap
+  def sphere_clippedplane(end):
+    cap_end_world = qp_a.pos + math.rotate(end, qp_a.rot)
+    normal = math.rotate(plane.normal, qp_b.rot)
+    pos = cap_end_world - normal * cap.radius
+    vel = qp_a.vel + jp.cross(qp_a.ang, pos - qp_a.pos)
+    plane_pt = math.rotate(plane.pos, qp_b.rot) + qp_b.pos
+    penetration = jp.dot(plane_pt - pos, normal)
+
+    # Clip against side planes.
+    norm_x = math.rotate(plane.x, qp_b.rot)
+    norm_y = math.rotate(plane.y, qp_b.rot)
+    side_plane_pt = jp.array([
+        plane_pt + norm_x * plane.halfsize_x,
+        plane_pt - norm_x * plane.halfsize_x,
+        plane_pt + norm_y * plane.halfsize_y,
+        plane_pt - norm_y * plane.halfsize_y])
+    yn, xn = jp.cross(normal, norm_x), -jp.cross(normal, norm_y)
+    side_plane_norm = jp.array([xn, -xn, yn, -yn])
+    in_front_of_side_plane = jp.vmap(geometry.point_in_front_of_plane,
+                                     include=[True, True, False])(
+                                         side_plane_pt, side_plane_norm, pos)
+    penetration = jp.where(jp.any(in_front_of_side_plane),
+                           -jp.ones_like(penetration),
+                           penetration)
+
+    return pos, vel, normal, penetration
+
+  pos, vel, normal, penetration = sphere_clippedplane(cap.end)
+
+  return geometry.Contact(pos, vel, normal, penetration)
+
+
 def capsule_capsule(cap_a: geometry.Capsule, cap_b: geometry.Capsule, qp_a: QP,
                     qp_b: QP) -> geometry.Contact:
   """Returns contact between two capsules."""
@@ -804,7 +842,7 @@ def capsule_mesh(cap: geometry.Capsule, mesh: geometry.BaseMesh, qp_a: QP,
   return geometry.Contact(pos, vel, normal, penetration)
 
 
-def hull_hull(mesh_a: geometry.Box, mesh_b: geometry.Box, qp_a: QP,
+def hull_hull(mesh_a: geometry.BaseMesh, mesh_b: geometry.BaseMesh, qp_a: QP,
               qp_b: QP) -> geometry.Contact:
   """Gets hull-hull contacts."""
 
@@ -861,6 +899,8 @@ def get(config: config_pb2.Config, body: bodies.Body) -> List[Collider]:
           (geometry.Capsule,
            functools.partial(geometry.Mesh,
                              mesh_geoms=mesh_geoms), capsule_mesh),
+      ('capsule', 'clipped_plane'): (geometry.CapsuleEnd, geometry.ClippedPlane,
+                                     capsule_clippedplane),
       ('mesh', 'plane'):
           (functools.partial(geometry.PointMesh, mesh_geoms=mesh_geoms),
            geometry.Plane, mesh_plane),
@@ -874,6 +914,7 @@ def get(config: config_pb2.Config, body: bodies.Body) -> List[Collider]:
       if c.no_contact:
         continue
       if c.WhichOneof('type') == 'sphere':
+        c = c if isinstance(c, config_pb2.Collider) else c.msg
         nc = config_pb2.Collider()
         nc.CopyFrom(c)
         nc.capsule.radius = c.sphere.radius
@@ -943,10 +984,15 @@ def get(config: config_pb2.Config, body: bodies.Body) -> List[Collider]:
           for c, c_idx, b, arr in [(ca, ca_idx, ba, bodies_a),
                                    (cb, cb_idx, bb, bodies_b)]:
             nb = config_pb2.Body()
-            nb.CopyFrom(b)
+            bb = b if isinstance(b, config_pb2.Body) else b.msg
+            cc = c if isinstance(c, config_pb2.Collider) else c.msg
+            nb.CopyFrom(bb)
             nb.ClearField('colliders')
-            nb.colliders.append(c)
-            arr.append(nb)
+            nb.colliders.append(cc)
+            if not isinstance(b, config_pb2.Body):
+              arr.append(customize.TracedConfig(nb, custom_tree=b.custom_tree))
+            else:
+              arr.append(nb)
             if (b.name, c_idx) not in unique_check:
               unique_bodies.append(nb)
               unique_check[(b.name, c_idx)] = 1

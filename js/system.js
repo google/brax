@@ -141,6 +141,37 @@ function createHeightMap(heightMap, mat) {
   return group;
 }
 
+function createClippedPlane(halfsizeX, halfsizeY, mat) {
+  const bufferGeometry = new THREE.BufferGeometry();
+  const vertices = new Float32Array([
+    // 1st triangle.
+    -halfsizeX, -halfsizeY,  0.0,
+    halfsizeX, -halfsizeY,  0.0,
+    halfsizeX,  halfsizeY,  0.0,
+    // 2nd triangle.
+    halfsizeX,  halfsizeY,  0.0,
+    -halfsizeX,  halfsizeY,  0.0,
+    -halfsizeX, -halfsizeY,  0.0,
+    // 3rd triangle.
+    halfsizeX,  halfsizeY,  0.0,
+    halfsizeX, -halfsizeY,  0.0,
+    -halfsizeX, -halfsizeY,  0.0,
+    // 4th triangle.
+    -halfsizeX, -halfsizeY,  0.0,
+    -halfsizeX,  halfsizeY,  0.0,
+    halfsizeX,  halfsizeY,  0.0,
+  ]);
+  bufferGeometry.setAttribute(
+    'position',
+    new THREE.BufferAttribute(vertices, 3));
+  bufferGeometry.computeVertexNormals();
+
+  const mesh = new THREE.Mesh(bufferGeometry, mat);
+  mesh.castShadow = true;
+  mesh.baseMaterial = mesh.material;
+  return mesh;
+}
+
 function createMesh(mesh_config, geom, mat, debug) {
   const bufferGeometry = new THREE.BufferGeometry();
   const vertices = geom.vertices;
@@ -223,6 +254,12 @@ function createScene(system) {
         child = createMesh(
             collider.mesh, meshGeoms[collider.mesh.name], mat, system.debug);
         axisSize = getMeshAxisSize(meshGeoms[collider.mesh.name]);
+      } else if ('clippedPlane' in collider) {
+        child = createClippedPlane(
+          collider.clippedPlane.halfsizeX, collider.clippedPlane.halfsizeY,
+          mat);
+        axisSize = (collider.clippedPlane.halfsizeX +
+          collider.clippedPlane.halfsizeY) / 2.0;
       }
       if (collider.rotation) {
         const rot = new THREE.Vector3(

@@ -50,6 +50,11 @@ message Collider {
   }
   // An infinite plane with normal vector (0, 0, 1)
   message Plane {}
+  // A clipped plane.
+  message ClippedPlane {
+    float halfsize_x = 1;
+    float halfsize_y = 2;
+  }
   // A sphere
   message Sphere {
     float radius = 1;
@@ -93,6 +98,7 @@ message Collider {
     Capsule capsule = 6;
     HeightMap heightMap = 7;
     Mesh mesh = 9;
+    ClippedPlane clipped_plane = 13;
   }
   // Color of the collider in css notation (e.g. '#ff0000' or 'red')
   string color = 10;

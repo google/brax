@@ -82,7 +82,8 @@ def train(environment: envs.Env,
           network_factory: types.NetworkFactory[
               ppo_networks.PPONetworks] = ppo_networks.make_ppo_networks,
           progress_fn: Callable[[int, Metrics], None] = lambda *args: None,
-          normalize_advantage: bool = True):
+          normalize_advantage: bool = True,
+          eval_env: Optional[envs.Env] = None):
   """PPO training."""
   assert batch_size * num_minibatches % num_envs == 0
   xt = time.time()
@@ -110,9 +111,10 @@ def train(environment: envs.Env,
 
   assert num_envs % device_count == 0
   env = environment
-  env = wrappers.EpisodeWrapper(env, episode_length, action_repeat)
-  env = wrappers.VmapWrapper(env)
-  env = wrappers.AutoResetWrapper(env)
+
+  env = wrappers.wrap_for_training(
+      env, episode_length=episode_length, action_repeat=action_repeat)
+
   reset_fn = jax.jit(jax.vmap(env.reset))
 
   normalize = lambda x, y: x
@@ -197,7 +199,8 @@ def train(environment: envs.Env,
         length=batch_size * num_minibatches // num_envs)
     # Have leading dimentions (batch_size * num_minibatches, unroll_length)
     data = jax.tree_util.tree_map(lambda x: jnp.swapaxes(x, 1, 2), data)
-    data = jax.tree_util.tree_map(lambda x: jnp.reshape(x, (-1,) + x.shape[2:]), data)
+    data = jax.tree_util.tree_map(lambda x: jnp.reshape(x, (-1,) + x.shape[2:]),
+                                  data)
     assert data.discount.shape[1:] == (unroll_length,)
 
     # Update normalization params and normalize observations.
@@ -279,8 +282,14 @@ def train(environment: envs.Env,
                          (local_devices_to_use, -1) + key_envs.shape[1:])
   env_state = reset_fn(key_envs)
 
+  if not eval_env:
+    eval_env = env
+  else:
+    eval_env = wrappers.wrap_for_training(
+        eval_env, episode_length=episode_length, action_repeat=action_repeat)
+
   evaluator = acting.Evaluator(
-      env,
+      eval_env,
       functools.partial(make_policy, deterministic=deterministic_eval),
       num_eval_envs=num_eval_envs,
       episode_length=episode_length,

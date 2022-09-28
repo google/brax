@@ -15,11 +15,12 @@
 # pylint:disable=g-multiple-import
 """A brax system."""
 
-from typing import Optional, Sequence, Tuple
+from typing import Callable, Optional, Sequence, Tuple, Union
 
 from brax import jumpy as jp
 from brax import math
 from brax import pytree
+from brax.experimental.tracing.customize import TracedConfig
 from brax.physics import actuators
 from brax.physics import bodies
 from brax.physics import colliders
@@ -51,8 +52,14 @@ class System:
 
   def __init__(self,
                config: config_pb2.Config,
-               resource_paths: Optional[Sequence[str]] = None):
+               resource_paths: Optional[Sequence[str]] = None,
+               post_process_fn: Optional[Callable[[config_pb2.Config],
+                                                  Union[config_pb2.Config,
+                                                        TracedConfig]]] = None):
     config = validate_config(config, resource_paths=resource_paths)
+    if post_process_fn:
+      config = post_process_fn(config)
+
     self.config = config
     self.num_actuators = len(config.actuators)
     self.num_joint_dof = sum(len(j.angle_limit) for j in config.joints)

@@ -125,7 +125,8 @@ def train(environment: envs.Env,
           network_factory: types.NetworkFactory[
               sac_networks.SACNetworks] = sac_networks.make_sac_networks,
           progress_fn: Callable[[int, Metrics], None] = lambda *args: None,
-          checkpoint_logdir: Optional[str] = None):
+          checkpoint_logdir: Optional[str] = None,
+          eval_env: Optional[envs.Env] = None):
   """SAC training."""
   process_id = jax.process_index()
   local_devices_to_use = jax.local_device_count()
@@ -159,9 +160,8 @@ def train(environment: envs.Env,
 
   assert num_envs % device_count == 0
   env = environment
-  env = wrappers.EpisodeWrapper(env, episode_length, action_repeat)
-  env = wrappers.VmapWrapper(env)
-  env = wrappers.AutoResetWrapper(env)
+  env = wrappers.wrap_for_training(
+      env, episode_length=episode_length, action_repeat=action_repeat)
 
   obs_size = env.observation_size
   action_size = env.action_size
@@ -404,8 +404,14 @@ def train(environment: envs.Env,
   buffer_state = jax.pmap(replay_buffer.init)(
       jax.random.split(rb_key, local_devices_to_use))
 
+  if not eval_env:
+    eval_env = env
+  else:
+    eval_env = wrappers.wrap_for_training(
+        eval_env, episode_length=episode_length, action_repeat=action_repeat)
+
   evaluator = acting.Evaluator(
-      env,
+      eval_env,
       functools.partial(make_policy, deterministic=deterministic_eval),
       num_eval_envs=num_eval_envs,
       episode_length=episode_length,

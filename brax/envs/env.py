@@ -19,6 +19,7 @@ from typing import Any, Dict, Optional
 
 import brax
 from brax import jumpy as jp
+from brax import pytree
 from flax import struct
 
 from google.protobuf import text_format
@@ -35,13 +36,15 @@ class State:
   info: Dict[str, Any] = struct.field(default_factory=dict)
 
 
+@pytree.register
 class Env(abc.ABC):
   """API for driving a brax system for training and inference."""
 
-  def __init__(self, config: Optional[str]):
+
+  def __init__(self, config: Optional[str], *args, **kwargs):
     if config:
       config = text_format.Parse(config, brax.Config())
-      self.sys = brax.System(config)
+      self.sys = brax.System(config, *args, **kwargs)
 
   @abc.abstractmethod
   def reset(self, rng: jp.ndarray) -> State:
