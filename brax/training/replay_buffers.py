@@ -15,12 +15,15 @@
 """Replay buffers for Brax."""
 
 import abc
-from typing import Generic, Tuple, TypeVar
+from typing import Generic, Optional, Tuple, TypeVar
 
 from brax.training.types import PRNGKey
 import flax
 import jax
 from jax import flatten_util
+from jax.experimental import maps
+from jax.experimental import pjit
+from jax.interpreters import pxla
 import jax.numpy as jnp
 
 State = TypeVar('State')
@@ -165,7 +168,7 @@ class Queue(QueueBase[Sample], Generic[Sample]):
 
     flat_batch = jnp.take(buffer_state.data, idx, axis=0, mode='wrap')
 
-    # TODO: Raise an error instad of padding with zeros
+    # TODO: Raise an error instead of padding with zeros
     #                    when the buffer does not contain enough elements.
     # If the sample batch size is larger than the number of elements in the
     # queue, `mask` would contain 0s for all elements that are past the current
@@ -211,3 +214,143 @@ class UniformSamplingQueue(QueueBase[Sample], Generic[Sample]):
         maxval=buffer_state.current_position)
     batch = jnp.take(buffer_state.data, idx, axis=0, mode='wrap')
     return buffer_state.replace(key=key), self._unflatten_fn(batch)
+
+
+class PmapWrapper(ReplayBuffer[State, Sample]):
+  """Wrapper to distribute the buffer on multiple devices.
+
+  Each device stores a replay buffer 'buffer' such that no data moves from one
+  device to another.
+  The total capacity of this replay buffer is the number of devices multiplied
+  by the size of the wrapped buffer.
+  The sample size is also the number of devices multiplied by the size of the
+  wrapped buffer.
+  This should not be used inside a pmapped function:
+  You should just use the regular replay buffer in that case.
+  """
+
+  def __init__(self,
+               buffer: ReplayBuffer[State, Sample],
+               local_device_count: Optional[int] = None):
+    self._buffer = buffer
+    self._num_devices = local_device_count or jax.local_device_count()
+
+  def init(self, key: PRNGKey) -> State:
+    key = jax.random.fold_in(key, jax.process_index())
+    keys = jax.random.split(key, self._num_devices)
+    return jax.pmap(self._buffer.init)(keys)
+
+  # NB: In multi-hosts setups, every host is expected to give a different batch.
+  def insert(self, buffer_state: State, samples: Sample) -> State:
+    samples = jax.tree_util.tree_map(
+        lambda x: jnp.reshape(x, (-1, self._num_devices) + x.shape[1:]),
+        samples)
+    # This is to enforce we're gonna iterate on the start of the batch before
+    # the end of the batch.
+    samples = jax.tree_util.tree_map(lambda x: jnp.swapaxes(x, 0, 1), samples)
+    return jax.pmap(self._buffer.insert)(buffer_state, samples)
+
+  # NB: In multi-hosts setups, every host will get a different batch.
+  def sample(self, buffer_state: State) -> Tuple[State, Sample]:
+    buffer_state, samples = jax.pmap(self._buffer.sample)(buffer_state)
+    samples = jax.tree_util.tree_map(lambda x: jnp.swapaxes(x, 0, 1), samples)
+    samples = jax.tree_util.tree_map(
+        lambda x: jnp.reshape(x, (-1,) + x.shape[2:]), samples)
+    return buffer_state, samples
+
+  def size(self, buffer_state: State) -> int:
+    axis_name = 'x'
+
+    def psize(buffer_state):
+      return jax.lax.psum(self._buffer.size(buffer_state), axis_name=axis_name)
+
+    return jax.pmap(psize, axis_name=axis_name)(buffer_state)[0]
+
+
+# TODO: Make this multi-host and GDS compatible.
+class PjitWrapper(ReplayBuffer[State, Sample]):
+  """Wrapper to distribute the buffer on multiple devices with pjit.
+
+  Each device stores a part of the replay buffer depending on its index on axis
+  'axis_name'.
+  The total capacity of this replay buffer is the size of the mesh multiplied
+  by the size of the wrapped buffer.
+  The sample size is also the size of the mesh multiplied by the size of the
+  sample in the wrapped buffer. Sample batches from each shard are concatenated
+  (i.e. for random sampling, each shard will sample from the data they can see).
+  """
+
+  def __init__(self,
+               buffer: ReplayBuffer[State, Sample],
+               mesh: maps.Mesh,
+               axis_name: str,
+               batch_partion_spec: Optional[pxla.PartitionSpec] = None):
+    """Constructor.
+
+    Args:
+      buffer: The buffer to replicate.
+      mesh: Device mesh for pjitting context.
+      axis_name: The axis along which the replay buffer data should be
+        partitionned.
+      batch_partion_spec: PartitionSpec of the inserted/sampled batch.
+    """
+    self._buffer = buffer
+    self._mesh = mesh
+    num_devices = mesh.shape[axis_name]
+
+    def init(key: PRNGKey) -> State:
+      keys = jax.random.split(key, num_devices)
+      return jax.vmap(self._buffer.init)(keys)
+
+    def insert(buffer_state: State, samples: Sample) -> State:
+      samples = jax.tree_util.tree_map(
+          lambda x: jnp.reshape(x, (-1, num_devices) + x.shape[1:]), samples)
+      # This is to enforce we're gonna iterate on the start of the batch before
+      # the end of the batch.
+      samples = jax.tree_util.tree_map(lambda x: jnp.swapaxes(x, 0, 1), samples)
+      return jax.vmap(self._buffer.insert)(buffer_state, samples)
+
+    def sample(buffer_state: State) -> Tuple[State, Sample]:
+      buffer_state, samples = jax.vmap(self._buffer.sample)(buffer_state)
+      samples = jax.tree_util.tree_map(lambda x: jnp.swapaxes(x, 0, 1), samples)
+      samples = jax.tree_util.tree_map(
+          lambda x: jnp.reshape(x, (-1,) + x.shape[2:]), samples)
+      return buffer_state, samples
+
+    def size(buffer_state: State) -> int:
+      return jnp.sum(jax.vmap(self._buffer.size)(buffer_state))
+
+    partition_spec = pxla.PartitionSpec((axis_name,))
+    self._partitioned_init = pjit.pjit(
+        init, in_axis_resources=None, out_axis_resources=partition_spec)
+    self._partitioned_insert = pjit.pjit(
+        insert,
+        in_axis_resources=(partition_spec, batch_partion_spec),
+        out_axis_resources=partition_spec)
+    self._partitioned_sample = pjit.pjit(
+        sample,
+        in_axis_resources=partition_spec,
+        out_axis_resources=(partition_spec, batch_partion_spec))
+    # This will return the TOTAL size accross all devices.
+    self._partitioned_size = pjit.pjit(
+        size, in_axis_resources=partition_spec, out_axis_resources=None)
+
+  def init(self, key: PRNGKey) -> State:
+    """See base class."""
+    with self._mesh:
+      return self._partitioned_init(key)
+
+  def insert(self, buffer_state: State, samples: Sample) -> State:
+    """See base class."""
+    with self._mesh:
+      return self._partitioned_insert(buffer_state, samples)
+
+  def sample(self, buffer_state: State) -> Tuple[State, Sample]:
+    """See base class."""
+    with self._mesh:
+      return self._partitioned_sample(buffer_state)
+
+  def size(self, buffer_state: State) -> int:
+    """See base class. The total size (sum of all partitions) is returned."""
+    with self._mesh:
+      return self._partitioned_size(buffer_state)

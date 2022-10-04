@@ -114,7 +114,7 @@ def scan(f: Callable[[Carry, X], Tuple[Carry, Y]],
       xs_slice = [x[i] for x in xs_flat]
       carry, y = f(carry, jax.tree_util.tree_unflatten(xs_tree, xs_slice))
       ys.append(y)
-    stacked_y = jax.tree_util.tree_map(lambda *y: onp.vstack(y),
+    stacked_y = jax.tree_util.tree_map(lambda *y: onp.stack(y),
                                        *maybe_reversed(ys))
     return carry, stacked_y
 
