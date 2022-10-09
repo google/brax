@@ -27,7 +27,8 @@ def get_match_env_name(task_name: str, comp1: str, comp2):
   return f'match_{task_name}__{comp1}__{comp2}'
 
 
-def race(component: str, pos: Tuple[float] = (0, 0, 0), **component_params):
+def race(component: str, pos: Tuple[float, float, float] = (0, 0, 0),
+         **component_params):
   return dict(
       components=dict(
           agent1=dict(
