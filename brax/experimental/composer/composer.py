@@ -424,12 +424,15 @@ class ComponentEnv(Env):
 
 def get_action_shapes(sys):
   """Get action shapes."""
-  names = sim_utils.get_names(sys.config, 'actuator')
-  action_shapes = sim_utils.names2indices(
-      sys.config, names=names, datatype='actuator')[1]
+  actuator_names = sim_utils.get_names(sys.config, 'actuator')
+  actuator_action_shapes = sim_utils.names2indices(
+      sys.config, names=actuator_names, datatype='actuator')[1]
+  force_names = sim_utils.get_names(sys.config, 'force')
+  force_action_shapes = sim_utils.names2indices(
+      sys.config, names=force_names, datatype='force')[1]
   action_shapes = odict([
       (k, dict(start=v[0], end=v[-1] + 1, size=len(v), shape=(len(v),)))
-      for k, v in action_shapes.items()
+      for k, v in itertools.chain(actuator_action_shapes.items(), force_action_shapes.items())
   ])
   return action_shapes
 

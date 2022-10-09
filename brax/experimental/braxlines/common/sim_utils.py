@@ -55,6 +55,7 @@ def get_names(config, datatype: str = 'body'):
       'body': config.bodies,
       'joint': config.joints,
       'actuator': config.actuators,
+      'force': config.forces,
   }[datatype]
   return [b.name for b in objs]
 
@@ -116,9 +117,11 @@ def names2indices(config, names: List[str], datatype: str = 'body'):
       'body': config.bodies,
       'joint': config.joints,
       'actuator': config.actuators,
+      'force': config.forces,
   }[datatype]
   joint_counters = [0, 0, 0]
   actuator_counter = 0
+  force_counter = 0
   for i, b in enumerate(objs):
     if datatype == 'joint':
       if config.dynamics_mode == 'pbd':
@@ -131,21 +134,27 @@ def names2indices(config, names: List[str], datatype: str = 'body'):
         dof = _check_active_dofs(joint)
       else:
         dof = lim_to_dof[len(joint.angle_limit)]
+    elif datatype == 'force':
+      dof = 3
     if b.name in names:
       indices[b.name] = i
       if datatype in ('joint',):
         info[b.name] = dict(dof=dof, index=joint_counters[dof - 1])
       if datatype in ('actuator',):
         info[b.name] = tuple(range(actuator_counter, actuator_counter + dof))
+      if datatype in ('force',):
+        info[b.name] = tuple(range(force_counter, force_counter + dof))
     if datatype in ('joint',):
       joint_counters[dof - 1] += 1
     if datatype in ('actuator',):
       actuator_counter += dof
+    if datatype in ('force',):
+      force_counter += dof
 
   indices = [indices[n] for n in names]
   mask = jnp.array([b.name in names for b in objs])
 
-  if datatype in ('actuator', 'joint'):
+  if datatype in ('actuator', 'force', 'joint'):
     info = collections.OrderedDict([(k, info[k]) for k in names])
 
   return indices, info, mask
