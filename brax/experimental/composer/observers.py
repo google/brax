@@ -123,7 +123,7 @@ class SimObserver(Observer):
                sdname: str = '',
                comp_name: str = '',
                name: str = None,
-               indices: Tuple[int] = None,
+               indices: Tuple[int, ...] = None,
                **kwargs):
     sdname = component_editor.concat_name(sdname, comp_name)
     if not name:
