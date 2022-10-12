@@ -31,6 +31,7 @@ from brax.physics import integrators
 from brax.physics import joints
 from brax.physics import spring_joints
 from brax.physics.base import Info, P, Q, QP, validate_config, vec_to_arr
+from brax.physics.inertia import infer_inertia
 
 
 def _get_contact_info(
@@ -57,6 +58,7 @@ class System:
                                                   Union[config_pb2.Config,
                                                         TracedConfig]]] = None):
     config = validate_config(config, resource_paths=resource_paths)
+    config = infer_inertia(config)
     if post_process_fn:
       config = post_process_fn(config)
 

@@ -222,10 +222,6 @@ def validate_config(
   ]):
     config.frozen.all = True
   for b in config.bodies:
-    inertia = b.inertia
-    if inertia.x == 0 and inertia.y == 0 and inertia.z == 0:
-      b.inertia.x, b.inertia.y, b.inertia.z = 1, 1, 1
-
     b.frozen.position.x = b.frozen.position.x or frozen.position.x
     b.frozen.position.y = b.frozen.position.y or frozen.position.y
     b.frozen.position.z = b.frozen.position.z or frozen.position.z
