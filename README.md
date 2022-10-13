@@ -43,6 +43,12 @@ pip install --upgrade pip
 pip install brax
 ```
 
+You may also install from [Conda](https://docs.conda.io/en/latest/) or [Mamba](https://github.com/mamba-org/mamba):
+
+```
+conda install -c conda-forge brax  # s/conda/mamba for mamba
+```
+
 Alternatively, to install Brax from source, clone this repo, `cd` to it, and then:
 
 ```

@@ -23,7 +23,6 @@ import jax
 from jax import flatten_util
 from jax.experimental import maps
 from jax.experimental import pjit
-from jax.interpreters import pxla
 import jax.numpy as jnp
 
 State = TypeVar('State')
@@ -267,7 +266,6 @@ class PmapWrapper(ReplayBuffer[State, Sample]):
     return jax.pmap(psize, axis_name=axis_name)(buffer_state)[0]
 
 
-# TODO: Make this multi-host and GDS compatible.
 class PjitWrapper(ReplayBuffer[State, Sample]):
   """Wrapper to distribute the buffer on multiple devices with pjit.
 
@@ -284,7 +282,7 @@ class PjitWrapper(ReplayBuffer[State, Sample]):
                buffer: ReplayBuffer[State, Sample],
                mesh: maps.Mesh,
                axis_name: str,
-               batch_partion_spec: Optional[pxla.PartitionSpec] = None):
+               batch_partition_spec: Optional[pjit.PartitionSpec] = None):
     """Constructor.
 
     Args:
@@ -292,7 +290,7 @@ class PjitWrapper(ReplayBuffer[State, Sample]):
       mesh: Device mesh for pjitting context.
       axis_name: The axis along which the replay buffer data should be
         partitionned.
-      batch_partion_spec: PartitionSpec of the inserted/sampled batch.
+      batch_partition_spec: PartitionSpec of the inserted/sampled batch.
     """
     self._buffer = buffer
     self._mesh = mesh
@@ -320,17 +318,17 @@ class PjitWrapper(ReplayBuffer[State, Sample]):
     def size(buffer_state: State) -> int:
       return jnp.sum(jax.vmap(self._buffer.size)(buffer_state))
 
-    partition_spec = pxla.PartitionSpec((axis_name,))
+    partition_spec = pjit.PartitionSpec((axis_name,))
     self._partitioned_init = pjit.pjit(
         init, in_axis_resources=None, out_axis_resources=partition_spec)
     self._partitioned_insert = pjit.pjit(
         insert,
-        in_axis_resources=(partition_spec, batch_partion_spec),
+        in_axis_resources=(partition_spec, batch_partition_spec),
         out_axis_resources=partition_spec)
     self._partitioned_sample = pjit.pjit(
         sample,
         in_axis_resources=partition_spec,
-        out_axis_resources=(partition_spec, batch_partion_spec))
+        out_axis_resources=(partition_spec, batch_partition_spec))
     # This will return the TOTAL size accross all devices.
     self._partitioned_size = pjit.pjit(
         size, in_axis_resources=partition_spec, out_axis_resources=None)

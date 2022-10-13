@@ -999,12 +999,14 @@ def get(config: config_pb2.Config, body: bodies.Body) -> List[Collider]:
         if config.collider_cutoff and len(
             bodies_a) > config.collider_cutoff and (
                 type_a, type_b) in supported_near_neighbors:
+          # pytype: disable=wrong-arg-types
           col_a = cls_a(bodies_a, body)
           col_b = cls_b(bodies_b, body)
           cull = NearNeighbors(
               cls_a(unique_bodies, body), cls_b(unique_bodies, body),
               (col_a.body.idx, col_b.body.idx), config.collider_cutoff)
         else:
+          # pytype: disable=wrong-arg-types
           cull = Pairs(cls_a(bodies_a, body), cls_b(bodies_b, body))
         if b_is_frozen:
           collider = OneWayCollider(contact_fn, cull, config)
