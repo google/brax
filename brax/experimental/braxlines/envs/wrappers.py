@@ -23,4 +23,4 @@ class ExtraStepArgsWrapper(brax_env.Wrapper):
 
   def step(self, state: brax_env.State, action: jnp.ndarray, **kwargs):
     self.unwrapped.step = functools.partial(self.unwrapped.step, **kwargs)
-    return self.unwrapped.step(state, action)
+    return self.env.step(state, action)
