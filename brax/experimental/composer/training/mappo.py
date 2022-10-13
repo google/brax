@@ -83,7 +83,7 @@ def compute_ppo_loss(
     lambda_: float = 0.95,
     ppo_epsilon: float = 0.3,
     extra_loss_update_ratios: Optional[Dict[str, float]] = None,
-    extra_loss_fns: Optional[Dict[str, Callable[[ppo.StepData],
+    extra_loss_fns: Optional[Dict[str, Callable[[StepData],
                                                 jnp.ndarray]]] = None,
     action_shapes: Dict[str, Dict[str, Any]] = None,
     agent_name: str = None,
