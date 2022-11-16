@@ -19,6 +19,7 @@ from typing import Any, Dict, Union
 import warnings
 
 import jax
+import jax.dlpack as dlp
 from jax.interpreters.xla import DeviceArray
 
 try:
@@ -49,7 +50,7 @@ def torch_to_jax(value: Any) -> Any:
 def _tensor_to_jax(value: torch.Tensor) -> DeviceArray:
   """Converts a PyTorch Tensor into a Jax DeviceArray."""
   tensor = torch_dlpack.to_dlpack(value)
-  tensor = jax.dlpack.from_dlpack(tensor)
+  tensor = dlp.from_dlpack(tensor)
   return tensor
 
 
