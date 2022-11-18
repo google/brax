@@ -78,12 +78,11 @@ def train(environment: envs.Env,
           normalize_observations: bool = False,
           reward_scaling: float = 1.,
           clipping_epsilon: float = .3,
-          gae_lambda: float = .95,
+          lambda_: float = .95,
           deterministic_eval: bool = False,
           network_factory: types.NetworkFactory[
               shac_networks.SHACNetworks] = shac_networks.make_shac_networks,
           progress_fn: Callable[[int, Metrics], None] = lambda *args: None,
-          normalize_advantage: bool = True,
           eval_env: Optional[envs.Env] = None):
   """SHAC training."""
   assert batch_size * num_minibatches % num_envs == 0
@@ -135,9 +134,8 @@ def train(environment: envs.Env,
       entropy_cost=entropy_cost,
       discounting=discounting,
       reward_scaling=reward_scaling,
-      gae_lambda=gae_lambda,
-      clipping_epsilon=clipping_epsilon,
-      normalize_advantage=normalize_advantage)
+      lambda_=lambda_,
+      clipping_epsilon=clipping_epsilon)
 
   gradient_update_fn = gradients.gradient_update_fn(
       loss_fn, optimizer, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True)
@@ -282,6 +280,7 @@ def train(environment: envs.Env,
   key_envs = jnp.reshape(key_envs,
                          (local_devices_to_use, -1) + key_envs.shape[1:])
   env_state = reset_fn(key_envs)
+  print(f'env_state: {env_state.qp.pos.shape}')
 
   if not eval_env:
     eval_env = env

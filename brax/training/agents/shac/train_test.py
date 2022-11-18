@@ -32,20 +32,19 @@ class SHACTest(parameterized.TestCase):
     """Test SHAC with a simple env."""
     _, _, metrics = shac.train(
         envs.get_environment('fast'),
-        num_timesteps=2**15,
+        num_timesteps=2**18,
         episode_length=128,
         num_envs=64,
-        learning_rate=3e-4,
+        learning_rate=3e-5,
         entropy_cost=1e-2,
         discounting=0.95,
-        unroll_length=5,
+        unroll_length=10,
         batch_size=64,
         num_minibatches=8,
-        num_updates_per_batch=4,
+        num_updates_per_batch=1,
         normalize_observations=True,
         seed=2,
-        reward_scaling=10,
-        normalize_advantage=False)
+        reward_scaling=10)
     self.assertGreater(metrics['eval/episode_reward'], 135)
 
   @parameterized.parameters(True, False)
