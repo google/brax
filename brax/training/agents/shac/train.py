@@ -175,13 +175,13 @@ def train(environment: envs.Env,
                                   data)
     assert data.discount.shape[1:] == (unroll_length,)
 
-    loss = policy_loss_fn(policy_params, value_params,
+    loss, metrics = policy_loss_fn(policy_params, value_params,
         normalizer_params, data, key_loss)
 
-    return loss, (state, data)
+    return loss, (state, data, metrics)
 
   policy_gradient_update_fn = gradients.gradient_update_fn(
-      rollout_loss_fn, value_optimizer, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True)
+      rollout_loss_fn, policy_optimizer, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True)
 
   def minibatch_step(
       carry, data: types.Transition,
@@ -221,7 +221,7 @@ def train(environment: envs.Env,
     training_state, state, key = carry
     key_sgd, key_generate_unroll, new_key = jax.random.split(key, 3)
 
-    (_, (state, data)), policy_params, policy_optimizer_state = policy_gradient_update_fn(
+    (policy_loss, (state, data, policy_metrics)), policy_params, policy_optimizer_state = policy_gradient_update_fn(
         training_state.policy_params, training_state.value_params,
         training_state.normalizer_params, state, key_generate_unroll,
         optimizer_state=training_state.policy_optimizer_state)
@@ -232,18 +232,20 @@ def train(environment: envs.Env,
         data.observation,
         pmap_axis_name=_PMAP_AXIS_NAME)
 
-    (optimizer_state, params, _), metrics = jax.lax.scan(
+    (value_optimizer_state, value_params, _), metrics = jax.lax.scan(
         functools.partial(
             critic_sgd_step, data=data, normalizer_params=normalizer_params),
         (training_state.value_optimizer_state, training_state.value_params, key_sgd), (),
         length=num_updates_per_batch)
 
+    metrics.update(policy_metrics)
+
     new_training_state = TrainingState(
         policy_optimizer_state=policy_optimizer_state,
         policy_params=policy_params,
-        value_optimizer_state=optimizer_state,
-        value_params=params,
-        normalizer_params=normalizer_params,
+        value_optimizer_state=value_optimizer_state,
+        value_params=value_params,
+        normalizer_params=training_state.normalizer_params,
         env_steps=training_state.env_steps + env_step_per_training_step)
     return (new_training_state, state, new_key), metrics
 

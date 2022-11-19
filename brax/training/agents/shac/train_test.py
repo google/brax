@@ -31,12 +31,12 @@ class SHACTest(parameterized.TestCase):
   def testTrain(self):
     """Test SHAC with a simple env."""
     _, _, metrics = shac.train(
-        envs.get_environment('fast'),
-        num_timesteps=2**18,
+        envs.get_environment('fast_differentiable'),
+        num_timesteps=2**15,
         episode_length=128,
         num_envs=64,
-        actor_learning_rate=1e-3,
-        critic_learning_rate=1e-4,
+        actor_learning_rate=1.5e-2,
+        critic_learning_rate=1e-3,
         entropy_cost=1e-2,
         discounting=0.95,
         unroll_length=10,
