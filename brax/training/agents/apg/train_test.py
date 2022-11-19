@@ -30,15 +30,14 @@ class APGTest(parameterized.TestCase):
   def testTrain(self):
     """Test APG with a simple env."""
     _, _, metrics = apg.train(
-        envs.get_environment('fast'),
+        envs.get_environment('fast_differentiable'),
         episode_length=128,
         num_envs=64,
         num_evals=200,
         learning_rate=3e-3,
         normalize_observations=True,
     )
-    # TODO: Can you make this 135?
-    self.assertGreater(metrics['eval/episode_reward'], 50)
+    self.assertGreater(metrics['eval/episode_reward'], 135)
 
   @parameterized.parameters(True, False)
   def testNetworkEncoding(self, normalize_observations):
