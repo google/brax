@@ -53,6 +53,7 @@ class TrainingState:
   policy_params: Params
   value_optimizer_state: optax.OptState
   value_params: Params
+  target_value_params: Params
   normalizer_params: running_statistics.RunningStatisticsState
   env_steps: jnp.ndarray
 
@@ -80,6 +81,7 @@ def train(environment: envs.Env,
           num_evals: int = 1,
           normalize_observations: bool = False,
           reward_scaling: float = 1.,
+          tau: float = 0.005,  # this is 1-alpha from the original paper
           lambda_: float = .95,
           deterministic_eval: bool = False,
           network_factory: types.NetworkFactory[
@@ -222,7 +224,7 @@ def train(environment: envs.Env,
     key_sgd, key_generate_unroll, new_key = jax.random.split(key, 3)
 
     (policy_loss, (state, data, policy_metrics)), policy_params, policy_optimizer_state = policy_gradient_update_fn(
-        training_state.policy_params, training_state.value_params,
+        training_state.policy_params, training_state.target_value_params,
         training_state.normalizer_params, state, key_generate_unroll,
         optimizer_state=training_state.policy_optimizer_state)
 
@@ -238,6 +240,10 @@ def train(environment: envs.Env,
         (training_state.value_optimizer_state, training_state.value_params, key_sgd), (),
         length=num_updates_per_batch)
 
+    target_value_params = jax.tree_util.tree_map(
+        lambda x, y: x * (1 - tau) + y * tau, training_state.target_value_params,
+        value_params)
+
     metrics.update(policy_metrics)
 
     new_training_state = TrainingState(
@@ -245,6 +251,7 @@ def train(environment: envs.Env,
         policy_params=policy_params,
         value_optimizer_state=value_optimizer_state,
         value_params=value_params,
+        target_value_params=target_value_params,
         normalizer_params=training_state.normalizer_params,
         env_steps=training_state.env_steps + env_step_per_training_step)
     return (new_training_state, state, new_key), metrics
@@ -298,6 +305,7 @@ def train(environment: envs.Env,
       policy_params=policy_init_params,
       value_optimizer_state=value_optimizer.init(value_init_params),
       value_params=value_init_params,
+      target_value_params=value_init_params,
       normalizer_params=running_statistics.init_state(
           specs.Array((env.observation_size,), jnp.float32)),
       env_steps=0)
@@ -329,7 +337,7 @@ def train(environment: envs.Env,
   if process_id == 0 and num_evals > 1:
     metrics = evaluator.run_evaluation(
         _unpmap(
-            (training_state.normalizer_params, training_state.params.policy)),
+            (training_state.normalizer_params, training_state.policy_params)),
         training_metrics={})
     logging.info(metrics)
     progress_fn(0, metrics)
