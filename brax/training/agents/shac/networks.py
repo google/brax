@@ -44,15 +44,8 @@ def make_inference_fn(shac_networks: SHACNetworks):
       logits = policy_network.apply(*params, observations)
       if deterministic:
         return shac_networks.parametric_action_distribution.mode(logits), {}
-      raw_actions = parametric_action_distribution.sample_no_postprocessing(
-          logits, key_sample)
-      log_prob = parametric_action_distribution.log_prob(logits, raw_actions)
-      postprocessed_actions = parametric_action_distribution.postprocess(
-          raw_actions)
-      return postprocessed_actions, {
-          'log_prob': log_prob,
-          'raw_action': raw_actions
-      }
+      return shac_networks.parametric_action_distribution.sample(
+          logits, key_sample), {}
 
     return policy
 

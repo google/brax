@@ -49,8 +49,10 @@ _PMAP_AXIS_NAME = 'i'
 @flax.struct.dataclass
 class TrainingState:
   """Contains training state for the learner."""
-  optimizer_state: optax.OptState
-  params: shac_losses.SHACNetworkParams
+  policy_optimizer_state: optax.OptState
+  policy_params: Params
+  value_optimizer_state: optax.OptState
+  value_params: Params
   normalizer_params: running_statistics.RunningStatisticsState
   env_steps: jnp.ndarray
 
@@ -66,7 +68,8 @@ def train(environment: envs.Env,
           num_envs: int = 1,
           max_devices_per_host: Optional[int] = None,
           num_eval_envs: int = 128,
-          learning_rate: float = 1e-4,
+          actor_learning_rate: float = 1e-3,
+          critic_learning_rate: float = 1e-4,
           entropy_cost: float = 1e-4,
           discounting: float = 0.9,
           seed: int = 0,
@@ -126,7 +129,8 @@ def train(environment: envs.Env,
       preprocess_observations_fn=normalize)
   make_policy = shac_networks.make_inference_fn(shac_network)
 
-  optimizer = optax.adam(learning_rate=learning_rate)
+  policy_optimizer = optax.adam(learning_rate=actor_learning_rate)
+  value_optimizer = optax.adam(learning_rate=critic_learning_rate)
 
   loss_fn = functools.partial(
       shac_losses.compute_shac_loss,
@@ -138,7 +142,7 @@ def train(environment: envs.Env,
       clipping_epsilon=clipping_epsilon)
 
   gradient_update_fn = gradients.gradient_update_fn(
-      loss_fn, optimizer, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True)
+      loss_fn, value_optimizer, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True)
 
   def minibatch_step(
       carry, data: types.Transition,
@@ -154,7 +158,7 @@ def train(environment: envs.Env,
 
     return (optimizer_state, params, key), metrics
 
-  def sgd_step(carry, unused_t, data: types.Transition,
+  def critic_sgd_step(carry, unused_t, data: types.Transition,
                normalizer_params: running_statistics.RunningStatisticsState):
     optimizer_state, params, key = carry
     key, key_perm, key_grad = jax.random.split(key, 3)
@@ -178,8 +182,10 @@ def train(environment: envs.Env,
     training_state, state, key = carry
     key_sgd, key_generate_unroll, new_key = jax.random.split(key, 3)
 
+    # TODO: this needs to be wrapped in a differentiable function for the
+    # policy loss
     policy = make_policy(
-        (training_state.normalizer_params, training_state.params.policy))
+        (training_state.normalizer_params, training_state.policy_params))
 
     def f(carry, unused_t):
       current_state, current_key = carry
@@ -210,13 +216,15 @@ def train(environment: envs.Env,
 
     (optimizer_state, params, _), metrics = jax.lax.scan(
         functools.partial(
-            sgd_step, data=data, normalizer_params=normalizer_params),
-        (training_state.optimizer_state, training_state.params, key_sgd), (),
+            critic_sgd_step, data=data, normalizer_params=normalizer_params),
+        (training_state.value_optimizer_state, training_state.value_params, key_sgd), (),
         length=num_updates_per_batch)
 
     new_training_state = TrainingState(
-        optimizer_state=optimizer_state,
-        params=params,
+        policy_optimizer_state=training_state.policy_optimizer_state,
+        policy_params=training_state.policy_params,
+        value_optimizer_state=optimizer_state,
+        value_params=params,
         normalizer_params=normalizer_params,
         env_steps=training_state.env_steps + env_step_per_training_step)
     return (new_training_state, state, new_key), metrics
@@ -263,12 +271,13 @@ def train(environment: envs.Env,
   key_policy, key_value = jax.random.split(global_key)
   del global_key
 
-  init_params = shac_losses.SHACNetworkParams(
-      policy=shac_network.policy_network.init(key_policy),
-      value=shac_network.value_network.init(key_value))
+  policy_init_params = shac_network.policy_network.init(key_policy)
+  value_init_params = shac_network.value_network.init(key_value)
   training_state = TrainingState(
-      optimizer_state=optimizer.init(init_params),
-      params=init_params,
+      policy_optimizer_state=policy_optimizer.init(policy_init_params),
+      policy_params=policy_init_params,
+      value_optimizer_state=value_optimizer.init(value_init_params),
+      value_params=value_init_params,
       normalizer_params=running_statistics.init_state(
           specs.Array((env.observation_size,), jnp.float32)),
       env_steps=0)
@@ -322,7 +331,7 @@ def train(environment: envs.Env,
       # Run evals.
       metrics = evaluator.run_evaluation(
           _unpmap(
-              (training_state.normalizer_params, training_state.params.policy)),
+              (training_state.normalizer_params, training_state.policy_params)),
           training_metrics)
       logging.info(metrics)
       progress_fn(current_step, metrics)
@@ -334,7 +343,7 @@ def train(environment: envs.Env,
   # devices.
   pmap.assert_is_replicated(training_state)
   params = _unpmap(
-      (training_state.normalizer_params, training_state.params.policy))
+      (training_state.normalizer_params, training_state.policy_params))
   logging.info('total steps: %s', total_steps)
   pmap.synchronize_hosts()
   return (make_policy, params, metrics)
