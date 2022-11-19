@@ -82,6 +82,71 @@ def compute_policy_loss(truncation: jnp.ndarray,
   loss = -jnp.mean(acc) / horizon
   return loss
 
+def compute_shac_policy_loss(
+    policy_params: Params,
+    value_params: Params,
+    normalizer_params: Any,
+    data: types.Transition,
+    rng: jnp.ndarray,
+    shac_network: shac_networks.SHACNetworks,
+    entropy_cost: float = 1e-4,
+    discounting: float = 0.9,
+    reward_scaling: float = 1.0) -> Tuple[jnp.ndarray, types.Metrics]:
+  """Computes SHAC critic loss.
+
+  Args:
+    policy_params: Policy network parameters
+    value_params: Value network parameters,
+    normalizer_params: Parameters of the normalizer.
+    data: Transition that with leading dimension [B, T]. extra fields required
+      are ['state_extras']['truncation'] ['policy_extras']['raw_action']
+        ['policy_extras']['log_prob']
+    rng: Random key
+    shac_network: SHAC networks.
+    entropy_cost: entropy cost.
+    discounting: discounting,
+    reward_scaling: reward multiplier.
+
+  Returns:
+    A scalar loss
+  """
+  parametric_action_distribution = shac_network.parametric_action_distribution
+  policy_apply = shac_network.policy_network.apply
+  value_apply = shac_network.value_network.apply
+
+  # Put the time dimension first.
+  data = jax.tree_util.tree_map(lambda x: jnp.swapaxes(x, 0, 1), data)
+  policy_logits = policy_apply(normalizer_params, policy_params,
+                               data.observation)
+
+  baseline = value_apply(normalizer_params, value_params, data.observation)
+  bootstrap_value = value_apply(normalizer_params, value_params, data.next_observation[-1])
+
+  rewards = data.reward * reward_scaling
+  truncation = data.extras['state_extras']['truncation']
+  termination = (1 - data.discount) * (1 - truncation)
+
+  # compute policy loss
+  policy_loss = compute_policy_loss(
+      truncation=truncation,
+      termination=termination,
+      rewards=rewards,
+      values=baseline,
+      bootstrap_value=bootstrap_value,
+      discount=discounting)
+
+  #policy_loss = -jnp.mean(rewards)
+
+  # Entropy reward
+  entropy = jnp.mean(parametric_action_distribution.entropy(policy_logits, rng))
+  entropy_loss = entropy_cost * -entropy
+  #entropy_loss = 0
+
+  total_loss = policy_loss + entropy_loss
+
+  return total_loss
+
+
 
 def compute_target_values(truncation: jnp.ndarray,
                           termination: jnp.ndarray,
@@ -90,7 +155,7 @@ def compute_target_values(truncation: jnp.ndarray,
                           bootstrap_value: jnp.ndarray,
                           discount: float = 0.99,
                           lambda_: float = 0.95,
-                          td_lambda=False):
+                          td_lambda=True):
   """Calculates the target values.
 
   This implements Eq. 7 of 2204.07137
@@ -145,18 +210,16 @@ def compute_target_values(truncation: jnp.ndarray,
   return jax.lax.stop_gradient(vs)
 
 
-def compute_shac_loss(
+def compute_shac_critic_loss(
     params: Params,
     normalizer_params: Any,
     data: types.Transition,
     rng: jnp.ndarray,
     shac_network: shac_networks.SHACNetworks,
-    entropy_cost: float = 1e-4,
     discounting: float = 0.9,
     reward_scaling: float = 1.0,
-    lambda_: float = 0.95,
-    clipping_epsilon: float = 0.3) -> Tuple[jnp.ndarray, types.Metrics]:
-  """Computes SHAC loss.
+    lambda_: float = 0.95) -> Tuple[jnp.ndarray, types.Metrics]:
+  """Computes SHAC critic loss.
 
   Args:
     params: Value network parameters,
@@ -176,14 +239,10 @@ def compute_shac_loss(
   Returns:
     A tuple (loss, metrics)
   """
-  parametric_action_distribution = shac_network.parametric_action_distribution
-  #policy_apply = shac_network.policy_network.apply
+
   value_apply = shac_network.value_network.apply
 
-  # Put the time dimension first.
   data = jax.tree_util.tree_map(lambda x: jnp.swapaxes(x, 0, 1), data)
-  #policy_logits = policy_apply(normalizer_params, params.policy,
-  #                             data.observation)
 
   baseline = value_apply(normalizer_params, params, data.observation)
   bootstrap_value = value_apply(normalizer_params, params, data.next_observation[-1])
@@ -191,17 +250,6 @@ def compute_shac_loss(
   rewards = data.reward * reward_scaling
   truncation = data.extras['state_extras']['truncation']
   termination = (1 - data.discount) * (1 - truncation)
-
-  # compute policy loss
-  policy_loss = compute_policy_loss(
-      truncation=truncation,
-      termination=termination,
-      rewards=rewards,
-      values=baseline,
-      bootstrap_value=bootstrap_value,
-      discount=discounting)
-
-  policy_loss = -jnp.mean(rewards)
 
   vs = compute_target_values(
       truncation=truncation,
@@ -226,19 +274,14 @@ def compute_shac_loss(
   v_error = vs - baseline
   v_loss = jnp.mean(v_error * v_error) * 0.5 * 0.5
 
-  jax.debug.print("LOSS {loss} MEAN TARGET {targets} V_LOSS {v_loss} MEAN_REWARD {x} MEAN BOOTSTRAP {y}",
-                   loss=policy_loss, targets=jnp.mean(vs), v_loss=v_loss, x=jnp.mean(rewards),
-                   y=jnp.mean(bootstrap_value))
+  #jax.debug.print("LOSS {loss} MEAN TARGET {targets} V_LOSS {v_loss} MEAN_REWARD {x} MEAN BOOTSTRAP {y}",
+  #                 loss=policy_loss, targets=jnp.mean(vs), v_loss=v_loss, x=jnp.mean(rewards),
+  #                 y=jnp.mean(bootstrap_value))
 
-  # Entropy reward
-  #entropy = jnp.mean(parametric_action_distribution.entropy(policy_logits, rng))
-  #entropy_loss = entropy_cost * -entropy
-  entropy_loss = 0
-
-  total_loss = policy_loss #+ v_loss + entropy_loss
+  total_loss = v_loss
   return total_loss, {
       'total_loss': total_loss,
-      'policy_loss': policy_loss,
+      'policy_loss': 0,
       'v_loss': v_loss,
-      'entropy_loss': entropy_loss
+      'entropy_loss': 0
   }

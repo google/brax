@@ -80,7 +80,6 @@ def train(environment: envs.Env,
           num_evals: int = 1,
           normalize_observations: bool = False,
           reward_scaling: float = 1.,
-          clipping_epsilon: float = .3,
           lambda_: float = .95,
           deterministic_eval: bool = False,
           network_factory: types.NetworkFactory[
@@ -132,24 +131,64 @@ def train(environment: envs.Env,
   policy_optimizer = optax.adam(learning_rate=actor_learning_rate)
   value_optimizer = optax.adam(learning_rate=critic_learning_rate)
 
-  loss_fn = functools.partial(
-      shac_losses.compute_shac_loss,
+  value_loss_fn = functools.partial(
+      shac_losses.compute_shac_critic_loss,
+      shac_network=shac_network,
+      discounting=discounting,
+      reward_scaling=reward_scaling,
+      lambda_=lambda_)
+
+  value_gradient_update_fn = gradients.gradient_update_fn(
+      value_loss_fn, value_optimizer, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True)
+
+  policy_loss_fn = functools.partial(
+      shac_losses.compute_shac_policy_loss,
       shac_network=shac_network,
       entropy_cost=entropy_cost,
       discounting=discounting,
-      reward_scaling=reward_scaling,
-      lambda_=lambda_,
-      clipping_epsilon=clipping_epsilon)
+      reward_scaling=reward_scaling)
 
-  gradient_update_fn = gradients.gradient_update_fn(
-      loss_fn, value_optimizer, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True)
+  def rollout_loss_fn(policy_params, value_params, normalizer_params, state, key):
+    policy = make_policy((normalizer_params, policy_params))
+
+    key, key_loss = jax.random.split(key)
+
+    def f(carry, unused_t):
+      current_state, current_key = carry
+      current_key, next_key = jax.random.split(current_key)
+      next_state, data = acting.generate_unroll(
+          env,
+          current_state,
+          policy,
+          current_key,
+          unroll_length,
+          extra_fields=('truncation',))
+      return (next_state, next_key), data
+
+    (state, _), data = jax.lax.scan(
+        f, (state, key), (),
+        length=batch_size * num_minibatches // num_envs)
+
+    # Have leading dimentions (batch_size * num_minibatches, unroll_length)
+    data = jax.tree_util.tree_map(lambda x: jnp.swapaxes(x, 1, 2), data)
+    data = jax.tree_util.tree_map(lambda x: jnp.reshape(x, (-1,) + x.shape[2:]),
+                                  data)
+    assert data.discount.shape[1:] == (unroll_length,)
+
+    loss = policy_loss_fn(policy_params, value_params,
+        normalizer_params, data, key_loss)
+
+    return loss, (state, data)
+
+  policy_gradient_update_fn = gradients.gradient_update_fn(
+      rollout_loss_fn, value_optimizer, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True)
 
   def minibatch_step(
       carry, data: types.Transition,
       normalizer_params: running_statistics.RunningStatisticsState):
     optimizer_state, params, key = carry
     key, key_loss = jax.random.split(key)
-    (_, metrics), params, optimizer_state = gradient_update_fn(
+    (_, metrics), params, optimizer_state = value_gradient_update_fn(
         params,
         normalizer_params,
         data,
@@ -182,31 +221,10 @@ def train(environment: envs.Env,
     training_state, state, key = carry
     key_sgd, key_generate_unroll, new_key = jax.random.split(key, 3)
 
-    # TODO: this needs to be wrapped in a differentiable function for the
-    # policy loss
-    policy = make_policy(
-        (training_state.normalizer_params, training_state.policy_params))
-
-    def f(carry, unused_t):
-      current_state, current_key = carry
-      current_key, next_key = jax.random.split(current_key)
-      next_state, data = acting.generate_unroll(
-          env,
-          current_state,
-          policy,
-          current_key,
-          unroll_length,
-          extra_fields=('truncation',))
-      return (next_state, next_key), data
-
-    (state, _), data = jax.lax.scan(
-        f, (state, key_generate_unroll), (),
-        length=batch_size * num_minibatches // num_envs)
-    # Have leading dimentions (batch_size * num_minibatches, unroll_length)
-    data = jax.tree_util.tree_map(lambda x: jnp.swapaxes(x, 1, 2), data)
-    data = jax.tree_util.tree_map(lambda x: jnp.reshape(x, (-1,) + x.shape[2:]),
-                                  data)
-    assert data.discount.shape[1:] == (unroll_length,)
+    (_, (state, data)), policy_params, policy_optimizer_state = policy_gradient_update_fn(
+        training_state.policy_params, training_state.value_params,
+        training_state.normalizer_params, state, key_generate_unroll,
+        optimizer_state=training_state.policy_optimizer_state)
 
     # Update normalization params and normalize observations.
     normalizer_params = running_statistics.update(
@@ -221,8 +239,8 @@ def train(environment: envs.Env,
         length=num_updates_per_batch)
 
     new_training_state = TrainingState(
-        policy_optimizer_state=training_state.policy_optimizer_state,
-        policy_params=training_state.policy_params,
+        policy_optimizer_state=policy_optimizer_state,
+        policy_params=policy_params,
         value_optimizer_state=optimizer_state,
         value_params=params,
         normalizer_params=normalizer_params,
