@@ -89,7 +89,7 @@ def compute_shac_policy_loss(
   # jax implementation of https://github.com/NVlabs/DiffRL/blob/a4c0dd1696d3c3b885ce85a3cb64370b580cb913/algorithms/shac.py#L227
   def sum_step(carry, target_t):
     gam, rew_acc = carry
-    reward, v, termination = target_t
+    reward, termination = target_t
 
     # clean up gamma and rew_acc for done envs, otherwise update
     rew_acc = jnp.where(termination, 0, rew_acc + gam * reward)
@@ -100,7 +100,7 @@ def compute_shac_policy_loss(
   rew_acc = jnp.zeros_like(terminal_values)
   gam = jnp.ones_like(terminal_values)
   (gam, last_rew_acc), (gam_acc, rew_acc) = jax.lax.scan(sum_step, (gam, rew_acc),
-      (rewards, values, termination))
+      (rewards, termination))
 
   policy_loss = jnp.sum(-last_rew_acc - gam * terminal_values)
   # for trials that are truncated (i.e. hit the episode length) include reward for
@@ -118,7 +118,6 @@ def compute_shac_policy_loss(
   total_loss = policy_loss + entropy_loss
 
   return total_loss, {
-    'total_loss': total_loss,
     'policy_loss': policy_loss,
     'entropy_loss': entropy_loss
   }

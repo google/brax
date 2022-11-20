@@ -67,7 +67,8 @@ def make_shac_networks(
     .identity_observation_preprocessor,
     policy_hidden_layer_sizes: Sequence[int] = (32,) * 4,
     value_hidden_layer_sizes: Sequence[int] = (256,) * 5,
-    activation: networks.ActivationFn = linen.swish) -> SHACNetworks:
+    activation: networks.ActivationFn = linen.elu,
+    layer_norm: bool = True) -> SHACNetworks:
   """Make SHAC networks with preprocessor."""
   parametric_action_distribution = distribution.NormalTanhDistribution(
       event_size=action_size)
@@ -77,13 +78,13 @@ def make_shac_networks(
       preprocess_observations_fn=preprocess_observations_fn,
       hidden_layer_sizes=policy_hidden_layer_sizes,
       activation=activation,
-      layer_norm=True)
+      layer_norm=layer_norm)
   value_network = networks.make_value_network(
       observation_size,
       preprocess_observations_fn=preprocess_observations_fn,
       hidden_layer_sizes=value_hidden_layer_sizes,
       activation=activation,
-      layer_norm=True)
+      layer_norm=layer_norm)
 
   return SHACNetworks(
       policy_network=policy_network,

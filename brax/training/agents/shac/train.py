@@ -83,6 +83,7 @@ def train(environment: envs.Env,
           reward_scaling: float = 1.,
           tau: float = 0.005,  # this is 1-alpha from the original paper
           lambda_: float = .95,
+          td_lambda: bool = True,
           deterministic_eval: bool = False,
           network_factory: types.NetworkFactory[
               shac_networks.SHACNetworks] = shac_networks.make_shac_networks,
@@ -144,7 +145,8 @@ def train(environment: envs.Env,
       shac_network=shac_network,
       discounting=discounting,
       reward_scaling=reward_scaling,
-      lambda_=lambda_)
+      lambda_=lambda_,
+      td_lambda=td_lambda)
 
   value_gradient_update_fn = gradients.gradient_update_fn(
       value_loss_fn, value_optimizer, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True)
