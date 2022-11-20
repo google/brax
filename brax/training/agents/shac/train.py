@@ -130,8 +130,14 @@ def train(environment: envs.Env,
       preprocess_observations_fn=normalize)
   make_policy = shac_networks.make_inference_fn(shac_network)
 
-  policy_optimizer = optax.adam(learning_rate=actor_learning_rate)
-  value_optimizer = optax.adam(learning_rate=critic_learning_rate)
+  policy_optimizer = optax.chain(
+    optax.clip(1.0),
+    optax.adam(learning_rate=actor_learning_rate, b1=0.7, b2=0.95)
+  )
+  value_optimizer = optax.chain(
+    optax.clip(1.0),
+    optax.adam(learning_rate=critic_learning_rate, b1=0.7, b2=0.95)
+  )
 
   value_loss_fn = functools.partial(
       shac_losses.compute_shac_critic_loss,
@@ -184,6 +190,7 @@ def train(environment: envs.Env,
 
   policy_gradient_update_fn = gradients.gradient_update_fn(
       rollout_loss_fn, policy_optimizer, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True)
+  policy_gradient_update_fn = jax.jit(policy_gradient_update_fn)
 
   def minibatch_step(
       carry, data: types.Transition,
@@ -194,7 +201,6 @@ def train(environment: envs.Env,
         params,
         normalizer_params,
         data,
-        key_loss,
         optimizer_state=optimizer_state)
 
     return (optimizer_state, params, key), metrics
@@ -317,7 +323,6 @@ def train(environment: envs.Env,
   key_envs = jnp.reshape(key_envs,
                          (local_devices_to_use, -1) + key_envs.shape[1:])
   env_state = reset_fn(key_envs)
-  print(f'env_state: {env_state.qp.pos.shape}')
 
   if not eval_env:
     eval_env = env

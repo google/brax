@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Proximal policy optimization training.
+"""Short-Horizon Actor Critic.
 
-See: https://arxiv.org/pdf/1707.06347.pdf
+See: https://arxiv.org/pdf/2204.07137.pdf
 """
 
 from typing import Any, Tuple
@@ -46,8 +46,7 @@ def compute_shac_policy_loss(
     reward_scaling: float = 1.0) -> Tuple[jnp.ndarray, types.Metrics]:
   """Computes SHAC critic loss.
 
-  This implements Eq. 5 of 2204.07137. It needs to account for any episodes where
-  the episode terminates and include the terminal values appopriately.
+  This implements Eq. 5 of 2204.07137.
 
   Args:
     policy_params: Policy network parameters
@@ -129,7 +128,6 @@ def compute_shac_critic_loss(
     params: Params,
     normalizer_params: Any,
     data: types.Transition,
-    rng: jnp.ndarray,
     shac_network: shac_networks.SHACNetworks,
     discounting: float = 0.9,
     reward_scaling: float = 1.0,

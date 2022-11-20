@@ -76,12 +76,14 @@ def make_shac_networks(
       observation_size,
       preprocess_observations_fn=preprocess_observations_fn,
       hidden_layer_sizes=policy_hidden_layer_sizes,
-      activation=activation)
+      activation=activation,
+      layer_norm=True)
   value_network = networks.make_value_network(
       observation_size,
       preprocess_observations_fn=preprocess_observations_fn,
       hidden_layer_sizes=value_hidden_layer_sizes,
-      activation=activation)
+      activation=activation,
+      layer_norm=True)
 
   return SHACNetworks(
       policy_network=policy_network,
