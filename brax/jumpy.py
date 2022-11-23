@@ -475,7 +475,7 @@ def segment_sum(data: ndarray,
 
 
 def top_k(operand: ndarray, k: int) -> ndarray:
-  """Returns the oredered top k values and their indices along the last axis of operand."""
+  """Returns the ordered top k values and their indices along the last axis of operand."""
   if _which_np(operand) is jnp:
     return jax.lax.top_k(operand, k)
   else:
