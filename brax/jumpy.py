@@ -483,6 +483,7 @@ def top_k(operand: ndarray, k: int) -> ndarray:
     sorted_ind = top_ind[onp.argsort(-operand[top_ind])]
     return operand[sorted_ind], sorted_ind
 
+
 def stack(x: List[ndarray], axis=0) -> ndarray:
   """Join a sequence of arrays along a new axis."""
   return _which_np(*x).stack(x, axis=axis)

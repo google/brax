@@ -35,7 +35,7 @@ class TracedConfig:
     base = self.msg.__getattribute__(name)  # pytype:disable=attribute-error
 
     if name in self.custom_tree:
-      if isinstance(base, Iterable):
+      if isinstance(base, Iterable) and not isinstance(base, str):
         list_msg = []
         for o, b in zip(self.custom_tree[name], base):
           list_msg.append(TracedConfig(b, custom_tree=o))

@@ -165,6 +165,8 @@ def validate_config(
   if config.substeps == 0:
     config.substeps = 1
 
+  config.solver_scale_collide = config.solver_scale_collide or 1.0
+
   def find_dupes(objs):
     names = set()
     for obj in objs:

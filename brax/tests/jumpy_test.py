@@ -14,37 +14,27 @@
 
 """Tests for brax.jumpy."""
 
-import jax
-import numpy as np
 from absl.testing import absltest
-from jax import numpy as jnp
-
 from brax import jumpy as jp
+import jax
+from jax import numpy as jnp
+import numpy as np
 
 
 class ForiLoopTest(absltest.TestCase):
   """Tests jumpy.fori_loop when jitted and not jitted."""
-  WANT = 1. + 2. + 3.
-
-  def function(self) -> jp.ndarray:
-    def body_func(i, a):
-      return i + a
-
-    a = jp.fori_loop(2, 4, body_func, jp.array(1.))
-    return a
 
   def testForiLoopTest(self):
-    a = self.function()
+    a = jp.fori_loop(2, 4, lambda i, x: i + x, jp.array(1.))
     self.assertIsInstance(a, np.float_)
     self.assertEqual(a.shape, ())
-    self.assertAlmostEqual(a, np.array(self.WANT))
+    self.assertAlmostEqual(a, 1.0 + 2.0 + 3.0)
 
   def testForiLoopTestJit(self):
-    compiled = jax.jit(self.function)
-    a = compiled()
+    a = jax.jit(lambda: jp.fori_loop(2, 4, lambda i, x: i + x, jp.array(1.)))()
     self.assertIsInstance(a, jnp.ndarray)
     self.assertEqual(a.shape, ())
-    self.assertAlmostEqual(a, jnp.array(self.WANT))
+    self.assertAlmostEqual(a, 1.0 + 2.0 + 3.0)
 
 
 if __name__ == '__main__':

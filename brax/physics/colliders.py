@@ -109,7 +109,7 @@ class Collider(abc.ABC):
     self.baumgarte_erp = config.baumgarte_erp * config.substeps / config.dt
     self.h = config.dt / config.substeps
     self.substeps = config.substeps
-    self.collide_scale = config.solver_scale_collide or 1.0
+    self.collide_scale = config.solver_scale_collide
     # updates only applied if velocity differences exceed this threshold
     self.velocity_threshold = jp.norm(vec_to_arr(config.gravity)) * self.h * 4.0
 
@@ -767,6 +767,11 @@ def capsule_clippedplane(cap: geometry.CapsuleEnd, plane: geometry.ClippedPlane,
   def sphere_clippedplane(end):
     cap_end_world = qp_a.pos + math.rotate(end, qp_a.rot)
     normal = math.rotate(plane.normal, qp_b.rot)
+
+    # orient the normal s.t. it points at the CoM of the capsule
+    normal_dir = jp.where(qp_a.pos.dot(normal) > 0., 1, -1)
+    normal = normal * normal_dir
+
     pos = cap_end_world - normal * cap.radius
     vel = qp_a.vel + jp.cross(qp_a.ang, pos - qp_a.pos)
     plane_pt = math.rotate(plane.pos, qp_b.rot) + qp_b.pos
@@ -780,7 +785,8 @@ def capsule_clippedplane(cap: geometry.CapsuleEnd, plane: geometry.ClippedPlane,
         plane_pt - norm_x * plane.halfsize_x,
         plane_pt + norm_y * plane.halfsize_y,
         plane_pt - norm_y * plane.halfsize_y])
-    yn, xn = jp.cross(normal, norm_x), -jp.cross(normal, norm_y)
+    yn, xn = jp.cross(normal * normal_dir, norm_x), -jp.cross(
+        normal * normal_dir, norm_y)
     side_plane_norm = jp.array([xn, -xn, yn, -yn])
     in_front_of_side_plane = jp.vmap(geometry.point_in_front_of_plane,
                                      include=[True, True, False])(
