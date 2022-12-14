@@ -64,6 +64,10 @@ NAME_FIELDS = {
         'name',
         'joint',
     ),
+    'forces': (
+        'name',
+        'body',
+    ),
     'collide_include': (
         'first',
         'second',
