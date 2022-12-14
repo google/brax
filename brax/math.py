@@ -22,7 +22,7 @@ Vector3 = jp.ndarray
 Quaternion = jp.ndarray
 
 
-def rotate(vec: Vector3, quat: Quaternion):
+def rotate(vec: Vector3, quat: Quaternion) -> Vector3:
   """Rotates a vector vec by a unit quaternion quat.
 
   Args:
@@ -40,7 +40,7 @@ def rotate(vec: Vector3, quat: Quaternion):
   return r
 
 
-def inv_rotate(vec: Vector3, quat: Quaternion):
+def inv_rotate(vec: Vector3, quat: Quaternion) -> Vector3:
   """Rotates a vector by the inverse of a unit quaternion.
 
   Args:
@@ -53,7 +53,7 @@ def inv_rotate(vec: Vector3, quat: Quaternion):
   return rotate(vec, quat_inv(quat))
 
 
-def ang_to_quat(ang: Vector3):
+def ang_to_quat(ang: Vector3) -> Quaternion:
   """Converts angular velocity to a quaternion.
 
   Args:
@@ -170,7 +170,7 @@ def vec_quat_mul(u: Vector3, v: Quaternion) -> Quaternion:
   ])
 
 
-def quat_rot_axis(axis: Vector3, angle: jp.ndarray) -> Vector3:
+def quat_rot_axis(axis: Vector3, angle: jp.ndarray) -> Quaternion:
   """Provides a quaternion that describes rotating around axis v by angle.
 
   Args:
