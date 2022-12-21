@@ -42,7 +42,7 @@ def render_from_json(
   js_url = base_url
   if base_url is None:
     base_url = 'https://cdn.jsdelivr.net/gh/google/brax'
-    js_url = f'{base_url}@v{brax.__version__}/v2/visualizer/js/viewer.js'
+    js_url = f'{base_url}@v{brax.__version__}/brax/v2/visualizer/js/viewer.js'
 
   html = template.render(
       system_json=sys, height=height, js_url=js_url, colab=colab

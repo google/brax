@@ -2,13 +2,19 @@
 
 Welcome to a preview of **Brax v2**, a massive update full of new capabilities!
 
-Besides Brax remaining differentiable and blazingly fast, we have major upgrades
-that are really exciting:
+# Note on the `v2` module
 
-NOTE: Do not depend on the `v2` module in your own stable releases! This is a
-preview: the `v2` module is temporary. A future version bump of Brax will
-replace its API with the new one found in `v2` and the `v2` preview namespace will
-disappear. Users who want to stick with the old Brax should pin to v0.0.16.
+Do not depend on the `v2` module in your own stable releases! This is a preview:
+the `v2` module is temporary. A future version bump of Brax will replace its API
+with the new one found in `v2` and the `v2` preview namespace will disappear.
+Users who want to stick with the old Brax should pin to v0.0.16.
+
+# What's new?
+
+Besides Brax remaining differentiable and blazingly fast, we have major upgrades
+that are really exciting. For a summary of changes see the
+[v0.1.0](https://github.com/google/brax/releases/tag/v0.1.0) release notes, or
+take a look at a more in-depth review below:
 
 *   New physics backend that works in **generalized coordinates**:
     *   Simulator fidelity vastly improves in generalized coordinates compared
@@ -35,5 +41,5 @@ disappear. Users who want to stick with the old Brax should pin to v0.0.16.
 ## Quickstart:
 
 [Brax v2 Training](https://colab.research.google.com/github/google/brax/blob/main/notebooks/v2_training.ipynb)
-introduces the Brax v2 API, and shows how to train a policy with the `spring`
-backend, and then transfers a policy to the `generalized` backend.
+introduces the Brax v2 API, and shows how to train a policy with the spring and
+generalized backends.
