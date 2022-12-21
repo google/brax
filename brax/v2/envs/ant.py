@@ -192,7 +192,7 @@ class Ant(env.PipelineEnv):
 
     if backend == 'spring':
       sys = self.fix_spring_sys(sys)
-      n_frames = 50
+      n_frames = 10
     super().__init__(sys=sys, backend=backend, n_frames=n_frames, **kwargs)
 
     self._ctrl_cost_weight = ctrl_cost_weight
@@ -298,10 +298,11 @@ class Ant(env.PipelineEnv):
         )
     )
     link = sys.link.replace(constraint_limit_stiffness=jp.array([1_000.0] * 9))
-    link = link.replace(constraint_stiffness=jp.array([10_000.0] * 9))
-    link = link.replace(constraint_ang_damping=jp.array([20.0] * 9))
-    link = link.replace(constraint_damping=jp.array([80.0] * 9))
+    link = link.replace(constraint_stiffness=jp.array([4_000.0] * 9))
+    link = link.replace(constraint_ang_damping=jp.array([10.0] * 9))
+    link = link.replace(constraint_damping=jp.array([20.0] * 9))
     sys = sys.replace(link=link)
     sys = sys.replace(ang_damping=0.0)
-    sys = sys.replace(dt=0.001)
+    sys = sys.replace(dt=0.005)
+    sys = sys.replace(actuator=sys.actuator.replace(gear=jp.array(8 * [100.0])))
     return sys

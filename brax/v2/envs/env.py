@@ -72,6 +72,11 @@ class Env(abc.ABC):
 class PipelineEnv(Env):
   """API for driving a brax system for training and inference."""
 
+  __pytree_ignore__ = (
+      '_backend',
+      '_pipeline',
+  )
+
   def __init__(
       self, sys: base.System, backend: str = 'generalized', n_frames: int = 1
   ):
