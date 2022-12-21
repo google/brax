@@ -40,6 +40,6 @@ take a look at a more in-depth review below:
 
 ## Quickstart:
 
-[Brax v2 Training](https://colab.research.google.com/github/google/brax/blob/main/notebooks/v2_training.ipynb)
-introduces the Brax v2 API, and shows how to train a policy with the spring and
-generalized backends.
+[Brax v2 Training](https://colab.research.google.com/github/google/brax/blob/main/notebooks/Brax_v2_Training_Preview.ipynb)
+introduces the Brax v2 API, and shows how to train a policy with the
+generalized backend.
