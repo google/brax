@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <title>Brax visualizer</title>
+    <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico">
+  </head>
+
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+    }
+
+    #brax-viewer {
+    {%- if colab %}
+      height: {{height | default('480', true)}}px;
+      margin: 0;
+      padding: 0;
+    {%- else %}
+      height: {{height | default('100vh', true)}};
+      width: 100vw;
+      overflow: hidden;
+    {%- endif %}
+    }
+  </style>
+
+  <script type="application/javascript">
+  var system = {{ system_json }};
+  </script>
+
+  <body>
+
+    <div id="brax-viewer"></div>
+
+    <script type="module">
+      import {Viewer} from '{{ js_url }}';
+      const domElement = document.getElementById("brax-viewer");
+      var viewer = new Viewer(domElement, system);
+    </script>
+
+  </body>
+
+</html>

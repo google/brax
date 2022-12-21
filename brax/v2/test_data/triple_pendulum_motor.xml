@@ -1,0 +1,23 @@
+<mujoco model="pendulum">
+  <compiler inertiafromgeom="true"/>
+  <option gravity="0 0 -9.81" timestep="0.02"/>
+  <worldbody>
+    <body name="body1" pos="0 0 0">
+      <joint axis="1 0 0" name="hinge1" pos="0 0 0" type="hinge"/>
+      <geom name="sphere1" pos="0 0.5 0" size=".15" mass="1" type="sphere"/>
+      <body name="body2" pos="0 0.5 0">
+        <joint axis="1 0 0" name="hinge2" pos="0 0 0" type="hinge"/>
+        <geom name="sphere2" pos="0 0.5 0" size=".15" mass="1" type="sphere"/>
+        <body name="body3" pos="0 0.5 0">
+          <joint axis="1 0 0" name="hinge3" pos="0 0 0" type="hinge"/>
+          <geom name="sphere3" pos="0 0.5 0" size=".15" mass="1" type="sphere"/>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+  <actuator>
+    <motor ctrllimited="true" ctrlrange="-100.0 100.0" joint="hinge1" gear="150 0 0 0 0 0"/>
+    <motor ctrllimited="true" ctrlrange="-100.0 100.0" joint="hinge2" gear="150 0 0 0 0 0"/>
+    <motor ctrllimited="true" ctrlrange="-100.0 100.0" joint="hinge3" gear="150 0 0 0 0 0"/>
+  </actuator>
+</mujoco>

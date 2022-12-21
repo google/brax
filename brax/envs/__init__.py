@@ -18,7 +18,6 @@
 import functools
 from typing import Callable, Optional, Type, Union, overload
 
-import brax
 from brax.envs import acrobot
 from brax.envs import ant
 from brax.envs import fast

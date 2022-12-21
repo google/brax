@@ -1,0 +1,10 @@
+<mujoco model="pendulum">
+  <compiler inertiafromgeom="true"/>
+  <option gravity="0 0 -9.81" timestep="0.02"/>
+  <worldbody>
+    <body name="body1" pos="0 0 0">
+      <joint axis="1 0 0" name="hinge1" pos="0 0 0" type="hinge"/>
+      <geom name="sphere1" pos="0 0.5 0" size=".15" mass="1" type="sphere"/>
+    </body>
+  </worldbody>
+</mujoco>

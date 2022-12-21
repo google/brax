@@ -12,11 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Import top-level classes and functions here for encapsulation/clarity."""
+"""Imports for top-level geometry."""
 
-__version__ = '0.1.0'
-
-from brax.physics.base import Info
-from brax.physics.base import QP
-from brax.physics.config_pb2 import Config
-from brax.physics.system import System
+from brax.v2.geometry.contact import contact
