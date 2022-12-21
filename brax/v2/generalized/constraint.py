@@ -201,7 +201,7 @@ def force(
     pos: jp.ndarray,
     diag: jp.ndarray,
 ) -> jp.ndarray:
-  """Calculates forces in constraint frame.
+  """Calculates forces that satisfy joint, collision constraints.
 
   Args:
     sys: a brax system
@@ -213,7 +213,7 @@ def force(
     diag: approximate diagonal of A matrix
 
   Returns:
-    qf_constraint: delta joint velocity, already time-integrated
+    qf_constraint: (qd_size,) constraint force
   """
   if jac.shape[0] == 0:
     return jp.zeros_like(qd)
@@ -229,6 +229,7 @@ def force(
     residual = a @ x + b
     return jp.sum(0.5 * residual**2)
 
+  # profiling a physics step, most of the time is spent running this solver:
   pg = jaxopt.ProjectedGradient(
       objective,
       projection_non_negative,
@@ -237,6 +238,7 @@ def force(
       maxls=5,
   )
 
+  # solve and convert back to q coordinates
   qf_constraint = jac.T @ pg.run(jp.zeros_like(b)).params
 
   return qf_constraint
