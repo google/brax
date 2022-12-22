@@ -76,7 +76,8 @@ class UrdfTest(absltest.TestCase):
     self.assertEqual(config.joints[0].name, 'test_joint')
     self.assertEqual(len(config.actuators), 1)
     self.assertEqual(config.actuators[0].name, 'test_joint')
-
+    self.assertEqual(config.bodies[0].mass, 1.0)
+    self.assertEqual(config.bodies[1].mass, 2.0)
 
 if __name__ == '__main__':
   absltest.main()

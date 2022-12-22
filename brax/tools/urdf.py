@@ -199,6 +199,7 @@ class UrdfConverter(object):
       cur_offset: An optional positional offset for this node
     """
     colliders = self.links[node].findall('collision')
+    inertia = self.links[node].find('inertial')
     if fuse_to_parent:
       body = fuse_to_parent
     else:
@@ -253,8 +254,13 @@ class UrdfConverter(object):
 
       else:
         warnings.warn(f'No collider found on link {node}.')
-    # TODO: load real mass and inertia
-    body.mass += 1.
+    
+    if inertia.find("mass") is None:
+      body.mass += 1.
+    else:
+      body.mass = float(inertia.find("mass").get("value"))
+
+    # TODO: load inertia
     body.inertia.x, body.inertia.y, body.inertia.z = 1., 1., 1.
 
     if self.body_tree[node]['joints']:
