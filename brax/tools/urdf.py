@@ -131,7 +131,7 @@ def _construct_mesh(geom, pos, rot):
       position=_vec(pos))
 
 
-_joint_type_to_limit = {'revolute': 1, 'universal': 2, 'spherical': 3}
+_joint_type_to_limit = {'universal': 2, 'spherical': 3}
 
 
 class UrdfConverter(object):
@@ -301,11 +301,19 @@ class UrdfConverter(object):
           joint.angular_damping = 10.
           joint.reference_rotation.x, joint.reference_rotation.y, joint.reference_rotation.z = relative_rotation
 
+          limits = self.joints[j['joint']].find('limit')
+
           # TODO: Load joint limit metadata
           if joint_type in _joint_type_to_limit:
             num_limits = _joint_type_to_limit[joint_type]
             for _ in range(num_limits):
               joint.angle_limit.add()
+          elif joint_type == 'revolute':
+            lower = float(limits.get('lower'))
+            upper = float(limits.get('upper'))
+            angle_limit = joint.angle_limit.add()
+            angle_limit.min = lower
+            angle_limit.max = upper
 
           self.expand_node(
               j['child'], cur_quat=quaternions.qmult(rotation, cur_quat))
