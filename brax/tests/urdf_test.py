@@ -26,6 +26,8 @@ _TEST_XML = """
 		<dynamics damping="1.0" friction="0.0001" />
 		<origin rpy="1.57080 0.0 1.57080" xyz="0.1 0.2 -0.3" />
 		<axis xyz="1.00000 0.00000 0.00000" />
+    <limit effort="0" lower="0" upper="1" velocity="50"/>
+    <dynamics damping="1.0" friction="0.0001"/>
 	</joint>
   <link name="parent_link">
       <inertial>
@@ -74,9 +76,12 @@ class UrdfTest(absltest.TestCase):
     self.assertEqual(config.bodies[1].name, 'child_link')
     self.assertEqual(len(config.joints), 1)
     self.assertEqual(config.joints[0].name, 'test_joint')
+    self.assertEqual(config.joints[0].angle_limit[0].min, 0)
+    self.assertEqual(config.joints[0].angle_limit[0].max, 1)
     self.assertEqual(len(config.actuators), 1)
     self.assertEqual(config.actuators[0].name, 'test_joint')
-
+    self.assertEqual(config.bodies[0].mass, 1.0)
+    self.assertEqual(config.bodies[1].mass, 2.0)
 
 if __name__ == '__main__':
   absltest.main()
