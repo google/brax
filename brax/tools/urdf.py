@@ -254,11 +254,11 @@ class UrdfConverter(object):
 
       else:
         warnings.warn(f'No collider found on link {node}.')
-    
-    if inertia.find("mass") is None:
+
+    if inertia.find('mass') is None:
       body.mass += 1.
     else:
-      body.mass = float(inertia.find("mass").get("value"))
+      body.mass = float(inertia.find('mass').get('value'))
 
     # TODO: load inertia
     body.inertia.x, body.inertia.y, body.inertia.z = 1., 1., 1.

@@ -15,13 +15,14 @@
 # pylint:disable=g-multiple-import
 """Calculations for generating contacts."""
 
-from typing import Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple, TypeVar
 
 from brax.v2 import math
 from brax.v2.base import (
     Box,
     Capsule,
     Contact,
+    Convex,
     Geometry,
     Mesh,
     Plane,
@@ -34,6 +35,9 @@ from brax.v2.geometry import mesh as geom_mesh
 import jax
 from jax import numpy as jp
 from jax.tree_util import tree_map
+
+
+Geom = TypeVar('Geom', bound=Geometry)
 
 
 def _combine(
@@ -188,6 +192,61 @@ def _capsule_mesh(capsule: Capsule, mesh: Mesh) -> Contact:
   return capsule_face(face_vert, face_norm)
 
 
+def _convex_convex(convex_a: Convex, convex_b: Convex) -> Contact:
+  """Calculates contacts between two convex objects."""
+  normals_a = geom_mesh.get_face_norm(convex_a.vert, convex_a.face)
+  normals_b = geom_mesh.get_face_norm(convex_b.vert, convex_b.face)
+  faces_a = jp.take(convex_a.vert, convex_a.face, axis=0)
+  faces_b = jp.take(convex_b.vert, convex_b.face, axis=0)
+
+  def transform_faces(convex, faces, normals):
+    faces = convex.transform.pos + jax.vmap(math.rotate, in_axes=[0, None])(
+        faces, convex.transform.rot
+    )
+    normals = math.rotate(normals, convex.transform.rot)
+    return faces, normals
+
+  v_transform_faces = jax.vmap(transform_faces, in_axes=[None, 0, 0])
+  faces_a, normals_a = v_transform_faces(convex_a, faces_a, normals_a)
+  faces_b, normals_b = v_transform_faces(convex_b, faces_b, normals_b)
+
+  def transform_verts(convex, vertices):
+    vertices = convex.transform.pos + math.rotate(
+        vertices, convex.transform.rot
+    )
+    return vertices
+
+  v_transform_verts = jax.vmap(transform_verts, in_axes=[None, 0])
+  vertices_a = v_transform_verts(convex_a, convex_a.vert)
+  vertices_b = v_transform_verts(convex_b, convex_b.vert)
+
+  unique_edges_a = jp.take(vertices_a, convex_a.unique_edge, axis=0)
+  unique_edges_b = jp.take(vertices_b, convex_b.unique_edge, axis=0)
+
+  c = geom_math.sat_hull_hull(
+      faces_a,
+      faces_b,
+      vertices_a,
+      vertices_b,
+      normals_a,
+      normals_b,
+      unique_edges_a,
+      unique_edges_b,
+  )
+  friction, elasticity, link_idx = jax.tree_map(
+      lambda x: jp.repeat(x, 4), _combine(convex_a, convex_b)
+  )
+
+  return Contact(
+      c.pos,
+      c.normal,
+      c.penetration,
+      friction,
+      elasticity,
+      link_idx,
+  )
+
+
 def _mesh_plane(mesh: Mesh, plane: Plane) -> Contact:
   """Calculates contacts between a mesh and a plane."""
 
@@ -205,12 +264,43 @@ _TYPE_FUN = {
     (Sphere, Plane): jax.vmap(_sphere_plane),
     (Sphere, Sphere): jax.vmap(_sphere_sphere),
     (Sphere, Capsule): jax.vmap(_sphere_capsule),
+    (Sphere, Box): jax.vmap(_sphere_mesh),
     (Sphere, Mesh): jax.vmap(_sphere_mesh),
     (Capsule, Plane): jax.vmap(_capsule_plane),
     (Capsule, Capsule): jax.vmap(_capsule_capsule),
+    (Capsule, Box): jax.vmap(_capsule_mesh),
     (Capsule, Mesh): jax.vmap(_capsule_mesh),
+    (Convex, Convex): jax.vmap(_convex_convex),
     (Mesh, Plane): jax.vmap(_mesh_plane),
 }
+
+
+def _geom_pairs(
+    sys, x
+) -> List[Tuple[Optional[Callable[[Geom, Geom], Any]], Geom, Geom]]:
+  """Transforms geometries and gets contact functions to apply to each pair."""
+  geom_pairs = []
+  for geom_a, geom_b in sys.contacts:
+    # check both type signatures: a, b <> b, a
+    fun = _TYPE_FUN.get((type(geom_a), type(geom_b)))
+    if fun is None:
+      fun = _TYPE_FUN.get((type(geom_b), type(geom_a)))
+      if fun is None:
+        raise RuntimeError(
+            f'unrecognized collider pair: {type(geom_a)}, {type(geom_b)}'
+        )
+      geom_a, geom_b = geom_b, geom_a
+
+    tx_a = x.take(geom_a.link_idx).vmap().do(geom_a.transform)
+    geom_a = geom_a.replace(transform=tx_a)
+    # OK for geom b to have no parent links, e.g. static terrain
+    if geom_b.link_idx is not None:
+      tx_b = x.take(geom_b.link_idx).vmap().do(geom_b.transform)
+      geom_b = geom_b.replace(transform=tx_b)
+
+    geom_pairs.append((fun, geom_a, geom_b))  # type: ignore
+
+  return geom_pairs
 
 
 def contact(sys: System, x: Transform) -> Optional[Contact]:
@@ -229,28 +319,7 @@ def contact(sys: System, x: Transform) -> Optional[Contact]:
 
   contacts = []
 
-  for geom_a, geom_b in sys.contacts:
-    # convert Box geometry to Mesh
-    geom_a = geom_mesh.box(geom_a) if isinstance(geom_a, Box) else geom_a
-    geom_b = geom_mesh.box(geom_b) if isinstance(geom_b, Box) else geom_b
-
-    # check both type signatures: a, b <> b, a
-    fun = _TYPE_FUN.get((type(geom_a), type(geom_b)))
-    if fun is None:
-      fun = _TYPE_FUN.get((type(geom_b), type(geom_a)))
-      if fun is None:
-        raise RuntimeError(
-            f'unrecognized collider pair: {type(geom_a)}, {type(geom_b)}'
-        )
-      geom_a, geom_b = geom_b, geom_a
-
-    tx_a = x.take(geom_a.link_idx).vmap().do(geom_a.transform)
-    geom_a = geom_a.replace(transform=tx_a)
-    # OK for geom b to have no parent links, e.g. static terrain
-    if geom_b.link_idx is not None:
-      tx_b = x.take(geom_b.link_idx).vmap().do(geom_b.transform)
-      geom_b = geom_b.replace(transform=tx_b)
-
+  for fun, geom_a, geom_b in _geom_pairs(sys, x):
     c = fun(geom_a, geom_b)  # type: ignore
     c = tree_map(jp.concatenate, c)
     contacts.append(c)

@@ -18,18 +18,18 @@
 from typing import List, Optional, Union
 
 import brax
-from brax.v2.base import System, Transform
+from brax.v2.base import State, System
 from brax.v2.io import json
 from etils import epath
 import jinja2
 
 
-def save(path: str, sys: System, xs: List[Transform]):
-  """Saves trajectory as an HTML file."""
+def save(path: str, sys: System, states: List[State]):
+  """Saves trajectory as an HTML text file."""
   path = epath.Path(path)
   if not path.parent.exists():
     path.parent.mkdir(parents=True)
-  path.write_text(render(sys, xs))
+  path.write_text(render(sys, states))
 
 
 def render_from_json(
@@ -52,16 +52,16 @@ def render_from_json(
 
 def render(
     sys: System,
-    xs: List[Transform],
+    states: List[State],
     height: Union[int, str] = 480,
     colab: bool = True,
     base_url: Optional[str] = None,
 ) -> str:
-  """Returns an HTML string that visualizes the brax system and trajectory.
+  """Returns an HTML string for the brax system and trajectory.
 
   Args:
     sys: brax System object
-    xs: world coordinates to render
+    states: list of system states to render
     height: the height of the render window
     colab: whether to use css styles for colab
     base_url: the base url for serving the visualizer files. By default, a CDN
@@ -70,4 +70,4 @@ def render(
   Returns:
     string containing HTML for the brax visualizer
   """
-  return render_from_json(json.dumps(sys, xs), height, colab, base_url)
+  return render_from_json(json.dumps(sys, states), height, colab, base_url)

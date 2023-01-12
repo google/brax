@@ -124,9 +124,9 @@ class MjcfTest(absltest.TestCase):
     self.assertIsNone(plane.link_idx)
 
   def test_load_mesh_and_box(self):
-    sys = test_utils.load_fixture('ur5e/robot.xml')
+    sys = test_utils.load_fixture('convex_convex.xml')
     n_meshes = sum(isinstance(g, Mesh) for g in sys.geoms)
-    self.assertEqual(n_meshes, 14)
+    self.assertEqual(n_meshes, 3)
     n_boxes = sum(isinstance(g, Box) for g in sys.geoms)
     self.assertEqual(n_boxes, 1)
 

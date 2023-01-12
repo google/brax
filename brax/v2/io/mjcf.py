@@ -16,7 +16,7 @@
 """Function to load MuJoCo mjcf format to Brax system."""
 
 import itertools
-from typing import Dict, Tuple, Union
+from typing import Dict, List, Tuple, TypeVar, Union
 import warnings
 from xml.etree import ElementTree
 
@@ -24,7 +24,9 @@ from brax.v2.base import (
     Actuator,
     Box,
     Capsule,
+    Convex,
     DoF,
+    Geometry,
     Inertia,
     Link,
     Mesh,
@@ -34,11 +36,15 @@ from brax.v2.base import (
     System,
     Transform,
 )
+from brax.v2.geometry import mesh as geom_mesh
 from etils import epath
 from jax import numpy as jp
 from jax.tree_util import tree_map
 import mujoco
 import numpy as np
+
+
+Geom = TypeVar('Geom', bound=Geometry)
 
 
 # map from mujoco geom_type to brax geometry string
@@ -70,7 +76,10 @@ _COLLIDABLES = [
     ((Capsule, False), (Box, False)),
     ((Capsule, False), (Mesh, False)),
     ((Box, False), (Plane, True)),
+    ((Box, False), (Box, False)),
+    ((Box, False), (Mesh, False)),
     ((Mesh, False), (Plane, True)),
+    ((Mesh, False), (Mesh, False)),
 ]
 
 
@@ -110,7 +119,8 @@ def _find_assets(
   meshdir = meshdir or _get_meshdir(elem)
   fname = elem.attrib.get('file') or elem.attrib.get('filename')
   if fname:
-    assets[fname] = (path.parent / (meshdir or '') / fname).read_bytes()
+    dirname = path if path.is_dir() else path.parent
+    assets[fname] = (dirname / (meshdir or '') / fname).read_bytes()
 
   for child in list(elem):
     assets.update(_find_assets(child, path, meshdir))
@@ -118,7 +128,7 @@ def _find_assets(
   return assets
 
 
-def _get_mesh(mj: mujoco.MjModel, i: int) -> Tuple[jp.ndarray, jp.ndarray]:
+def _get_mesh(mj: mujoco.MjModel, i: int) -> Tuple[np.ndarray, np.ndarray]:
   """Gets mesh from mj at index i."""
   last = (i + 1) >= mj.nmesh
   face_start = mj.mesh_faceadr[i]
@@ -129,7 +139,7 @@ def _get_mesh(mj: mujoco.MjModel, i: int) -> Tuple[jp.ndarray, jp.ndarray]:
   vert_end = mj.mesh_vertadr[i + 1] if not last else mj.mesh_vert.shape[0]
   vert = mj.mesh_vert[vert_start:vert_end]
 
-  return face, vert
+  return vert, face
 
 
 def _get_name(mj: mujoco.MjModel, i: int) -> str:
@@ -192,6 +202,92 @@ def _get_custom(mj: mujoco.MjModel) -> Dict[str, np.ndarray]:
     custom[name] = arr
 
   return custom
+
+
+def _contact_geoms(geom_a: Geom, geom_b: Geom) -> Tuple[Geom, Geom]:
+  """Converts geometries for contact functions."""
+  if isinstance(geom_a, Box) and isinstance(geom_b, Box):
+    geom_a = geom_mesh.box_hull(geom_a)
+    geom_b = geom_mesh.box_hull(geom_b)
+  elif isinstance(geom_a, Box) and isinstance(geom_b, Mesh):
+    geom_a = geom_mesh.box_hull(geom_a)
+    geom_b = geom_mesh.convex_hull(geom_b)
+  elif isinstance(geom_a, Mesh) and isinstance(geom_b, Box):
+    geom_a = geom_mesh.convex_hull(geom_a)
+    geom_b = geom_mesh.box_hull(geom_b)
+  elif isinstance(geom_a, Mesh) and isinstance(geom_b, Mesh):
+    geom_a = geom_mesh.convex_hull(geom_a)
+    geom_b = geom_mesh.convex_hull(geom_b)
+  elif isinstance(geom_a, Box):
+    geom_a = geom_mesh.box_tri(geom_a)
+  elif isinstance(geom_b, Box):
+    geom_b = geom_mesh.box_tri(geom_b)
+
+  # pad face vertices so that we can broadcast between geom_a and geom_b faces
+  if isinstance(geom_a, Convex) and isinstance(geom_b, Convex):
+    sa = geom_a.face.shape[-1]
+    sb = geom_b.face.shape[-1]
+    if sa < sb:
+      face = np.pad(geom_a.face, ((0, 0), (0, sb - sa)), 'edge')
+      geom_a = geom_a.replace(face=face)
+    elif sb < sa:
+      face = np.pad(geom_b.face, ((0, 0), (0, sa - sb)), 'edge')
+      geom_b = geom_b.replace(face=face)
+
+  return geom_a, geom_b
+
+
+def _contacts_from_geoms(
+    mj: mujoco.MjModel, geoms: List[Geom]
+) -> List[Tuple[Geom, Geom]]:
+  """Gets a list of contact geom pairs."""
+  collidables = []
+  for key_a, key_b in _COLLIDABLES:
+    if mj.opt.collision == 1:  # only check predefined pairs in mj.pair_*
+      geoms_ab = []
+      for geom_id_a, geom_id_b in zip(mj.pair_geom1, mj.pair_geom2):
+        geom_a, geom_b = geoms[geom_id_a], geoms[geom_id_b]
+        static_a, static_b = geom_a.link_idx is None, geom_b.link_idx is None
+        cls_a, cls_b = type(geom_a), type(geom_b)
+        if (cls_a, static_a) == key_a and (cls_b, static_b) == key_b:
+          geoms_ab.append((geom_a, geom_b))
+        elif (cls_a, static_a) == key_b and (cls_b, static_b) == key_a:
+          geoms_ab.append((geom_b, geom_a))
+    elif key_a == key_b:  # types match, avoid double counting (a, b), (b, a)
+      geoms_a = [g for g in geoms if (type(g), g.link_idx is None) == key_a]
+      geoms_ab = list(itertools.combinations(geoms_a, 2))
+    else:  # types don't match, take every permutation
+      geoms_a = [g for g in geoms if (type(g), g.link_idx is None) == key_a]
+      geoms_b = [g for g in geoms if (type(g), g.link_idx is None) == key_b]
+      geoms_ab = list(itertools.product(geoms_a, geoms_b))
+    if not geoms_ab:
+      continue
+    # filter out self-collisions
+    geoms_ab = [(a, b) for a, b in geoms_ab if a.link_idx != b.link_idx]
+    # convert the geometries so that they can be used for contact functions
+    geoms_ab = [_contact_geoms(a, b) for a, b in geoms_ab]
+    collidables.append(geoms_ab)
+
+  # meshes with different shapes cannot be stacked, so we group meshes by vert
+  # and face shape
+  def key_fn(x):
+    def get_key(x):
+      if isinstance(x, Convex):
+        return (x.vert.shape, x.face.shape, x.unique_edge.shape)
+      if isinstance(x, Mesh):
+        return (x.vert.shape, x.face.shape)
+      return -1
+
+    return get_key(x[0]), get_key(x[1])
+
+  contacts = []
+  for geoms_ab in collidables:
+    geoms_ab = sorted(geoms_ab, key=key_fn)
+    for _, g in itertools.groupby(geoms_ab, key=key_fn):
+      geom_a, geom_b = tree_map(lambda *x: np.stack(x), *g)
+      contacts.append((geom_a, geom_b))
+
+  return contacts
 
 
 def load_model(mj: mujoco.MjModel) -> System:
@@ -311,45 +407,11 @@ def load_model(mj: mujoco.MjModel) -> System:
     elif geom_cls is Box:
       geom = Box(halfsize=mj.geom_size[i, :], **kwargs)
     elif geom_cls is Mesh:
-      face, vert = _get_mesh(mj, mj.geom_dataid[i])
-      geom = Mesh(face=face, vert=vert, **kwargs)
+      vert, face = _get_mesh(mj, mj.geom_dataid[i])
+      geom = Mesh(vert=vert, face=face, **kwargs)
     geoms.append(geom)
 
-  # create contacts from geoms
-  contacts = []
-  for key_a, key_b in _COLLIDABLES:
-    if mj.opt.collision == 1:  # only check predefined pairs in mj.pair_*
-      geoms_ab = []
-      for geom_id_a, geom_id_b in zip(mj.pair_geom1, mj.pair_geom2):
-        geom_a, geom_b = geoms[geom_id_a], geoms[geom_id_b]
-        static_a, static_b = geom_a.link_idx is None, geom_b.link_idx is None
-        cls_a, cls_b = type(geom_a), type(geom_b)
-        if (cls_a, static_a) == key_a and (cls_b, static_b) == key_b:
-          geoms_ab.append((geom_a, geom_b))
-        elif (cls_a, static_a) == key_b and (cls_b, static_b) == key_a:
-          geoms_ab.append((geom_b, geom_a))
-    elif key_a == key_b:  # types match, avoid double counting (a, b), (b, a)
-      geoms_a = [g for g in geoms if (type(g), g.link_idx is None) == key_a]
-      geoms_ab = list(itertools.combinations(geoms_a, 2))
-    else:  # types don't match, take every permutation
-      geoms_a = [g for g in geoms if (type(g), g.link_idx is None) == key_a]
-      geoms_b = [g for g in geoms if (type(g), g.link_idx is None) == key_b]
-      geoms_ab = list(itertools.product(geoms_a, geoms_b))
-    if not geoms_ab:
-      continue
-
-    # meshes with different shapes cannot be stacked, so we group meshes by vert
-    # and face shape
-    def key_fn(x):
-      id_fn = lambda x: (  # pylint:disable=g-long-lambda
-          (x.vert.shape, x.face.shape) if isinstance(x, Mesh) else -1
-      )
-      return id_fn(x[0]), id_fn(x[1])
-
-    geoms_ab = sorted(geoms_ab, key=key_fn)
-    for _, g in itertools.groupby(geoms_ab, key=key_fn):
-      geom_a, geom_b = tree_map(lambda *x: np.stack(x), *g)
-      contacts.append((geom_a, geom_b))
+  contacts = _contacts_from_geoms(mj, geoms)
 
   # create actuators
   ctrl_range = mj.actuator_ctrlrange

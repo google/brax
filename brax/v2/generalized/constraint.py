@@ -14,15 +14,15 @@
 
 # pylint:disable=g-multiple-import
 """Functions for constraint satisfaction."""
-from typing import Optional, Tuple
+from typing import Tuple
 
 from brax.v2 import math
 from brax.v2 import scan
-from brax.v2.base import Contact, Motion, System, Transform
+from brax.v2.base import Motion, System, Transform
+from brax.v2.generalized.base import State
 import jax
 from jax import numpy as jp
 import jaxopt
-from jaxopt.projection import projection_non_negative
 
 
 def _pt_jac(
@@ -92,13 +92,13 @@ def _imp_aref(pos: jp.ndarray, vel: jp.ndarray) -> jp.ndarray:
 
 
 def jac_limit(
-    sys: System, q: jp.ndarray
+    sys: System, state: State
 ) -> Tuple[jp.ndarray, jp.ndarray, jp.ndarray]:
   """Calculates the jacobian for angle limits in dof frame.
 
   Args:
     sys: the brax system
-    q: joint angle vector
+    state: generalized state
 
   Returns:
     jac: the angle limit jacobian
@@ -111,8 +111,8 @@ def jac_limit(
   # determine q and qd indices for non-free joints
   q_idx, qd_idx = sys.q_idx('123'), sys.qd_idx('123')
 
-  pos_min = q[q_idx] - sys.dof.limit[0][qd_idx]
-  pos_max = sys.dof.limit[1][qd_idx] - q[q_idx]
+  pos_min = state.q[q_idx] - sys.dof.limit[0][qd_idx]
+  pos_max = sys.dof.limit[1][qd_idx] - state.q[q_idx]
   pos = jp.minimum(jp.minimum(pos_min, pos_max), 0)
 
   side = ((pos_min < pos_max) * 2 - 1) * (pos < 0)
@@ -123,28 +123,26 @@ def jac_limit(
 
 
 def jac_contact(
-    sys: System, com: jp.ndarray, cdof: Motion, contact: Optional[Contact]
+    sys: System, state: State
 ) -> Tuple[jp.ndarray, jp.ndarray, jp.ndarray]:
   """Calculates the jacobian for contact constraints.
 
   Args:
     sys: the brax system
-    com: center of mass position
-    cdof: dofs in com frame
-    contact: contacts computed for link geometries
+    state: generalized state
 
   Returns:
     jac: the contact jacobian
     pos: contact position in constraint frame
     diag: approximate diagonal of A matrix
   """
-  if contact is None:
+  if state.contact is None:
     return jp.zeros((0, sys.qd_size())), jp.zeros((0,)), jp.zeros((0,))
 
   def row_fn(contact):
     link_a, link_b = contact.link_idx
-    a = _pt_jac(sys, com, cdof, contact.pos, link_a)
-    b = _pt_jac(sys, com, cdof, contact.pos, link_b)
+    a = _pt_jac(sys, state.com, state.cdof, contact.pos, link_a)
+    b = _pt_jac(sys, state.com, state.cdof, contact.pos, link_b)
     diff = b - a
 
     # 4 pyramidal friction directions
@@ -163,66 +161,42 @@ def jac_contact(
         lambda x: x * (contact.penetration > 0), (jac, pos, diag)
     )
 
-  return jax.tree_map(jp.concatenate, jax.vmap(row_fn)(contact))
+  return jax.tree_map(jp.concatenate, jax.vmap(row_fn)(state.contact))
 
 
-def jacobian(
-    sys: System,
-    q: jp.ndarray,
-    com: jp.ndarray,
-    cdof: Motion,
-    contact: Optional[Contact],
-) -> Tuple[jp.ndarray, jp.ndarray, jp.ndarray]:
-  """Calculates the full constraint jacobian and constraint position.
+def jacobian(sys: System, state: State) -> State:
+  """Calculates the constraint jacobian, position, and A matrix diagonal.
 
   Args:
     sys: a brax system
-    q: joint position vector
-    com: center of mass position
-    cdof: dofs in com frame
-    contact: contacts computed for link geometries
+    state: generalized state
 
   Returns:
-    jac: the constraint jacobian
-    pos: position in constraint frame
-    diag: approximate diagonal of A matrix
+    state: generalized state with jac, pos, diag updated
   """
-  jpds = jac_contact(sys, com, cdof, contact), jac_limit(sys, q)
+  jpds = jac_contact(sys, state), jac_limit(sys, state)
+  jac, pos, diag = jax.tree_map(lambda *x: jp.concatenate(x), *jpds)
+  return state.replace(con_jac=jac, con_pos=pos, con_diag=diag)
 
-  return jax.tree_map(lambda *x: jp.concatenate(x), *jpds)
 
-
-def force(
-    sys: System,
-    qd: jp.ndarray,
-    qf_smooth: jp.ndarray,
-    mass_mx_inv: jp.ndarray,
-    jac: jp.ndarray,
-    pos: jp.ndarray,
-    diag: jp.ndarray,
-) -> jp.ndarray:
+def force(sys: System, state: State) -> jp.ndarray:
   """Calculates forces that satisfy joint, collision constraints.
 
   Args:
     sys: a brax system
-    qd: joint velocity vector
-    qf_smooth: joint force vector for smooth dynamics
-    mass_mx_inv: inverse mass matrix
-    jac: the constraint jacobian
-    pos: position in constraint frame
-    diag: approximate diagonal of A matrix
+    state: generalized state
 
   Returns:
     qf_constraint: (qd_size,) constraint force
   """
-  if jac.shape[0] == 0:
-    return jp.zeros_like(qd)
+  if state.con_jac.shape[0] == 0:
+    return jp.zeros(sys.qd_size())
 
   # calculate A matrix and b vector
-  imp, aref = _imp_aref(pos, jac @ qd)
-  a = jac @ mass_mx_inv @ jac.T
-  a = a + jp.diag(diag * (1 - imp) / imp)
-  b = jac @ mass_mx_inv @ qf_smooth - aref
+  imp, aref = _imp_aref(state.con_pos, state.con_jac @ state.qd)
+  a = state.con_jac @ state.mass_mx_inv @ state.con_jac.T
+  a = a + jp.diag(state.con_diag * (1 - imp) / imp)
+  b = state.con_jac @ state.mass_mx_inv @ state.qf_smooth - aref
 
   # solve for forces in constraint frame, Ax + b = 0 s.t. x >= 0
   def objective(x):
@@ -230,15 +204,26 @@ def force(
     return jp.sum(0.5 * residual**2)
 
   # profiling a physics step, most of the time is spent running this solver:
+  #
+  # there might still be some opportunities to speed this up.  consider that
+  # the A matrix is positive definite.  could possibly use conjugate gradient?
+  # we made a jax version of this: https://github.com/david-cortes/nonneg_cg
+  # but it was still not as fast as the projected gradient solver below.
+  # this is possibly due to the line search method, which is a big part
+  # of the cost.  jaxopt uses FISTA which we did not implement
+  #
+  # another avenue worth pursuing is that these A matrices are often
+  # fairly sparse.  perhaps worth trying some kind of random or
+  # learned projection to solve a smaller dense matrix at each step
   pg = jaxopt.ProjectedGradient(
       objective,
-      projection_non_negative,
+      jaxopt.projection.projection_non_negative,
       maxiter=sys.solver_iterations,
       implicit_diff=False,
       maxls=5,
   )
 
   # solve and convert back to q coordinates
-  qf_constraint = jac.T @ pg.run(jp.zeros_like(b)).params
+  qf_constraint = state.con_jac.T @ pg.run(jp.zeros_like(b)).params
 
   return qf_constraint

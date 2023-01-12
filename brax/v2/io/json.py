@@ -18,10 +18,14 @@
 import json
 from typing import List, Text
 
-from brax.v2.base import System, Transform
+from brax.v2.base import State, System
 from etils import epath
 import jax
+import jax.numpy as jp
 import numpy as np
+
+# State attributes needed for the visualizer.
+_STATE_ATTR = ['x', 'contact']
 
 
 def _to_dict(obj):
@@ -47,27 +51,61 @@ def _to_dict(obj):
   return obj
 
 
-def dumps(sys: System, xs: List[Transform]) -> Text:
-  """Creates a json string of the system config."""
+def _compress_contact(states: List[State]) -> List[State]:
+  """Reduces the number of contacts based on penetration > 0."""
+  stacked = jax.tree_map(lambda *x: jp.stack(x), *states)
+  if stacked.contact is None:
+    return states
+  contact_mask = stacked.contact.penetration > 0
+  n_contact = contact_mask.sum(axis=1).max()
+
+  def pad(arr, n):
+    r = jp.zeros(n)
+    if len(arr.shape) > 1:
+      r = jp.zeros((n, arr.shape[1]))
+    r = r.at[: arr.shape[0]].set(arr)
+    return r
+
+  def compress(i, s):
+    mask = contact_mask[i]
+    contact = jax.tree_map(lambda x: pad(x[mask], n_contact), s.contact)
+    return s.replace(contact=contact)
+
+  return [compress(i, s) for i, s in enumerate(states)]
+
+
+def dumps(sys: System, states: List[State]) -> Text:
+  """Creates a json string of the system config.
+
+  Args:
+    sys: brax System object
+    states: list of brax system states
+
+  Returns:
+    string containing json dump of system and states
+  """
   d = _to_dict(sys)
 
   # fill in empty link names
   link_names = [n or f'link {i}' for i, n in enumerate(sys.link_names)]
 
-  # group geoms by their links
+  # key geoms by their link names
   link_geoms = {}
   for g in d['geoms']:
-    link = 'world' if g['link_idx'] is None else link_names[g['link_idx']]
-    link_geoms.setdefault(link, []).append(g)
+    link_name = 'world' if g['link_idx'] is None else link_names[g['link_idx']]
+    link_geoms.setdefault(link_name, []).append(g)
   d['geoms'] = link_geoms
 
-  d['pos'] = [x.pos for x in xs]
-  d['rot'] = [x.rot for x in xs]
-  d['debug'] = False  # TODO implement debugging
+  states = _compress_contact(states)
+
+  # stack states for the viewer
+  states = _to_dict(jax.tree_map(lambda *x: jp.stack(x), *states))
+  d['states'] = {k: states[k] for k in _STATE_ATTR}
+
   return json.dumps(_to_dict(d))
 
 
-def save(path: str, sys: System, xs: List[Transform]):
+def save(path: str, sys: System, states: List[State]):
   """Saves a system config and trajectory as json."""
   with epath.Path(path).open('w') as fout:
-    fout.write(dumps(sys, xs))
+    fout.write(dumps(sys, states))

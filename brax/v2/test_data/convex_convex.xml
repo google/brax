@@ -1,0 +1,38 @@
+<mujoco model="convex_convex">
+  <custom>
+    <numeric data="0.2" name="baumgarte_erp"/>
+    <numeric data="0.5" name="elasticity"/>
+  </custom>
+  <default>
+    <geom friction="0.5 0.0 0.0"/>
+  </default>
+  <asset>
+      <mesh name="tetrahedron" file="meshes/tetrahedron.stl" scale="0.1 0.1 0.1" />
+      <mesh name="dodecahedron" file="meshes/dodecahedron.stl" scale="0.01 0.01 0.01" />
+      <mesh name="pyramid" file="meshes/pyramid.stl" scale="0.1 0.1 0.1" />
+  </asset>
+  <worldbody>
+    <geom name="floor" pos="0 0 0" size="40 40 40" type="plane"/>
+
+    <body name="tetrahedron" pos="0.0 2.0 0.2">
+      <joint axis="1 0 0" name="free1" pos="0 0 0" type="free"/>
+      <geom name="tetrahedron" pos="0 0 0" size="0.2 0.2 0.2" type="mesh" mesh="tetrahedron"/>
+    </body>
+
+    <body name="dodecahedron" pos="0.0 2.0 0.5" euler="0.1 -0.1 45">
+      <joint axis="1 0 0" name="free2" pos="0 0 0" type="free"/>
+      <geom name="dodecahedron" pos="0 0 0" size="0.1 0.1 0.1" type="mesh" mesh="dodecahedron"/>
+    </body>
+
+    <body name="box" pos="0.0 2.0 0.8" euler="0.1 -0.1 45">
+      <joint axis="1 0 0" name="free3" pos="0 0 0" type="free"/>
+      <geom name="box1" pos="0 0 0" size="0.05 0.05 0.05" type="box"/>
+    </body>
+
+    <body name="pyramid" pos="0.0 2.0 1.0" euler="0.1 -0.1 45">
+      <joint axis="1 0 0" name="free4" pos="0 0 0" type="free"/>
+      <geom name="pyramid" pos="0 0 0" size="0.2 0.2 0.2" type="mesh" mesh="pyramid"/>
+    </body>
+
+  </worldbody>
+</mujoco>

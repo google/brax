@@ -349,12 +349,23 @@ class Mesh(Geometry):
   The mesh is expected to be in the counter-clockwise winding order.
 
   Attributes:
-    face: (num_faces, num_face_vertices) vertices associated with each face
     vert: (num_verts, 3) spatial coordinates associated with each vertex
+    face: (num_faces, num_face_vertices) vertices associated with each face
   """
 
-  face: jp.ndarray
   vert: jp.ndarray
+  face: jp.ndarray
+
+
+@struct.dataclass
+class Convex(Mesh):
+  """A convex mesh geometry.
+
+  Attributes:
+    unique_edge: (num_unique, 2) vert index associated with each unique edge
+  """
+
+  unique_edge: jp.ndarray
 
 
 @struct.dataclass
@@ -405,12 +416,14 @@ class State:
     qd: (qd_size,) joint velocity vector
     x: (num_links,) link position in world frame
     xd: (num_links,) link velocity in world frame
+    contact: calculated contacts
   """
 
   q: jp.ndarray
   qd: jp.ndarray
   x: jp.ndarray
   xd: jp.ndarray
+  contact: Optional[Contact]
 
 
 @struct.dataclass

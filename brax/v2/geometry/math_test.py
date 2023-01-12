@@ -18,8 +18,10 @@ from absl.testing import absltest
 from absl.testing import parameterized
 from brax.v2 import math
 from brax.v2.geometry import math as geom_math
+import jax
 import jax.numpy as jp
 import numpy as np
+from scipy import spatial
 
 
 def _get_rand_point(seed=None):
@@ -43,10 +45,32 @@ def _get_rand_triangle_vertices(seed=None):
   return verts[0, :], verts[1, :], verts[2, :]
 
 
+def _get_rand_dir(seed=None):
+  if seed is not None:
+    np.random.seed(seed)
+  r = np.random.randn(1)
+  theta = np.random.random(1) * 2 * np.pi
+  a = (np.random.random(1) - 0.5) * 2.0
+  phi = np.arccos(a)
+  x = r * np.sin(phi) * np.cos(theta)
+  y = r * np.sin(phi) * np.sin(theta)
+  z = r * np.cos(phi)
+  return jp.array([x, y, z]).squeeze()
+
+
+def _get_rand_convex_polygon(seed=None):
+  if seed is not None:
+    np.random.seed(seed)
+  points = np.random.random((15, 2))
+  hull = spatial.ConvexHull(points)
+  points = points[hull.vertices]
+  points = np.array([[p[0], p[1], 0] for p in points])
+  return points
+
+
 def _minimize(fn, sample_fn, lb, ub, tol, max_iter=20, seed=42):
   """Minimize a function, roughly, using the cross-entropy method."""
-  # We can alternatively use scipy.optimize with non-linear constraints here,
-  # but we are avoiding a scipy dependency for now.
+  # We can alternatively use scipy.optimize with non-linear constraints here.
   assert lb.shape == ub.shape, 'bounds need to have the same shape'
   np.random.seed(seed)
 
@@ -260,6 +284,146 @@ class GeometryScipyTest(parameterized.TestCase):
     self.assertAlmostEqual(expected_dist, test_dist, 1)
     # Guarantee we are lower than an upper bound.
     self.assertLessEqual(test_dist, expected_dist + 1e-5)
+
+
+def _check_eq_pts(pts1, pts2, atol=1e-6):
+  # For every point in pts1, make sure we have a point in pts2
+  # that is close within `atol`, and vice versa.
+  if not pts1.size and not pts2.size:
+    return True
+  elif not pts1.size:
+    return False
+  elif not pts2.size:
+    return False
+  if pts1.shape[-1] != 3 or pts2.shape[-1] != 3:
+    raise AssertionError('Points should be three dimensional.')
+  eq = True
+  for p1 in pts1:
+    eq = eq and jp.any(jp.sum(jp.abs(p1 - pts2) < atol, axis=-1) == 3)
+  for p2 in pts2:
+    eq = eq and jp.any(jp.sum(jp.abs(p2 - pts1) < atol, axis=-1) == 3)
+  return eq
+
+
+def _clip(clipping_polygon, subject_polygon):
+  """Returns the clipped subject polygon, using Sutherland-Hodgman Clipping."""
+  polygon1 = clipping_polygon
+  polygon1_normal = jp.cross(
+      polygon1[-1] - polygon1[0], polygon1[1] - polygon1[0]
+  )
+  clipping_edges = [
+      (polygon1[i - 1], polygon1[i]) for i in range(len(polygon1))
+  ]
+  # Clipping plane normals point away from the clipping poly center (polygon
+  # points assumed to have a clockwise winding order).
+  clipping_planes = [
+      (e0, jp.cross(polygon1_normal, e1 - e0)) for e0, e1 in clipping_edges
+  ]
+
+  output_polygon = subject_polygon
+  for clipping_plane in clipping_planes:
+    input_ = output_polygon
+    output_polygon = []
+
+    starting_pt = input_[-1]
+    clipping_plane_pt, clipping_plane_normal = clipping_plane
+
+    for endpt in input_:
+      intersection_pt = geom_math.closest_segment_point_plane(
+          starting_pt, endpt, clipping_plane_pt, clipping_plane_normal
+      )
+      starting_pt_front = geom_math.point_in_front_of_plane(
+          clipping_plane_pt, clipping_plane_normal, starting_pt
+      )
+      endpt_front = geom_math.point_in_front_of_plane(
+          clipping_plane_pt, clipping_plane_normal, endpt
+      )
+
+      if not endpt_front and not starting_pt_front:
+        output_polygon.append(endpt)
+      elif not endpt_front and starting_pt_front:
+        output_polygon.append(intersection_pt)
+        output_polygon.append(endpt)
+      elif not starting_pt_front:
+        output_polygon.append(intersection_pt)
+
+      starting_pt = endpt
+
+    if not output_polygon:
+      # All clipping points outside the subject polygon.
+      return jp.array(output_polygon)
+
+  return jp.array(output_polygon)
+
+
+class ClippingTest(parameterized.TestCase):
+  """Tests that the clipping algorithm matches a baseline implementation."""
+
+  clip_vectorized = jax.jit(geom_math.clip)
+
+  @parameterized.parameters(range(100))
+  def test_clipped_triangles(self, i):
+    subject_poly = jp.array(_get_rand_triangle_vertices(i))
+    clipping_poly = jp.array(_get_rand_triangle_vertices(i + 1))
+
+    poly_out = _clip(clipping_poly, subject_poly)
+
+    clipping_normal = jp.cross(
+        clipping_poly[1] - clipping_poly[0],
+        clipping_poly[-1] - clipping_poly[0],
+    )
+    subject_normal = jp.cross(
+        subject_poly[1] - subject_poly[0], subject_poly[-1] - subject_poly[0]
+    )
+    poly_out_jax, mask = ClippingTest.clip_vectorized(
+        clipping_poly, subject_poly, clipping_normal, subject_normal
+    )
+
+    self.assertTrue(
+        _check_eq_pts(poly_out, poly_out_jax[mask], atol=1e-4),
+        f'Clipped triangles {i} did not match.',
+    )
+
+  @parameterized.parameters(range(100))
+  def test_clipped_hulls(self, i):
+    # The hulls are all in the x-y plane, unlike in `test_clipped_triangles`.
+    subject_poly = jp.array(_get_rand_convex_polygon(i))
+    clipping_poly = jp.array(_get_rand_convex_polygon(i + 1))
+
+    poly_out = _clip(clipping_poly, subject_poly)
+
+    clipping_normal = jp.cross(
+        clipping_poly[1] - clipping_poly[0],
+        clipping_poly[-1] - clipping_poly[0],
+    )
+    subject_normal = jp.cross(
+        subject_poly[1] - subject_poly[0],
+        subject_poly[-1] - subject_poly[0],
+    )
+    poly_out_jax, mask = ClippingTest.clip_vectorized(
+        clipping_poly, subject_poly, clipping_normal, subject_normal
+    )
+
+    self.assertTrue(
+        _check_eq_pts(poly_out, poly_out_jax[mask], atol=1e-2),
+        f'Clipped hulls {i} did not match.',
+    )
+
+
+class ManifoldPointsTest(parameterized.TestCase):
+  """Tests manifold point selection."""
+
+  def test_manifold_points(self):
+    poly = jp.array([
+        [0.99999994, 0.14842263, 0.39985055],
+        [0.8585786, 0.00145163, 0.39985055],
+        [1.0, -0.14551926, 0.39985055],
+        [1.1414213, 0.00145174, 0.39985055],
+    ])
+    poly_mask = jp.array([False, True, True, True])
+    poly_norm = jp.array([0.0, 0.0, 1.0])
+    idx = geom_math.manifold_points(poly, poly_mask, poly_norm)
+    self.assertSequenceEqual(idx.tolist(), [1, 3, 1, 2])
 
 
 if __name__ == '__main__':

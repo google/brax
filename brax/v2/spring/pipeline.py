@@ -12,18 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Physics pipeline for fully articulated dynamics and collisiion."""
 # pylint:disable=g-multiple-import
+"""Physics pipeline for fully articulated dynamics and collisiion."""
+
 from brax.v2 import actuator
 from brax.v2 import base
 from brax.v2 import geometry
 from brax.v2 import kinematics
-from brax.v2.base import Motion, System, Transform
+from brax.v2.base import System, Transform
 from brax.v2.spring import collisions
 from brax.v2.spring import integrator
 from brax.v2.spring import joints
 from brax.v2.spring import maximal
 from flax import struct
+
 import jax
 from jax import numpy as jp
 
@@ -31,10 +33,6 @@ from jax import numpy as jp
 @struct.dataclass
 class State(base.State):
   """Dynamic state that changes after every step."""
-  q: jp.ndarray
-  qd: jp.ndarray
-  x: Transform
-  xd: Motion
 
 
 def init(sys: System, q: jp.ndarray, qd: jp.ndarray) -> State:
@@ -49,7 +47,8 @@ def init(sys: System, q: jp.ndarray, qd: jp.ndarray) -> State:
     state: initial physics state
   """
   x, xd = kinematics.forward(sys, q, qd)
-  return State(q, qd, x, xd)
+  contact = geometry.contact(sys, x)
+  return State(q, qd, x, xd, contact)
 
 
 def step(sys: System, state: State, act: jp.ndarray) -> State:
@@ -112,4 +111,4 @@ def step(sys: System, state: State, act: jp.ndarray) -> State:
   x, xd = maximal.com_to_maximal(xi, xdi, coord_transform)
 
   q, qd = kinematics.inverse(sys, x, xd)
-  return State(q, qd, x, xd)
+  return State(q, qd, x, xd, contact)

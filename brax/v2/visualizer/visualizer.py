@@ -45,12 +45,14 @@ def index():
 
 @flask_app.route('/favicon.ico')
 def favicon():
+  """Serves the brax favicon."""
   path = epath.Path(flask_app.root_path)
   return send_from_directory(str(path), 'favicon.ico')
 
 
 @flask_app.route('/js/<path:path>', methods=['GET'])
 def js(path):
+  """Serves files from the js/ directory."""
   path = epath.Path(flask_app.root_path) / 'js' / path
   response = flask.Response(path.read_text(), mimetype='text/javascript')
   response.headers.add('Access-Control-Allow-Origin', '*')
@@ -64,10 +66,9 @@ def _render_file(path: epath.Path) -> str:
   )
 
 
-
-
 @flask_app.route('/file/<path:path>', methods=['GET'])
 def from_file(path):
+  """Renders a json encoded brax system from a local file path."""
   return _render_file(epath.Path(path))
 
 
@@ -77,7 +78,6 @@ def main(_):
         host='localhost', port=PORT.value, use_reloader=True, debug=True
     )
     return
-
 
   server = simple_server.make_server(
       'localhost', PORT.value, validate.validator(flask_app)

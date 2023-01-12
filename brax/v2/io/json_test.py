@@ -15,32 +15,28 @@
 """Tests for json."""
 
 import json
+
 from absl.testing import absltest
 from brax.v2 import test_utils
+from brax.v2.generalized import pipeline
 from brax.v2.io import json as bjson
+import jax.numpy as jp
 
 
 class JsonTest(absltest.TestCase):
 
   def test_dumps(self):
-    sys = test_utils.load_fixture('ur5e/robot.xml')
-    res = bjson.dumps(sys, [])
+    sys = test_utils.load_fixture('convex_convex.xml')
+    state = pipeline.init(sys, sys.init_q, jp.zeros(sys.qd_size()))
+    res = bjson.dumps(sys, [state])
     res = json.loads(res)
 
     self.assertIsInstance(res['geoms'], dict)
     self.assertSequenceEqual(
         sorted(res['geoms'].keys()),
-        [
-            'forearm_link',
-            'shoulder_link',
-            'upper_arm_link',
-            'world',
-            'wrist_1_link',
-            'wrist_2_link',
-            'wrist_3_link',
-        ],
+        ['box', 'dodecahedron', 'pyramid', 'tetrahedron', 'world'],
     )
-    self.assertLen(res['geoms']['world'], 2)
+    self.assertLen(res['geoms']['world'], 1)
 
 
 if __name__ == '__main__':

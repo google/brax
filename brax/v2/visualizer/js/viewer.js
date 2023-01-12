@@ -37,6 +37,41 @@ function downloadFile(name, contents, mime) {
   link.remove();
 }
 
+/**
+ * Toggles the contact point debug in the scene.
+ * @param {!ObjType} obj A Scene or Mesh object.
+ * @param {boolean} debug Whether to add contact debugging.
+ */
+function toggleContactDebug(obj, debug) {
+  for (let i = 0; i < obj.children.length; i++) {
+    let c = obj.children[i];
+    if (c.type == 'AxesHelper') {
+      /* toggle visibility on world axis */
+      c.visible = debug;
+    }
+    if (c.type == 'Group' && c.name && c.name.startsWith('contact')) {
+      /* toggle visibility of all contact points */
+      c.children[0].visible = debug;
+    }
+    if (c.type == 'Group') {
+      /* recurse over group's children */
+      for (let j = 0; j < c.children.length; j++) {
+        toggleContactDebug(c.children[j], debug);
+      }
+    }
+  }
+  if (obj.type == 'Mesh') {
+    /* change opacity for each mesh */
+    if (debug) {
+      obj.material.opacity = 0.6;
+      obj.material.transparent = true;
+    } else {
+      obj.material.opacity = 1.0;
+      obj.material.transparent = false;
+    }
+  }
+}
+
 const hoverMaterial =
     new THREE.MeshPhongMaterial({color: 0x332722, emissive: 0x114a67});
 const selectMaterial = new THREE.MeshPhongMaterial({color: 0x2194ce});
@@ -49,6 +84,7 @@ class Viewer {
     this.domElement = domElement;
     this.system = system;
     this.scene = createScene(system);
+
     this.trajectory = createTrajectory(system);
 
     /* set up renderer, camera, and add default scene elements */
@@ -60,13 +96,7 @@ class Viewer {
     this.domElement.appendChild(this.renderer.domElement);
 
     this.camera = new THREE.PerspectiveCamera(40, 1, 0.01, 100);
-    if (system.frozen?.position?.z) {
-      this.camera.position.set(0, 0, 1);
-    } else if (system.frozen?.position?.y) {
-      this.camera.position.set(0, 2, 1);
-    } else {
-      this.camera.position.set(5, 8, 2);
-    }
+    this.camera.position.set(5, 8, 2);
     this.camera.follow = true;
     this.camera.freezeAngle = false;
     this.camera.followDistance = 10;
@@ -153,7 +183,16 @@ class Viewer {
     let saveFolder = this.gui.addFolder('Save / Capture');
     saveFolder.add(this, 'saveScene').name('Save Scene');
     saveFolder.add(this, 'saveImage').name('Capture Image');
+    saveFolder.close();
 
+    /* debugger */
+    this.contactDebug = false;
+    let debugFolder = this.gui.addFolder('Debugger');
+    debugFolder.add(this, 'contactDebug')
+        .name('contacts')
+        .onChange((value) => this.setContactDebug(value));
+
+    /* done setting up the gui */
     this.gui.close();
 
     /* set up body selector */
@@ -215,6 +254,7 @@ class Viewer {
   }
 
   render() {
+    toggleContactDebug(this.scene, this.contactDebug);
     this.renderer.render(this.scene, this.camera);
     this.needsRender = false;
   }
@@ -278,6 +318,10 @@ class Viewer {
 
   saveScene() {
     downloadFile('system.json', JSON.stringify(this.system));
+  }
+
+  setContactDebug(val) {
+    this.contactDebug = val;
   }
 
   setHover(object, hovering) {

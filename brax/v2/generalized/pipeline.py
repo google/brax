@@ -15,60 +15,16 @@
 # pylint:disable=g-multiple-import
 """Physics pipeline for generalized coordinates engine."""
 
-from typing import Optional
-
 from brax.v2 import actuator
-from brax.v2 import base
 from brax.v2 import geometry
 from brax.v2 import kinematics
-from brax.v2 import math
-from brax.v2.base import Contact, Inertia, Motion, System
+from brax.v2.base import System
 from brax.v2.generalized import constraint
 from brax.v2.generalized import dynamics
 from brax.v2.generalized import integrator
 from brax.v2.generalized import mass
-from flax import struct
-import jax
+from brax.v2.generalized.base import State
 from jax import numpy as jp
-
-
-@struct.dataclass
-class State(base.State):
-  """Dynamic state that changes after every step.
-
-  Attributes:
-    com: center of mass position
-    cinr: inertia in com frame
-    cd: body velocities in com frame
-    cdof: dofs in com frame
-    cdofd: cdof velocity
-    mass_mx: (qd_size, qd_size) mass matrix
-    mass_mx_inv: (qd_size, qd_size) inverse mass matrix
-    contact: calculated contacts
-    con_jac: constraint jacobian
-    con_pos: constraint position
-    con_diag: constraint A diagonal
-    qf_smooth: smooth dynamics force
-    qf_constraint: (qd_size,) force from constraints (collision etc)
-    qdd: (qd_size,) joint acceleration vector
-  """
-
-  # position/velocity based terms are updated at the end of each step:
-  com: jp.ndarray
-  cinr: Inertia
-  cd: Motion
-  cdof: Motion
-  cdofd: Motion
-  mass_mx: jp.ndarray
-  mass_mx_inv: jp.ndarray
-  contact: Optional[Contact]
-  con_jac: jp.ndarray
-  con_pos: jp.ndarray
-  con_diag: jp.ndarray
-  # acceleration based terms are calculated using terms from the previous step:
-  qf_smooth: jp.ndarray
-  qf_constraint: jp.ndarray
-  qdd: jp.ndarray
 
 
 def init(sys: System, q: jp.ndarray, qd: jp.ndarray) -> State:
@@ -82,35 +38,17 @@ def init(sys: System, q: jp.ndarray, qd: jp.ndarray) -> State:
   Returns:
     state: initial physics state
   """
-  x, xd = kinematics.forward(sys, q, qd)
-  com, cinr, cd, cdof, cdofd = dynamics.transform_com(sys, q, qd, x)
-  mass_mx = mass.matrix(sys, cinr, cdof)
-  one = jp.eye(sys.qd_size())
-  mass_mx_inv = jax.scipy.linalg.solve(mass_mx, one, assume_a='pos')
-  contact = geometry.contact(sys, x)
-  con_jac, con_pos, con_diag = constraint.jacobian(sys, q, com, cdof, contact)
-  qf_smooth, qf_constraint, qdd = jp.zeros((3, sys.qd_size()))
+  state = State.zero(sys)
 
-  return State(
-      q,
-      qd,
-      x,
-      xd,
-      com,
-      cinr,
-      cd,
-      cdof,
-      cdofd,
-      mass_mx,
-      mass_mx_inv,
-      contact,
-      con_jac,
-      con_pos,
-      con_diag,
-      qf_smooth,
-      qf_constraint,
-      qdd,
-  )
+  # position/velocity level terms
+  x, xd = kinematics.forward(sys, q, qd)
+  state = state.replace(q=q, qd=qd, x=x, xd=xd)
+  state = state.replace(contact=geometry.contact(sys, x))
+  state = dynamics.transform_com(sys, state)
+  state = mass.matrix_inv(sys, state)
+  state = constraint.jacobian(sys, state)
+
+  return state
 
 
 def step(sys: System, state: State, act: jp.ndarray) -> State:
@@ -124,54 +62,26 @@ def step(sys: System, state: State, act: jp.ndarray) -> State:
   Returns:
     state: physics state after step
   """
-  tau = actuator.to_tau(sys, act, state.q)
-
   # calculate acceleration terms
-  qf_smooth = dynamics.forward(
-      sys, state.q, state.qd, state.cinr, state.cd, state.cdof, state.cdofd, tau
-  )
-  qf_constraint = constraint.force(
-      sys,
-      state.qd,
-      qf_smooth,
-      state.mass_mx_inv,
-      state.con_jac,
-      state.con_pos,
-      state.con_diag,
-  )
+  tau = actuator.to_tau(sys, act, state.q)
+  state = state.replace(qf_smooth=dynamics.forward(sys, state, tau))
+  state = state.replace(qf_constraint=constraint.force(sys, state))
+
   # add dof damping to the mass matrix
   # because we already have M^-1, we use the derivative of the inverse:
   # (A +  εX)^-1 = A^-1 - εA^-1 @ X @ A^-1 + O(ε^2)
   mx_inv = state.mass_mx_inv
   mx_inv_damp = mx_inv - mx_inv @ (jp.diag(sys.dof.damping) * sys.dt) @ mx_inv
-  qdd = mx_inv_damp @ (qf_smooth + qf_constraint)
+  qdd = mx_inv_damp @ (state.qf_smooth + state.qf_constraint)
+  state = state.replace(qdd=qdd)
 
   # update position/velocity level terms
   q, qd = integrator.integrate(sys, state.q, state.qd, qdd)
   x, xd = kinematics.forward(sys, q, qd)
-  com, cinr, cd, cdof, cdofd = dynamics.transform_com(sys, q, qd, x)
-  mass_mx = mass.matrix(sys, cinr, cdof)
-  mass_mx_inv = math.inv_approximate(mass_mx, state.mass_mx_inv)
-  contact = geometry.contact(sys, x)
-  con_jac, con_pos, con_diag = constraint.jacobian(sys, q, com, cdof, contact)
+  state = state.replace(q=q, qd=qd, x=x, xd=xd)
+  state = state.replace(contact=geometry.contact(sys, x))
+  state = dynamics.transform_com(sys, state)
+  state = mass.matrix_inv(sys, state, approximate=True)
+  state = constraint.jacobian(sys, state)
 
-  return State(
-      q,
-      qd,
-      x,
-      xd,
-      com,
-      cinr,
-      cd,
-      cdof,
-      cdofd,
-      mass_mx,
-      mass_mx_inv,
-      contact,
-      con_jac,
-      con_pos,
-      con_diag,
-      qf_smooth,
-      qf_constraint,
-      qdd,
-  )
+  return state

@@ -13,16 +13,18 @@
 # limitations under the License.
 
 # pylint:disable=g-multiple-import
-"""Functions for calculating the mass matrix."""
+"""Functions for calculating the mass matrix and its inverse."""
 import itertools
 
+from brax.v2 import math
 from brax.v2 import scan
 from brax.v2.base import System
+from brax.v2.generalized.base import State
 import jax
 from jax import numpy as jp
 
 
-def matrix(sys: System, cinr: jp.ndarray, cdof: jp.ndarray) -> jp.ndarray:
+def matrix(sys: System, state: State) -> jp.ndarray:
   """Calculates the mass matrix for the system given joint position.
 
   This function uses the Composite-Rigid-Body Algorithm as described here:
@@ -30,9 +32,8 @@ def matrix(sys: System, cinr: jp.ndarray, cdof: jp.ndarray) -> jp.ndarray:
   https://users.dimi.uniud.it/~antonio.dangelo/Robotica/2019/helper/Handbook-dynamics.pdf
 
   Args:
-    sys: system defining the kinematic tree and other properties
-    cinr: inertia in com frame
-    cdof: dofs in com frame
+    sys: a brax system
+    state: generalized state
 
   Returns:
     a symmetric positive matrix (qd_size, qd_size) representing the generalized
@@ -44,7 +45,7 @@ def matrix(sys: System, cinr: jp.ndarray, cdof: jp.ndarray) -> jp.ndarray:
       crb += crb_child
     return crb
 
-  crb = scan.tree(sys, crb_fn, 'l', cinr, reverse=True)
+  crb = scan.tree(sys, crb_fn, 'l', state.cinr, reverse=True)
 
   # expand composite inertias to a matrix: M[i,j] = cdof_j * crb[i] * cdof_i
   @jax.vmap
@@ -55,9 +56,9 @@ def matrix(sys: System, cinr: jp.ndarray, cdof: jp.ndarray) -> jp.ndarray:
     def mx_col(cdof_j):
       return cdof_j.dot(f)
 
-    return mx_col(cdof)
+    return mx_col(state.cdof)
 
-  mx = mx_row(sys.dof_link(), cdof)
+  mx = mx_row(sys.dof_link(), state.cdof)
 
   # mask out empty parts of the matrix
   si, sj = [], []
@@ -79,3 +80,25 @@ def matrix(sys: System, cinr: jp.ndarray, cdof: jp.ndarray) -> jp.ndarray:
   mx = mx + jp.diag(sys.dof.armature)
 
   return mx
+
+
+def matrix_inv(sys: System, state: State, approximate: bool = False) -> State:
+  """Calculates the mass matrix and its inverse for the system.
+
+  Args:
+    sys: a brax system
+    state: generalized state
+    approximate: if true, iteratively approximates matrix inverse
+
+  Returns:
+    state: generalized state with com, cinr, cd, cdof, cdofd updated
+  """
+
+  mx = matrix(sys, state)
+
+  if approximate:
+    mx_inv = math.inv_approximate(mx, state.mass_mx_inv)
+  else:
+    mx_inv = jax.scipy.linalg.solve(mx, jp.eye(sys.qd_size()), assume_a='pos')
+
+  return state.replace(mass_mx=mx, mass_mx_inv=mx_inv)

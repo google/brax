@@ -19,6 +19,7 @@ from typing import Tuple, Optional, Union
 import jax
 from jax import custom_jvp
 from jax import numpy as jp
+import numpy as np
 
 
 def rotate(vec: jp.ndarray, quat: jp.ndarray):
@@ -314,7 +315,7 @@ def normalize(
   Returns:
     A tuple of (normalized array x, the norm).
   """
-  norm = safe_norm(x)
+  norm = safe_norm(x, axis=axis)
   n = x / (norm + 1e-6 * (norm == 0.0))
   return n, norm
 

@@ -14,48 +14,39 @@
 
 # pylint:disable=g-multiple-import
 """Functions for smooth forward and inverse dynamics."""
-from typing import Tuple
-
 from brax.v2 import math
 from brax.v2 import scan
-from brax.v2.base import Inertia, Motion, System, Transform
+from brax.v2.base import Motion, System, Transform
+from brax.v2.generalized.base import State
 import jax
 from jax import numpy as jp
 
 
-def transform_com(
-    sys: System, q: jp.ndarray, qd: jp.ndarray, x: jp.ndarray
-) -> Tuple[jp.ndarray, Inertia, Motion, Motion, Motion]:
+def transform_com(sys: System, state: State) -> State:
   """Transforms inertia, dof, and link velocity into center of mass frame.
 
   Args:
     sys: a brax system
-    q: joint position vector
-    qd: joint velocity vector
-    x: link position in world frame
+    state: generalized state
 
   Returns:
-    com: center of mass position
-    cinr: inertia in com frame
-    cd: body velocities in com frame
-    cdof: dofs in com frame
-    cdofd: cdof velocity
+    state: generalized state with com, cinr, cd, cdof, cdofd updated
   """
   # TODO: support multiple kinematic trees in the same system
-  xi = x.vmap().do(sys.link.inertia.transform)
+  xi = state.x.vmap().do(sys.link.inertia.transform)
   mass = sys.link.inertia.mass
   com = jp.sum(jax.vmap(jp.multiply)(mass, xi.pos), axis=0) / jp.sum(mass)
   cinr = xi.replace(pos=xi.pos - com).vmap().do(sys.link.inertia)
 
   # motion dofs to global frame centered at subtree-CoM
-  x_pad = x.concatenate(Transform.zero(shape=(1,)))
-  pidx = jp.array(
+  parent_idx = jp.array(
       [
           i if t == 'f' else p
           for i, (t, p) in enumerate(zip(sys.link_types, sys.link_parents))
       ]
   )
-  j = x_pad.take(pidx).vmap().do(sys.link.transform).vmap().do(sys.link.joint)
+  parent = state.x.concatenate(Transform.zero(shape=(1,))).take(parent_idx)
+  j = parent.vmap().do(sys.link.transform).vmap().do(sys.link.joint)
 
   # propagate motion through stacked joints
   def cdof_fn(typ, q, motion):
@@ -88,11 +79,11 @@ def transform_com(
 
     return motion
 
-  cdof = scan.link_types(sys, cdof_fn, 'qd', 'd', q, sys.dof.motion)
+  cdof = scan.link_types(sys, cdof_fn, 'qd', 'd', state.q, sys.dof.motion)
   ang = jax.vmap(math.rotate)(cdof.ang, j.take(sys.dof_link()).rot)
   cdof = cdof.replace(ang=ang)
   cdof = Transform.create(pos=com - j.pos).take(sys.dof_link()).vmap().do(cdof)
-  cdof_qd = jax.vmap(lambda x, y: x * y)(cdof, qd)
+  cdof_qd = jax.vmap(lambda x, y: x * y)(cdof, state.qd)
 
   # forward scan down tree: accumulate link center of mass velocity
   def cd_fn(cd_parent, cdof_qd, dof_idx):
@@ -130,20 +121,13 @@ def transform_com(
 
     return cdofd
 
-  cd_p = cd.concatenate(Motion.zero(shape=(1,))).take(pidx)
+  cd_p = cd.concatenate(Motion.zero(shape=(1,))).take(parent_idx)
   cdofd = scan.link_types(sys, cdofd_fn, 'ldd', 'd', cd_p, cdof, cdof_qd)
 
-  return com, cinr, cd, cdof, cdofd
+  return state.replace(com=com, cinr=cinr, cd=cd, cdof=cdof, cdofd=cdofd)
 
 
-def inverse(
-    sys: System,
-    qd: jp.ndarray,
-    cinr: jp.ndarray,
-    cd: jp.ndarray,
-    cdof: jp.ndarray,
-    cdofd: jp.ndarray,
-) -> jp.ndarray:
+def inverse(sys: System, state: State) -> jp.ndarray:
   """Calculates the system's forces given input motions.
 
   This function computes inverse dynamics using the Newton-Euler algorithm:
@@ -152,11 +136,7 @@ def inverse(
 
   Args:
     sys: a brax system
-    qd: joint velocity vector
-    cinr: inertia in com frame
-    cd: body velocities in com frame
-    cdof: dofs in com frame
-    cdofd: cdof velocity
+    state: generalized state
 
   Returns:
     tau: generalized forces resulting from joint positions and velocities
@@ -171,13 +151,15 @@ def inverse(
 
     return cdd
 
-  cdd = scan.tree(sys, cdd_fn, 'ddd', cdofd, qd, sys.dof_link(depth=True))
+  cdd = scan.tree(
+      sys, cdd_fn, 'ddd', state.cdofd, state.qd, sys.dof_link(depth=True)
+  )
 
   # cfrc_flat = cinr * cdd + cd x (cinr * cd)
   def frc(cinr, cdd, cd):
     return cinr.mul(cdd) + cd.cross(cinr.mul(cd))
 
-  cfrc_flat = jax.vmap(frc)(cinr, cdd, cd)
+  cfrc_flat = jax.vmap(frc)(state.cinr, cdd, state.cd)
 
   # backward scan up tree: accumulate link center of mass forces
   def cfrc_fn(cfrc_child, cfrc):
@@ -188,7 +170,7 @@ def inverse(
   cfrc = scan.tree(sys, cfrc_fn, 'l', cfrc_flat, reverse=True)
 
   # tau = cdof * cfrc[dof_link]
-  tau = jax.vmap(lambda x, y: x.dot(y))(cdof, cfrc.take(sys.dof_link()))
+  tau = jax.vmap(lambda x, y: x.dot(y))(state.cdof, cfrc.take(sys.dof_link()))
 
   return tau
 
@@ -207,17 +189,8 @@ def _passive(sys: System, q: jp.ndarray, qd: jp.ndarray) -> jp.ndarray:
   return frc
 
 
-def forward(
-    sys: System,
-    q: jp.ndarray,
-    qd: jp.ndarray,
-    cinr: Inertia,
-    cd: Motion,
-    cdof: Motion,
-    cdofd: Motion,
-    tau: jp.ndarray,
-) -> jp.ndarray:
-  """Calculates the system's motion given input forces.
+def forward(sys: System, state: State, tau: jp.ndarray) -> jp.ndarray:
+  """Calculates resulting joint forces given input forces.
 
   This method builds and solves the linear system: M @ qdd = -C + tau
 
@@ -226,19 +199,14 @@ def forward(
 
   Args:
     sys: a brax system
-    q: joint position vector
-    qd: joint velocity vector
-    cinr: inertia in com frame
-    cd: body velocities in com frame
-    cdof: dofs in com frame
-    cdofd: cdof velocity
+    state: generalized state
     tau: joint force input vector
 
   Returns:
-    qdd: joint acceleration vector
+    qfrc: joint force vector
   """
-  qfrc_passive = _passive(sys, q, qd)
-  qfrc_bias = inverse(sys, qd, cinr, cd, cdof, cdofd)
+  qfrc_passive = _passive(sys, state.q, state.qd)
+  qfrc_bias = inverse(sys, state)
   qfrc = qfrc_passive - qfrc_bias + tau
 
   return qfrc

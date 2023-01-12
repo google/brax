@@ -51,6 +51,7 @@ setup(
         "optax",
         "Pillow",
         "pytinyrenderer",
+        "scipy",
         "tensorboardX",
         "trimesh",
         "typing-extensions",

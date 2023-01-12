@@ -1,8 +1,5 @@
 import * as THREE from 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r135/build/three.module.js';
 
-
-const DEBUG_OPACITY = 0.6;
-
 function createCheckerBoard() {
   const width = 2;
   const height = 2;
@@ -38,16 +35,21 @@ function getBoxAxisSize(box) {
   return Math.max(box.halfsize[0], box.halfsize[1], box.halfsize[2]) * 4;
 }
 
+/**
+ * Gets an axis size for a mesh.
+ * @param {!ObjType} geom a geometry object
+ * @returns {!float} the axis size
+ */
 function getMeshAxisSize(geom) {
-  let size = 1;
+  let size = 0;
   for (let i = 0; i < geom.vert.length; i++) {
     let v = geom.vert[i];
-    size = Math.max(v.x, v.y, v.z, size);
+    size = Math.max(v[0], v[1], v[2], size);
   }
-  return size;
+  return size * 2;
 }
 
-function createCapsule(capsule, mat, debug) {
+function createCapsule(capsule, mat) {
   const sphere_geom = new THREE.SphereGeometry(capsule.radius, 16, 16);
   const cylinder_geom = new THREE.CylinderGeometry(
       capsule.radius, capsule.radius, capsule.length);
@@ -67,30 +69,17 @@ function createCapsule(capsule, mat, debug) {
   cylinder.castShadow = true;
   cylinder.rotation.x = -Math.PI / 2;
 
-  if (debug) {
-    sphere1.material.transparent = true;
-    sphere2.material.transparent = true;
-    cylinder.material.transparent = true;
-    sphere1.material.opacity = DEBUG_OPACITY;
-    sphere2.material.opacity = DEBUG_OPACITY;
-    cylinder.material.opacity = DEBUG_OPACITY;
-  }
-
   const group = new THREE.Group();
   group.add(sphere1, sphere2, cylinder);
   return group;
 }
 
-function createBox(box, mat, debug) {
+function createBox(box, mat) {
   const geom = new THREE.BoxBufferGeometry(
       2 * box.halfsize[0], 2 * box.halfsize[1], 2 * box.halfsize[2]);
   const mesh = new THREE.Mesh(geom, mat);
   mesh.castShadow = true;
   mesh.baseMaterial = mesh.material;
-  if (debug) {
-    mesh.material.transparent = true;
-    mesh.material.opacity = DEBUG_OPACITY;
-  }
   return mesh;
 }
 
@@ -103,19 +92,15 @@ function createPlane(plane, mat) {
   return mesh;
 }
 
-function createSphere(sphere, mat, debug) {
+function createSphere(sphere, mat) {
   const geom = new THREE.SphereGeometry(sphere.radius, 16, 16);
   const mesh = new THREE.Mesh(geom, mat);
   mesh.castShadow = true;
   mesh.baseMaterial = mesh.material;
-  if (debug) {
-    mesh.material.transparent = true;
-    mesh.material.opacity = DEBUG_OPACITY;
-  }
   return mesh;
 }
 
-function createMesh(meshGeom, mat, debug) {
+function createMesh(meshGeom, mat) {
   const bufferGeometry = new THREE.BufferGeometry();
   const vertices = meshGeom.vert;
   const positions = new Float32Array(vertices.length * 3);
@@ -134,23 +119,7 @@ function createMesh(meshGeom, mat, debug) {
   const mesh = new THREE.Mesh(bufferGeometry, mat);
   mesh.castShadow = true;
   mesh.baseMaterial = mesh.material;
-  if (debug) {
-    mesh.material.transparent = true;
-    mesh.material.opacity = DEBUG_OPACITY;
-  }
   return mesh;
-}
-
-function hasContactDebug(system) {
-  if (system.hasOwnProperty('has_contact_debug')) {
-    return system.has_contact_debug;
-  }
-  let maxLen = 0;
-  for (let i = 0; i < system.contact_pos?.length; i++) {
-    maxLen = Math.max(system.contact_pos[i].length, maxLen);
-  }
-  system.has_contact_debug = system.debug && (maxLen > 0);
-  return system.has_contact_debug;
 }
 
 function createScene(system) {
@@ -161,11 +130,12 @@ function createScene(system) {
       meshGeoms[geom[0]] = geom[1];
     });
   }
-  if (system.debug) {
-    // Add a world axis for debugging.
-    const worldAxis = new THREE.AxesHelper(100);
-    scene.add(worldAxis);
-  }
+
+  // Add a world axis for debugging.
+  const worldAxis = new THREE.AxesHelper(100);
+  worldAxis.visible = false;
+  scene.add(worldAxis);
+
   let minAxisSize = 1e6;
   Object.entries(system.geoms).forEach(function(geom) {
     const name = geom[0];
@@ -183,21 +153,21 @@ function createScene(system) {
       let child;
       let axisSize;
       if (collider.name == 'Box') {
-        child = createBox(collider, mat, system.debug);
+        child = createBox(collider, mat);
         axisSize = getBoxAxisSize(collider);
       } else if (collider.name == 'Capsule') {
-        child = createCapsule(collider, mat, system.debug);
+        child = createCapsule(collider, mat);
         axisSize = getCapsuleAxisSize(collider);
       } else if (collider.name == 'Plane') {
         child = createPlane(collider.plane, mat);
       } else if (collider.name == 'Sphere') {
-        child = createSphere(collider, mat, system.debug);
+        child = createSphere(collider, mat);
         axisSize = getSphereAxisSize(collider);
       } else if (collider.name == 'HeightMap') {
         console.log('heightMap not implemented');
         return;
       } else if (collider.name == 'Mesh') {
-        child = createMesh(collider, mat, system.debug);
+        child = createMesh(collider, mat);
         axisSize = getMeshAxisSize(collider);
       } else if ('clippedPlane' in collider) {
         console.log('clippedPlane not implemented');
@@ -213,8 +183,9 @@ function createScene(system) {
             collider.transform.pos[0], collider.transform.pos[1],
             collider.transform.pos[2]);
       }
-      if (system.debug && axisSize) {
+      if (axisSize) {
         const debugAxis = new THREE.AxesHelper(axisSize);
+        debugAxis.visible = false;
         child.add(debugAxis);
         minAxisSize = Math.min(minAxisSize, axisSize);
       }
@@ -223,60 +194,59 @@ function createScene(system) {
     scene.add(parent);
   });
 
-  // Add contact position debug points.
-  if (hasContactDebug(system)) {
-    for (let i = 0; i < system.contact_pos[0].length; i++) {
-      const parent = new THREE.Group();
-      parent.name = 'contact' + i;
-      let child;
+  /* add contact point spheres  */
+  for (let i = 0; i < system.states.contact.pos[0].length; i++) {
+    const parent = new THREE.Group();
+    parent.name = 'contact' + i;
+    let child;
 
-      const mat = new THREE.MeshPhongMaterial({color: 0xff0000});
-      const sphere_geom = new THREE.SphereGeometry(minAxisSize / 20.0, 6, 6);
-      child = new THREE.Mesh(sphere_geom, mat);
-      child.baseMaterial = child.material;
-      child.castShadow = false;
-      child.position.set(0, 0, 0);
+    const mat = new THREE.MeshPhongMaterial({color: 0xff0000});
+    const sphere_geom = new THREE.SphereGeometry(minAxisSize / 20.0, 6, 6);
+    child = new THREE.Mesh(sphere_geom, mat);
+    child.baseMaterial = child.material;
+    child.castShadow = false;
+    child.position.set(0, 0, 0);
 
-      parent.add(child);
-      scene.add(parent);
-    }
+    parent.add(child);
+    scene.add(parent);
   }
 
   return scene;
 }
 
 function createTrajectory(system) {
-  const times = [...Array(system.pos.length).keys()].map(x => x * system.dt);
+  const times =
+      [...Array(system.states.x.pos.length).keys()].map(x => x * system.dt);
   const tracks = [];
 
-  Object.entries(system.geoms).forEach(function(geom) {
-    const name = geom[0];
-    const i = geom[1][0].link_idx;
+  Object.entries(system.geoms).forEach(function(geom_tuple) {
+    const name = geom_tuple[0];
+    const geom = geom_tuple[1];
+    const i = geom[0].link_idx;
     if (i == null) {
       return;
     }
     const group = name.replaceAll('/', '_');  // sanitize node name
-    const pos = system.pos.map(p => [p[i][0], p[i][1], p[i][2]]);
-    const rot = system.rot.map(r => [r[i][1], r[i][2], r[i][3], r[i][0]]);
+    const pos = system.states.x.pos.map(p => [p[i][0], p[i][1], p[i][2]]);
+    const rot =
+        system.states.x.rot.map(r => [r[i][1], r[i][2], r[i][3], r[i][0]]);
     tracks.push(new THREE.VectorKeyframeTrack(
         'scene/' + group + '.position', times, pos.flat()));
     tracks.push(new THREE.QuaternionKeyframeTrack(
         'scene/' + group + '.quaternion', times, rot.flat()));
   });
 
-  // Add contact point debug.
-  if (hasContactDebug(system)) {
-    for (let i = 0; i < system.contact_pos[0].length; i++) {
-      const group = 'contact' + i;
-      const pos = system.contact_pos.map(p => [p[i][0], p[i][1], p[i][2]]);
-      const visible = system.contact_penetration.map(p => p[i] > 1e-6);
-      tracks.push(new THREE.VectorKeyframeTrack(
-          'scene/' + group + '.position', times, pos.flat(),
-          THREE.InterpolateDiscrete));
-      tracks.push(new THREE.BooleanKeyframeTrack(
-          'scene/' + group + '.visible', times, visible,
-          THREE.InterpolateDiscrete));
-    }
+  /* add contact debug point trajectory */
+  for (let i = 0; i < system.states.contact.pos[0].length; i++) {
+    const group = 'contact' + i;
+    const pos = system.states.contact.pos.map(p => [p[i][0], p[i][1], p[i][2]]);
+    const visible = system.states.contact.penetration.map(p => p[i] > 1e-6);
+    tracks.push(new THREE.VectorKeyframeTrack(
+        'scene/' + group + '.position', times, pos.flat(),
+        THREE.InterpolateDiscrete));
+    tracks.push(new THREE.BooleanKeyframeTrack(
+        'scene/' + group + '.visible', times, visible,
+        THREE.InterpolateDiscrete));
   }
 
   return new THREE.AnimationClip('Action', -1, tracks);
