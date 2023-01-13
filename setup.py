@@ -53,7 +53,7 @@ setup(
         "pytinyrenderer",
         "scipy",
         "tensorboardX",
-        "trimesh",
+        "trimesh==3.9.35",
         "typing-extensions",
     ],
     extras_require={
