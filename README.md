@@ -82,7 +82,7 @@ If you would like to reference Brax in a publication, please use:
   author = {C. Daniel Freeman and Erik Frey and Anton Raichuk and Sertan Girgin and Igor Mordatch and Olivier Bachem},
   title = {Brax - A Differentiable Physics Engine for Large Scale Rigid Body Simulation},
   url = {http://github.com/google/brax},
-  version = {0.1.0},
+  version = {0.1.1},
   year = {2021},
 }
 ```
