@@ -39,6 +39,7 @@ setup(
         "absl-py",
         "dataclasses",
         "dm_env",
+        "etils",
         "flax",
         "grpcio",
         "gym",
