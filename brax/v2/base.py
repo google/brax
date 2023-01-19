@@ -300,6 +300,7 @@ class Geometry(_Base):
   transform: Transform
   friction: jp.ndarray
   elasticity: jp.ndarray
+  rgba: jp.ndarray
 
 
 @struct.dataclass

@@ -40,6 +40,8 @@ setup(
         "dataclasses",
         "dm_env",
         "etils",
+        "flask",
+        "flask-cors",
         "flax",
         "grpcio",
         "gym",

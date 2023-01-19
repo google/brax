@@ -393,6 +393,7 @@ def load_model(mj: mujoco.MjModel) -> System:
         'transform': Transform(pos=mj.geom_pos[i], rot=mj.geom_quat[i]),
         'friction': mj.geom_friction[i, 0],
         'elasticity': custom['elasticity'][i],
+        'rgba': mj.geom_rgba[i], # if there is no colour specified, default is applied
     }
 
     geom_cls = _GEOM_TYPE_CLS[typ]
