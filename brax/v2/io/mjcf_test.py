@@ -139,6 +139,14 @@ class MjcfTest(absltest.TestCase):
     sys = test_utils.load_fixture('capsule.xml')
     self.assertSequenceEqual([g.elasticity for g in sys.geoms], [0.2, 0.1])
 
+  def test_rgba(self):
+    sys = test_utils.load_fixture('colour_objects.xml')
+    # non default colour in plane
+    self.assertSequenceEqual([colour for colour in sys.geoms[0].rgba], [1, 0, 0.8, 1])
+    # rest of the Geometries with default colour
+    for g in sys.geoms[1:]:
+      self.assertSequenceEqual([colour for colour in g.rgba], [0.8, 0.6, 0.4, 1.])
+      
 
 if __name__ == '__main__':
   absltest.main()

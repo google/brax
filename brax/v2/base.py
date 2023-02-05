@@ -300,7 +300,7 @@ class Geometry(_Base):
   transform: Transform
   friction: jp.ndarray
   elasticity: jp.ndarray
-  rgba: jp.ndarray
+
 
 
 @struct.dataclass
@@ -312,6 +312,7 @@ class Sphere(Geometry):
   """
 
   radius: jp.ndarray
+  rgba: Optional[jp.ndarray] = None
 
 
 @struct.dataclass
@@ -325,6 +326,7 @@ class Capsule(Geometry):
 
   radius: jp.ndarray
   length: jp.ndarray
+  rgba: Optional[jp.ndarray] = None
 
 
 @struct.dataclass
@@ -336,12 +338,13 @@ class Box(Geometry):
   """
 
   halfsize: jp.ndarray
+  rgba: Optional[jp.ndarray] = None
 
 
 @struct.dataclass
 class Plane(Geometry):
   """An infinite plane whose normal points at +z in its coordinate space."""
-
+  rgba: Optional[jp.ndarray] = None
 
 @struct.dataclass
 class Mesh(Geometry):
@@ -356,16 +359,18 @@ class Mesh(Geometry):
 
   vert: jp.ndarray
   face: jp.ndarray
+  rgba: Optional[jp.ndarray] = None
 
 
 @struct.dataclass
-class Convex(Mesh):
+class Convex(Geometry):
   """A convex mesh geometry.
 
   Attributes:
     unique_edge: (num_unique, 2) vert index associated with each unique edge
   """
-
+  vert: jp.ndarray
+  face: jp.ndarray
   unique_edge: jp.ndarray
 
 
