@@ -12,20 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for maximal."""
+"""Tests for com."""
 # pylint:disable=g-multiple-import
 from absl.testing import absltest
 from brax.v2 import kinematics
 from brax.v2 import math
 from brax.v2 import test_utils
-from brax.v2.base import Transform
-from brax.v2.spring import maximal
+from brax.v2.positional import com
 import jax
 from jax import numpy as jp
 import numpy as np
 
 
-class MaximalTest(absltest.TestCase):
+class ComTest(absltest.TestCase):
 
   def test_transform(self):
     sys = test_utils.load_fixture('capsule.xml')
@@ -48,14 +47,12 @@ class MaximalTest(absltest.TestCase):
         vel=jp.array([[5.0, 1.0, -1.0]]), ang=jp.array([[1.0, 2.0, -3.0]])
     )
 
-    xi, xdi = maximal.maximal_to_com(sys, x, xd)
-    self.assertNotAlmostEqual(jp.abs(xi.pos - x.pos).sum(), 0)
-    np.testing.assert_array_almost_equal(xi.rot, x.rot)
-    self.assertNotAlmostEqual(jp.abs(xdi.vel - xd.vel).sum(), 0)
-    np.testing.assert_array_almost_equal(xdi.ang, xd.ang)
-
-    coord_transform = Transform(pos=xi.pos - x.pos, rot=x.rot)
-    xp, xdp = maximal.com_to_maximal(xi, xdi, coord_transform)
+    x_i, xd_i = com.from_world(sys, x, xd)
+    self.assertNotAlmostEqual(jp.abs(x_i.pos - x.pos).sum(), 0)
+    np.testing.assert_array_almost_equal(x_i.rot, x.rot)
+    self.assertNotAlmostEqual(jp.abs(xd_i.vel - xd.vel).sum(), 0)
+    np.testing.assert_array_almost_equal(xd_i.ang, xd.ang)
+    xp, xdp = com.to_world(sys, x_i, xd_i)
     np.testing.assert_array_almost_equal(x.pos, xp.pos)
     np.testing.assert_array_almost_equal(x.rot, xp.rot)
     np.testing.assert_array_almost_equal(xd.vel, xdp.vel)
@@ -77,15 +74,12 @@ class MaximalTest(absltest.TestCase):
         rot=math.euler_to_quat(jp.array([45.0, 0.0, 0.0])).reshape(1, -1)
     )
 
-    r_inv = jax.vmap(math.quat_inv)(sys.link.inertia.transform.rot)
-    ri = jax.vmap(lambda x, y: math.quat_to_3x3(math.quat_mul(x, y)))(
-        r_inv, x.rot
-    )
-    expected = jax.vmap(lambda r, i: math.inv_3x3(r @ i @ r.T))(
-        ri, sys.link.inertia.i
-    )
+    # get the expected inv inertia
+    x_i = x.vmap().do(sys.link.inertia.transform)
+    cinr = x_i.replace(pos=jp.zeros_like(x_i.pos)).vmap().do(sys.link.inertia)
+    expected = jax.vmap(math.inv_3x3)(cinr.i)
 
-    inv_i = maximal.com_inv_inertia(sys, x)
+    inv_i = com.inv_inertia(sys, x)
     np.testing.assert_array_almost_equal(expected, inv_i, 1e-6)
 
 

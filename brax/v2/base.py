@@ -27,7 +27,7 @@ Q_WIDTHS = {'f': 7, '1': 1, '2': 2, '3': 3}
 QD_WIDTHS = {'f': 6, '1': 1, '2': 2, '3': 3}
 
 
-class _Base:
+class Base:
   """Base functionality extending all brax types.
 
   These methods allow for brax types to be operated like arrays/matrices.
@@ -109,7 +109,7 @@ class _Base:
 
 
 @struct.dataclass
-class Transform(_Base):
+class Transform(Base):
   """Transforms the position and rotation of a coordinate frame.
 
   Attributes:
@@ -156,7 +156,7 @@ class Transform(_Base):
 
 
 @struct.dataclass
-class Motion(_Base):
+class Motion(Base):
   """Spatial motion vector describing linear and angular velocity.
 
   More on spatial vectors: http://royfeatherstone.org/spatial/v2/index.html
@@ -197,7 +197,7 @@ class Motion(_Base):
 
 
 @struct.dataclass
-class Force(_Base):
+class Force(Base):
   """Spatial force vector describing linear and angular (torque) force.
 
   Attributes:
@@ -208,9 +208,20 @@ class Force(_Base):
   ang: jp.ndarray
   vel: jp.ndarray
 
+  @classmethod
+  def create(
+      cls, ang: Optional[jp.ndarray] = None, vel: Optional[jp.ndarray] = None
+  ) -> 'Force':
+    if ang is None and vel is None:
+      raise ValueError('must specify either ang or vel')
+    ang = jp.zeros_like(vel) if ang is None else ang
+    vel = jp.zeros_like(ang) if vel is None else vel
+
+    return Force(ang=ang, vel=vel)
+
 
 @struct.dataclass
-class Inertia(_Base):
+class Inertia(Base):
   """Angular inertia, mass, and center of mass location.
 
   Attributes:
@@ -233,7 +244,7 @@ class Inertia(_Base):
 
 
 @struct.dataclass
-class Link(_Base):
+class Link(Base):
   """A rigid segment of an articulated body.
 
   Links are connected to eachother by joints.  By moving (rotating or
@@ -263,7 +274,7 @@ class Link(_Base):
 
 
 @struct.dataclass
-class DoF(_Base):
+class DoF(Base):
   """A degree of freedom in the system.
 
   Attributes:
@@ -285,7 +296,7 @@ class DoF(_Base):
 
 
 @struct.dataclass
-class Geometry(_Base):
+class Geometry(Base):
   """A surface or spatial volume with a shape and material properties.
 
   Attributes:
@@ -369,7 +380,7 @@ class Convex(Mesh):
 
 
 @struct.dataclass
-class Contact(_Base):
+class Contact(Base):
   """Contact between two geometries.
 
   Attributes:
@@ -394,7 +405,7 @@ class Contact(_Base):
 
 
 @struct.dataclass
-class Actuator(_Base):
+class Actuator(Base):
   """Actuator, transforms an input signal into a force (motor or thruster).
 
   Attributes:
@@ -421,8 +432,8 @@ class State:
 
   q: jp.ndarray
   qd: jp.ndarray
-  x: jp.ndarray
-  xd: jp.ndarray
+  x: Transform
+  xd: Motion
   contact: Optional[Contact]
 
 
@@ -443,6 +454,10 @@ class System:
     ang_damping: (1,) angular vel damping applied to each body.
     baumgarte_erp: how aggressively interpenetrating bodies should push away\
                 from one another
+    spring_mass_scale: a float that scales mass as `mass^(1 - x)`
+    spring_inertia_scale: a float that scales inertia diag as `inertia^(1 - x)`
+    joint_scale: fraction of position based joint update to apply
+    collide_scale: fraction of position based collide update to apply
     link_names: (num_link,) link names
     link_types: (num_link,) string specifying the joint type of each link
                 valid types are:
@@ -473,6 +488,11 @@ class System:
   vel_damping: jp.float32
   ang_damping: jp.float32
   baumgarte_erp: jp.float32
+  spring_mass_scale: jp.float32
+  spring_inertia_scale: jp.float32
+  # only used in `brax.physics.positional`
+  joint_scale: jp.float32
+  collide_scale: jp.float32
 
   link_names: List[str] = struct.field(pytree_node=False)
   link_types: str = struct.field(pytree_node=False)

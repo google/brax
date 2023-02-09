@@ -139,6 +139,11 @@ class MjcfTest(absltest.TestCase):
     sys = test_utils.load_fixture('capsule.xml')
     self.assertSequenceEqual([g.elasticity for g in sys.geoms], [0.2, 0.1])
 
+  def test_joint_ref_check(self):
+    with self.assertRaisesRegex(
+        NotImplementedError, '`ref` attribute'):
+      test_utils.load_fixture('nonzero_joint_ref.xml')
+
 
 if __name__ == '__main__':
   absltest.main()

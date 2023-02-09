@@ -36,7 +36,9 @@ def _in_jit() -> bool:
   """Returns true if currently inside a jax.jit call or jit is disabled."""
   if jax.config.jax_disable_jit:
     return True
-  return core.cur_sublevel().level > 0
+  return 'DynamicJaxprTrace' in str(
+      jax.core.thread_local_state.trace_state.trace_stack
+  )
 
 
 def _which_np(*args):
@@ -86,7 +88,8 @@ def vmap(fun: F, include: Optional[Sequence[bool]] = None) -> F:
           b_args.append(a)
       rets.append(fun(*b_args))
 
-    return jax.tree_util.tree_map(lambda *x: onp.stack(x), *rets)
+    np = _which_np(*rets)
+    return jax.tree_util.tree_map(lambda *x: np.stack(x), *rets)
 
   return _batched
 
@@ -114,8 +117,9 @@ def scan(f: Callable[[Carry, X], Tuple[Carry, Y]],
       xs_slice = [x[i] for x in xs_flat]
       carry, y = f(carry, jax.tree_util.tree_unflatten(xs_tree, xs_slice))
       ys.append(y)
-    stacked_y = jax.tree_util.tree_map(lambda *y: onp.stack(y),
-                                       *maybe_reversed(ys))
+    mry = maybe_reversed(ys)
+    np = _which_np(*mry)
+    stacked_y = jax.tree_util.tree_map(lambda *y: np.stack(y), *mry)
     return carry, stacked_y
 
 

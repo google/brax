@@ -74,6 +74,7 @@ _COLLIDABLES = [
     ((Capsule, False), (Plane, True)),
     ((Capsule, False), (Capsule, False)),
     ((Capsule, False), (Box, False)),
+    ((Capsule, False), (Box, True)),
     ((Capsule, False), (Mesh, False)),
     ((Box, False), (Plane, True)),
     ((Box, False), (Box, False)),
@@ -147,20 +148,39 @@ def _get_name(mj: mujoco.MjModel, i: int) -> str:
   return names[: names.find('\x00')]
 
 
+def _check_custom(mj: mujoco.MjModel, custom: Dict[str, np.ndarray]) -> None:
+  """Validates fields in custom."""
+  if not (
+      0 <= custom['spring_mass_scale'] <= 1
+      and 0 <= custom['spring_inertia_scale'] <= 1
+  ):
+    raise ValueError('Spring inertia and mass scale must be in [0, 1].')
+  if 'init_qpos' in custom and custom['init_qpos'].shape[0] != mj.nq:
+    size = custom['init_qpos'].shape[0]
+    raise ValueError(
+        f'init_qpos had length {size} but expected length {mj.nq}.'
+    )
+
+
 def _get_custom(mj: mujoco.MjModel) -> Dict[str, np.ndarray]:
   """Gets custom mjcf parameters for brax, with defaults."""
   default = {
-      'vel_damping': (0.0, None),
       'ang_damping': (0.0, None),
+      'vel_damping': (0.0, None),
       'baumgarte_erp': (0.1, None),
+      'spring_mass_scale': (0.0, None),
+      'spring_inertia_scale': (0.0, None),
+      'joint_scale': (0.2, None),
+      'collide_scale': (1.0, None),
       'elasticity': (0.0, 'geom'),
+      'prefer_mesh_collision': (True, 'geom'),
       'constraint_stiffness': (2000.0, 'body'),
       'constraint_damping': (150.0, 'body'),
       'constraint_limit_stiffness': (1000.0, 'body'),
       'constraint_ang_damping': (0.0, 'body'),
   }
 
-  # get numeric default overrides
+  # add user provided overrides to the defaults
   for i, ni in enumerate(mj.name_numericadr):
     nsize = mj.numeric_size[i]
     name = _get_name(mj, ni)
@@ -168,10 +188,27 @@ def _get_custom(mj: mujoco.MjModel) -> Dict[str, np.ndarray]:
     typ = default[name][1] if name in default else None
     default[name] = (val, typ)
 
+  # gather custom overrides with correct sizes
   custom = {}
   for name, (val, typ) in default.items():
-    size = {'body': mj.nbody, 'geom': mj.ngeom}.get(typ)
-    custom[name] = np.repeat(val, size) if size else np.array(val).squeeze()
+    val = np.array([val])
+    size = {
+        'body': mj.nbody - 1,  # ignore the world body
+        'geom': mj.ngeom,
+    }.get(typ, val.shape[-1])
+    if val.shape[-1] != size and val.shape[-1] > 1:
+      # the provided shape does not match against our default size
+      raise ValueError(
+          f'"{name}" custom arg needed {size} values for the "{typ}" type, '
+          f'but got {val.shape[0]} values.'
+      )
+    elif val.shape[-1] != size and val.shape[-1] == 1:
+      val = np.repeat(val, size)
+    val = val.squeeze() if not typ else val.reshape(size)
+    if typ == 'body':
+      # pad one value for the world body, which gets dropped at Link creation
+      val = np.concatenate([[val[0]], val])
+    custom[name] = val
 
   # get tuple custom overrides
   for i, ni in enumerate(mj.name_tupleadr):
@@ -201,25 +238,27 @@ def _get_custom(mj: mujoco.MjModel) -> Dict[str, np.ndarray]:
     arr[objid] = objprm
     custom[name] = arr
 
+  _check_custom(mj, custom)
   return custom
 
 
-def _contact_geoms(geom_a: Geom, geom_b: Geom) -> Tuple[Geom, Geom]:
+def _contact_geoms(
+    a_id: int, b_id: int, geoms: List[Geom], custom: Dict[str, np.ndarray]
+) -> Tuple[Geom, Geom]:
   """Converts geometries for contact functions."""
-  if isinstance(geom_a, Box) and isinstance(geom_b, Box):
-    geom_a = geom_mesh.box_hull(geom_a)
-    geom_b = geom_mesh.box_hull(geom_b)
-  elif isinstance(geom_a, Box) and isinstance(geom_b, Mesh):
-    geom_a = geom_mesh.box_hull(geom_a)
-    geom_b = geom_mesh.convex_hull(geom_b)
-  elif isinstance(geom_a, Mesh) and isinstance(geom_b, Box):
-    geom_a = geom_mesh.convex_hull(geom_a)
-    geom_b = geom_mesh.box_hull(geom_b)
-  elif isinstance(geom_a, Mesh) and isinstance(geom_b, Mesh):
+  geom_a, geom_b = geoms[a_id], geoms[b_id]
+
+  if type(geom_a) in [Box, Mesh] and type(geom_b) in [Box, Mesh]:
     geom_a = geom_mesh.convex_hull(geom_a)
     geom_b = geom_mesh.convex_hull(geom_b)
+
+  if type(geom_a) in [Box, Mesh] and not custom['prefer_mesh_collision'][a_id]:
+    geom_a = geom_mesh.convex_hull(geom_a)
   elif isinstance(geom_a, Box):
     geom_a = geom_mesh.box_tri(geom_a)
+
+  if type(geom_b) in [Box, Mesh] and not custom['prefer_mesh_collision'][b_id]:
+    geom_b = geom_mesh.convex_hull(geom_b)
   elif isinstance(geom_b, Box):
     geom_b = geom_mesh.box_tri(geom_b)
 
@@ -238,7 +277,9 @@ def _contact_geoms(geom_a: Geom, geom_b: Geom) -> Tuple[Geom, Geom]:
 
 
 def _contacts_from_geoms(
-    mj: mujoco.MjModel, geoms: List[Geom]
+    mj: mujoco.MjModel,
+    geoms: List[Geom],
+    custom: Dict[str, np.ndarray],
 ) -> List[Tuple[Geom, Geom]]:
   """Gets a list of contact geom pairs."""
   collidables = []
@@ -250,22 +291,42 @@ def _contacts_from_geoms(
         static_a, static_b = geom_a.link_idx is None, geom_b.link_idx is None
         cls_a, cls_b = type(geom_a), type(geom_b)
         if (cls_a, static_a) == key_a and (cls_b, static_b) == key_b:
-          geoms_ab.append((geom_a, geom_b))
+          geoms_ab.append((geom_id_a, geom_id_b))
         elif (cls_a, static_a) == key_b and (cls_b, static_b) == key_a:
-          geoms_ab.append((geom_b, geom_a))
+          geoms_ab.append((geom_id_b, geom_id_a))
     elif key_a == key_b:  # types match, avoid double counting (a, b), (b, a)
-      geoms_a = [g for g in geoms if (type(g), g.link_idx is None) == key_a]
+      geoms_a = [
+          i
+          for i in range(len(geoms))
+          if (type(geoms[i]), geoms[i].link_idx is None) == key_a
+      ]
       geoms_ab = list(itertools.combinations(geoms_a, 2))
     else:  # types don't match, take every permutation
-      geoms_a = [g for g in geoms if (type(g), g.link_idx is None) == key_a]
-      geoms_b = [g for g in geoms if (type(g), g.link_idx is None) == key_b]
+      geoms_a = [
+          i
+          for i in range(len(geoms))
+          if (type(geoms[i]), geoms[i].link_idx is None) == key_a
+      ]
+      geoms_b = [
+          i
+          for i in range(len(geoms))
+          if (type(geoms[i]), geoms[i].link_idx is None) == key_b
+      ]
       geoms_ab = list(itertools.product(geoms_a, geoms_b))
     if not geoms_ab:
       continue
+
     # filter out self-collisions
-    geoms_ab = [(a, b) for a, b in geoms_ab if a.link_idx != b.link_idx]
+    geoms_ab = [
+        ids
+        for ids in geoms_ab
+        if geoms[ids[0]].link_idx != geoms[ids[1]].link_idx
+    ]
+
     # convert the geometries so that they can be used for contact functions
-    geoms_ab = [_contact_geoms(a, b) for a, b in geoms_ab]
+    geoms_ab = [
+        _contact_geoms(a_id, b_id, geoms, custom) for a_id, b_id in geoms_ab
+    ]
     collidables.append(geoms_ab)
 
   # meshes with different shapes cannot be stacked, so we group meshes by vert
@@ -277,7 +338,6 @@ def _contacts_from_geoms(
       if isinstance(x, Mesh):
         return (x.vert.shape, x.face.shape)
       return -1
-
     return get_key(x[0]), get_key(x[1])
 
   contacts = []
@@ -303,6 +363,11 @@ def load_model(mj: mujoco.MjModel) -> System:
     raise NotImplementedError(
         'Only joint transmission types are supported for actuators.'
     )
+  q_width = {0: 7, 1: 4, 2: 1, 3: 1}
+  non_free = np.concatenate([[j != 0] * q_width[j] for j in mj.jnt_type])
+  if mj.qpos0[non_free].any():
+    raise NotImplementedError(
+        'The `ref` attribute on joint types is not supported.')
 
   custom = _get_custom(mj)
 
@@ -411,7 +476,7 @@ def load_model(mj: mujoco.MjModel) -> System:
       geom = Mesh(vert=vert, face=face, **kwargs)
     geoms.append(geom)
 
-  contacts = _contacts_from_geoms(mj, geoms)
+  contacts = _contacts_from_geoms(mj, geoms, custom)
 
   # create actuators
   ctrl_range = mj.actuator_ctrlrange
@@ -474,6 +539,10 @@ def load_model(mj: mujoco.MjModel) -> System:
       vel_damping=custom['vel_damping'],
       ang_damping=custom['ang_damping'],
       baumgarte_erp=custom['baumgarte_erp'],
+      spring_mass_scale=custom['spring_mass_scale'],
+      spring_inertia_scale=custom['spring_inertia_scale'],
+      joint_scale=custom['joint_scale'],
+      collide_scale=custom['collide_scale'],
       link_names=link_names,
       link_types=link_types,
       link_parents=link_parents,

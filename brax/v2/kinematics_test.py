@@ -50,7 +50,7 @@ class KinematicsTest(parameterized.TestCase):
         7,
     )
 
-  @parameterized.parameters(('ant.xml',), ('humanoid.xml',))
+  @parameterized.parameters(('ant.xml',), ('humanoid.xml',), ('reacher.xml',))
   def test_inverse(self, xml_file):
     sys = test_utils.load_fixture(xml_file)
     # # test at random init
@@ -61,7 +61,8 @@ class KinematicsTest(parameterized.TestCase):
     rand_qd = jp.array(np.random.rand(sys.qd_size())) * 0.1
 
     x, xd = kinematics.forward(sys, rand_q, rand_qd)
-    q, qd = kinematics.inverse(sys, x, xd)
+    j, jd, _, _ = kinematics.world_to_joint(sys, x, xd)
+    q, qd = kinematics.inverse(sys, j, jd)
     np.testing.assert_array_almost_equal(q, rand_q, decimal=5)
     np.testing.assert_array_almost_equal(qd, rand_qd)
 

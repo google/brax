@@ -184,16 +184,20 @@ class Ant(env.PipelineEnv):
       reset_noise_scale=0.1,
       exclude_current_positions_from_observation=True,
       backend='generalized',
-      n_frames=5,
       **kwargs,
   ):
     path = epath.resource_path('brax') / 'v2/envs/assets/ant.xml'
     sys = mjcf.load(path)
 
+    n_frames = 5
+
     if backend == 'spring':
-      sys = self.fix_spring_sys(sys)
+      sys = sys.replace(dt=0.005)
       n_frames = 10
-    super().__init__(sys=sys, backend=backend, n_frames=n_frames, **kwargs)
+
+    kwargs['n_frames'] = kwargs.get('n_frames', n_frames)
+
+    super().__init__(sys=sys, backend=backend, **kwargs)
 
     self._ctrl_cost_weight = ctrl_cost_weight
     self._use_contact_forces = use_contact_forces
@@ -286,23 +290,3 @@ class Ant(env.PipelineEnv):
       qpos = pipeline_state.q[2:]
 
     return jp.concatenate([qpos] + [qvel])
-
-  def fix_spring_sys(self, sys):
-    # TODO: add to custom fields in ant xml
-    sys = sys.replace(
-        link=sys.link.replace(
-            inertia=sys.link.inertia.replace(
-                i=jp.array([1.0 * jp.eye(3)] * sys.num_links()),
-                mass=jp.ones_like(sys.link.inertia.mass),
-            )
-        )
-    )
-    link = sys.link.replace(constraint_limit_stiffness=jp.array([1_000.0] * 9))
-    link = link.replace(constraint_stiffness=jp.array([4_000.0] * 9))
-    link = link.replace(constraint_ang_damping=jp.array([10.0] * 9))
-    link = link.replace(constraint_damping=jp.array([20.0] * 9))
-    sys = sys.replace(link=link)
-    sys = sys.replace(ang_damping=0.0)
-    sys = sys.replace(dt=0.005)
-    sys = sys.replace(actuator=sys.actuator.replace(gear=jp.array(8 * [100.0])))
-    return sys

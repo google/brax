@@ -16,7 +16,6 @@
 
 from absl.testing import absltest
 from absl.testing import parameterized
-from brax.v2 import kinematics
 from brax.v2 import test_utils
 from brax.v2.spring import pipeline
 import jax
@@ -30,7 +29,6 @@ class JointTest(parameterized.TestCase):
   )
   def test_pendulum_period(self, mass, radius, vel):
     """A small spherical mass swings for approximately one period."""
-    # config = text_format.Parse(JointTest._CONFIG, brax.Config())
     sys = test_utils.load_fixture('single_pendulum.xml')
 
     dist_to_anchor = 0.5
@@ -41,7 +39,7 @@ class JointTest(parameterized.TestCase):
     period = (
         2 * jp.pi * jp.sqrt(inertia_about_anchor / (mass * g * dist_to_anchor))
     )
-    num_timesteps = 20_000
+    num_timesteps = 1_000
     sys = sys.replace(dt=period / num_timesteps)
     link = sys.link.replace(constraint_limit_stiffness=jp.array([0.0] * 1))
     link = link.replace(constraint_stiffness=jp.array([10_000.0] * 1))
@@ -59,17 +57,7 @@ class JointTest(parameterized.TestCase):
     )
 
     # init with small initial velocity for small angle approx. validity
-    state = pipeline.init(sys, sys.init_q, jp.zeros(sys.qd_size()))
-    x, xd = kinematics.forward(
-        sys,
-        jp.array(
-            [
-                -jp.pi / 2.0,
-            ]
-        ),
-        jp.array([vel]),
-    )
-    state = state.replace(x=x, xd=xd)
+    state = pipeline.init(sys, jp.array([-jp.pi / 2.0]), jp.array([vel]))
 
     j_spring_step = jax.jit(pipeline.step)
     for _ in range(num_timesteps):

@@ -65,7 +65,7 @@ class BoxTest(absltest.TestCase):
         friction=0.42,
         elasticity=1,
     )
-    h = mesh.box_hull(b)
+    h = mesh.convex_hull(b)
     self.assertIsInstance(h, Convex)
     self.assertSequenceEqual(h.vert.shape, (8, 3))
     self.assertEqual(np.unique(np.abs(h.vert)), 0.5)
@@ -135,6 +135,39 @@ class ConvexTest(absltest.TestCase):
         np.array([[0, 3], [0, 2], [0, 4], [3, 4], [2, 4], [1, 4]]),
     )
     self.assertEqual(h.friction, 1)
+
+
+class ConvexHull2DTest(absltest.TestCase):
+
+  def test_convex_hull_2d_axis1(self):
+    """Tests for the correct winding order for a polgyon with +y normal."""
+    pts = np.array([
+        [-0.04634297, -0.06652775, 0.05853534],
+        [-0.01877651, -0.08309858, -0.05236476],
+        [0.02362804, -0.08010745, 0.05499557],
+        [0.04066505, -0.09034877, -0.01354446],
+        [-0.07255043, -0.06837638, -0.00781699],
+    ])
+    normal = np.array([-0.18467607, -0.97768016, 0.10018111])
+    idx = mesh.convex_hull_2d(pts, normal)
+    expected = np.cross(pts[idx][1] - pts[idx][0], pts[idx][2] - pts[idx][0])
+    expected /= np.linalg.norm(expected)
+    np.testing.assert_array_almost_equal(normal, expected)
+
+  def test_convex_hull_2d_axis2(self):
+    """Tests for the correct winding order for a polgyon with +z normal."""
+    pts = np.array([
+        [0.08607829, -0.03881998, -0.03291714],
+        [-0.01877651, -0.08309858, -0.05236476],
+        [0.05470364, 0.00027677, -0.08371042],
+        [-0.01010019, -0.02708892, -0.0957297],
+        [0.04066505, -0.09034877, -0.01354446],
+    ])
+    normal = np.array([0.3839915, -0.60171936, -0.70034587])
+    idx = mesh.convex_hull_2d(pts, normal)
+    expected = np.cross(pts[idx][1] - pts[idx][0], pts[idx][2] - pts[idx][0])
+    expected /= np.linalg.norm(expected)
+    np.testing.assert_array_almost_equal(normal, expected)
 
 
 class UniqueEdgesTest(absltest.TestCase):

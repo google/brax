@@ -83,7 +83,8 @@ def train(environment: envs.Env,
               ppo_networks.PPONetworks] = ppo_networks.make_ppo_networks,
           progress_fn: Callable[[int, Metrics], None] = lambda *args: None,
           normalize_advantage: bool = True,
-          eval_env: Optional[envs.Env] = None):
+          eval_env: Optional[envs.Env] = None,
+          policy_params_fn: Callable[..., None] = lambda *args: None):
   """PPO training."""
   assert batch_size * num_minibatches % num_envs == 0
   xt = time.time()
@@ -326,6 +327,9 @@ def train(environment: envs.Env,
           training_metrics)
       logging.info(metrics)
       progress_fn(current_step, metrics)
+      params = _unpmap(
+          (training_state.normalizer_params, training_state.params.policy))
+      policy_params_fn(current_step, make_policy, params)
 
   total_steps = current_step
   assert total_steps >= num_timesteps

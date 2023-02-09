@@ -52,6 +52,40 @@ class PipelineTest(absltest.TestCase):
     # trajectories should be close after 1 second of simulation
     self.assertLess(jp.linalg.norm(x_g.pos - x.pos), 2e-2)
 
+  def test_universal_pendulum(self):
+    sys = test_utils.load_fixture('single_universal_pendulum.xml')
+
+    init_q = jp.array([0.1, 0.2])
+    init_qd = jax.random.uniform(jax.random.PRNGKey(0), (2,)) / 10.0
+
+    # set sensible springy defaults
+    link = sys.link.replace(constraint_limit_stiffness=jp.array([0.0] * 2))
+    link = link.replace(constraint_stiffness=jp.array([100_000.0] * 2))
+    link = link.replace(constraint_ang_damping=jp.array([0.0] * 2))
+    link = link.replace(constraint_damping=jp.array([200.0] * 2))
+    sys = sys.replace(link=link)
+    sys = sys.replace(ang_damping=0.0)
+    sys = sys.replace(dt=0.001)
+    sys = sys.replace(solver_iterations=500)
+
+    state = pipeline.init(sys, init_q, init_qd)
+    j_spring_step = jax.jit(pipeline.step)
+    for _ in range(1000):
+      state = j_spring_step(sys, state, jp.zeros(sys.qd_size()))
+    x = state.x
+
+    # compare against generalized step
+    q, qd = init_q, init_qd
+    state = g_pipeline.init(sys, q, qd)
+    j_g_step = jax.jit(g_pipeline.step)
+    j_forward = jax.jit(kinematics.forward)
+    for _ in range(1000):
+      state = j_g_step(sys, state, jp.zeros(sys.qd_size()))
+    x_g, _ = j_forward(sys, state.q, state.qd)
+
+    # trajectories should be close after 1 second of simulation
+    self.assertLess(jp.linalg.norm(x_g.rot - x.rot), 1.5e-2)
+
   def test_spherical_pendulum(self):
     sys = test_utils.load_fixture('single_spherical_pendulum.xml')
 
@@ -119,6 +153,62 @@ class PipelineTest(absltest.TestCase):
 
     # trajectories should be close after 1 second of simulation
     np.testing.assert_allclose(x_g.pos, x.pos, rtol=5e-3, atol=5e-3)
+
+  def test_2d_sliding_joint(self):
+    # tests launching a capsule at a wall with 2 sliding dofs
+    sys = test_utils.load_fixture('double_prismatic.xml')
+    sys = sys.replace(dt=0.001)
+
+    qd = jp.zeros(sys.qd_size())
+    qd = qd.at[0].set(2.5)
+    qd = qd.at[1].set(2.5)
+
+    state = pipeline.init(sys, sys.init_q, qd)
+    j_spring_step = jax.jit(pipeline.step)
+    states = []
+    for _ in range(1000):
+      state = j_spring_step(sys, state, jp.zeros(sys.qd_size()))
+      states.append(state)
+    x, xd = state.x, state.xd
+
+    # capsule still constrained to the plane and not rotating
+    self.assertAlmostEqual(x.pos[0, 2], 0.0, delta=1e-2)
+    np.testing.assert_allclose(
+        x.rot, jp.array([[1.0, 0.0, 0.0, 0.0]]), atol=1e-3
+    )
+    # capsule has reflected off boundary and is traveling 2.5 m/s without rotating
+    np.testing.assert_allclose(
+        xd.vel[0], jp.array([-2.5, -2.5, 0.0]), atol=1e-3
+    )
+    np.testing.assert_allclose(xd.ang[0], jp.array([0.0, 0.0, 0.0]), atol=1e-7)
+
+  def test_3d_sliding_joint(self):
+    # tests launching a capsule at a wall with 2 sliding dofs
+    sys = test_utils.load_fixture('triple_prismatic.xml')
+    sys = sys.replace(dt=0.001)
+
+    qd = jp.zeros(sys.qd_size())
+    qd = qd.at[0].set(2.5)
+    qd = qd.at[1].set(2.5)
+    qd = qd.at[2].set(2.5)
+
+    state = pipeline.init(sys, sys.init_q, qd)
+    j_spring_step = jax.jit(pipeline.step)
+    states = []
+    for _ in range(1000):
+      state = j_spring_step(sys, state, jp.zeros(sys.qd_size()))
+      states.append(state)
+    x, xd = state.x, state.xd
+
+    # capsule not rotating
+    np.testing.assert_allclose(
+        x.rot, jp.array([[1.0, 0.0, 0.0, 0.0]]), atol=1e-3
+    )
+    # capsule has reflected off boundary and is traveling 2.5 m/s without rotating
+    np.testing.assert_allclose(
+        xd.vel[0], jp.array([-2.5, -2.5, -2.5]), atol=1e-3
+    )
+    np.testing.assert_allclose(xd.ang[0], jp.array([0.0, 0.0, 0.0]), atol=1e-7)
 
   def test_sliding_capsule(self):
     sys = test_utils.load_fixture('capsule.xml')

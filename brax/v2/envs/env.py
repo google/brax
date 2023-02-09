@@ -102,6 +102,7 @@ class PipelineEnv(Env):
       self, pipeline_state: Any, action: jp.ndarray
   ) -> base.State:
     """Takes a physics step using the physics pipeline."""
+
     def f(state, _):
       return self._pipeline.step(self.sys, state, action), None
 

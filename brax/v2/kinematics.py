@@ -14,12 +14,16 @@
 
 # pylint:disable=g-multiple-import
 """Functions for forward and inverse kinematics."""
+
+from functools import partial
 from typing import Tuple
 
 from brax.v2 import base
 from brax.v2 import math
 from brax.v2 import scan
-from brax.v2.base import Motion, System, Transform
+from brax.v2.base import Motion
+from brax.v2.base import System
+from brax.v2.base import Transform
 import jax
 from jax import numpy as jp
 
@@ -103,34 +107,29 @@ def forward(
   return x, xd
 
 
-def world_to_joint_frame(
+def world_to_joint(
     sys: System, x: Transform, xd: Motion
-) -> Tuple[Transform, Motion]:
+) -> Tuple[Transform, Motion, Transform, Transform]:
   """Moves into the joint frame of a maximal coordinates kinematic tree."""
 
-  # pad a world transform onto the end
-  x_pad = x.concatenate(Transform.zero((1,)))
-  xd_pad = xd.concatenate(Motion.zero((1,)))
-
-  p_idx = jp.array(sys.link_parents)
-
-  x_p, xd_p = x_pad.take(p_idx), xd_pad.take(p_idx)
-  x_c, xd_c = x, xd
+  parent_idx = jp.array(sys.link_parents)
+  x_p = x.concatenate(Transform.zero((1,))).take(parent_idx)
+  xd_p = xd.concatenate(Motion.zero((1,))).take(parent_idx)
 
   # move x and xd into joint frame
-  x_joint = x_p.vmap().do(sys.link.transform).vmap().do(sys.link.joint)
-  x_c = x_c.vmap().do(sys.link.joint)
-  j = x_c.vmap().to_local(x_joint)
+  a_p = x_p.vmap().do(sys.link.transform).vmap().do(sys.link.joint)
+  a_c = x.vmap().do(sys.link.joint)
+  j = a_c.vmap().to_local(a_p)
 
   # find world velocity of joint location point on parent
-  xd_wj = Transform.create(pos=x_p.pos - x_joint.pos).vmap().do(xd_p)
+  xd_wj = Transform.create(pos=x_p.pos - a_p.pos).vmap().do(xd_p)
 
   # move into joint coordinates
-  xd_joint = xd_c - xd_wj
+  xd_joint = xd - xd_wj
   inv_rotate = jax.vmap(lambda x, y: math.rotate(x, math.quat_inv(y)))
-  jd = jax.tree_map(lambda x: inv_rotate(x, x_joint.rot), xd_joint)
+  jd = jax.tree_map(lambda x: inv_rotate(x, a_p.rot), xd_joint)
 
-  return j, jd
+  return j, jd, a_p, a_c
 
 
 def link_to_joint_motion(motion: Motion) -> Tuple[Motion, float]:
@@ -267,30 +266,22 @@ def axis_slide_vel(
 
 
 def inverse(
-    sys: System, x: Transform, xd: Motion
+    sys: System, j: Transform, jd: Motion
 ) -> Tuple[jp.ndarray, jp.ndarray]:
   """Translates maximal coordinates into reduced coordinates."""
 
-  j, jd = world_to_joint_frame(sys, x, xd)
-
-  def one_dof(j, jd, motion):
-    _, _, (angle, _, _), (ang_vel, _, _) = axis_angle_ang(j, jd, motion)
-    _, (slide_x, _, _), (vel, _, _) = axis_slide_vel(j, jd, motion)
-    # TODO: investigate removing this `where``
-    q = jp.where(motion.ang.any(), angle, slide_x)
-    qd = jp.where(motion.ang.any(), ang_vel, vel)
-    return q, qd
-
-  def two_dof(j, jd, motion):
-    _, _, angles, vels = axis_angle_ang(j, jd, motion)
-    return jp.array(angles[0:2]), jp.array(vels[0:2])
-
-  def three_dof(j, jd, motion):
-    _, _, angles, vels = axis_angle_ang(j, jd, motion)
-    return jp.array(angles[0:3]), jp.array(vels[0:3])
-
   def free(x, xd, _):
     return jp.concatenate([x.pos, x.rot]), jp.concatenate([xd.vel, xd.ang])
+
+  def x_dof(j, jd, motion, x):
+    _, _, angles, angle_vels = axis_angle_ang(j, jd, motion)
+    _, slides, slide_vels = axis_slide_vel(j, jd, motion)
+    # TODO: investigate removing this `where`
+    q = jp.where(motion.ang.any(), jp.array(angles[:x]), jp.array(slides[:x]))
+    qd = jp.where(
+        motion.ang.any(), jp.array(angle_vels[:x]), jp.array(slide_vels[:x])
+    )
+    return q, qd
 
   def q_fn(typ, j, jd, motion):
     motion = jax.tree_map(
@@ -298,9 +289,9 @@ def inverse(
     )
     q_fn_map = {
         'f': free,
-        '1': one_dof,
-        '2': two_dof,
-        '3': three_dof,
+        '1': partial(x_dof, x=1),
+        '2': partial(x_dof, x=2),
+        '3': partial(x_dof, x=3),
     }
 
     q, qd = jax.vmap(q_fn_map[typ])(j, jd, motion)

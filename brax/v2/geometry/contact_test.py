@@ -97,8 +97,45 @@ class SphereTest(absltest.TestCase):
     np.testing.assert_array_almost_equal(c.pos, jp.array([0.0, 0.3, 0.045]))
     np.testing.assert_array_almost_equal(c.normal, jp.array([0, 0.0, -1.0]))
 
-  _SPHERE_BOX = """
-    <mujoco model="sphere_box">
+  _SPHERE_CONVEX = """
+    <mujoco model="sphere_convex">
+      <custom>
+        <tuple name="prefer_mesh_collision">
+          <element objtype="geom" objname="box" prm="0"/>
+        </tuple>
+      </custom>
+      <worldbody>
+        <body name="body1" pos="0.52 0 0.52">
+          <joint axis="1 0 0" name="free1" pos="0 0 0" type="free"/>
+          <geom name="sphere1" pos="0 0 0" size="0.05" type="sphere"/>
+        </body>
+        <body name="body2" pos="0 0 0" euler="0 0 0">
+          <joint axis="1 0 0" name="free2" pos="0 0 0" type="free"/>
+          <geom name="box" pos="0 0 0" size="0.5 0.5 0.5" type="box"/>
+        </body>
+      </worldbody>
+    </mujoco>
+  """
+
+  def test_sphere_convex(self):
+    sys = mjcf.loads(self._SPHERE_CONVEX)
+    x, _ = kinematics.forward(sys, sys.init_q, jp.zeros(sys.qd_size()))
+    c = geometry.contact(sys, x)
+
+    # contact occurs on the edge of the box
+    self.assertGreater(c.penetration, 0.02)
+    normal = jp.array([[1 / jp.sqrt(2), 0.0, 1 / jp.sqrt(2)]])
+    np.testing.assert_array_almost_equal(c.normal, normal, 4)
+    pos = jp.array([0.52, 0, 0.52]) + normal * (c.penetration / 2.0 - 0.05)
+    np.testing.assert_array_almost_equal(c.pos, pos)
+
+  _SPHERE_MESH = """
+    <mujoco model="sphere_mesh">
+      <custom>
+        <tuple name="prefer_mesh_collision">
+          <element objtype="geom" objname="box" prm="1"/>
+        </tuple>
+      </custom>
       <worldbody>
         <body name="body1" pos="0 0 0.54">
           <joint axis="1 0 0" name="free1" pos="0 0 0" type="free"/>
@@ -113,7 +150,7 @@ class SphereTest(absltest.TestCase):
   """
 
   def test_sphere_mesh(self):
-    sys = mjcf.loads(self._SPHERE_BOX)
+    sys = mjcf.loads(self._SPHERE_MESH)
     x, _ = kinematics.forward(sys, sys.init_q, jp.zeros(sys.qd_size()))
     c = geometry.contact(sys, x)
 
@@ -188,6 +225,78 @@ class CapsuleTest(absltest.TestCase):
 
   _CAP_BOX = """
     <mujoco model="cap_box">
+      <custom>
+        <tuple name="prefer_mesh_collision">
+          <element objtype="geom" objname="box" prm="0"/>
+        </tuple>
+      </custom>
+      <worldbody>
+        <body name="body1" pos="0 0 0.54">
+          <joint axis="1 0 0" name="free1" pos="0 0 0" type="free"/>
+          <geom name="cap1" fromto="-0.6 0 0 0.6 0 0" pos="0 0 0" size="0.05" type="capsule"/>
+        </body>
+        <body name="body2" pos="0 0 0" euler="0 0 0">
+          <joint axis="1 0 0" name="free2" pos="0 0 0" type="free"/>
+          <geom name="box" pos="0 0 0" size="0.5 0.5 0.5" type="box"/>
+        </body>
+      </worldbody>
+    </mujoco>
+  """
+
+  def test_capsule_hull(self):
+    """Tests a convex-capsule collision for a face contact."""
+    sys = mjcf.loads(self._CAP_BOX)
+    x, _ = kinematics.forward(sys, sys.init_q, jp.zeros(sys.qd_size()))
+    c = geometry.contact(sys, x)
+
+    self.assertEqual(c.pos.shape[0], 2)
+    np.testing.assert_array_almost_equal(c.penetration, jp.repeat(0.01, 2))
+    np.testing.assert_array_almost_equal(c.pos[:, 2], jp.repeat(0.495, 2))
+    np.testing.assert_array_almost_equal(
+        c.normal, jp.array([[0, 0.0, 1.0]] * 2), 4
+    )
+
+  _CAP_EDGE_BOX = """
+    <mujoco model="cap_edge_box">
+      <custom>
+        <tuple name="prefer_mesh_collision">
+          <element objtype="geom" objname="box" prm="0"/>
+        </tuple>
+      </custom>
+      <worldbody>
+        <body name="body1" pos="0.5 0 0.55" euler="0 30 0">
+          <joint axis="1 0 0" name="free1" pos="0 0 0" type="free"/>
+          <geom name="cap1" fromto="-0.6 0 0 0.6 0 0" pos="0 0 0" size="0.05" type="capsule"/>
+        </body>
+        <body name="body2" pos="0 0 0" euler="0 0 0">
+          <joint axis="1 0 0" name="free2" pos="0 0 0" type="free"/>
+          <geom name="box" pos="0 0 0" size="0.5 0.5 0.5" type="box"/>
+        </body>
+      </worldbody>
+    </mujoco>
+  """
+
+  def test_capsule_edge_hull(self):
+    """Tests a convex-capsule collision for an edge contact."""
+    sys = mjcf.loads(self._CAP_EDGE_BOX)
+    x, _ = kinematics.forward(sys, sys.init_q, jp.zeros(sys.qd_size()))
+    c = geometry.contact(sys, x)
+
+    self.assertEqual(c.pos.shape[0], 2)
+    np.testing.assert_array_almost_equal(
+        c.penetration, jp.array([0.006699, -0.3])
+    )
+
+    # The contact point is in the correct box quadrant.
+    pos_r = round(c.pos[0], 5)
+    self.assertTrue(((pos_r <= 0.5) & (pos_r >= 0)).all())
+    # Normal points in +z and +x.
+    self.assertGreater(c.normal[0, 0], 0)
+    np.testing.assert_array_almost_equal(c.normal[0, 1], 0, 4)
+    self.assertGreater(c.normal[0, 2], 0)
+
+  _CAP_MESH = """
+    <mujoco model="cap_mesh">
       <worldbody>
         <body name="body1" pos="0 0 0.54">
           <joint axis="1 0 0" name="free1" pos="0 0 0" type="free"/>
@@ -202,10 +311,11 @@ class CapsuleTest(absltest.TestCase):
   """
 
   def test_capsule_mesh(self):
-    sys = mjcf.loads(self._CAP_BOX)
+    sys = mjcf.loads(self._CAP_MESH)
     x, _ = kinematics.forward(sys, sys.init_q, jp.zeros(sys.qd_size()))
     c = geometry.contact(sys, x)
 
+    self.assertEqual(c.pos.shape[0], 12)  # one contact per triangle
     np.testing.assert_array_almost_equal((c.penetration > 0).sum(), 4)
     c = c.take(c.penetration.argsort()[-4:])
     np.testing.assert_array_almost_equal(c.penetration, jp.repeat(0.01, 4))
@@ -216,7 +326,38 @@ class CapsuleTest(absltest.TestCase):
 
 
 class ConvexTest(absltest.TestCase):
-  """Tests the convex-convex contact function."""
+  """Tests the convex contact functions."""
+
+  _BOX_PLANE = """
+    <mujoco model="box_plane">
+      <custom>
+        <tuple name="prefer_mesh_collision">
+          <element objtype="geom" objname="box" prm="0"/>
+        </tuple>
+      </custom>
+      <worldbody>
+        <geom name="floor" pos="0 0 0" size="40 40 40" type="plane"/>
+        <body name="body1" pos="0 0 0.7" euler="45 0 0">
+          <joint axis="1 0 0" name="free1" pos="0 0 0" type="free"/>
+          <geom name="box" pos="0 0 0" size="0.5 0.5 0.5" type="box"/>
+        </body>
+      </worldbody>
+    </mujoco>
+  """
+
+  def test_box_plane(self):
+    """Tests a plane contact for a box convex collision."""
+    sys = mjcf.loads(self._BOX_PLANE)
+    x, _ = kinematics.forward(sys, sys.init_q, jp.zeros(sys.qd_size()))
+    c = geometry.contact(sys, x)
+
+    self.assertEqual(c.pos.shape[0], 4)  # 4 potential contacts with a plane
+    self.assertEqual((c.penetration > 0.0).sum(), 2)  # 2 corners penetrating
+    np.testing.assert_array_almost_equal(
+        c.pos[c.penetration > 0.0].sort(axis=0),
+        jp.array([[-0.5, 0.0, -0.00710678], [0.5, 0.0, -0.00710678]]),
+    )
+    self.assertTrue((c.normal == jp.array([0.0, 0.0, 1.0])).all())
 
   _BOX_BOX = """
     <mujoco model="box_box">
@@ -234,6 +375,7 @@ class ConvexTest(absltest.TestCase):
   """
 
   def test_box_box(self):
+    """Tests a face contact for a box-box convex collision."""
     sys = mjcf.loads(self._BOX_BOX)
     x, _ = kinematics.forward(sys, sys.init_q, jp.zeros(sys.qd_size()))
     c = geometry.contact(sys, x)
@@ -260,7 +402,7 @@ class ConvexTest(absltest.TestCase):
   """
 
   def test_box_box_edge(self):
-    """Tests the edge contact for a box-box collision."""
+    """Tests an edge contact for a box-box convex collision."""
     sys = mjcf.loads(self._BOX_BOX_EDGE)
     x, _ = kinematics.forward(sys, sys.init_q, jp.zeros(sys.qd_size()))
     c = geometry.contact(sys, x)
@@ -275,8 +417,8 @@ class ConvexTest(absltest.TestCase):
   _CONVEX_CONVEX = """
     <mujoco model="convex_convex">
       <asset>
-          <mesh name="tetrahedron" file="meshes/tetrahedron.stl" scale="0.1 0.1 0.1" />
-          <mesh name="dodecahedron" file="meshes/dodecahedron.stl" scale="0.01 0.01 0.01" />
+        <mesh name="tetrahedron" file="meshes/tetrahedron.stl" scale="0.1 0.1 0.1" />
+        <mesh name="dodecahedron" file="meshes/dodecahedron.stl" scale="0.01 0.01 0.01" />
       </asset>
       <worldbody>
         <body name="obj1" pos="0.0 2.0 0.096">
@@ -308,8 +450,8 @@ class ConvexTest(absltest.TestCase):
 class MeshTest(absltest.TestCase):
   """Tests the mesh contact functions."""
 
-  _BOX_PLANE = """
-    <mujoco model="box_plane">
+  _MESH_PLANE = """
+    <mujoco model="mesh_plane">
       <worldbody>
         <geom name="floor" pos="0 0 0" size="40 40 40" type="plane"/>
         <body name="body1" pos="0 0 0.7" euler="45 0 0">
@@ -320,12 +462,12 @@ class MeshTest(absltest.TestCase):
     </mujoco>
   """
 
-  def test_box_plane(self):
-    sys = mjcf.loads(self._BOX_PLANE)
+  def test_mesh_plane(self):
+    sys = mjcf.loads(self._MESH_PLANE)
     x, _ = kinematics.forward(sys, sys.init_q, jp.zeros(sys.qd_size()))
     c = geometry.contact(sys, x)
 
-    self.assertEqual(c.pos.shape[0], 8)  # 8 box corners
+    self.assertEqual(c.pos.shape[0], 8)  # 8 potential contacts for each corner
     self.assertEqual((c.penetration > 0.0).sum(), 2)  # 2 corners penetrating
     np.testing.assert_array_almost_equal(
         c.pos[c.penetration > 0.0].sort(axis=0),

@@ -22,11 +22,7 @@ from brax.v2 import envs
 from brax.v2 import test_utils
 from jax import numpy as jp
 
-_EXPECTED_SPS = {
-    'spring': {
-        'ant': 1000,
-    }
-}
+_EXPECTED_SPS = {'spring': {'ant': 1000, 'humanoid': 1000}}
 
 
 

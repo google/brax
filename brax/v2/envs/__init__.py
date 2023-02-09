@@ -18,12 +18,28 @@
 from typing import Optional, Type
 
 from brax.v2.envs import ant
+from brax.v2.envs import half_cheetah
+from brax.v2.envs import hopper
+from brax.v2.envs import humanoid
+from brax.v2.envs import humanoidstandup
+from brax.v2.envs import inverted_double_pendulum
+from brax.v2.envs import inverted_pendulum
+from brax.v2.envs import reacher
+from brax.v2.envs import walker2d
 from brax.v2.envs import wrapper
 from brax.v2.envs.env import Env
 
 
 _envs = {
     'ant': ant.Ant,
+    'halfcheetah': half_cheetah.Halfcheetah,
+    'hopper': hopper.Hopper,
+    'humanoid': humanoid.Humanoid,
+    'humanoidstandup': humanoidstandup.HumanoidStandup,
+    'inverted_pendulum': inverted_pendulum.InvertedPendulum,
+    'inverted_double_pendulum': inverted_double_pendulum.InvertedDoublePendulum,
+    'reacher': reacher.Reacher,
+    'walker2d': walker2d.Walker2d,
 }
 
 

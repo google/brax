@@ -67,7 +67,7 @@ class State(base.State):
         x=Transform.zero((sys.num_links(),)),
         xd=Motion.zero((sys.num_links(),)),
         contact=None,
-        com=jp.zeros((sys.num_links(), 3)),
+        com=jp.zeros(3),
         cinr=Inertia(
             Transform.zero((sys.num_links(),)),
             jp.zeros((sys.num_links(), 3, 3)),

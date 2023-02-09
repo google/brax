@@ -21,7 +21,6 @@ from brax.training.types import PRNGKey
 import flax
 import jax
 from jax import flatten_util
-from jax.experimental import maps
 from jax.experimental import pjit
 import jax.numpy as jnp
 
@@ -278,11 +277,13 @@ class PjitWrapper(ReplayBuffer[State, Sample]):
   (i.e. for random sampling, each shard will sample from the data they can see).
   """
 
-  def __init__(self,
-               buffer: ReplayBuffer[State, Sample],
-               mesh: maps.Mesh,
-               axis_name: str,
-               batch_partition_spec: Optional[pjit.PartitionSpec] = None):
+  def __init__(
+      self,
+      buffer: ReplayBuffer[State, Sample],
+      mesh: jax.sharding.Mesh,
+      axis_name: str,
+      batch_partition_spec: Optional[jax.sharding.PartitionSpec] = None,
+  ):
     """Constructor.
 
     Args:
@@ -318,7 +319,7 @@ class PjitWrapper(ReplayBuffer[State, Sample]):
     def size(buffer_state: State) -> int:
       return jnp.sum(jax.vmap(self._buffer.size)(buffer_state))
 
-    partition_spec = pjit.PartitionSpec((axis_name,))
+    partition_spec = jax.sharding.PartitionSpec((axis_name,))
     self._partitioned_init = pjit.pjit(
         init, in_axis_resources=None, out_axis_resources=partition_spec)
     self._partitioned_insert = pjit.pjit(
@@ -329,7 +330,7 @@ class PjitWrapper(ReplayBuffer[State, Sample]):
         sample,
         in_axis_resources=partition_spec,
         out_axis_resources=(partition_spec, batch_partition_spec))
-    # This will return the TOTAL size accross all devices.
+    # This will return the TOTAL size across all devices.
     self._partitioned_size = pjit.pjit(
         size, in_axis_resources=partition_spec, out_axis_resources=None)
 
@@ -352,3 +353,44 @@ class PjitWrapper(ReplayBuffer[State, Sample]):
     """See base class. The total size (sum of all partitions) is returned."""
     with self._mesh:
       return self._partitioned_size(buffer_state)
+
+
+@flax.struct.dataclass
+class PrimitiveReplayBufferState(Generic[Sample]):
+  """The state of the primitive replay buffer."""
+
+  samples: Optional[Sample] = None
+
+
+class PrimitiveReplayBuffer(
+    ReplayBuffer[PrimitiveReplayBufferState[Sample], Sample], Generic[Sample]
+):
+  """A primitive queue that can contain at most one batch of samples."""
+
+  def init(self, key: PRNGKey) -> PrimitiveReplayBufferState[Sample]:
+    """Init the replay buffer."""
+    return PrimitiveReplayBufferState(samples=None)
+
+  def insert(
+      self, buffer_state: PrimitiveReplayBufferState[Sample], samples: Sample
+  ) -> PrimitiveReplayBufferState[Sample]:
+    """Insert data in the replay buffer."""
+    if buffer_state.samples is not None:
+      raise ValueError('The buffer is full')
+    return PrimitiveReplayBufferState(samples=samples)
+
+  def sample(
+      self, buffer_state: PrimitiveReplayBufferState[Sample]
+  ) -> Tuple[PrimitiveReplayBufferState[Sample], Sample]:
+    """Sample a batch of data."""
+    if buffer_state.samples is None:
+      raise ValueError('The buffer is empty')
+    return PrimitiveReplayBufferState(samples=None), buffer_state.samples
+
+  def size(self, buffer_state: PrimitiveReplayBufferState[Sample]) -> int:
+    """Return the total amount of elements that are sampleable."""
+    return (
+        jax.tree_flatten(buffer_state.samples)[0][0].shape[0]
+        if buffer_state.samples is not None
+        else 0
+    )

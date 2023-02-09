@@ -16,23 +16,15 @@
 """Physics pipeline for fully articulated dynamics and collisiion."""
 
 from brax.v2 import actuator
-from brax.v2 import base
 from brax.v2 import geometry
 from brax.v2 import kinematics
-from brax.v2.base import System, Transform
+from brax.v2.base import Motion, System
 from brax.v2.spring import collisions
+from brax.v2.spring import com
 from brax.v2.spring import integrator
 from brax.v2.spring import joints
-from brax.v2.spring import maximal
-from flax import struct
-
-import jax
+from brax.v2.spring.base import State
 from jax import numpy as jp
-
-
-@struct.dataclass
-class State(base.State):
-  """Dynamic state that changes after every step."""
 
 
 def init(sys: System, q: jp.ndarray, qd: jp.ndarray) -> State:
@@ -46,9 +38,29 @@ def init(sys: System, q: jp.ndarray, qd: jp.ndarray) -> State:
   Returns:
     state: initial physics state
   """
+  # position/velocity level terms
   x, xd = kinematics.forward(sys, q, qd)
+  j, jd, a_p, a_c = kinematics.world_to_joint(sys, x, xd)
   contact = geometry.contact(sys, x)
-  return State(q, qd, x, xd, contact)
+  x_i, xd_i = com.from_world(sys, x, xd)
+  i_inv = com.inv_inertia(sys, x)
+  mass = sys.link.inertia.mass ** (1 - sys.spring_mass_scale)
+
+  return State(
+      q=q,
+      qd=qd,
+      x=x,
+      xd=xd,
+      contact=contact,
+      x_i=x_i,
+      xd_i=xd_i,
+      j=j,
+      jd=jd,
+      a_p=a_p,
+      a_c=a_c,
+      i_inv=i_inv,
+      mass=mass,
+  )
 
 
 def step(sys: System, state: State, act: jp.ndarray) -> State:
@@ -66,49 +78,24 @@ def step(sys: System, state: State, act: jp.ndarray) -> State:
     x: updated link transform in world frame
     xd: updated link motion in world frame
   """
-  x, xd, q, qd = state.x, state.xd, state.q, state.qd
+  # pre-calculate some auxilliary terms used further down
+  state = state.replace(contact=geometry.contact(sys, state.x))
+  state = state.replace(i_inv=com.inv_inertia(sys, state.x))
 
-  # calculate forces arising from different components
-  # TODO: consider a segment_sum in joints.resolve, so that tau and
-  # f_j can be combined here
-  f_j, pos_j, link_idx_j = joints.resolve(sys, x, xd)
+  # calculate acceleration and delta-velocity terms
+  tau = actuator.to_tau(sys, act, state.q)
+  xdd_i = joints.resolve(sys, state, tau) + Motion.create(vel=sys.gravity)
+  # semi-implicit euler: apply acceleration update before resolving collisions
+  # TODO: determine whether we really need this extra integration
+  state = state.replace(xd_i=state.xd_i + xdd_i * sys.dt)
+  xdv_i = collisions.resolve(sys, state)
 
-  tau_local = actuator.to_tau(sys, act, state.q)
-  f_a, pos_a, link_idx_a = actuator.to_tau_world(sys, state.q, tau_local)
+  # now integrate and update position/velocity-level terms
+  x_i, xd_i = integrator.integrate(sys, state.x_i, state.xd_i, xdv_i)
+  x, xd = com.to_world(sys, x_i, xd_i)
+  state = state.replace(x=x, xd=xd, x_i=x_i, xd_i=xd_i)
+  j, jd, a_p, a_c = kinematics.world_to_joint(sys, x, xd)
+  q, qd = kinematics.inverse(sys, j, jd)
+  state = state.replace(q=q, qd=qd, a_p=a_p, a_c=a_c, j=j, jd=jd)
 
-  # move to center of mass
-  xi, xdi = maximal.maximal_to_com(sys, x, xd)
-  coord_transform = Transform(pos=xi.pos - x.pos, rot=x.rot)
-  inv_inertia = maximal.com_inv_inertia(sys, x)
-
-  f, pos, link_idxs = (
-      jax.tree_map(lambda x, y: jp.vstack([x, y]), f_j, f_a),
-      jp.concatenate([pos_j, pos_a]),
-      jp.concatenate([link_idx_j, link_idx_a]),
-  )
-
-  # update state with forces
-  xdi = integrator.forward(
-      sys,
-      xi,
-      xdi,
-      inv_inertia,
-      f=f,
-      pos=pos,
-      link_idx=link_idxs,
-  )
-
-  # resolve collisions
-  contact = geometry.contact(sys, x)
-  p_c, pos_c, link_idx_c = collisions.resolve(
-      sys, xi, xdi, inv_inertia, contact
-  )
-  xi, xdi = integrator.forward_c(
-      sys, xi, xdi, inv_inertia, p=p_c, pos=pos_c, link_idx=link_idx_c
-  )
-
-  # move back to world frame
-  x, xd = maximal.com_to_maximal(xi, xdi, coord_transform)
-
-  q, qd = kinematics.inverse(sys, x, xd)
-  return State(q, qd, x, xd, contact)
+  return state

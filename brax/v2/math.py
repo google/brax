@@ -204,22 +204,13 @@ def inv_3x3(m) -> jp.ndarray:
   return adjugate / (det + 1e-10)
 
 
-def orthogonals(n: jp.ndarray) -> Tuple[jp.ndarray, jp.ndarray]:
-  """Given a normal n of a plane, returns orthogonal p, q on the plane."""
-  n_sqr = n[2] * n[2]
-  a = n[1] * n[1] + jp.where(n_sqr > 0.5, n_sqr, n[0] * n[0])
-  k = jp.sqrt(a)
-
-  p_gt = jp.array([0, -n[2], n[1]])
-  p_lt = jp.array([-n[1], n[0], n[1]])
-  p = jp.where(a > 0.5, p_gt, p_lt) * k
-
-  # set q = n x p
-  q_gt = jp.array([a * k, -n[0] * p[2], n[0] * p[1]])
-  q_lt = jp.array([-n[2] * p[1], n[2] * p[0], a * k])
-  q = jp.where(a > 0.5, q_gt, q_lt)
-
-  return p, q
+def orthogonals(a: jp.ndarray) -> Tuple[jp.ndarray, jp.ndarray]:
+  """Returns orthogonal vectors `b` and `c`, given a normal vector `a`."""
+  y, z = jp.array([0, 1, 0]), jp.array([0, 0, 1])
+  b = jp.where((-0.5 < a[1]) & (a[1] < 0.5), y, z)
+  b = b - a * a.dot(b)
+  b = normalize(b)[0]
+  return b, jp.cross(a, b)
 
 
 def solve_pgs(a: jp.ndarray, b: jp.ndarray, num_iters: int) -> jp.ndarray:
@@ -268,13 +259,12 @@ def inv_approximate(
 
   def body_fn(value):
     a_inv, k, _ = value
-    a_inv_new = 2 * a_inv - a_inv @ a.T @ a_inv
+    a_inv_new = a_inv @ (2 * np.eye(a.shape[0]) - a @ a_inv)
     return a_inv_new, k + 1, jp.linalg.norm(a_inv_new - a_inv)
 
   # ensure ||I - X0 @ A|| < 1, in order to guarantee convergence
   r0 = jp.eye(a.shape[0]) - a @ a_inv
   a_inv = jp.where(jp.linalg.norm(r0) > 1, 0.5 * a.T / jp.trace(a @ a.T), a_inv)
-
   a_inv, *_ = jax.lax.while_loop(cond_fn, body_fn, (a_inv, 0, 1.0))
 
   return a_inv
@@ -322,15 +312,12 @@ def normalize(
 
 def from_to(v1: jp.ndarray, v2: jp.ndarray) -> jp.ndarray:
   """Calculates the quaternion that rotates unit vector v1 to unit vector v2."""
-  rot = jp.append(1.0 + v1.dot(v2), jp.cross(v1, v2))
-
-  # handle v1.dot(v2) == -1
-  x, y = jp.array([1.0, 0.0, 0.0]), jp.array([0.0, 1.0, 0.0])
-  rot_axis = jp.where(
-      jp.abs(v1.dot(x)) > 0.99, jp.cross(v1, y), jp.cross(v1, x)
-  )
-  rot = jp.where(rot[0] < 1e-6, quat_rot_axis(rot_axis, jp.pi), rot)
-
+  xyz = jp.cross(v1, v2)
+  w = 1.0 + jp.dot(v1, v2)
+  rnd = jax.random.uniform(jax.random.PRNGKey(0), (3,))
+  v1_o = rnd - jp.dot(rnd, v1) * v1
+  xyz = jp.where(w < 1e-6, v1_o, xyz)
+  rot = jp.append(w, xyz)
   return rot / jp.linalg.norm(rot)
 
 
@@ -362,3 +349,33 @@ def quat_to_euler(q: jp.ndarray) -> jp.ndarray:
   )
 
   return jp.array([x, y, z])
+
+
+def vec_quat_mul(u: jp.ndarray, v: jp.ndarray) -> jp.ndarray:
+  """Multiplies a vector u and a quaternion v.
+
+  This is a convenience method for multiplying two quaternions when
+  one of the quaternions has a 0-value w-part, i.e.:
+  quat_mul([0.,a,b,c], [d,e,f,g])
+
+  It is slightly more efficient than constructing a 0-w-part quaternion
+  from the vector.
+
+  Args:
+    u: (3,) vector representation of the quaternion (0.,x,y,z)
+    v: (4,) quaternion (w,x,y,z)
+
+  Returns:
+    A quaternion u * v.
+  """
+  return jp.array([
+      -u[0] * v[1] - u[1] * v[2] - u[2] * v[3],
+      u[0] * v[0] + u[1] * v[3] - u[2] * v[2],
+      -u[0] * v[3] + u[1] * v[0] + u[2] * v[1],
+      u[0] * v[2] - u[1] * v[1] + u[2] * v[0],
+  ])
+
+
+def relative_quat(q1: jp.ndarray, q2: jp.ndarray) -> jp.ndarray:
+  """Returns the relative quaternion from q1 to q2."""
+  return quat_mul(q2, quat_inv(q1))

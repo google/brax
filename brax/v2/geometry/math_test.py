@@ -423,7 +423,7 @@ class ManifoldPointsTest(parameterized.TestCase):
     poly_mask = jp.array([False, True, True, True])
     poly_norm = jp.array([0.0, 0.0, 1.0])
     idx = geom_math.manifold_points(poly, poly_mask, poly_norm)
-    self.assertSequenceEqual(idx.tolist(), [1, 3, 1, 2])
+    self.assertSequenceEqual(idx.tolist(), [1, 3, 2, 1])
 
 
 if __name__ == '__main__':

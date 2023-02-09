@@ -186,7 +186,7 @@ def closest_segment_triangle_points(
   return seg_pt, tri_pt
 
 
-def _project_pt_onto_plane(
+def project_pt_onto_plane(
     pt: jp.ndarray, plane_pt: jp.ndarray, plane_normal: jp.ndarray
 ) -> jp.ndarray:
   """Projects a point onto a plane along the plane normal."""
@@ -198,7 +198,7 @@ def _project_poly_onto_plane(
     poly: jp.ndarray, plane_pt: jp.ndarray, plane_normal: jp.ndarray
 ) -> jp.ndarray:
   """Projects a polygon onto a plane using the plane normal."""
-  return jax.vmap(_project_pt_onto_plane, in_axes=[0, None, None])(
+  return jax.vmap(project_pt_onto_plane, in_axes=[0, None, None])(
       poly, plane_pt, math.normalize(plane_normal)[0]
   )
 
@@ -221,7 +221,7 @@ def point_in_front_of_plane(
   return (pt - plane_pt).dot(plane_normal) > 1e-6
 
 
-def _clip_edge_to_planes(
+def clip_edge_to_planes(
     edge_p0: jp.ndarray,
     edge_p1: jp.ndarray,
     plane_pts: jp.ndarray,
@@ -326,7 +326,7 @@ def clip(
 
   # Clip all edges of the subject poly against clipping side planes.
   clipped_edges0, masks0 = jax.vmap(
-      _clip_edge_to_planes, in_axes=[0, 0, None, None]
+      clip_edge_to_planes, in_axes=[0, 0, None, None]
   )(
       subject_edge_p0,
       subject_edge_p1,
@@ -345,7 +345,7 @@ def clip(
 
   # Clip all edges of the clipping poly against subject planes.
   clipped_edges1, masks1 = jax.vmap(
-      _clip_edge_to_planes, in_axes=[0, 0, None, None]
+      clip_edge_to_planes, in_axes=[0, 0, None, None]
   )(clipping_p0_s, clipping_p1_s, subject_plane_pts, subject_plane_normals)
 
   # Merge the points and reshape.
@@ -360,24 +360,25 @@ def clip(
 def manifold_points(
     poly: jp.ndarray, poly_mask: jp.ndarray, poly_norm: jp.ndarray
 ) -> jp.ndarray:
-  """Chooses four points with maximal area within a polygon."""
+  """Chooses four points on the polygon with approximately maximal area."""
   dist_mask = jp.where(poly_mask, 0.0, -1e6)
   a_idx = jp.argmax(dist_mask)
   a = poly[a_idx]
-  # choose point b farthest from a
+  # choose point b furthest from a
   b_idx = (((a - poly) ** 2).sum(axis=1) + dist_mask).argmax()
   b = poly[b_idx]
-  # maximize area of triangle
-  qa, qb = poly - a, poly - b
-  area_0 = jax.vmap(jp.cross)(qa, qb).dot(poly_norm)
-  c_idx = jp.argmax(area_0 + dist_mask)
+  # choose point c furthest along the axis orthogonal to (a-b)
+  ab = jp.cross(poly_norm, a - b)
+  ap = a - poly
+  c_idx = (jp.abs(ap.dot(ab)) + dist_mask).argmax()
   c = poly[c_idx]
-  # maximize negative area with each edge against fourth point
-  qc = poly - c
-  area_1 = jax.vmap(jp.cross)(qb, qc).dot(poly_norm)
-  area_2 = jax.vmap(jp.cross)(qc, qa).dot(poly_norm)
-  min_area = (jp.stack([area_0, area_1, area_2]) - dist_mask).min(axis=0)
-  d_idx = jp.argmin(min_area)
+  # choose point d furthest from the other two triangle edges
+  ac = jp.cross(poly_norm, a - c)
+  bc = jp.cross(poly_norm, b - c)
+  bp = b - poly
+  dist_bp = jp.abs(bp.dot(bc)) + dist_mask
+  dist_ap = jp.abs(ap.dot(ac)) + dist_mask
+  d_idx = jp.concatenate([dist_bp, dist_ap]).argmax() % poly.shape[0]
   return jp.array([a_idx, b_idx, c_idx, d_idx])
 
 

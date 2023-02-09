@@ -40,6 +40,8 @@ setup(
         "dataclasses",
         "dm_env",
         "etils",
+        "flask",
+        "flask_cors",
         "flax",
         "grpcio",
         "gym",
@@ -69,7 +71,4 @@ setup(
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
     ],
     keywords="JAX reinforcement learning rigidbody physics",
-    data_files=[
-        ("testdata", ["brax/tests/testdata/cylinder.stl"])
-    ],
 )
