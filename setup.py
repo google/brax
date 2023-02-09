@@ -45,7 +45,7 @@ setup(
         "flax",
         "grpcio",
         "gym",
-        "jax>=0.4.3",
+        "jax",
         "jaxlib",
         "jaxopt",
         "jinja2",
