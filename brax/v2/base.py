@@ -130,9 +130,10 @@ class Transform(Base):
     rot = math.quat_mul(math.quat_inv(t.rot), self.rot)
     return Transform(pos=pos, rot=rot)
 
-  def inv(self):
+  def inv(self) -> 'Transform':
     """Invert the transform."""
-    return Transform(pos=-1.0 * self.pos, rot=math.quat_inv(self.rot))
+    inv_rot = math.quat_inv(self.rot)
+    return Transform(pos=math.rotate(-self.pos, inv_rot), rot=inv_rot)
 
   @classmethod
   def create(
