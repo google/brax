@@ -16,7 +16,7 @@
 
 from absl.testing import absltest
 from absl.testing import parameterized
-from brax.v2 import math
+from brax.v2 import base, math
 import jax
 from jax import numpy as jp
 import numpy as np
@@ -79,6 +79,26 @@ class OrthoganalsTest(parameterized.TestCase):
     self.assertAlmostEqual(np.abs(a.dot(b)), 0, 6)
     self.assertAlmostEqual(np.abs(b.dot(c)), 0, 6)
     self.assertAlmostEqual(np.abs(a.dot(c)), 0, 6)
+
+
+class TransformInvTest(parameterized.TestCase):
+  """Tests Transform.inv()."""
+
+  @parameterized.parameters(range(100))
+  def test_transform_inv(self, i):
+    np.random.seed(i)
+    pos = np.random.randn(3)
+    rot = np.random.randn(4)
+    rot /= np.linalg.norm(rot)
+
+    a = base.Transform(pos, rot)
+    b = a.inv().do(a)
+    c = a.do(a.inv())
+
+    np.testing.assert_array_almost_equal(b.pos, np.zeros(3))
+    np.testing.assert_array_almost_equal(b.rot, np.array([1.0, 0.0, 0.0, 0.0]))
+    np.testing.assert_array_almost_equal(c.pos, np.zeros(3))
+    np.testing.assert_array_almost_equal(c.rot, np.array([1.0, 0.0, 0.0, 0.0]))
 
 
 if __name__ == '__main__':
