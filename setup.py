@@ -37,7 +37,7 @@ setup(
     scripts=["bin/learn"],
     install_requires=[
         "absl-py",
-        "dataclasses",
+        "dataclasses; python_version < '3.7'",
         "dm_env",
         "etils",
         "flask",
