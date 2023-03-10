@@ -14,7 +14,7 @@ on acceleration hardware. It is both efficient for single-device simulation, and
 scalable to massively parallel simulation on multiple devices, without the need
 for pesky datacenters.
 
-<img src="https://github.com/google/brax/raw/main/docs/img/humanoid_v2.gif" width="300" height="300"/><img src="https://github.com/google/brax/raw/main/docs/img/a1.gif" width="300" height="300"/><img src="https://github.com/google/brax/raw/main/docs/img/ant_v2.gif" width="300" height="300"/><img src="https://github.com/google/brax/raw/main/docs/img/ur5e.gif" width="300" height="300"/>
+<img src="https://github.com/google/brax/raw/main/docs/img/humanoid_v2.gif" width="250" height="250"/><img src="https://github.com/google/brax/raw/main/docs/img/a1.gif" width="250" height="250"/><img src="https://github.com/google/brax/raw/main/docs/img/ant_v2.gif" width="250" height="250"/><img src="https://github.com/google/brax/raw/main/docs/img/ur5e.gif" width="250" height="250"/>
 
 Brax simulates environments at millions of physics steps per second on TPU, and includes a suite of learning algorithms that train agents in seconds
 to minutes:
@@ -26,24 +26,23 @@ to minutes:
     [evolutionary strategies](https://github.com/google/brax/blob/main/brax/training/agents/es).
 *   Learning algorithms that leverage the differentiability of the simulator, such as [analytic policy gradients](https://github.com/google/brax/blob/main/brax/training/agents/apg).
 
-## One API, 3 Pipelines
+## One API, Three Pipelines
 
-Brax offers three distinct physics pipelines that are easy to swap between:
+Brax offers three distinct physics pipelines that are easy to swap:
 
 * [Generalized](https://github.com/google/brax/blob/main/brax/v2/generalized/)
-calculates motion in generalized coordinates, using the same accurate robot
-dynamics algorithms found in [MuJoCo](https://mujoco.org/) and [TDS](https://github.com/erwincoumans/tiny-differentiable-simulator).
-
+calculates motion in [generalized coordinates](https://en.wikipedia.org/wiki/Generalized_coordinates) using the same accurate robot
+dynamics algorithms as [MuJoCo](https://mujoco.org/) and [TDS](https://github.com/erwincoumans/tiny-differentiable-simulator).
 * [Positional](https://github.com/google/brax/blob/main/brax/v2/positional/)
 uses [Position Based Dynamics](https://matthias-research.github.io/pages/publications/posBasedDyn.pdf),
 a fast but stable method of resolving joint and collision constraints.
-
 * [Spring](https://github.com/google/brax/blob/main/brax/v2/spring/) provides
 fast and cheap simulation for rapid experimentation, using simple impulse-based
 methods often found in video games.
 
-Given that these pipelines share the same API, Brax is well suited for experiments
-in transfer learning and closing the gap between simulation and the real world.
+These pipelines share the same API and can run side-by-side within the same
+simulation.  This makes Brax well suited for experiments in transfer learning
+and closing the gap between simulation and the real world.
 
 ## Quickstart: Colab in the Cloud
 
@@ -53,7 +52,7 @@ Explore Brax easily and quickly through a series of colab notebooks:
 introduces the Brax v2 API, and shows how to train a policy with the
 generalized backend.
 
-## Using Brax locally
+## Using Brax Locally
 
 To install Brax from pypi, install it with:
 
