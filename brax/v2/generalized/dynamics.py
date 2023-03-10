@@ -71,7 +71,7 @@ def transform_com(sys: System, state: State) -> State:
     # accumulate jds as successive j transforms around joint
     j, jds = Transform.zero(shape=(num_links,)), []
     for i in range(0, num_dofs):
-      jds.append(j.inv().vmap().do(jd_stack.take(i, axis=1)))
+      jds.append(j.vmap().inv_do(jd_stack.take(i, axis=1)))
       j = j.vmap().do(j_stack.take(i, axis=1))
 
     # interleave jds back together to match joint stack order

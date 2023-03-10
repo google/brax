@@ -83,7 +83,7 @@ def vmap(fun: F, include: Optional[Sequence[bool]] = None) -> F:
       b_args = []
       for a, inc in zip(args, include):
         if inc:
-          b_args.append(take(a, b_idx))
+          b_args.append(take(a, b_idx))  # pytype: disable=wrong-arg-types  # jax-ndarray
         else:
           b_args.append(a)
       rets.append(fun(*b_args))
@@ -320,7 +320,7 @@ def _safe_arccos_jvp(primal, tangent):
   x, = primal
   x_dot, = tangent
   primal_out = safe_arccos(x)
-  tangent_out = -x_dot / sqrt(1. - clip(x, -1 + 1e-7, 1 - 1e-7)**2.)
+  tangent_out = -x_dot / sqrt(1. - clip(x, -1 + 1e-7, 1 - 1e-7)**2.)  # pytype: disable=wrong-arg-types  # jax-ndarray
   return primal_out, tangent_out
 
 
@@ -340,7 +340,7 @@ def _safe_arcsin_jvp(primal, tangent):
   x, = primal
   x_dot, = tangent
   primal_out = safe_arccos(x)
-  tangent_out = x_dot / sqrt(1. - clip(x, -1 + 1e-7, 1 - 1e-7)**2.)
+  tangent_out = x_dot / sqrt(1. - clip(x, -1 + 1e-7, 1 - 1e-7)**2.)  # pytype: disable=wrong-arg-types  # jax-ndarray
   return primal_out, tangent_out
 
 
@@ -481,11 +481,11 @@ def segment_sum(data: ndarray,
 def top_k(operand: ndarray, k: int) -> ndarray:
   """Returns the ordered top k values and their indices along the last axis of operand."""
   if _which_np(operand) is jnp:
-    return jax.lax.top_k(operand, k)
+    return jax.lax.top_k(operand, k)  # pytype: disable=bad-return-type  # jax-ndarray
   else:
     top_ind = onp.argpartition(operand, -k)[-k:]
     sorted_ind = top_ind[onp.argsort(-operand[top_ind])]
-    return operand[sorted_ind], sorted_ind
+    return operand[sorted_ind], sorted_ind  # pytype: disable=bad-return-type  # jax-ndarray
 
 
 def stack(x: List[ndarray], axis=0) -> ndarray:

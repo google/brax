@@ -121,7 +121,7 @@ def _box(b: Box, triangulated=True) -> Tuple[np.ndarray, np.ndarray]:
 def box_tri(b: Box) -> Mesh:
   """Creates a triangulated mesh from a box geometry."""
   vert, face = _box(b, triangulated=True)
-  return Mesh(
+  return Mesh(  # pytype: disable=wrong-arg-types  # jax-ndarray
       vert=vert,
       face=face,
       link_idx=b.link_idx,
@@ -134,7 +134,7 @@ def box_tri(b: Box) -> Mesh:
 def _box_hull(b: Box) -> Convex:
   """Creates a mesh for a box with rectangular faces."""
   vert, face = _box(b, triangulated=False)
-  return Convex(
+  return Convex(  # pytype: disable=wrong-arg-types  # jax-ndarray
       vert=vert,
       face=face,
       link_idx=b.link_idx,
@@ -216,7 +216,7 @@ def _convex_hull(m: Mesh) -> Convex:
   tm_convex = trimesh.convex.convex_hull(tm)
   vert = tm_convex.vertices.copy()
   face = _merge_coplanar(tm_convex)
-  return Convex(
+  return Convex(  # pytype: disable=wrong-arg-types  # jax-ndarray
       vert=vert,
       face=face,
       link_idx=m.link_idx,
@@ -231,7 +231,7 @@ def convex_hull(obj: Union[Box, Mesh]) -> Convex:
   """Creates a convex hull from a box or mesh."""
   if isinstance(obj, Box):
     return _box_hull(obj)
-  key = (hash(obj.vert.data.tobytes()), hash(obj.face.data.tobytes()))
+  key = (hash(obj.vert.data.tobytes()), hash(obj.face.data.tobytes()))  # pytype: disable=attribute-error  # jax-ndarray
   if key not in _CONVEX_CACHE:
     logging.info('Converting mesh %s into convex hull.', key)
     _CONVEX_CACHE[key] = _convex_hull(obj)

@@ -27,13 +27,16 @@ from brax.v2.spring.base import State
 from jax import numpy as jp
 
 
-def init(sys: System, q: jp.ndarray, qd: jp.ndarray) -> State:
+def init(
+    sys: System, q: jp.ndarray, qd: jp.ndarray, debug: bool = False
+) -> State:
   """Initializes physics state.
 
   Args:
     sys: a brax system
     q: (q_size,) joint angle vector
     qd: (qd_size,) joint velocity vector
+    debug: if True, adds contact to the state for debugging
 
   Returns:
     state: initial physics state
@@ -41,7 +44,6 @@ def init(sys: System, q: jp.ndarray, qd: jp.ndarray) -> State:
   # position/velocity level terms
   x, xd = kinematics.forward(sys, q, qd)
   j, jd, a_p, a_c = kinematics.world_to_joint(sys, x, xd)
-  contact = geometry.contact(sys, x)
   x_i, xd_i = com.from_world(sys, x, xd)
   i_inv = com.inv_inertia(sys, x)
   mass = sys.link.inertia.mass ** (1 - sys.spring_mass_scale)
@@ -51,7 +53,7 @@ def init(sys: System, q: jp.ndarray, qd: jp.ndarray) -> State:
       qd=qd,
       x=x,
       xd=xd,
-      contact=contact,
+      contact=geometry.contact(sys, x) if debug else None,
       x_i=x_i,
       xd_i=xd_i,
       j=j,
@@ -63,7 +65,9 @@ def init(sys: System, q: jp.ndarray, qd: jp.ndarray) -> State:
   )
 
 
-def step(sys: System, state: State, act: jp.ndarray) -> State:
+def step(
+    sys: System, state: State, act: jp.ndarray, debug: bool = False
+) -> State:
   """Performs a single physics step using spring-based dynamics.
 
   Resolves actuator forces, joints, and forces at acceleration level, and
@@ -73,13 +77,13 @@ def step(sys: System, state: State, act: jp.ndarray) -> State:
     sys: system defining the kinematic tree and other properties
     state: physics state prior to step
     act: (act_size,) actuator input vector
+    debug: if True, adds contact to the state for debugging
 
   Returns:
     x: updated link transform in world frame
     xd: updated link motion in world frame
   """
   # pre-calculate some auxilliary terms used further down
-  state = state.replace(contact=geometry.contact(sys, state.x))
   state = state.replace(i_inv=com.inv_inertia(sys, state.x))
 
   # calculate acceleration and delta-velocity terms
@@ -96,6 +100,14 @@ def step(sys: System, state: State, act: jp.ndarray) -> State:
   state = state.replace(x=x, xd=xd, x_i=x_i, xd_i=xd_i)
   j, jd, a_p, a_c = kinematics.world_to_joint(sys, x, xd)
   q, qd = kinematics.inverse(sys, j, jd)
-  state = state.replace(q=q, qd=qd, a_p=a_p, a_c=a_c, j=j, jd=jd)
+  state = state.replace(
+      q=q,
+      qd=qd,
+      a_p=a_p,
+      a_c=a_c,
+      j=j,
+      jd=jd,
+      contact=geometry.contact(sys, x) if debug else None,
+  )
 
   return state

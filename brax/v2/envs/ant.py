@@ -191,7 +191,7 @@ class Ant(env.PipelineEnv):
 
     n_frames = 5
 
-    if backend == 'spring':
+    if backend in ['spring', 'positional']:
       sys = sys.replace(dt=0.005)
       n_frames = 10
 
@@ -224,7 +224,7 @@ class Ant(env.PipelineEnv):
     )
     qd = hi * jax.random.normal(rng2, (self.sys.qd_size(),))
 
-    pipeline_state = self._pipeline.init(self.sys, q, qd)
+    pipeline_state = self.pipeline_init(q, qd)
     obs = self._get_obs(pipeline_state)
 
     reward, done, zero = jp.zeros(3)

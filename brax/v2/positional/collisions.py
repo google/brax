@@ -74,7 +74,6 @@ def resolve_position(
     n = contact.normal
     c = -contact.penetration
 
-    link = sys.link.take(link_idx)
     i_inv = inv_inertia.take(link_idx, axis=0)
     i_inv *= (link_idx > -1).reshape(-1, 1, 1)
     invmass = (1 / mass.take(link_idx)) * (link_idx > -1)
@@ -144,7 +143,7 @@ def resolve_position(
 
     # dp = jax.tree_map(lambda x, y: jp.vstack([x, y]), dp_p, dp_c)
 
-    return dp_p, dp_c, dlambda * coll_mask
+    return dp_p, dp_c, dlambda * coll_mask  # pytype: disable=bad-return-type  # jax-ndarray
 
   dp_p, dp_c, dlambda = translate(contact)
   dp = jax.tree_map(lambda x, y: jp.vstack([x, y]), dp_p, dp_c)

@@ -1,13 +1,16 @@
 <mujoco model="pendulum">
   <compiler inertiafromgeom="true"/>
-  <option gravity="0 0 -9.81" collision="predefined" timestep="0.02"/>
+  <option gravity="0 0 -9.81" timestep="0.02"/>
+	<default>
+		<geom contype="0" conaffinity="0"/>
+  </default>
   <custom>
     <!-- springy physics parameters -->
     <numeric data="0.0" name="ang_damping"/>
     <numeric data="0.0" name="constraint_limit_stiffness"/>
     <numeric data="800000.0" name="constraint_stiffness"/>
     <numeric data="0.0" name="constraint_ang_damping"/>
-    <numeric data="200.0" name="constraint_damping"/>
+    <numeric data="200.0" name="constraint_vel_damping"/>
   </custom>
   <worldbody>
     <body name="body1" pos="0 0 0">

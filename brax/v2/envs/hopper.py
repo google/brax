@@ -174,10 +174,8 @@ class Hopper(env.PipelineEnv):
       backend: str, the physics backend to use
       **kwargs: Arguments that are passed to the base class.
     """
-    if backend == 'spring':
-      raise NotImplementedError(
-          'Spring does not support joint types for hopper yet.'
-      )
+    if backend == 'positional':
+      raise NotImplementedError('Not implemented for positional backend.')
     path = epath.resource_path('brax') / 'v2/envs/assets/hopper.xml'
     sys = mjcf.load(path)
 
@@ -210,7 +208,7 @@ class Hopper(env.PipelineEnv):
         rng2, (self.sys.qd_size(),), minval=low, maxval=hi
     )
 
-    pipeline_state = self._pipeline.init(self.sys, qpos, qvel)
+    pipeline_state = self.pipeline_init(qpos, qvel)
 
     obs = self._get_obs(pipeline_state)
     reward, done, zero = jp.zeros(3)

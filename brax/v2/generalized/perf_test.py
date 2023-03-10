@@ -26,7 +26,6 @@ class PerfTest(absltest.TestCase):
 
   def test_pipeline_ant(self):
     sys = test_utils.load_fixture('ant.xml')
-    sys = sys.replace(solver_iterations=8)  # reasonable for training
 
     def init_fn(rng):
       rng1, rng2 = jax.random.split(rng, 2)

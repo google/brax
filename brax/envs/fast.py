@@ -25,14 +25,14 @@ class Fast(env.Env):
   def __init__(self, **kwargs):
     super().__init__(config='dt: .02', **kwargs)
 
-  def reset(self, rng: jnp.ndarray) -> env.State:
+  def reset(self, rng: jnp.ndarray) -> env.State:  # pytype: disable=signature-mismatch  # jax-ndarray
     zero = jnp.zeros(1)
     qp = brax.QP(pos=zero, vel=zero, rot=zero, ang=zero)
     obs = jnp.zeros(2)
     reward, done = jnp.zeros(2)
     return env.State(qp, obs, reward, done)
 
-  def step(self, state: env.State, action: jnp.ndarray) -> env.State:
+  def step(self, state: env.State, action: jnp.ndarray) -> env.State:  # pytype: disable=signature-mismatch  # jax-ndarray
     vel = state.qp.vel + (action > 0) * self.sys.config.dt
     pos = state.qp.pos + vel * self.sys.config.dt
 

@@ -209,7 +209,8 @@ def orthogonals(a: jp.ndarray) -> Tuple[jp.ndarray, jp.ndarray]:
   y, z = jp.array([0, 1, 0]), jp.array([0, 0, 1])
   b = jp.where((-0.5 < a[1]) & (a[1] < 0.5), y, z)
   b = b - a * a.dot(b)
-  b = normalize(b)[0]
+  # make b a normal vector. however if a is a zero vector, zero b as well.
+  b = normalize(b)[0] * jp.any(a)
   return b, jp.cross(a, b)
 
 
@@ -236,36 +237,31 @@ def solve_pgs(a: jp.ndarray, b: jp.ndarray, num_iters: int) -> jp.ndarray:
 
 
 def inv_approximate(
-    a: jp.ndarray, a_inv: jp.ndarray, tol: float = 1e-12, maxiter: int = 10
+    a: jp.ndarray, a_inv: jp.ndarray, num_iter: int = 10
 ) -> jp.ndarray:
   """Use Newton-Schulz iteration to solve ``A^-1``.
 
   Args:
     a: 2D array to invert
     a_inv: approximate solution to A^-1
-    tol: tolerance for convergance, ``norm(residual) <= tol``.
-    maxiter: maximum number of iterations.  Iteration will stop after maxiter
-      steps even if the specified tolerance has not been achieved.
+    num_iter: number of iterations
 
   Returns:
     A^-1 inverted matrix
   """
 
-  def cond_fn(value):
-    # TODO: test whether it's better for convergence to check
-    # ||I - Xn @ A || > tol - this is certainly faster and results seem OK
-    _, k, err = value
-    return (err > tol) & (k < maxiter)
-
-  def body_fn(value):
-    a_inv, k, _ = value
-    a_inv_new = a_inv @ (2 * np.eye(a.shape[0]) - a @ a_inv)
-    return a_inv_new, k + 1, jp.linalg.norm(a_inv_new - a_inv)
+  def body_fn(carry, _):
+    a_inv, r, err = carry
+    a_inv_next = a_inv @ (np.eye(a.shape[0]) + r)
+    r_next = np.eye(a.shape[0]) - a @ a_inv_next
+    err_next = jp.linalg.norm(r_next)
+    a_inv_next = jp.where(err_next < err, a_inv_next, a_inv)
+    return (a_inv_next, r_next, err_next), None
 
   # ensure ||I - X0 @ A|| < 1, in order to guarantee convergence
   r0 = jp.eye(a.shape[0]) - a @ a_inv
   a_inv = jp.where(jp.linalg.norm(r0) > 1, 0.5 * a.T / jp.trace(a @ a.T), a_inv)
-  a_inv, *_ = jax.lax.while_loop(cond_fn, body_fn, (a_inv, 0, 1.0))
+  (a_inv, _, _), _ = jax.lax.scan(body_fn, (a_inv, r0, 1.0), None, num_iter)
 
   return a_inv
 

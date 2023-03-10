@@ -32,9 +32,9 @@ class PipelineTest(absltest.TestCase):
     sys = sys.replace(dt=0.0005)
 
     state = pipeline.init(sys, sys.init_q, jp.zeros(sys.qd_size()))
-    j_spring_step = jax.jit(pipeline.step)
+    j_pos_step = jax.jit(pipeline.step)
     for _ in range(2_000):
-      state = j_spring_step(sys, state, jp.zeros(sys.qd_size()))
+      state = j_pos_step(sys, state, jp.zeros(sys.qd_size()))
     x = state.x
 
     # compare against generalized step
@@ -49,6 +49,92 @@ class PipelineTest(absltest.TestCase):
     # trajectories should be close after .1 second of simulation
     self.assertLess(jp.linalg.norm(x_g.pos - x.pos), 2e-2)
 
+  def test_spherical_pendulum(self):
+    sys = test_utils.load_fixture('single_spherical_pendulum.xml')
+
+    init_q = jp.array([0.1, 0.2, 0.3])
+    init_qd = jax.random.uniform(jax.random.PRNGKey(0), (3,)) / 10.0
+
+    # set sensible springy defaults
+    link = sys.link.replace(constraint_limit_stiffness=jp.array([0.0] * 3))
+    link = link.replace(constraint_ang_damping=jp.array([0.0] * 3))
+    sys = sys.replace(link=link)
+    sys = sys.replace(ang_damping=0.0)
+    sys = sys.replace(dt=0.001)
+    sys = sys.replace(solver_iterations=500)
+
+    state = pipeline.init(sys, init_q, init_qd)
+    j_pos_step = jax.jit(pipeline.step)
+    for _ in range(1000):
+      state = j_pos_step(sys, state, jp.zeros(sys.qd_size()))
+    x = state.x
+
+    # compare against generalized step
+    q, qd = init_q, init_qd
+    state = g_pipeline.init(sys, q, qd)
+    j_g_step = jax.jit(g_pipeline.step)
+    j_forward = jax.jit(kinematics.forward)
+    for _ in range(1000):
+      state = j_g_step(sys, state, jp.zeros(sys.qd_size()))
+    x_g, _ = j_forward(sys, state.q, state.qd)
+
+    # trajectories should be close after 1 second of simulation
+    self.assertLess(jp.linalg.norm(x_g.rot - x.rot), 1e-2)
+
+  def test_3d_sliding_joint(self):
+    # tests launching a capsule at a wall with 3 sliding dofs
+    sys = test_utils.load_fixture('triple_prismatic.xml')
+    sys = sys.replace(dt=0.001)
+
+    qd = jp.zeros(sys.qd_size())
+    qd = qd.at[0].set(2.5)
+    qd = qd.at[1].set(2.5)
+    qd = qd.at[2].set(2.5)
+
+    state = pipeline.init(sys, sys.init_q, qd)
+    j_pos_step = jax.jit(pipeline.step)
+    states = []
+    for _ in range(1000):
+      state = j_pos_step(sys, state, jp.zeros(sys.qd_size()))
+      states.append(state)
+    x, xd = state.x, state.xd
+
+    # capsule not rotating
+    np.testing.assert_allclose(
+        x.rot, jp.array([[1.0, 0.0, 0.0, 0.0]]), atol=1e-3
+    )
+    # capsule reflected off boundary.  pbd limit constraint forces are not
+    # perfectly elastic so the rebound velocity is not fully 2.5 m/s
+    np.testing.assert_array_less(xd.vel[0], jp.array([-1.5, -1.5, -1.5]))
+    np.testing.assert_allclose(xd.ang[0], jp.array([0.0, 0.0, 0.0]), atol=1e-7)
+
+  def test_3d_prismaversal_joint(self):
+    # tests a prismatic+spherical 3dof joint sliding/rotating into its limits
+    sys = test_utils.load_fixture('prismaversal_3dof_joint.xml')
+    sys = sys.replace(dt=0.001)
+
+    qd = jp.zeros(sys.qd_size())
+    qd = qd.at[0].set(2.5)
+    qd = qd.at[1].set(2.5)
+    qd = qd.at[2].set(2.5)
+
+    state = pipeline.init(sys, sys.init_q, qd)
+    j_pos_step = jax.jit(pipeline.step)
+    states = []
+    for _ in range(1000):
+      state = j_pos_step(sys, state, jp.zeros(sys.qd_size()))
+      states.append(state)
+
+    # reflects off limits and is still traveling close to 2.5 m/s
+    # note that pbd limit reflection not perfectly elastic
+    np.testing.assert_array_less(
+        jp.array([state.xd.vel[0, 0], state.xd.vel[0, 2]]),
+        jp.array([-1.5, -1.5]),
+    )
+    np.testing.assert_array_less(
+        jp.array([state.xd.ang[0, 1]]), jp.array([-1.45])
+    )
+
   def test_sliding_capsule(self):
     sys = test_utils.load_fixture('capsule.xml')
     sys = sys.replace(dt=0.001)
@@ -58,9 +144,9 @@ class PipelineTest(absltest.TestCase):
     qd = qd.at[0].set(5.0)
 
     state = pipeline.init(sys, sys.init_q, qd)
-    j_spring_step = jax.jit(pipeline.step)
+    j_pos_step = jax.jit(pipeline.step)
     for _ in range(1000):
-      state = j_spring_step(sys, state, jp.zeros(sys.qd_size()))
+      state = j_pos_step(sys, state, jp.zeros(sys.qd_size()))
     x, xd = state.x, state.xd
 
     # capsule slides to a stop

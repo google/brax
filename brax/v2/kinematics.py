@@ -15,8 +15,8 @@
 # pylint:disable=g-multiple-import
 """Functions for forward and inverse kinematics."""
 
-from functools import partial
-from typing import Tuple
+import functools
+from typing import Tuple, Any
 
 from brax.v2 import base
 from brax.v2 import math
@@ -159,59 +159,121 @@ def link_to_joint_motion(motion: Motion) -> Tuple[Motion, float]:
   joint might not be aligned with the rotational components of the joint.
   """
 
-  # if this is already a 3-dof motion, then we're done, up to handedness
+  # 1-dof
+  if motion.ang.shape[0] == 1:
+    ortho_ang = math.orthogonals(motion.ang[0])
+    ang_frame = jp.array([motion.ang[0], ortho_ang[0], ortho_ang[1]])
+    ortho_vel = math.orthogonals(motion.vel[0])
+    vel_frame = jp.array([motion.vel[0], ortho_vel[0], ortho_vel[1]])
+    parity = 1
+
+    return Motion(ang=ang_frame, vel=vel_frame), parity
+
+  # orthogonal frames for different possible joint configurations
+  ortho_ang = jax.vmap(math.orthogonals)(motion.ang)
+  ortho_vel = jax.vmap(math.orthogonals)(motion.vel)
+
+  # 2-dof
+  if motion.ang.shape[0] == 2:
+    # logic for fully translational or fully rotational
+    is_translational = motion.vel.any()
+    ang = jp.array([
+        motion.ang[0],
+        motion.ang[1],
+        jp.cross(motion.ang[0], motion.ang[1]),
+    ])
+    ang = jp.where(is_translational, jp.eye(3), ang)
+    vel = jp.array([
+        motion.vel[0],
+        motion.vel[1],
+        jp.cross(motion.vel[0], motion.vel[1]),
+    ])
+    vel = jp.where(is_translational, vel, jp.eye(3))
+    ang_frame = ang
+    vel_frame = vel
+    parity = jp.where(
+        is_translational,
+        jp.dot(jp.cross(motion.vel[0], motion.vel[1]), motion.vel[2]),
+        jp.dot(jp.cross(motion.ang[0], motion.ang[1]), motion.ang[2]),
+    )
+
+    # logic for rp / pr
+    axis_r_1 = jp.where(motion.ang[0].any(), motion.ang[0], ortho_ang[1][1])
+    axis_r_2 = jp.where(motion.ang[1].any(), motion.ang[1], ortho_ang[0][0])
+    axis_r_3 = jp.cross(axis_r_1, axis_r_2)
+
+    axis_p_1 = jp.where(motion.vel[0].any(), motion.vel[0], ortho_vel[1][1])
+    axis_p_2 = jp.where(motion.vel[1].any(), motion.vel[1], ortho_vel[0][0])
+    axis_p_3 = jp.cross(axis_p_1, axis_p_2)
+
+  # 3-dof
   if motion.ang.shape[0] == 3:
-    return Motion(
-        ang=jp.array([
-            motion.ang[0],
-            motion.ang[1],
-            jp.cross(motion.ang[0], motion.ang[1]),
-        ]),
-        vel=jp.array([
-            motion.vel[0],
-            motion.vel[1],
-            jp.cross(motion.vel[0], motion.vel[1]),
-        ]),
-    ), jp.dot(jp.cross(motion.ang[0], motion.ang[1]), motion.ang[2])
+    # pure-rotational or pure-translational logic
+    ang_frame = jp.array([
+        motion.ang[0],
+        motion.ang[1],
+        jp.cross(motion.ang[0], motion.ang[1]),
+    ])
+    vel_frame = jp.array([
+        motion.vel[0],
+        motion.vel[1],
+        jp.cross(motion.vel[0], motion.vel[1]),
+    ])
+    parity = jp.dot(jp.cross(motion.ang[0], motion.ang[1]), motion.ang[2])
 
-  # if motion is 1 or 2-dof, then we need to reconstruct the 3-dof frame that
-  # completely defines its joint frame
-  def j_axes(axis):
-    frame = jp.eye(3)
-    rot = math.from_to(frame[0], axis[0])
-    y_temp = math.rotate(frame[1], rot)
-    second_axis = axis[1] if axis.shape[0] > 1 else y_temp
-    second_angle = math.signed_angle(axis[0], y_temp, second_axis)
-    second_rot = math.quat_rot_axis(axis[0], second_angle)
-    # if second axis is all zeros, then is an identity op
-    rot = math.quat_mul(second_rot, rot)
-    return rot
+    # logic for rpp, prp, ppr
+    axis_r_1 = jp.where(
+        motion.ang[0].any(),
+        motion.ang[0],
+        jp.where(motion.ang[1].any(), ortho_ang[1][1], ortho_ang[0][2]),
+    )
+    axis_r_2 = jp.where(
+        motion.ang[1].any(),
+        motion.ang[1],
+        jp.where(motion.ang[0].any(), ortho_ang[0][0], ortho_ang[1][2]),
+    )
+    axis_r_3 = jp.cross(axis_r_1, axis_r_2)
 
-  link_rot_ang, link_rot_vel = j_axes(motion.ang), j_axes(motion.vel)
+    axis_p_1 = jp.where(motion.vel[0].any(), motion.vel[0], ortho_vel[1][1])
+    axis_p_2 = jp.where(motion.vel[1].any(), motion.vel[1], ortho_vel[0][0])
+    axis_p_3 = jp.cross(axis_p_1, axis_p_2)
 
-  def rotate_frame(axis_rotation):
-    return jax.vmap(math.rotate, in_axes=(0, None))(jp.eye(3), axis_rotation)
+  # branch based on whether the joint has both `p` and `r` types
+  ang_frame_p = jp.array([axis_r_1, axis_r_2, axis_r_3])
+  vel_frame_p = jp.array([axis_p_1, axis_p_2, axis_p_3])
 
-  link_frame_ang = rotate_frame(link_rot_ang)
-  link_frame_vel = rotate_frame(link_rot_vel)
+  is_both = jp.logical_and(motion.ang.any(), motion.vel.any())
 
-  return Motion(ang=link_frame_ang, vel=link_frame_vel), 1.0
+  ang_frame = jp.where(
+      is_both,
+      ang_frame_p,
+      ang_frame,
+  )
+  vel_frame = jp.where(
+      is_both,
+      vel_frame_p,
+      vel_frame,
+  )
+  parity = jp.where(is_both, 1, parity)
+
+  return Motion(ang=ang_frame, vel=vel_frame), parity
 
 
 def axis_angle_ang(
-    j: Transform, jd: Motion, motion: Motion
-) -> Tuple[jp.ndarray, jp.ndarray, jp.ndarray, jp.ndarray]:
+    j: Transform,
+    joint_motion: Motion,
+    parity: float = 1.0,
+) -> Tuple[Any, Any, Any]:
   """Returns axes, torque axes, angles, and angular velocities of a joint.
 
   Args:
     j: The transform for this joint.
-    jd: The motion for this joint.
-    motion: motion degrees of freedom for this joint
+    joint_motion: motion degrees of freedom for this joint
+    parity: handedness of this joint
 
   Returns:
-    Joint frame axis, torque axes, angles, and angular velocities.
+    Joint frame axis, angles, and auxiliary axes
   """
-  joint_motion, parity = link_to_joint_motion(motion)
 
   v_rot = jax.vmap(math.rotate, in_axes=[0, None])
   child_frame = v_rot(joint_motion.ang, j.rot)
@@ -235,12 +297,10 @@ def axis_angle_ang(
   phi = math.signed_angle(yc_n_normal, child_frame[1], line_of_nodes)
 
   axis = (child_frame[0], child_frame[1], child_frame[2] * parity)
-  torque_axis = (joint_motion.ang[0], child_frame[1], child_frame[2] * parity)
-
   angle = (psi, theta, phi)
-  vel = jax.tree_map(lambda x: jp.dot(x, jd.ang), axis)
+  aux_axes = (line_of_nodes, axis_1_p_in_xz_c)
 
-  return axis, torque_axis, angle, vel
+  return axis, angle, aux_axes
 
 
 def axis_slide_vel(
@@ -257,12 +317,10 @@ def axis_slide_vel(
     Joint frame axis, positions, and velocities.
   """
 
-  joint_motion, _ = link_to_joint_motion(motion)
+  coords = motion.vel @ x.pos
+  velocities = motion.vel @ xd.vel
 
-  coords = joint_motion.vel @ x.pos
-  velocities = joint_motion.vel @ xd.vel
-
-  return joint_motion.vel, coords, velocities
+  return motion.vel, coords, velocities
 
 
 def inverse(
@@ -274,12 +332,18 @@ def inverse(
     return jp.concatenate([x.pos, x.rot]), jp.concatenate([xd.vel, xd.ang])
 
   def x_dof(j, jd, motion, x):
-    _, _, angles, angle_vels = axis_angle_ang(j, jd, motion)
+    joint_motion, parity = link_to_joint_motion(motion)
+    axis, angles, _ = axis_angle_ang(j, joint_motion, parity)
+    angle_vels = jax.tree_map(lambda x: jp.dot(x, jd.ang), axis)
     _, slides, slide_vels = axis_slide_vel(j, jd, motion)
     # TODO: investigate removing this `where`
-    q = jp.where(motion.ang.any(), jp.array(angles[:x]), jp.array(slides[:x]))
+    q = jp.where(
+        motion.ang.any(axis=1), jp.array(angles[:x]), jp.array(slides[:x])
+    )
     qd = jp.where(
-        motion.ang.any(), jp.array(angle_vels[:x]), jp.array(slide_vels[:x])
+        motion.ang.any(axis=1),
+        jp.array(angle_vels[:x]),
+        jp.array(slide_vels[:x]),
     )
     return q, qd
 
@@ -289,9 +353,9 @@ def inverse(
     )
     q_fn_map = {
         'f': free,
-        '1': partial(x_dof, x=1),
-        '2': partial(x_dof, x=2),
-        '3': partial(x_dof, x=3),
+        '1': functools.partial(x_dof, x=1),
+        '2': functools.partial(x_dof, x=2),
+        '3': functools.partial(x_dof, x=3),
     }
 
     q, qd = jax.vmap(q_fn_map[typ])(j, jd, motion)

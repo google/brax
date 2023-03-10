@@ -253,8 +253,8 @@ class Humanoid(env.Env):
     forward_reward = self._forward_reward_weight * velocity[0]
 
     min_z, max_z = self._healthy_z_range
-    is_healthy = jp.where(qp.pos[0, 2] < min_z, x=0.0, y=1.0)
-    is_healthy = jp.where(qp.pos[0, 2] > max_z, x=0.0, y=is_healthy)
+    is_healthy = jp.where(qp.pos[0, 2] < min_z, x=0.0, y=1.0)  # pytype: disable=wrong-arg-types  # jax-ndarray
+    is_healthy = jp.where(qp.pos[0, 2] > max_z, x=0.0, y=is_healthy)  # pytype: disable=wrong-arg-types  # jax-ndarray
     if self._terminate_when_unhealthy:
       healthy_reward = self._healthy_reward
     else:

@@ -19,11 +19,10 @@ See: https://arxiv.org/pdf/1707.06347.pdf
 
 import functools
 import time
-from typing import Callable, Optional, Tuple
+from typing import Callable, Optional, Tuple, Union
 
 from absl import logging
-from brax import envs
-from brax.envs import wrappers
+from brax import envs as envs_v1
 from brax.training import acting
 from brax.training import gradients
 from brax.training import pmap
@@ -34,6 +33,7 @@ from brax.training.agents.ppo import losses as ppo_losses
 from brax.training.agents.ppo import networks as ppo_networks
 from brax.training.types import Params
 from brax.training.types import PRNGKey
+from brax.v2 import envs
 import flax
 import jax
 import jax.numpy as jnp
@@ -58,7 +58,7 @@ def _unpmap(v):
   return jax.tree_util.tree_map(lambda x: x[0], v)
 
 
-def train(environment: envs.Env,
+def train(environment: Union[envs_v1.Env, envs.Env],
           num_timesteps: int,
           episode_length: int,
           action_repeat: int = 1,
@@ -112,8 +112,12 @@ def train(environment: envs.Env,
 
   assert num_envs % device_count == 0
   env = environment
+  if isinstance(env, envs.Env):
+    wrap_for_training = envs.wrapper.wrap_for_training
+  else:
+    wrap_for_training = envs_v1.wrappers.wrap_for_training
 
-  env = wrappers.wrap_for_training(
+  env = wrap_for_training(
       env, episode_length=episode_length, action_repeat=action_repeat)
 
   reset_fn = jax.jit(jax.vmap(env.reset))
@@ -268,7 +272,7 @@ def train(environment: envs.Env,
   init_params = ppo_losses.PPONetworkParams(
       policy=ppo_network.policy_network.init(key_policy),
       value=ppo_network.value_network.init(key_value))
-  training_state = TrainingState(
+  training_state = TrainingState(  # pytype: disable=wrong-arg-types  # jax-ndarray
       optimizer_state=optimizer.init(init_params),
       params=init_params,
       normalizer_params=running_statistics.init_state(
@@ -286,7 +290,7 @@ def train(environment: envs.Env,
   if not eval_env:
     eval_env = env
   else:
-    eval_env = wrappers.wrap_for_training(
+    eval_env = wrap_for_training(
         eval_env, episode_length=episode_length, action_repeat=action_repeat)
 
   evaluator = acting.Evaluator(

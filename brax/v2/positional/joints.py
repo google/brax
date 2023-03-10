@@ -27,11 +27,11 @@ from jax import numpy as jp
 from jax.ops import segment_sum
 
 
-def _revolute(x: Transform, xd: Motion, dof: DoF) -> Transform:
+def _revolute(x: Transform, dof: DoF) -> Transform:
   """Returns position-level displacements in joint frame for revolute joint."""
 
-  joint_motion, _ = kinematics.link_to_joint_motion(dof.motion)
-  axis_c, _, (psi, _, _), _ = kinematics.axis_angle_ang(x, xd, dof.motion)
+  joint_motion, parity = kinematics.link_to_joint_motion(dof.motion)
+  axis_c, (psi, _, _), _ = kinematics.axis_angle_ang(x, joint_motion, parity)
   axis_p = joint_motion.ang
 
   # positional constraints
@@ -47,6 +47,66 @@ def _revolute(x: Transform, xd: Motion, dof: DoF) -> Transform:
     fixrot = math.quat_rot_axis(axis_p[0], ph).reshape((4))
     n1 = math.rotate(axis_p[2], fixrot)
     dq -= jp.cross(n1, axis_c[2])
+
+  return Transform(pos=dx, rot=dq)
+
+
+def _three_dof(x: Transform, dof: DoF) -> Transform:
+  """Returns position-level displacements in joint frame for spherical joint."""
+  joint_motion, parity = kinematics.link_to_joint_motion(dof.motion)
+  (
+      axis_c,
+      (psi, theta, phi),
+      (line_of_nodes, axis_1_p_in_xz_c),
+  ) = kinematics.axis_angle_ang(x, joint_motion, parity)
+
+  torque_axes = (joint_motion.ang[0], axis_c[1], axis_c[2] * parity)
+
+  axis_p = joint_motion.ang
+
+  limit_axes = -1.0 * jp.array(torque_axes)
+  ref_axis_1 = jp.array([axis_p[1], axis_p[0], line_of_nodes])
+  ref_axis_2 = jp.array([line_of_nodes, axis_1_p_in_xz_c, axis_c[1]])
+  angles = jp.array([psi, theta, phi])
+
+  def limit_angle(n, n_1, n_2, ph, dof, ang_limit):
+    mask = jp.where(ph < ang_limit[0], 1.0, 0.0)
+    mask = jp.where(ph > ang_limit[1], 1.0, mask)
+    ph = jp.clip(ph, ang_limit[0], ang_limit[1])
+    fixrot = math.quat_rot_axis(n, ph)
+    n1 = math.rotate(n_1, fixrot)
+    dq = jp.cross(n1, n_2) * mask
+
+    active_axis = dof.motion.vel.any()
+    xp = dof.motion.vel @ x.pos
+    dx = xp - jp.clip(xp, dof.limit[0], dof.limit[1])
+    dx = dof.motion.vel * dx * active_axis
+
+    return dq, dx
+
+  # positional constraints
+  dx = -x.pos
+
+  is_translational = dof.motion.vel.any()
+  # remove components of update along free prismatic axes
+  dx -= (dof.motion.vel @ dx @ dof.motion.vel) * is_translational
+
+  # for freezing angular dofs on prismatic axes
+  padded_ang_limit = jp.where(
+      dof.motion.vel.any(axis=1),
+      jp.zeros((2, 3)),
+      jp.array(dof.limit),
+  ).transpose()
+
+  # limit constraints
+  if dof.limit:
+    dq, dx_lim = jax.vmap(limit_angle)(
+        limit_axes, ref_axis_1, ref_axis_2, angles, dof, padded_ang_limit
+    )
+    dq = jp.sum(dq, axis=0)
+    dx -= jp.sum(dx_lim, axis=0)
+  else:
+    dq = jp.zeros_like(x.pos)
 
   return Transform(pos=dx, rot=dq)
 
@@ -84,6 +144,33 @@ def _damp(
   return Force(ang=ang, vel=vel)
 
 
+def _damp_three(
+    link: Link, j: Transform, jd: Motion, dof: DoF, tau: jp.ndarray
+) -> Force:
+  """Returns acceleration level joint damping in joint frame.
+
+  Args:
+    link: link in joint frame
+    j: joint transform
+    jd: joint motion
+    dof: dofs for this link
+    tau: actuator forces
+
+  Returns:
+    Force in joint frame
+  """
+  del j
+
+  joint_motion, _ = kinematics.link_to_joint_motion(dof.motion)
+  vel = jp.sum(tau * joint_motion.vel, axis=0)
+  ang = jp.sum(tau * joint_motion.ang, axis=0)
+
+  # damp the angular motion
+  ang += -1.0 * link.constraint_ang_damping * jd.ang
+
+  return Force(ang=ang, vel=vel)
+
+
 def resolve_damping(sys: System, state: State, tau: jp.ndarray) -> Motion:
   """Calculates forces to apply to links resulting from joint constraints.
 
@@ -107,6 +194,7 @@ def resolve_damping(sys: System, state: State, tau: jp.ndarray) -> Motion:
     j_fn_map = {
         'f': _free_joint,
         '1': _damp,
+        '3': _damp_three,
     }
 
     return jax.vmap(j_fn_map[typ])(link, j, jd, dof, tau)
@@ -158,8 +246,8 @@ def resolve_displacement(
     idxs: link to which displacement is applied
   """
 
-  def j_fn(typ, x_j, xd_j, dof):
-    dof = jax.tree_map(lambda x: x.reshape((x_j.pos.shape[0], -1)), dof)
+  def j_fn(typ, j, dof):
+    dof = jax.tree_map(lambda x: x.reshape((j.pos.shape[0], -1)), dof)
     dof = dof.replace(
         motion=jax.tree_map(
             lambda x: x.reshape((-1, base.QD_WIDTHS[typ], 3)), dof.motion
@@ -170,10 +258,10 @@ def resolve_displacement(
         '1': _revolute,
         # TODO: support prismatic for pbd
         # '2': _universal,
-        # '3': _spherical,
+        '3': _three_dof,
     }
 
-    return jax.vmap(j_fn_map[typ])(x_j, xd_j, dof)
+    return jax.vmap(j_fn_map[typ])(j, dof)
 
   p_idx = jp.array(sys.link_parents)
   c_idx = jp.array(range(sys.num_links()))
@@ -190,8 +278,8 @@ def resolve_displacement(
   x_c = x.vmap().do(sys.link.joint)
   x_joint = x_p.vmap().do(sys.link.transform).vmap().do(sys.link.joint)
 
-  j, jd, _, _ = kinematics.world_to_joint(sys, x, xd)
-  d_j = scan.link_types(sys, j_fn, 'lld', 'l', j, jd, sys.dof)
+  j, _, _, _ = kinematics.world_to_joint(sys, x, xd)
+  d_j = scan.link_types(sys, j_fn, 'ld', 'l', j, sys.dof)
 
   d_w = jax.tree_map(lambda x: jax.vmap(math.rotate)(x, x_joint.rot), d_j)
 
@@ -325,7 +413,6 @@ def position_update(
     dq_rot_c = 0.5 * math.vec_quat_mul(
         inertia_c @ jp.cross(pos_c, p), com_c.rot
     )
-    # import pdb; pdb.set_trace()
 
     return Transform(pos=scale * dq_pos_p, rot=scale * dq_rot_p), Transform(
         pos=scale * dq_pos_c, rot=scale * dq_rot_c

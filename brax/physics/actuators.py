@@ -43,7 +43,7 @@ class Actuator(abc.ABC):
     self.joint = jp.take(joint, [joint.index[a.joint] for a in actuators])
     self.strength = jp.array([a.strength for a in actuators])
     self.act_index = jp.array(act_index)
-    self.act_mask = jp.where(self.act_index >= 0, 1., 0.)
+    self.act_mask = jp.where(self.act_index >= 0, 1., 0.)  # pytype: disable=wrong-arg-types  # jax-ndarray
 
   @abc.abstractmethod
   def apply_reduced(self, act: jp.ndarray, qp_p: QP, qp_c: QP) -> Tuple[P, P]:
@@ -66,7 +66,7 @@ class Actuator(abc.ABC):
 
     # sum together all impulse contributions across parents and children
     body_idx = jp.concatenate((self.joint.body_p.idx, self.joint.body_c.idx))
-    dp_ang = jp.concatenate((dang_p, dang_c))
+    dp_ang = jp.concatenate((dang_p, dang_c))  # pytype: disable=wrong-arg-types  # jax-ndarray
     dp_ang = jp.segment_sum(dp_ang, body_idx, qp.pos.shape[0])
 
     return P(vel=jp.zeros_like(qp.vel), ang=dp_ang)
@@ -102,8 +102,8 @@ class Torque(Actuator):
     # clip torque if outside joint angle limits
     # * -1. so that positive actuation increases angle between parent and child
     torque = act * self.strength * -1.
-    torque = jp.where(angle < self.joint.limit[:, 0], 0, torque)
-    torque = jp.where(angle > self.joint.limit[:, 1], 0, torque)
+    torque = jp.where(angle < self.joint.limit[:, 0], 0, torque)  # pytype: disable=wrong-arg-types  # jax-ndarray
+    torque = jp.where(angle > self.joint.limit[:, 1], 0, torque)  # pytype: disable=wrong-arg-types  # jax-ndarray
     torque = jp.sum(jp.vmap(jp.multiply)(axis, torque), axis=0)
 
     dang_p = self.joint.body_p.inertia * torque

@@ -41,7 +41,7 @@ class MathTest(absltest.TestCase):
     x = jp.eye(4) * 0.001 + x @ x.T
 
     x_inv = jp.linalg.inv(x)
-    x_inv_approximate = math.inv_approximate(x, jp.zeros((4, 4)), maxiter=100)
+    x_inv_approximate = math.inv_approximate(x, jp.zeros((4, 4)), num_iter=100)
 
     np.testing.assert_array_almost_equal(x_inv_approximate, x_inv)
 

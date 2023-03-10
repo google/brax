@@ -20,11 +20,10 @@ See: https://arxiv.org/pdf/1703.03864.pdf
 import enum
 import functools
 import time
-from typing import Callable, Optional, Tuple
+from typing import Callable, Optional, Tuple, Union
 
 from absl import logging
-from brax import envs
-from brax.envs import wrappers
+from brax import envs as envs_v1
 from brax.training import acting
 from brax.training import types
 from brax.training.acme import running_statistics
@@ -32,6 +31,7 @@ from brax.training.acme import specs
 from brax.training.agents.es import networks as es_networks
 from brax.training.types import Params
 from brax.training.types import PRNGKey
+from brax.v2 import envs
 import flax
 import jax
 import jax.numpy as jnp
@@ -73,7 +73,7 @@ class FitnessShaping(enum.Enum):
 
 # TODO: Pass the network as argument.
 def train(
-    environment: envs.Env,
+    environment: Union[envs_v1.Env, envs.Env],
     num_timesteps: int = 100,
     episode_length: int = 1000,
     action_repeat: int = 1,
@@ -117,7 +117,12 @@ def train(
 
   assert num_envs % local_devices_to_use == 0
   env = environment
-  env = wrappers.wrap_for_training(
+  if isinstance(env, envs.Env):
+    wrap_for_training = envs.wrapper.wrap_for_training
+  else:
+    wrap_for_training = envs_v1.wrappers.wrap_for_training
+
+  env = wrap_for_training(
       env, episode_length=episode_length, action_repeat=action_repeat)
 
   obs_size = env.observation_size
@@ -306,7 +311,7 @@ def train(
   if not eval_env:
     eval_env = env
   else:
-    eval_env = wrappers.wrap_for_training(
+    eval_env = wrap_for_training(
         eval_env, episode_length=episode_length, action_repeat=action_repeat)
 
   # Evaluator function

@@ -36,11 +36,23 @@
   <compiler angle="radian" coordinate="local" inertiafromgeom="true" settotalmass="14"/>
   <default>
     <joint armature=".1" damping=".01" limited="true" solimplimit="0 .8 .03" solreflimit=".02 1" stiffness="8"/>
-    <geom conaffinity="0" condim="3" contype="1" friction=".4 .1 .1" rgba="0.8 0.6 .4 1" solimp="0.0 0.8 0.01" solref="0.02 1"/>
+    <geom conaffinity="0" condim="3" contype="0" friction=".4 .1 .1" rgba="0.8 0.6 .4 1" solimp="0.0 0.8 0.01" solref="0.02 1"/>
     <motor ctrllimited="true" ctrlrange="-1 1"/>
   </default>
   <size nstack="300000" nuser_geom="1"/>
-  <option gravity="0 0 -9.81" timestep="0.01" collision="predefined"/>
+  <option gravity="0 0 -9.81" timestep="0.01" iterations="4" />
+  <custom>
+    <!-- brax custom params -->
+    <numeric data="10000" name="constraint_limit_stiffness"/>
+    <numeric data="20000" name="constraint_stiffness"/>
+    <numeric data="10 2 2 2 10 2 1" name="constraint_ang_damping"/>
+    <numeric data="10" name="constraint_vel_damping"/>
+    <numeric data="-0.01" name="ang_damping"/>
+    <numeric data="0.2" name="baumgarte_erp"/>
+    <numeric data="0.3" name="spring_mass_scale"/>
+    <numeric data="0.8" name="spring_inertia_scale"/>
+    <numeric data="50" name="solver_maxls"/>
+  </custom>
   <asset>
     <texture builtin="gradient" height="100" rgb1="1 1 1" rgb2="0 0 0" type="skybox" width="100"/>
     <texture builtin="flat" height="1278" mark="cross" markrgb="1 1 1" name="texgeom" random="0.01" rgb1="0.8 0.6 0.4" rgb2="0.8 0.6 0.4" type="cube" width="127"/>
@@ -57,29 +69,29 @@
       <joint armature="0" axis="0 0 1" damping="0" limited="false" name="rootz" pos="0 0 0" stiffness="0" type="slide"/>
       <joint armature="0" axis="0 1 0" damping="0" limited="false" name="rooty" pos="0 0 0" stiffness="0" type="hinge"/>
       <geom fromto="-.5 0 0 .5 0 0" name="torso" size="0.046" type="capsule"/>
-      <geom axisangle="0 1 0 .87" name="head" pos=".6 0 .1" size="0.046 .15" type="capsule"/>
+      <geom contype="1" axisangle="0 1 0 .87" name="head" pos=".6 0 .1" size="0.046 .15" type="capsule"/>
       <!-- <site name='tip'  pos='.15 0 .11'/>-->
       <body name="bthigh" pos="-.5 0 0">
         <joint axis="0 1 0" damping="6" name="bthigh" pos="0 0 0" range="-.52 1.05" stiffness="240" type="hinge"/>
-        <geom axisangle="0 1 0 -3.8" name="bthigh" pos=".1 0 -.13" size="0.046 .145" type="capsule"/>
+        <geom contype="1" axisangle="0 1 0 -3.8" name="bthigh" pos=".1 0 -.13" size="0.046 .145" type="capsule"/>
         <body name="bshin" pos=".16 0 -.25">
           <joint axis="0 1 0" damping="4.5" name="bshin" pos="0 0 0" range="-.785 .785" stiffness="180" type="hinge"/>
           <geom axisangle="0 1 0 -2.03" name="bshin" pos="-.14 0 -.07" rgba="0.9 0.6 0.6 1" size="0.046 .15" type="capsule"/>
           <body name="bfoot" pos="-.28 0 -.14">
             <joint axis="0 1 0" damping="3" name="bfoot" pos="0 0 0" range="-.4 .785" stiffness="120" type="hinge"/>
-            <geom axisangle="0 1 0 -.27" name="bfoot" pos=".03 0 -.097" rgba="0.9 0.6 0.6 1" size="0.046 .094" type="capsule"/>
+            <geom contype="1" axisangle="0 1 0 -.27" name="bfoot" pos=".03 0 -.097" rgba="0.9 0.6 0.6 1" size="0.046 .094" type="capsule"/>
           </body>
         </body>
       </body>
       <body name="fthigh" pos=".5 0 0">
         <joint axis="0 1 0" damping="4.5" name="fthigh" pos="0 0 0" range="-1 .7" stiffness="180" type="hinge"/>
-        <geom axisangle="0 1 0 .52" name="fthigh" pos="-.07 0 -.12" size="0.046 .133" type="capsule"/>
+        <geom contype="1" axisangle="0 1 0 .52" name="fthigh" pos="-.07 0 -.12" size="0.046 .133" type="capsule"/>
         <body name="fshin" pos="-.14 0 -.24">
           <joint axis="0 1 0" damping="3" name="fshin" pos="0 0 0" range="-1.2 .87" stiffness="120" type="hinge"/>
           <geom axisangle="0 1 0 -.6" name="fshin" pos=".065 0 -.09" rgba="0.9 0.6 0.6 1" size="0.046 .106" type="capsule"/>
           <body name="ffoot" pos=".13 0 -.18">
             <joint axis="0 1 0" damping="1.5" name="ffoot" pos="0 0 0" range="-.5 .5" stiffness="60" type="hinge"/>
-            <geom axisangle="0 1 0 -.6" name="ffoot" pos=".045 0 -.07" rgba="0.9 0.6 0.6 1" size="0.046 .07" type="capsule"/>
+            <geom contype="1" axisangle="0 1 0 -.6" name="ffoot" pos=".045 0 -.07" rgba="0.9 0.6 0.6 1" size="0.046 .07" type="capsule"/>
           </body>
         </body>
       </body>
@@ -93,13 +105,4 @@
     <motor gear="60" joint="fshin" name="fshin"/>
     <motor gear="30" joint="ffoot" name="ffoot"/>
   </actuator>
-  <contact>
-    <pair geom1="floor" geom2="torso"/>
-    <pair geom1="floor" geom2="bfoot"/>
-    <pair geom1="floor" geom2="ffoot"/>
-    <pair geom1="floor" geom2="bthigh"/>
-    <pair geom1="floor" geom2="fthigh"/>
-    <pair geom1="floor" geom2="bshin"/>
-    <pair geom1="floor" geom2="fshin"/>
-  </contact>
 </mujoco>

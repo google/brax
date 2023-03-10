@@ -135,7 +135,7 @@ class QueueBase(ReplayBuffer[ReplayBufferState, Sample], Generic[Sample]):
     raise NotImplementedError(f'{self.__class__}.sample() is not implemented.')
 
   def size(self, buffer_state: ReplayBufferState) -> int:
-    return buffer_state.current_size
+    return buffer_state.current_size  # pytype: disable=bad-return-type  # jax-ndarray
 
 
 class Queue(QueueBase[Sample], Generic[Sample]):
@@ -321,18 +321,22 @@ class PjitWrapper(ReplayBuffer[State, Sample]):
 
     partition_spec = jax.sharding.PartitionSpec((axis_name,))
     self._partitioned_init = pjit.pjit(
-        init, in_axis_resources=None, out_axis_resources=partition_spec)
+        init, in_shardings=None, out_shardings=partition_spec
+    )
     self._partitioned_insert = pjit.pjit(
         insert,
-        in_axis_resources=(partition_spec, batch_partition_spec),
-        out_axis_resources=partition_spec)
+        in_shardings=(partition_spec, batch_partition_spec),
+        out_shardings=partition_spec,
+    )
     self._partitioned_sample = pjit.pjit(
         sample,
-        in_axis_resources=partition_spec,
-        out_axis_resources=(partition_spec, batch_partition_spec))
+        in_shardings=partition_spec,
+        out_shardings=(partition_spec, batch_partition_spec),
+    )
     # This will return the TOTAL size across all devices.
     self._partitioned_size = pjit.pjit(
-        size, in_axis_resources=partition_spec, out_axis_resources=None)
+        size, in_shardings=partition_spec, out_shardings=None
+    )
 
   def init(self, key: PRNGKey) -> State:
     """See base class."""

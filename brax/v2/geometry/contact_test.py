@@ -55,9 +55,6 @@ class SphereTest(absltest.TestCase):
           <geom name="sphere2" pos="0 0.3 0" size="0.11" type="sphere"/>
         </body>
       </worldbody>
-      <contact>
-        <pair geom1="sphere1" geom2="sphere2"/>
-      </contact>
     </mujoco>
   """
 
@@ -82,9 +79,6 @@ class SphereTest(absltest.TestCase):
           <geom name="cap2" fromto="0.0 -0.5 0.14 0.0 0.5 0.14" pos="0 0 0" size="0.1" type="capsule"/>
         </body>
       </worldbody>
-      <contact>
-        <pair geom1="sphere1" geom2="cap2"/>
-      </contact>
     </mujoco>
   """
 
@@ -99,11 +93,6 @@ class SphereTest(absltest.TestCase):
 
   _SPHERE_CONVEX = """
     <mujoco model="sphere_convex">
-      <custom>
-        <tuple name="prefer_mesh_collision">
-          <element objtype="geom" objname="box" prm="0"/>
-        </tuple>
-      </custom>
       <worldbody>
         <body name="body1" pos="0.52 0 0.52">
           <joint axis="1 0 0" name="free1" pos="0 0 0" type="free"/>
@@ -132,8 +121,8 @@ class SphereTest(absltest.TestCase):
   _SPHERE_MESH = """
     <mujoco model="sphere_mesh">
       <custom>
-        <tuple name="prefer_mesh_collision">
-          <element objtype="geom" objname="box" prm="1"/>
+        <tuple name="convex">
+          <element objtype="geom" objname="box" prm="0"/>
         </tuple>
       </custom>
       <worldbody>
@@ -180,9 +169,6 @@ class CapsuleTest(absltest.TestCase):
           <geom name="cap2" fromto="0.5505271 0.60345304 0.476661 1.3900293 0.30709633 0.932082" pos="0 0 0" size="0.05" type="capsule"/>
         </body>
       </worldbody>
-      <contact>
-        <pair geom1="cap1" geom2="cap2"/>
-      </contact>
     </mujoco>
   """
 
@@ -205,9 +191,6 @@ class CapsuleTest(absltest.TestCase):
           <geom name="cap2" fromto="-0.5 0.1 0.1 0.5 0.1 0.1" pos="0 0 0" size="0.1" type="capsule"/>
         </body>
       </worldbody>
-      <contact>
-        <pair geom1="cap1" geom2="cap2"/>
-      </contact>
     </mujoco>
   """
 
@@ -225,11 +208,6 @@ class CapsuleTest(absltest.TestCase):
 
   _CAP_BOX = """
     <mujoco model="cap_box">
-      <custom>
-        <tuple name="prefer_mesh_collision">
-          <element objtype="geom" objname="box" prm="0"/>
-        </tuple>
-      </custom>
       <worldbody>
         <body name="body1" pos="0 0 0.54">
           <joint axis="1 0 0" name="free1" pos="0 0 0" type="free"/>
@@ -258,11 +236,6 @@ class CapsuleTest(absltest.TestCase):
 
   _CAP_EDGE_BOX = """
     <mujoco model="cap_edge_box">
-      <custom>
-        <tuple name="prefer_mesh_collision">
-          <element objtype="geom" objname="box" prm="0"/>
-        </tuple>
-      </custom>
       <worldbody>
         <body name="body1" pos="0.5 0 0.55" euler="0 30 0">
           <joint axis="1 0 0" name="free1" pos="0 0 0" type="free"/>
@@ -297,6 +270,11 @@ class CapsuleTest(absltest.TestCase):
 
   _CAP_MESH = """
     <mujoco model="cap_mesh">
+      <custom>
+        <tuple name="convex">
+          <element objtype="geom" objname="box" prm="0"/>
+        </tuple>
+      </custom>
       <worldbody>
         <body name="body1" pos="0 0 0.54">
           <joint axis="1 0 0" name="free1" pos="0 0 0" type="free"/>
@@ -330,11 +308,6 @@ class ConvexTest(absltest.TestCase):
 
   _BOX_PLANE = """
     <mujoco model="box_plane">
-      <custom>
-        <tuple name="prefer_mesh_collision">
-          <element objtype="geom" objname="box" prm="0"/>
-        </tuple>
-      </custom>
       <worldbody>
         <geom name="floor" pos="0 0 0" size="40 40 40" type="plane"/>
         <body name="body1" pos="0 0 0.7" euler="45 0 0">
@@ -452,6 +425,11 @@ class MeshTest(absltest.TestCase):
 
   _MESH_PLANE = """
     <mujoco model="mesh_plane">
+      <custom>
+        <tuple name="convex">
+          <element objtype="geom" objname="box" prm="0"/>
+        </tuple>
+      </custom>
       <worldbody>
         <geom name="floor" pos="0 0 0" size="40 40 40" type="plane"/>
         <body name="body1" pos="0 0 0.7" euler="45 0 0">

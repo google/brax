@@ -24,10 +24,11 @@ from brax.v2.envs import humanoid
 from brax.v2.envs import humanoidstandup
 from brax.v2.envs import inverted_double_pendulum
 from brax.v2.envs import inverted_pendulum
+from brax.v2.envs import pusher
 from brax.v2.envs import reacher
 from brax.v2.envs import walker2d
 from brax.v2.envs import wrapper
-from brax.v2.envs.env import Env
+from brax.v2.envs.env import Env, State
 
 
 _envs = {
@@ -38,6 +39,7 @@ _envs = {
     'humanoidstandup': humanoidstandup.HumanoidStandup,
     'inverted_pendulum': inverted_pendulum.InvertedPendulum,
     'inverted_double_pendulum': inverted_double_pendulum.InvertedDoublePendulum,
+    'pusher': pusher.Pusher,
     'reacher': reacher.Reacher,
     'walker2d': walker2d.Walker2d,
 }

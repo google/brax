@@ -46,9 +46,10 @@ def inv_inertia(sys, x) -> jp.ndarray:
   @jax.vmap
   def inv_i(link_inertia, x_rot):
     ri = math.quat_mul(x_rot, link_inertia.transform.rot)
-    i = jp.diag(jp.diagonal(link_inertia.i) ** (1 - sys.spring_inertia_scale))
-    i_rot_row = jax.vmap(math.rotate, in_axes=[0, None])(i, ri)
+    i_diag = jp.diagonal(link_inertia.i) ** (1 - sys.spring_inertia_scale)
+    i_inv_mx = jp.diag(1 / i_diag)
+    i_rot_row = jax.vmap(math.rotate, in_axes=[0, None])(i_inv_mx, ri)
     i_rot_col = jax.vmap(math.rotate, in_axes=[0, None])(i_rot_row.T, ri)
-    return math.inv_3x3(i_rot_col)
+    return i_rot_col
 
   return inv_i(sys.link.inertia, x.rot)

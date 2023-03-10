@@ -18,6 +18,7 @@ import pickle
 from absl.testing import absltest
 from absl.testing import parameterized
 from brax import envs
+from brax.v2 import envs as envs_v2
 from brax.training.acme import running_statistics
 from brax.training.agents.ppo import networks as ppo_networks
 from brax.training.agents.ppo import train as ppo
@@ -47,6 +48,25 @@ class PPOTest(parameterized.TestCase):
         reward_scaling=10,
         normalize_advantage=False)
     self.assertGreater(metrics['eval/episode_reward'], 135)
+
+  def testTrainV2(self):
+    """Test PPO with a v2 env."""
+    _, _, metrics = ppo.train(
+        envs_v2.get_environment('inverted_pendulum'),
+        num_timesteps=2**15,
+        episode_length=1000,
+        num_envs=64,
+        learning_rate=3e-4,
+        entropy_cost=1e-2,
+        discounting=0.95,
+        unroll_length=5,
+        batch_size=64,
+        num_minibatches=8,
+        num_updates_per_batch=4,
+        normalize_observations=True,
+        seed=2,
+        reward_scaling=10,
+        normalize_advantage=False)
 
   @parameterized.parameters(True, False)
   def testNetworkEncoding(self, normalize_observations):

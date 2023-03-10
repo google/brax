@@ -124,15 +124,15 @@ class Transform(Base):
     """Apply the transform."""
     return _transform_do(o, self)
 
+  def inv_do(self, o):
+    """Apply the inverse of the transform."""
+    return _transform_inv_do(o, self)
+
   def to_local(self, t: 'Transform') -> 'Transform':
     """Move transform into basis of t."""
     pos = math.rotate(self.pos - t.pos, math.quat_inv(t.rot))
     rot = math.quat_mul(math.quat_inv(t.rot), self.rot)
     return Transform(pos=pos, rot=rot)
-
-  def inv(self):
-    """Invert the transform."""
-    return Transform(pos=-1.0 * self.pos, rot=math.quat_inv(self.rot))
 
   @classmethod
   def create(
@@ -256,7 +256,7 @@ class Link(Base):
     inertia: mass, center of mass location, and inertia of this link
     invweight: mean inverse inertia at init_q
     constraint_stiffness: (num_link,) constraint spring for joint.
-    constraint_damping: (num_link,) damping for constraint spring.
+    constraint_vel_damping: (num_link,) linear damping for constraint spring.
     constraint_limit_stiffness: (num_link,) constraint for angle limits
     constraint_ang_damping: (num_link,) angular damping for constraint spring.
   """
@@ -267,7 +267,7 @@ class Link(Base):
   invweight: jp.ndarray
   # only used by `brax.physics.spring`:
   constraint_stiffness: jp.ndarray
-  constraint_damping: jp.ndarray
+  constraint_vel_damping: jp.ndarray
   constraint_limit_stiffness: jp.ndarray
   # only used by `brax.physics.spring` and `brax.physics.pbd`:
   constraint_ang_damping: jp.ndarray
@@ -446,10 +446,11 @@ class System:
     gravity: (3,) linear universal force applied during forward dynamics
     link: (num_link,) the links in the system
     dof: (qd_size,) every degree of freedom for the system
-    geoms: (num_geoms,) every geom in the system
-    contacts: a list of all geometry pairs to test for this system
+    geoms: list of batched geoms grouped by type
     actuator: actuators that can be applied to links
     init_q: (q_size,) initial q position for the system
+    solver_params_joint: (7,) joint limit constraint solver parameters
+    solver_params_contact: (7,) collision constraint solver parameters
     vel_damping: (1,) linear vel damping applied to each body.
     ang_damping: (1,) angular vel damping applied to each body.
     baumgarte_erp: how aggressively interpenetrating bodies should push away\
@@ -458,6 +459,9 @@ class System:
     spring_inertia_scale: a float that scales inertia diag as `inertia^(1 - x)`
     joint_scale: fraction of position based joint update to apply
     collide_scale: fraction of position based collide update to apply
+    geom_masks: 64-bit mask determines whether two geoms will be contact tested.
+                lower 32 bits are type, upper 32 bits are affinity.  two geoms
+                a, b will be contact tested if a.type & b.affinity != 0
     link_names: (num_link,) link names
     link_types: (num_link,) string specifying the joint type of each link
                 valid types are:
@@ -473,7 +477,9 @@ class System:
     actuator_link_id: (num_actuators,) the link id associated with each actuator
     actuator_qid: (num_actuators,) the q index associated with each actuator
     actuator_qdid: (num_actuators,) the qd index associated with each actuator
+    matrix_inv_iterations: maximum number of iterations of the matrix inverse
     solver_iterations: maximum number of iterations of the constraint solver
+    solver_maxls: maximum number of line searches of the constraint solver
   """
 
   dt: jp.ndarray
@@ -481,9 +487,11 @@ class System:
   link: Link
   dof: DoF
   geoms: List[Geometry]
-  contacts: List[Tuple[Geometry, Geometry]]
   actuator: Actuator
   init_q: jp.ndarray
+  # only used in `brax.physics.generalized`
+  solver_params_joint: jp.ndarray
+  solver_params_contact: jp.ndarray
   # only used in `brax.physics.spring` and `brax.physics.pbd`:
   vel_damping: jp.float32
   ang_damping: jp.float32
@@ -494,6 +502,7 @@ class System:
   joint_scale: jp.float32
   collide_scale: jp.float32
 
+  geom_masks: List[int] = struct.field(pytree_node=False)
   link_names: List[str] = struct.field(pytree_node=False)
   link_types: str = struct.field(pytree_node=False)
   link_parents: Tuple[int, ...] = struct.field(pytree_node=False)
@@ -502,7 +511,9 @@ class System:
   actuator_qid: List[int] = struct.field(pytree_node=False)
   actuator_qdid: List[int] = struct.field(pytree_node=False)
   # only used in `brax.physics.generalized`:
+  matrix_inv_iterations: int = struct.field(pytree_node=False)
   solver_iterations: int = struct.field(pytree_node=False)
+  solver_maxls: int = struct.field(pytree_node=False)
 
   def num_links(self) -> int:
     """Returns the number of links in the system."""
@@ -574,11 +585,16 @@ def _transform_do(other, self: Transform):
   return NotImplemented
 
 
+@functools.singledispatch
+def _transform_inv_do(other, self: Transform):
+  del other, self
+  return NotImplemented
+
+
 @_transform_do.register(Transform)
 def _(t: Transform, self: Transform) -> Transform:
   pos = self.pos + math.rotate(t.pos, self.rot)
   rot = math.quat_mul(self.rot, t.rot)
-
   return Transform(pos, rot)
 
 
@@ -587,7 +603,14 @@ def _(m: Motion, self: Transform) -> Motion:
   rot_t = math.quat_inv(self.rot)
   ang = math.rotate(m.ang, rot_t)
   vel = math.rotate(m.vel - jp.cross(self.pos, m.ang), rot_t)
+  return Motion(ang, vel)
 
+
+@_transform_inv_do.register(Motion)
+def _(m: Motion, self: Transform) -> Motion:
+  rot_t = self.rot
+  ang = math.rotate(m.ang, rot_t)
+  vel = math.rotate(m.vel, rot_t) + jp.cross(self.pos, ang)
   return Motion(ang, vel)
 
 
@@ -595,7 +618,6 @@ def _(m: Motion, self: Transform) -> Motion:
 def _(f: Force, self: Transform) -> Force:
   vel = math.rotate(f.vel, self.rot)
   ang = math.rotate(f.ang, self.rot) + jp.cross(self.pos, f.vel)
-
   return Force(ang, vel)
 
 

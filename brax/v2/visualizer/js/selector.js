@@ -1,20 +1,18 @@
-import * as THREE from 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r135/build/three.module.js';
+import * as THREE from 'three';
 
 class Selector extends THREE.EventDispatcher {
   constructor(viewer) {
     super();
 
-    const ignore = ['world'];
-
     this.viewer = viewer;
     this.raycaster = new THREE.Raycaster();
+    this.raycaster.layers.set(1);
     this.mousePos = new THREE.Vector2();
     this.selected = null;
     this.hovered = null;
     this.dragging = false;
     this.selectable = viewer.scene.children.filter(
-        o =>
-            o instanceof THREE.Group && !ignore.includes(o.name.toLowerCase()));
+        o => o instanceof THREE.Group);
 
     const domElement = this.viewer.domElement;
     domElement.addEventListener('pointermove', this.onPointerMove.bind(this));

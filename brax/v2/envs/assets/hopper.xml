@@ -2,14 +2,22 @@
   <compiler angle="degree" coordinate="global" inertiafromgeom="true"/>
   <default>
     <joint armature="1" damping="1" limited="true"/>
-    <geom conaffinity="1" condim="1" contype="1" margin="0.001" material="geom" rgba="0.8 0.6 .4 1" solimp=".8 .8 .01" solref=".02 1"/>
+    <geom conaffinity="0" condim="1" contype="0" margin="0.001" material="geom" rgba="0.8 0.6 .4 1" solimp=".8 .8 .01" solref=".02 1"/>
     <motor ctrllimited="true" ctrlrange="-.4 .4"/>
   </default>
   <!-- Removed RK4 integrator for brax. -->
-  <option timestep="0.002" collision="predefined"/>
+  <option timestep="0.002" iterations="4"/>
   <custom>
-    <numeric data="0" name="spring_mass_scale"/>
+    <!-- brax custom params -->
+    <numeric data="10000" name="constraint_limit_stiffness"/>
+    <numeric data="10000" name="constraint_stiffness"/>
+    <numeric data="20" name="constraint_ang_damping"/>
+    <numeric data="20" name="constraint_vel_damping"/>
+    <numeric data="1" name="vel_damping"/>
+    <numeric data="-0.05" name="ang_damping"/>
+    <numeric data="1" name="spring_mass_scale"/>
     <numeric data="1" name="spring_inertia_scale"/>
+    <numeric data="15" name="solver_maxls"/>
   </custom>
   <visual>
     <map znear="0.02"/>
@@ -33,7 +41,7 @@
           <geom friction="0.9" fromto="0 0 0.6 0 0 0.1" name="leg_geom" size="0.04" type="capsule"/>
           <body name="foot" pos="0.13 0 0">
             <joint axis="0 -1 0" name="foot_joint" pos="0 0 0.1" range="-45 45" type="hinge"/>
-            <geom friction="2.0" fromto="-0.13 0 0.1 0.26 0 0.1" name="foot_geom" size="0.06" type="capsule"/>
+            <geom contype="1" friction="2.0" fromto="-0.13 0 0.1 0.26 0 0.1" name="foot_geom" size="0.06" type="capsule"/>
           </body>
         </body>
       </body>
@@ -52,10 +60,4 @@
       <material name="MatPlane" reflectance="0.5" shininess="1" specular="1" texrepeat="60 60" texture="texplane"/>
       <material name="geom" texture="texgeom" texuniform="true"/>
   </asset>
-  <contact>
-    <pair geom1="floor" geom2="torso_geom"/>
-    <pair geom1="floor" geom2="thigh_geom"/>
-    <pair geom1="floor" geom2="leg_geom"/>
-    <pair geom1="floor" geom2="foot_geom"/>
-  </contact>
 </mujoco>

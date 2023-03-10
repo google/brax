@@ -77,7 +77,7 @@ class Grasp(env.Env):
     palm_pos = state.qp.pos[self.palm_idx]
     norm = jp.norm(target_pos - palm_pos)
     # make sure hand doesn't move too fast
-    scale = jp.where(norm > 2.0, 2. / norm, 1.0)
+    scale = jp.where(norm > 2.0, 2. / norm, 1.0)  # pytype: disable=wrong-arg-types  # jax-ndarray
     palm_pos = palm_pos + scale * (target_pos - palm_pos) * .15
     pos = state.qp.pos
     pos = jp.index_update(pos, self.palm_idx, palm_pos)
@@ -111,12 +111,12 @@ class Grasp(env.Env):
 
     # small reward for touching object
     contact_mag = jp.sum(jp.square(info.contact.vel), axis=-1)
-    contacts = jp.where(contact_mag > 0.00001, 1, 0)
+    contacts = jp.where(contact_mag > 0.00001, 1, 0)  # pytype: disable=wrong-arg-types  # jax-ndarray
     touching_object = 0.2 * self.sys.config.dt * (
         contacts[3] + contacts[9] + contacts[12] + contacts[15])
 
     # big reward for reaching target
-    target_hit = jp.where(target_dist < self.target_radius, 1.0, 0.0)
+    target_hit = jp.where(target_dist < self.target_radius, 1.0, 0.0)  # pytype: disable=wrong-arg-types  # jax-ndarray
 
     reward = moving_to_object + close_to_object + touching_object + 5. * target_hit + moving_to_target
 
@@ -175,7 +175,7 @@ class Grasp(env.Env):
     vel_local = vel_local.reshape(-1)
 
     contact_mag = jp.sum(jp.square(info.contact.vel), axis=-1)
-    contacts = jp.where(contact_mag > 0.00001, 1, 0)
+    contacts = jp.where(contact_mag > 0.00001, 1, 0)  # pytype: disable=wrong-arg-types  # jax-ndarray
 
     return jp.concatenate([
         object_local_mag, object_local_dir, target_local_mag, target_local_dir,

@@ -62,7 +62,7 @@ class PipelineTest(absltest.TestCase):
     link = sys.link.replace(constraint_limit_stiffness=jp.array([0.0] * 2))
     link = link.replace(constraint_stiffness=jp.array([100_000.0] * 2))
     link = link.replace(constraint_ang_damping=jp.array([0.0] * 2))
-    link = link.replace(constraint_damping=jp.array([200.0] * 2))
+    link = link.replace(constraint_vel_damping=jp.array([200.0] * 2))
     sys = sys.replace(link=link)
     sys = sys.replace(ang_damping=0.0)
     sys = sys.replace(dt=0.001)
@@ -96,7 +96,7 @@ class PipelineTest(absltest.TestCase):
     link = sys.link.replace(constraint_limit_stiffness=jp.array([0.0] * 3))
     link = link.replace(constraint_stiffness=jp.array([100_000.0] * 3))
     link = link.replace(constraint_ang_damping=jp.array([0.0] * 3))
-    link = link.replace(constraint_damping=jp.array([200.0] * 3))
+    link = link.replace(constraint_vel_damping=jp.array([200.0] * 3))
     sys = sys.replace(link=link)
     sys = sys.replace(ang_damping=0.0)
     sys = sys.replace(dt=0.001)
@@ -131,7 +131,7 @@ class PipelineTest(absltest.TestCase):
     link = sys.link.replace(constraint_limit_stiffness=jp.array([10_000.0]))
     link = link.replace(constraint_stiffness=jp.array([10_000.0]))
     link = link.replace(constraint_ang_damping=jp.array([0.0]))
-    link = link.replace(constraint_damping=jp.array([200.0]))
+    link = link.replace(constraint_vel_damping=jp.array([200.0]))
     sys = sys.replace(link=link)
     sys = sys.replace(ang_damping=0.0)
     sys = sys.replace(dt=0.001)
@@ -176,14 +176,14 @@ class PipelineTest(absltest.TestCase):
     np.testing.assert_allclose(
         x.rot, jp.array([[1.0, 0.0, 0.0, 0.0]]), atol=1e-3
     )
-    # capsule has reflected off boundary and is traveling 2.5 m/s without rotating
+    # capsule reflects off boundary and is traveling 2.5 m/s without rotating
     np.testing.assert_allclose(
         xd.vel[0], jp.array([-2.5, -2.5, 0.0]), atol=1e-3
     )
     np.testing.assert_allclose(xd.ang[0], jp.array([0.0, 0.0, 0.0]), atol=1e-7)
 
   def test_3d_sliding_joint(self):
-    # tests launching a capsule at a wall with 2 sliding dofs
+    # tests launching a capsule at a wall with 3 sliding dofs
     sys = test_utils.load_fixture('triple_prismatic.xml')
     sys = sys.replace(dt=0.001)
 
@@ -204,11 +204,58 @@ class PipelineTest(absltest.TestCase):
     np.testing.assert_allclose(
         x.rot, jp.array([[1.0, 0.0, 0.0, 0.0]]), atol=1e-3
     )
-    # capsule has reflected off boundary and is traveling 2.5 m/s without rotating
+    # capsule reflected off boundary and is traveling 2.5 m/s without rotating
     np.testing.assert_allclose(
         xd.vel[0], jp.array([-2.5, -2.5, -2.5]), atol=1e-3
     )
     np.testing.assert_allclose(xd.ang[0], jp.array([0.0, 0.0, 0.0]), atol=1e-7)
+
+  def test_2d_prismaversal_joint(self):
+    # tests a prismatic+universal 2dof joint sliding/rotating into its limits
+    sys = test_utils.load_fixture('prismaversal_2dof_joint.xml')
+    sys = sys.replace(dt=0.001)
+
+    qd = jp.zeros(sys.qd_size())
+    qd = qd.at[0].set(2.5)
+    qd = qd.at[1].set(2.5)
+
+    state = pipeline.init(sys, sys.init_q, qd)
+    j_spring_step = jax.jit(pipeline.step)
+    states = []
+    for _ in range(1000):
+      state = j_spring_step(sys, state, jp.zeros(sys.qd_size()))
+      states.append(state)
+
+    # reflects off limits and is still traveling 2.5 m/s
+    np.testing.assert_allclose(state.qd, jp.array([-2.5, -2.5]), atol=1e-3)
+    np.testing.assert_allclose(
+        state.xd.ang[0], jp.array([0.0, -2.5, 0.0]), atol=1e-4
+    )
+
+  def test_3d_prismaversal_joint(self):
+    # tests a prismatic+spherical 3dof joint sliding/rotating into its limits
+    sys = test_utils.load_fixture('prismaversal_3dof_joint.xml')
+    sys = sys.replace(dt=0.001)
+
+    qd = jp.zeros(sys.qd_size())
+    qd = qd.at[0].set(2.5)
+    qd = qd.at[1].set(2.5)
+    qd = qd.at[2].set(2.5)
+
+    state = pipeline.init(sys, sys.init_q, qd)
+    j_spring_step = jax.jit(pipeline.step)
+    states = []
+    for _ in range(1000):
+      state = j_spring_step(sys, state, jp.zeros(sys.qd_size()))
+      states.append(state)
+
+    # reflects off limits and is still traveling 2.5 m/s
+    np.testing.assert_allclose(
+        state.qd, jp.array([-2.5, -2.5, -2.5]), atol=1e-3
+    )
+    np.testing.assert_allclose(
+        state.xd.ang[0], jp.array([0.0, -2.5, 0.0]), atol=1e-4
+    )
 
   def test_sliding_capsule(self):
     sys = test_utils.load_fixture('capsule.xml')

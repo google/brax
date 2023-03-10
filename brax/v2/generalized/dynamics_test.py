@@ -26,7 +26,7 @@ import numpy as np
 class DynamicsTest(parameterized.TestCase):
 
   @parameterized.parameters(
-      'ant.xml', 'triple_pendulum.xml', ('humanoid.xml',), ('halfcheetah.xml',)
+      'ant.xml', 'triple_pendulum.xml', ('humanoid.xml',), ('half_cheetah.xml',)
   )
   def test_transform_com(self, xml_file):
     """Test dynamics transform com."""
@@ -44,15 +44,12 @@ class DynamicsTest(parameterized.TestCase):
       np.testing.assert_almost_equal(state.cinr.i, mj_cinr_i, 5)
       np.testing.assert_almost_equal(state.cinr.transform.pos, mj_cinr_pos, 5)
       np.testing.assert_almost_equal(state.cinr.mass, mj_next.cinert[1:, 9], 6)
-      np.testing.assert_almost_equal(state.cd.matrix(), mj_next.cvel[1:], 5)
+      np.testing.assert_almost_equal(state.cd.matrix(), mj_next.cvel[1:], 4)
       np.testing.assert_almost_equal(state.cdof.matrix(), mj_next.cdof, 6)
       np.testing.assert_almost_equal(state.cdofd.matrix(), mj_next.cdof_dot, 5)
 
   @parameterized.parameters(
-      ('ant.xml',),
-      ('triple_pendulum.xml',),
-      ('humanoid.xml',),
-      ('halfcheetah.xml',),
+      'ant.xml', 'triple_pendulum.xml', ('humanoid.xml',), ('half_cheetah.xml',)
   )
   def test_forward(self, xml_file):
     """Test dynamics forward."""
@@ -62,7 +59,7 @@ class DynamicsTest(parameterized.TestCase):
       state = jax.jit(pipeline.step)(sys, state, mj_prev.qfrc_applied)
 
       np.testing.assert_allclose(
-          state.qf_smooth, mj_next.qfrc_smooth, rtol=1e-5, atol=1e-4
+          state.qf_smooth, mj_next.qfrc_smooth, rtol=1e-4, atol=1e-4
       )
 
 

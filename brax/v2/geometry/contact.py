@@ -15,7 +15,7 @@
 # pylint:disable=g-multiple-import
 """Calculations for generating contacts."""
 
-from typing import Any, Callable, List, Optional, Tuple, TypeVar
+from typing import Iterator, Optional, Tuple
 
 from brax.v2 import math
 from brax.v2.base import (
@@ -33,10 +33,6 @@ from brax.v2.geometry import math as geom_math
 from brax.v2.geometry import mesh as geom_mesh
 import jax
 from jax import numpy as jp
-from jax.tree_util import tree_map
-
-
-Geom = TypeVar('Geom', bound=Geometry)
 
 
 def _combine(
@@ -49,7 +45,7 @@ def _combine(
       geom_a.link_idx,
       geom_b.link_idx if geom_b.link_idx is not None else -1,
   )
-  return friction, elasticity, link_idx
+  return friction, elasticity, link_idx  # pytype: disable=bad-return-type  # jax-ndarray
 
 
 def _sphere_plane(sphere: Sphere, plane: Plane) -> Contact:
@@ -59,9 +55,9 @@ def _sphere_plane(sphere: Sphere, plane: Plane) -> Contact:
   penetration = sphere.radius - t
   # halfway between contact points on sphere and on plane
   pos = sphere.transform.pos - n * (sphere.radius - 0.5 * penetration)
-  c = Contact(pos, n, penetration, *_combine(sphere, plane))
+  c = Contact(pos, n, penetration, *_combine(sphere, plane))  # pytype: disable=wrong-arg-types  # jax-ndarray
   # add a batch dimension of size 1
-  return tree_map(lambda x: jp.expand_dims(x, axis=0), c)
+  return jax.tree_map(lambda x: jp.expand_dims(x, axis=0), c)
 
 
 def _sphere_sphere(s_a: Sphere, s_b: Sphere) -> Contact:
@@ -71,9 +67,9 @@ def _sphere_sphere(s_a: Sphere, s_b: Sphere) -> Contact:
   s_a_pos = s_a.transform.pos - n * s_a.radius
   s_b_pos = s_b.transform.pos + n * s_b.radius
   pos = (s_a_pos + s_b_pos) * 0.5
-  c = Contact(pos, n, penetration, *_combine(s_a, s_b))
+  c = Contact(pos, n, penetration, *_combine(s_a, s_b))  # pytype: disable=wrong-arg-types  # jax-ndarray
   # add a batch dimension of size 1
-  return tree_map(lambda x: jp.expand_dims(x, axis=0), c)
+  return jax.tree_map(lambda x: jp.expand_dims(x, axis=0), c)
 
 
 def _sphere_capsule(sphere: Sphere, capsule: Capsule) -> Contact:
@@ -92,9 +88,9 @@ def _sphere_capsule(sphere: Sphere, capsule: Capsule) -> Contact:
   cap_pos = pt + n * capsule.radius
   pos = (sphere_pos + cap_pos) * 0.5
 
-  c = Contact(pos, n, penetration, *_combine(sphere, capsule))
+  c = Contact(pos, n, penetration, *_combine(sphere, capsule))  # pytype: disable=wrong-arg-types  # jax-ndarray
   # add a batch dimension of size 1
-  return tree_map(lambda x: jp.expand_dims(x, axis=0), c)
+  return jax.tree_map(lambda x: jp.expand_dims(x, axis=0), c)
 
 
 def _sphere_convex(sphere: Sphere, convex: Convex) -> Contact:
@@ -158,8 +154,8 @@ def _sphere_convex(sphere: Sphere, convex: Convex) -> Contact:
   penetration = sphere.radius - d
   pos = (pt + spt) * 0.5
 
-  c = Contact(pos, n, penetration, *_combine(sphere, convex))
-  return tree_map(lambda x: jp.expand_dims(x, axis=0), c)
+  c = Contact(pos, n, penetration, *_combine(sphere, convex))  # pytype: disable=wrong-arg-types  # jax-ndarray
+  return jax.tree_map(lambda x: jp.expand_dims(x, axis=0), c)
 
 
 def _sphere_mesh(sphere: Sphere, mesh: Mesh) -> Contact:
@@ -178,7 +174,7 @@ def _sphere_mesh(sphere: Sphere, mesh: Mesh) -> Contact:
     penetration = sphere.radius - dist
     sph_p = sphere.transform.pos - n * sphere.radius
     pos = (tri_p + sph_p) * 0.5
-    return Contact(pos, n, penetration, *_combine(sphere, mesh))
+    return Contact(pos, n, penetration, *_combine(sphere, mesh))  # pytype: disable=wrong-arg-types  # jax-ndarray
 
   return sphere_face(jp.take(mesh.vert, mesh.face, axis=0))
 
@@ -199,7 +195,7 @@ def _capsule_plane(capsule: Capsule, plane: Plane) -> Contact:
     )
     results.append(_sphere_plane(sphere, plane))
 
-  return tree_map(lambda *x: jp.concatenate(x), *results)
+  return jax.tree_map(lambda *x: jp.concatenate(x), *results)
 
 
 def _capsule_capsule(cap_a: Capsule, cap_b: Capsule) -> Contact:
@@ -221,9 +217,9 @@ def _capsule_capsule(cap_a: Capsule, cap_b: Capsule) -> Contact:
   cap_b_pos = pt_b + n * cap_b.radius
   pos = (cap_a_pos + cap_b_pos) * 0.5
 
-  c = Contact(pos, n, penetration, *_combine(cap_a, cap_b))
+  c = Contact(pos, n, penetration, *_combine(cap_a, cap_b))  # pytype: disable=wrong-arg-types  # jax-ndarray
   # add a batch dimension of size 1
-  return tree_map(lambda x: jp.expand_dims(x, axis=0), c)
+  return jax.tree_map(lambda x: jp.expand_dims(x, axis=0), c)
 
 
 def _capsule_convex(capsule: Capsule, convex: Convex) -> Contact:
@@ -339,7 +335,7 @@ def _capsule_mesh(capsule: Capsule, mesh: Mesh) -> Contact:
     penetration = capsule.radius - dist
     cap_p = seg_p - n * capsule.radius
     pos = (tri_p + cap_p) * 0.5
-    return Contact(pos, n, penetration, *_combine(capsule, mesh))
+    return Contact(pos, n, penetration, *_combine(capsule, mesh))  # pytype: disable=wrong-arg-types  # jax-ndarray
 
   face_vert = jp.take(mesh.vert, mesh.face, axis=0)
   face_norm = geom_mesh.get_face_norm(mesh.vert, mesh.face)
@@ -372,6 +368,15 @@ def _convex_plane(convex: Convex, plane: Plane) -> Contact:
 
 def _convex_convex(convex_a: Convex, convex_b: Convex) -> Contact:
   """Calculates contacts between two convex objects."""
+  # pad face vertices so that we can broadcast between geom_i and geom_j
+  sa, sb = convex_a.face.shape[-1], convex_b.face.shape[-1]
+  if sa < sb:
+    face = jp.pad(convex_a.face, ((0, sb - sa)), 'edge')
+    convex_a = convex_a.replace(face=face)
+  elif sb < sa:
+    face = jp.pad(convex_b.face, ((0, sa - sb)), 'edge')
+    convex_b = convex_b.replace(face=face)
+
   normals_a = geom_mesh.get_face_norm(convex_a.vert, convex_a.face)
   normals_b = geom_mesh.get_face_norm(convex_b.vert, convex_b.face)
   faces_a = jp.take(convex_a.vert, convex_a.face, axis=0)
@@ -433,53 +438,39 @@ def _mesh_plane(mesh: Mesh, plane: Plane) -> Contact:
     n = math.rotate(jp.array([0.0, 0.0, 1.0]), plane.transform.rot)
     pos = mesh.transform.pos + math.rotate(vert, mesh.transform.rot)
     penetration = jp.dot(plane.transform.pos - pos, n)
-    return Contact(pos, n, penetration, *_combine(mesh, plane))
+    return Contact(pos, n, penetration, *_combine(mesh, plane))  # pytype: disable=wrong-arg-types  # jax-ndarray
 
   return point_plane(mesh.vert)
 
 
 _TYPE_FUN = {
-    (Sphere, Plane): jax.vmap(_sphere_plane),
-    (Sphere, Sphere): jax.vmap(_sphere_sphere),
-    (Sphere, Capsule): jax.vmap(_sphere_capsule),
-    (Sphere, Convex): jax.vmap(_sphere_convex),
-    (Sphere, Mesh): jax.vmap(_sphere_mesh),
-    (Capsule, Plane): jax.vmap(_capsule_plane),
-    (Capsule, Capsule): jax.vmap(_capsule_capsule),
-    (Capsule, Convex): jax.vmap(_capsule_convex),
-    (Capsule, Mesh): jax.vmap(_capsule_mesh),
-    (Convex, Convex): jax.vmap(_convex_convex),
-    (Convex, Plane): jax.vmap(_convex_plane),
-    (Mesh, Plane): jax.vmap(_mesh_plane),
+    (Sphere, Plane): _sphere_plane,
+    (Sphere, Sphere): _sphere_sphere,
+    (Sphere, Capsule): _sphere_capsule,
+    (Sphere, Convex): _sphere_convex,
+    (Sphere, Mesh): _sphere_mesh,
+    (Capsule, Plane): _capsule_plane,
+    (Capsule, Capsule): _capsule_capsule,
+    (Capsule, Convex): _capsule_convex,
+    (Capsule, Mesh): _capsule_mesh,
+    (Convex, Convex): _convex_convex,
+    (Convex, Plane): _convex_plane,
+    (Mesh, Plane): _mesh_plane,
 }
 
 
-def _geom_pairs(
-    sys, x
-) -> List[Tuple[Optional[Callable[[Geom, Geom], Any]], Geom, Geom]]:
-  """Transforms geometries and gets contact functions to apply to each pair."""
-  geom_pairs = []
-  for geom_a, geom_b in sys.contacts:
-    # check both type signatures: a, b <> b, a
-    fun = _TYPE_FUN.get((type(geom_a), type(geom_b)))
-    if fun is None:
-      fun = _TYPE_FUN.get((type(geom_b), type(geom_a)))
-      if fun is None:
-        raise RuntimeError(
-            f'unrecognized collider pair: {type(geom_a)}, {type(geom_b)}'
-        )
-      geom_a, geom_b = geom_b, geom_a
-
-    tx_a = x.take(geom_a.link_idx).vmap().do(geom_a.transform)
-    geom_a = geom_a.replace(transform=tx_a)
-    # OK for geom b to have no parent links, e.g. static terrain
-    if geom_b.link_idx is not None:
-      tx_b = x.take(geom_b.link_idx).vmap().do(geom_b.transform)
-      geom_b = geom_b.replace(transform=tx_b)
-
-    geom_pairs.append((fun, geom_a, geom_b))  # type: ignore
-
-  return geom_pairs
+def _geom_pairs(sys: System) -> Iterator[Tuple[Geometry, Geometry]]:
+  for i in range(len(sys.geoms)):
+    for j in range(i, len(sys.geoms)):
+      mask_i, mask_j = sys.geom_masks[i], sys.geom_masks[j]
+      if (mask_i & mask_j >> 32) | (mask_i >> 32 & mask_j) == 0:
+        continue
+      geom_i, geom_j = sys.geoms[i], sys.geoms[j]
+      if i == j and geom_i.link_idx is None:
+        continue
+      if i == j and geom_j.transform.pos.shape[0] == 1:
+        continue
+      yield (geom_i, geom_j)
 
 
 def contact(sys: System, x: Transform) -> Optional[Contact]:
@@ -497,13 +488,40 @@ def contact(sys: System, x: Transform) -> Optional[Contact]:
   """
 
   contacts = []
+  for geom_i, geom_j in _geom_pairs(sys):
+    key = (type(geom_i), type(geom_j))
+    fun = _TYPE_FUN.get(key)
+    if fun is None:
+      geom_i, geom_j = geom_j, geom_i
+      fun = _TYPE_FUN.get((key[1], key[0]))
+      if fun is None:
+        raise RuntimeError(f'unrecognized collider pair: {key}')
+    tx_i = x.take(geom_i.link_idx).vmap().do(geom_i.transform)
 
-  for fun, geom_a, geom_b in _geom_pairs(sys, x):
-    c = fun(geom_a, geom_b)  # type: ignore
-    c = tree_map(jp.concatenate, c)
+    if geom_i is geom_j:
+      geom_i = geom_i.replace(transform=tx_i)
+      choose_i, choose_j = jp.triu_indices(geom_i.link_idx.shape[0], 1)
+      geom_i, geom_j = geom_i.take(choose_i), geom_i.take(choose_j)
+      c = jax.vmap(fun)(geom_i, geom_j)  # type: ignore
+      c = jax.tree_map(jp.concatenate, c)
+    else:
+      geom_i = geom_i.replace(transform=tx_i)
+      # OK for geom j to have no parent links, e.g. static terrain
+      if geom_j.link_idx is not None:
+        tx_j = x.take(geom_j.link_idx).vmap().do(geom_j.transform)
+        geom_j = geom_j.replace(transform=tx_j)
+      vvfun = jax.vmap(jax.vmap(fun, in_axes=(0, None)), in_axes=(None, 0))
+      c = vvfun(geom_i, geom_j)  # type: ignore
+      c = jax.tree_map(lambda x: jp.concatenate(jp.concatenate(x)), c)
+
     contacts.append(c)
 
   if not contacts:
     return None
 
-  return jax.tree_map(lambda *x: jp.concatenate(x), *contacts)
+  # ignore penetration of two geoms within the same link
+  c = jax.tree_map(lambda *x: jp.concatenate(x), *contacts)
+  penetration = jp.where(c.link_idx[0] != c.link_idx[1], c.penetration, -1)
+  c = c.replace(penetration=penetration)
+
+  return c

@@ -86,10 +86,10 @@ class Euler(abc.ABC):
 
     @jp.vmap
     def op_acc(qp, dp, pos_mask, rot_mask) -> QP:
-      vel = jp.exp(self.velocity_damping * self.dt) * qp.vel
+      vel = jp.exp(self.velocity_damping * self.dt) * qp.vel  # pytype: disable=wrong-arg-types  # jax-ndarray
       vel += (dp.vel + self.gravity) * self.dt
       vel *= pos_mask
-      ang = jp.exp(self.angular_damping * self.dt) * qp.ang
+      ang = jp.exp(self.angular_damping * self.dt) * qp.ang  # pytype: disable=wrong-arg-types  # jax-ndarray
       ang += dp.ang * self.dt
       ang *= rot_mask
       return QP(pos=qp.pos, rot=qp.rot, vel=vel, ang=ang)
@@ -139,7 +139,7 @@ class Euler(abc.ABC):
       vel = ((qp.pos - qp_prev.pos) / self.dt) * pos_mask
       dq = math.relative_quat(qp_prev.rot, new_rot)
       ang = 2. * dq[1:] / self.dt
-      scale = jp.where(dq[0] >= 0., 1., -1.) * rot_mask
+      scale = jp.where(dq[0] >= 0., 1., -1.) * rot_mask  # pytype: disable=wrong-arg-types  # jax-ndarray
       ang = scale * ang * rot_mask
       return QP(pos=qp.pos, vel=vel, rot=new_rot, ang=ang)
 

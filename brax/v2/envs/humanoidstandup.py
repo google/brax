@@ -215,6 +215,8 @@ class HumanoidStandup(env.PipelineEnv):
 
 
   def __init__(self, backend='generalized', **kwargs):
+    if backend == 'positional':
+      raise NotImplementedError('Not implemented for positional backend.')
     path = epath.resource_path('brax') / 'v2/envs/assets/humanoidstandup.xml'
     sys = mjcf.load(path)
 
@@ -245,7 +247,7 @@ class HumanoidStandup(env.PipelineEnv):
         rng2, (self.sys.qd_size(),), minval=low, maxval=hi
     )
 
-    pipeline_state = self._pipeline.init(self.sys, qpos, qvel)
+    pipeline_state = self.pipeline_init(qpos, qvel)
     obs = self._get_obs(pipeline_state, jp.zeros(self.sys.act_size()))
     reward, done, zero = jp.zeros(3)
     metrics = {
@@ -317,4 +319,4 @@ class HumanoidStandup(env.PipelineEnv):
     com = (
         jp.sum(jax.vmap(jp.multiply)(inertia.mass, x_i.pos), axis=0) / mass_sum
     )
-    return com, inertia, mass_sum, x_i
+    return com, inertia, mass_sum, x_i  # pytype: disable=bad-return-type  # jax-ndarray

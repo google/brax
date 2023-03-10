@@ -29,10 +29,7 @@ import numpy as np
 class KinematicsTest(parameterized.TestCase):
 
   @parameterized.parameters(
-      ('ant.xml',),
-      ('triple_pendulum.xml',),
-      ('humanoid.xml',),
-      ('halfcheetah.xml',),
+      ('ant.xml',), ('humanoid.xml',), ('reacher.xml',), ('half_cheetah.xml',)
   )
   def test_forward_q(self, xml_file):
     """Test dynamics forward q."""
@@ -50,7 +47,9 @@ class KinematicsTest(parameterized.TestCase):
         7,
     )
 
-  @parameterized.parameters(('ant.xml',), ('humanoid.xml',), ('reacher.xml',))
+  @parameterized.parameters(
+      ('ant.xml',), ('humanoid.xml',), ('reacher.xml',), ('half_cheetah.xml',)
+  )
   def test_inverse(self, xml_file):
     sys = test_utils.load_fixture(xml_file)
     # # test at random init

@@ -44,7 +44,7 @@ class JointTest(parameterized.TestCase):
     link = sys.link.replace(constraint_limit_stiffness=jp.array([0.0] * 1))
     link = link.replace(constraint_stiffness=jp.array([10_000.0] * 1))
     link = link.replace(constraint_ang_damping=jp.array([0.0] * 1))
-    link = link.replace(constraint_damping=jp.array([0.0] * 1))
+    link = link.replace(constraint_vel_damping=jp.array([0.0] * 1))
     sys = sys.replace(link=link)
     sys = sys.replace(ang_damping=0.0)
     sys = sys.replace(

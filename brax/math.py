@@ -84,7 +84,7 @@ def quat_to_euler(q: Quaternion) -> Vector3:
   z = jp.arctan2(-2 * q[1] * q[2] + 2 * q[0] * q[3],
                  q[1] * q[1] + q[0] * q[0] - q[3] * q[3] - q[2] * q[2])
   # TODO: Investigate why quaternions go so big we need to clip.
-  y = jp.safe_arcsin(jp.clip(2 * q[1] * q[3] + 2 * q[0] * q[2], -1., 1.))
+  y = jp.safe_arcsin(jp.clip(2 * q[1] * q[3] + 2 * q[0] * q[2], -1., 1.))  # pytype: disable=wrong-arg-types  # jax-ndarray
   x = jp.arctan2(-2 * q[2] * q[3] + 2 * q[0] * q[1],
                  q[3] * q[3] - q[2] * q[2] - q[1] * q[1] + q[0] * q[0])
 
@@ -107,9 +107,9 @@ def quat_to_axis_angle(q: Quaternion) -> Tuple[Vector3, jp.ndarray]:
   denom = jp.safe_norm(q[1:])
   angle = 2. * jp.arctan2(
       jp.sqrt(epsilon + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]), q[0])
-  angle += jp.where(angle > jp.pi, x=-2 * jp.pi, y=0)
-  angle += jp.where(angle < -jp.pi, x=2 * jp.pi, y=0)
-  scale = jp.where(denom == 0., 0., 1. / denom)
+  angle += jp.where(angle > jp.pi, x=-2 * jp.pi, y=0)  # pytype: disable=wrong-arg-types  # jax-ndarray
+  angle += jp.where(angle < -jp.pi, x=2 * jp.pi, y=0)  # pytype: disable=wrong-arg-types  # jax-ndarray
+  scale = jp.where(denom == 0., 0., 1. / denom)  # pytype: disable=wrong-arg-types  # jax-ndarray
   return q[1:] * scale, angle
 
 

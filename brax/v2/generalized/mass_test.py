@@ -30,7 +30,7 @@ class MassTest(parameterized.TestCase):
       ('ant.xml',),
       ('triple_pendulum.xml',),
       ('humanoid.xml',),
-      ('halfcheetah.xml',),
+      ('half_cheetah.xml',),
   )
   def test_matrix(self, xml_file):
     """Test mass matrix calculation."""

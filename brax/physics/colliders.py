@@ -64,7 +64,7 @@ class NearNeighbors(Cull):
     dist_off = jp.zeros(col_a.body.idx.shape + col_b.body.idx.shape)
     # TODO: consider accounting for bounds/radius of a collidable
     dist_mask = dist_off + float('inf')
-    dist_off += jp.index_update(dist_mask, mask, 0)
+    dist_off += jp.index_update(dist_mask, mask, 0)  # pytype: disable=wrong-arg-types  # jax-ndarray
     self.dist_off = dist_off
     self.cutoff = cutoff
     self.candidate_a, self.candidate_b = col_a, col_b
@@ -141,7 +141,7 @@ class Collider(abc.ABC):
           (jp.repeat(col_a.body.idx, rep_a), jp.repeat(col_b.body.idx, rep_b)))
       dp_vel = jp.concatenate((dp_a.vel, dp_b.vel))
       dp_ang = jp.concatenate((dp_a.ang, dp_b.ang))
-    contact = jp.where(jp.any(dp_vel, axis=-1), 1.0, 0.0)
+    contact = jp.where(jp.any(dp_vel, axis=-1), 1.0, 0.0)  # pytype: disable=wrong-arg-types  # jax-ndarray
     contact = jp.segment_sum(contact, body_idx, qp.pos.shape[0])
     dp_vel = jp.segment_sum(dp_vel, body_idx, qp.pos.shape[0])
     dp_ang = jp.segment_sum(dp_ang, body_idx, qp.pos.shape[0])
@@ -184,7 +184,7 @@ class Collider(abc.ABC):
           (jp.repeat(col_a.body.idx, rep_a), jp.repeat(col_b.body.idx, rep_b)))
       dp_vel = jp.concatenate((dp_a.vel, dp_b.vel))
       dp_ang = jp.concatenate((dp_a.ang, dp_b.ang))
-    contact = jp.where(jp.any(dp_vel, axis=-1), 1.0, 0.0)
+    contact = jp.where(jp.any(dp_vel, axis=-1), 1.0, 0.0)  # pytype: disable=wrong-arg-types  # jax-ndarray
     contact = jp.segment_sum(contact, body_idx, qp.pos.shape[0])
     dp_vel = jp.segment_sum(dp_vel, body_idx, qp.pos.shape[0])
     dp_ang = jp.segment_sum(dp_ang, body_idx, qp.pos.shape[0])
@@ -228,7 +228,7 @@ class Collider(abc.ABC):
           (jp.repeat(col_a.body.idx, rep_b), jp.repeat(col_b.body.idx, rep_b)))
       dq_pos = jp.concatenate((dq_a.pos, dq_b.pos))
       dq_rot = jp.concatenate((dq_a.rot, dq_b.rot))
-    contact = jp.where(jp.any(dq_pos, axis=-1), 1.0, 0.0)
+    contact = jp.where(jp.any(dq_pos, axis=-1), 1.0, 0.0)  # pytype: disable=wrong-arg-types  # jax-ndarray
     contact = jp.segment_sum(contact, body_idx, qp.pos.shape[0])
     dq_pos = jp.segment_sum(dq_pos, body_idx, qp.pos.shape[0])
     dq_rot = jp.segment_sum(dq_rot, body_idx, qp.rot.shape[0])
@@ -292,11 +292,11 @@ class OneWayCollider(Collider):
       dir_d = vel_d / (1e-6 + jp.safe_norm(vel_d))
       dp_d = col_a.body.impulse(qp_a, -impulse_d * dir_d, contact.pos)
       # apply collision if penetrating, approaching, and oriented correctly
-      apply_n = jp.where(
+      apply_n = jp.where(  # pytype: disable=wrong-arg-types  # jax-ndarray
           (contact.penetration > 0.) & (normal_vel < 0) & (impulse > 0.), 1.,
           0.)
       # apply drag if moving laterally above threshold
-      apply_d = apply_n * jp.where(jp.safe_norm(vel_d) > 0.01, 1., 0.)
+      apply_d = apply_n * jp.where(jp.safe_norm(vel_d) > 0.01, 1., 0.)  # pytype: disable=wrong-arg-types  # jax-ndarray
 
       dp_a = dp_n * apply_n + dp_d * apply_d
       return dp_a, None
@@ -329,7 +329,7 @@ class OneWayCollider(Collider):
 
       dlambda = -c / (w1 + 1e-6)
 
-      coll_mask = jp.where(c < 0, 1., 0.)
+      coll_mask = jp.where(c < 0, 1., 0.)  # pytype: disable=wrong-arg-types  # jax-ndarray
       p = dlambda * n * coll_mask
 
       dq_p_pos = p / col_a.body.mass
@@ -360,7 +360,7 @@ class OneWayCollider(Collider):
       w1 = (1. / col_a.body.mass) + jp.dot(cr1, col_a.body.inertia * cr1)
 
       dlambdat = -c / (w1 + 0.)
-      static_mask = jp.where(
+      static_mask = jp.where(  # pytype: disable=wrong-arg-types  # jax-ndarray
           jp.abs(dlambdat) < jp.abs(friction * dlambda), 1., 0.)
       p = dlambdat * n * static_mask * coll_mask
 
@@ -428,8 +428,8 @@ class OneWayCollider(Collider):
       w1 = (1. / col_a.body.mass) + jp.dot(cr1, col_a.body.inertia * cr1)
 
       dlambda_rest = c / (w1 + 1e-6)
-      static_mask = jp.where(contact.penetration > 0, 1., 0.)
-      sinking = jp.where(v_n_old <= -self.velocity_threshold, 1., 0.)
+      static_mask = jp.where(contact.penetration > 0, 1., 0.)  # pytype: disable=wrong-arg-types  # jax-ndarray
+      sinking = jp.where(v_n_old <= -self.velocity_threshold, 1., 0.)  # pytype: disable=wrong-arg-types  # jax-ndarray
 
       p = (dlambda_rest * n * sinking + p_dyn) * static_mask
 
@@ -480,11 +480,11 @@ class TwoWayCollider(Collider):
       dp_d_a = col_a.body.impulse(qp_a, -impulse_d * dir_d, contact.pos)
       dp_d_b = col_b.body.impulse(qp_b, impulse_d * dir_d, contact.pos)
       # apply collision if penetrating, approaching, and oriented correctly
-      apply_n = jp.where(
+      apply_n = jp.where(  # pytype: disable=wrong-arg-types  # jax-ndarray
           (contact.penetration > 0.) & (normal_vel < 0) & (impulse > 0.), 1.,
           0.)
       # apply drag if moving laterally above threshold
-      apply_d = apply_n * jp.where(jp.safe_norm(vel_d) > 0.01, 1., 0.)
+      apply_d = apply_n * jp.where(jp.safe_norm(vel_d) > 0.01, 1., 0.)  # pytype: disable=wrong-arg-types  # jax-ndarray
 
       dp_a = dp_n_a * apply_n + dp_d_a * apply_d
       dp_b = dp_n_b * apply_n + dp_d_b * apply_d
@@ -516,7 +516,7 @@ class TwoWayCollider(Collider):
       w2 = (1. / col_b.body.mass) + jp.dot(cr2, col_b.body.inertia * cr2)
 
       dlambda = -c / (w1 + w2 + 1e-6)
-      coll_mask = jp.where(c < 0, 1., 0.)
+      coll_mask = jp.where(c < 0, 1., 0.)  # pytype: disable=wrong-arg-types  # jax-ndarray
       p = dlambda * n * coll_mask
 
       dq_p_pos = p / col_a.body.mass
@@ -561,7 +561,7 @@ class TwoWayCollider(Collider):
       w2 = (1. / col_b.body.mass) + jp.dot(cr2, col_b.body.inertia * cr2)
 
       dlambdat = -c / (w1 + w2)
-      static_mask = jp.where(jp.abs(dlambdat) < jp.abs(dlambda), 1., 0.)
+      static_mask = jp.where(jp.abs(dlambdat) < jp.abs(dlambda), 1., 0.)  # pytype: disable=wrong-arg-types  # jax-ndarray
       p = dlambdat * n * static_mask * coll_mask
 
       dq_p_pos = p / col_a.body.mass
@@ -640,8 +640,8 @@ class TwoWayCollider(Collider):
       w2 = (1. / col_b.body.mass) + jp.dot(cr2, col_b.body.inertia * cr2)
 
       dlambda_rest = c / (w1 + w2 + 1e-6)
-      static_mask = jp.where(contact.penetration > 0, 1., 0.)
-      sinking = jp.where(v_n_old <= 0., 1., 0.)
+      static_mask = jp.where(contact.penetration > 0, 1., 0.)  # pytype: disable=wrong-arg-types  # jax-ndarray
+      sinking = jp.where(v_n_old <= 0., 1., 0.)  # pytype: disable=wrong-arg-types  # jax-ndarray
 
       p = (dlambda_rest * n * sinking + p_dyn) * static_mask
 
@@ -714,7 +714,7 @@ def box_heightmap(box: geometry.Box, hm: geometry.HeightMap, qp_a: QP,
     uv_idx = jp.floor(uv_pos).astype(int)
     delta_uv = uv_pos - uv_idx
     lower_triangle = jp.sum(delta_uv) < 1
-    mu = jp.where(lower_triangle, -1, 1)
+    mu = jp.where(lower_triangle, -1, 1)  # pytype: disable=wrong-arg-types  # jax-ndarray
 
     # Compute the triangle vertices (u, v) that enclose the candidate point.
     triangle_u = uv_idx[0] + jp.where(lower_triangle, jp.array([0, 1, 0]),
@@ -769,7 +769,7 @@ def capsule_clippedplane(cap: geometry.CapsuleEnd, plane: geometry.ClippedPlane,
     normal = math.rotate(plane.normal, qp_b.rot)
 
     # orient the normal s.t. it points at the CoM of the capsule
-    normal_dir = jp.where(qp_a.pos.dot(normal) > 0., 1, -1)
+    normal_dir = jp.where(qp_a.pos.dot(normal) > 0., 1, -1)  # pytype: disable=wrong-arg-types  # jax-ndarray
     normal = normal * normal_dir
 
     pos = cap_end_world - normal * cap.radius
@@ -791,7 +791,7 @@ def capsule_clippedplane(cap: geometry.CapsuleEnd, plane: geometry.ClippedPlane,
     in_front_of_side_plane = jp.vmap(geometry.point_in_front_of_plane,
                                      include=[True, True, False])(
                                          side_plane_pt, side_plane_norm, pos)
-    penetration = jp.where(jp.any(in_front_of_side_plane),
+    penetration = jp.where(jp.any(in_front_of_side_plane),  # pytype: disable=wrong-arg-types  # jax-ndarray
                            -jp.ones_like(penetration),
                            penetration)
 

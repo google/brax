@@ -14,6 +14,7 @@
 
 """Function to resolve collisions."""
 # pylint:disable=g-multiple-import
+from brax.v2 import geometry
 from brax.v2 import math
 from brax.v2.base import Force, Motion, System, Transform
 from brax.v2.spring.base import State
@@ -32,7 +33,9 @@ def resolve(sys: System, state: State) -> Motion:
   Returns:
     xdv_i: delta-velocity to apply to link center of mass in world frame
   """
-  if state.contact is None:
+  contact = geometry.contact(sys, state.x)
+
+  if contact is None:
     return Motion.zero((sys.num_links(),))
 
   @jax.vmap
@@ -73,16 +76,16 @@ def resolve(sys: System, state: State) -> Motion:
 
     return f, jp.array(apply_n, dtype=jp.float32)
 
-  link_idx = jp.array(state.contact.link_idx).T
+  link_idx = jp.array(contact.link_idx).T
   x_i, xd_i = state.x_i.take(link_idx), state.xd_i.take(link_idx)
   i_inv = state.i_inv.take(link_idx) * (link_idx > -1)
   i_mass = 1 / state.mass.take(link_idx) * (link_idx > -1)
-  p, is_contact = impulse(state.contact, link_idx, x_i, xd_i, i_inv, i_mass)
+  p, is_contact = impulse(contact, link_idx, x_i, xd_i, i_inv, i_mass)
 
   # calculate the impulse to each link center of mass
   p = jax.tree_map(lambda x: jp.concatenate((x, -x)), p)
-  pos = jp.tile(state.contact.pos, (2, 1))
-  link_idx = jp.concatenate(state.contact.link_idx)
+  pos = jp.tile(contact.pos, (2, 1))
+  link_idx = jp.concatenate(contact.link_idx)
   xp_i = Transform.create(pos=pos - state.x_i.take(link_idx).pos).vmap().do(p)
   xp_i = jax.tree_map(lambda x: segment_sum(x, link_idx, sys.num_links()), xp_i)
 

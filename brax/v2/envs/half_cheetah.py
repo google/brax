@@ -27,11 +27,11 @@ class Halfcheetah(env.PipelineEnv):
 
 
   # pyformat: disable
-  """### Description
+  """
+  ### Description
 
   This environment is based on the work by P. Wawrzyński in
-  ["A Cat-Like Robot Real-Time Learning to
-  Run"](http://staff.elka.pw.edu.pl/~pwawrzyn/pub-s/0812_LSCLRR.pdf).
+  ["A Cat-Like Robot Real-Time Learning to Run"](http://staff.elka.pw.edu.pl/~pwawrzyn/pub-s/0812_LSCLRR.pdf).
 
   The HalfCheetah is a 2-dimensional robot consisting of 9 links and 8 joints
   connecting them (including two paws).
@@ -52,21 +52,14 @@ class Halfcheetah(env.PipelineEnv):
   `[-1.0, 1.0]`, where `action` represents the numerical torques applied
   between *links*
 
-  | Num | Action                                  | Control Min | Control Max |
-  Name (in corresponding config) | Joint | Unit         |
+  | Num | Action                                  | Control Min | Control Max | Name (in corresponding config) | Joint | Unit         |
   |-----|-----------------------------------------|-------------|-------------|--------------------------------|-------|--------------|
-  | 0   | Torque applied on the back thigh rotor  | -1          | 1           |
-  bthigh                         | hinge | torque (N m) |
-  | 1   | Torque applied on the back shin rotor   | -1          | 1           |
-  bshin                          | hinge | torque (N m) |
-  | 2   | Torque applied on the back foot rotor   | -1          | 1           |
-  bfoot                          | hinge | torque (N m) |
-  | 3   | Torque applied on the front thigh rotor | -1          | 1           |
-  fthigh                         | hinge | torque (N m) |
-  | 4   | Torque applied on the front shin rotor  | -1          | 1           |
-  fshin                          | hinge | torque (N m) |
-  | 5   | Torque applied on the front foot rotor  | -1          | 1           |
-  ffoot                          | hinge | torque (N m) |
+  | 0   | Torque applied on the back thigh rotor  | -1          | 1           | bthigh                         | hinge | torque (N m) |
+  | 1   | Torque applied on the back shin rotor   | -1          | 1           | bshin                          | hinge | torque (N m) |
+  | 2   | Torque applied on the back foot rotor   | -1          | 1           | bfoot                          | hinge | torque (N m) |
+  | 3   | Torque applied on the front thigh rotor | -1          | 1           | fthigh                         | hinge | torque (N m) |
+  | 4   | Torque applied on the front shin rotor  | -1          | 1           | fshin                          | hinge | torque (N m) |
+  | 5   | Torque applied on the front foot rotor  | -1          | 1           | ffoot                          | hinge | torque (N m) |
 
   ### Observation Space
 
@@ -77,45 +70,26 @@ class Halfcheetah(env.PipelineEnv):
   The observation is a `ndarray` with shape `(18,)` where the elements
   correspond to the following:
 
-  | Num | Observation                          | Min  | Max | Name (in
-  corresponding config) | Joint | Unit                     |
+  | Num | Observation                          | Min  | Max | Name (in corresponding config) | Joint | Unit                     |
   |-----|--------------------------------------|------|-----|--------------------------------|-------|--------------------------|
-  | 0   | z-coordinate of the center of mass   | -Inf | Inf | rootx
-  | slide | position (m)             |
-  | 1   | w-orientation of the front tip       | -Inf | Inf | rooty
-  | hinge | angle (rad)              |
-  | 2   | y-orientation of the front tip       | -Inf | Inf | rooty
-  | hinge | angle (rad)              |
-  | 3   | angle of the back thigh rotor        | -Inf | Inf | bthigh
-  | hinge | angle (rad)              |
-  | 4   | angle of the back shin rotor         | -Inf | Inf | bshin
-  | hinge | angle (rad)              |
-  | 5   | angle of the back foot rotor         | -Inf | Inf | bfoot
-  | hinge | angle (rad)              |
-  | 6   | velocity of the tip along the y-axis | -Inf | Inf | fthigh
-  | hinge | angle (rad)              |
-  | 7   | angular velocity of front tip        | -Inf | Inf | fshin
-  | hinge | angle (rad)              |
-  | 8   | angular velocity of second rotor     | -Inf | Inf | ffoot
-  | hinge | angle (rad)              |
-  | 9   | x-coordinate of the front tip        | -Inf | Inf | rootx
-  | slide | velocity (m/s)           |
-  | 10  | y-coordinate of the front tip        | -Inf | Inf | rootz
-  | slide | velocity (m/s)           |
-  | 11  | angle of the front tip               | -Inf | Inf | rooty
-  | hinge | angular velocity (rad/s) |
-  | 12  | angle of the second rotor            | -Inf | Inf | bthigh
-  | hinge | angular velocity (rad/s) |
-  | 13  | angle of the second rotor            | -Inf | Inf | bshin
-  | hinge | angular velocity (rad/s) |
-  | 14  | velocity of the tip along the x-axis | -Inf | Inf | bfoot
-  | hinge | angular velocity (rad/s) |
-  | 15  | velocity of the tip along the y-axis | -Inf | Inf | fthigh
-  | hinge | angular velocity (rad/s) |
-  | 16  | angular velocity of front tip        | -Inf | Inf | fshin
-  | hinge | angular velocity (rad/s) |
-  | 17  | angular velocity of second rotor     | -Inf | Inf | ffoot
-  | hinge | angular velocity (rad/s) |
+  | 0   | z-coordinate of the center of mass   | -Inf | Inf | rootx                          | slide | position (m)             |
+  | 1   | w-orientation of the front tip       | -Inf | Inf | rooty                          | hinge | angle (rad)              |
+  | 2   | y-orientation of the front tip       | -Inf | Inf | rooty                          | hinge | angle (rad)              |
+  | 3   | angle of the back thigh rotor        | -Inf | Inf | bthigh                         | hinge | angle (rad)              |
+  | 4   | angle of the back shin rotor         | -Inf | Inf | bshin                          | hinge | angle (rad)              |
+  | 5   | angle of the back foot rotor         | -Inf | Inf | bfoot                          | hinge | angle (rad)              |
+  | 6   | velocity of the tip along the y-axis | -Inf | Inf | fthigh                         | hinge | angle (rad)              |
+  | 7   | angular velocity of front tip        | -Inf | Inf | fshin                          | hinge | angle (rad)              |
+  | 8   | angular velocity of second rotor     | -Inf | Inf | ffoot                          | hinge | angle (rad)              |
+  | 9   | x-coordinate of the front tip        | -Inf | Inf | rootx                          | slide | velocity (m/s)           |
+  | 10  | y-coordinate of the front tip        | -Inf | Inf | rootz                          | slide | velocity (m/s)           |
+  | 11  | angle of the front tip               | -Inf | Inf | rooty                          | hinge | angular velocity (rad/s) |
+  | 12  | angle of the second rotor            | -Inf | Inf | bthigh                         | hinge | angular velocity (rad/s) |
+  | 13  | angle of the second rotor            | -Inf | Inf | bshin                          | hinge | angular velocity (rad/s) |
+  | 14  | velocity of the tip along the x-axis | -Inf | Inf | bfoot                          | hinge | angular velocity (rad/s) |
+  | 15  | velocity of the tip along the y-axis | -Inf | Inf | fthigh                         | hinge | angular velocity (rad/s) |
+  | 16  | angular velocity of front tip        | -Inf | Inf | fshin                          | hinge | angular velocity (rad/s) |
+  | 17  | angular velocity of second rotor     | -Inf | Inf | ffoot                          | hinge | angular velocity (rad/s) |
 
   ### Rewards
 
@@ -184,14 +158,20 @@ class Halfcheetah(env.PipelineEnv):
       backend='generalized',
       **kwargs
   ):
-    if backend == 'spring':
-      raise NotImplementedError(
-          'Spring does not support joint types for hopper yet.'
-      )
+    if backend == 'positional':
+      raise NotImplementedError('Not implemented for positional backend.')
     path = epath.resource_path('brax') / 'v2/envs/assets/half_cheetah.xml'
     sys = mjcf.load(path)
 
     n_frames = 5
+
+    if backend == 'spring':
+      sys = sys.replace(dt=0.003125)
+      n_frames = 16
+      sys = sys.replace(
+          actuator=sys.actuator.replace(
+              gear=jp.array([120, 90, 60, 120, 90, 90])))  # pyformat: disable
+
     kwargs['n_frames'] = kwargs.get('n_frames', n_frames)
 
     super().__init__(sys=sys, backend=backend, **kwargs)
@@ -213,7 +193,7 @@ class Halfcheetah(env.PipelineEnv):
     )
     qvel = hi * jax.random.normal(rng2, (self.sys.qd_size(),))
 
-    pipeline_state = self._pipeline.init(self.sys, qpos, qvel)
+    pipeline_state = self.pipeline_init(qpos, qvel)
 
     obs = self._get_obs(pipeline_state)
     reward, done, zero = jp.zeros(3)

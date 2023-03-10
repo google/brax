@@ -2,15 +2,17 @@
 	<compiler angle="radian" inertiafromgeom="true"/>
 	<default>
 		<joint armature="1" damping="1" limited="true"/>
-		<geom contype="0" friction="1 0.1 0.1" rgba="0.7 0.7 0 1"/>
+		<geom conaffinity="0" contype="0" friction="1 0.1 0.1" rgba="0.7 0.7 0 1"/>
 	</default>
 	<!-- Removed RK4 integrator for brax. -->
-	<option gravity="0 0 -9.81" timestep="0.01" collision="predefined"/>
+	<option gravity="0 0 -9.81" timestep="0.01" />
   <custom>
+	  <!-- brax custom params -->
 		<numeric data="0 0 0.1 -0.1" name="init_qpos"/>
     <numeric data="1000 1000 10" name="constraint_stiffness"/>
-    <numeric data="3 3 0.1" name="constraint_damping"/>
 		<numeric data="1000" name="constraint_limit_stiffness"/>
+    <numeric data="3 3 0.1" name="constraint_vel_damping"/>
+		<numeric data="0.1" name="constraint_ang_damping"/>
     <numeric data="0.0" name="ang_damping"/>
     <numeric data="0" name="spring_mass_scale"/>
 		<numeric data="1" name="spring_inertia_scale"/>

@@ -218,7 +218,7 @@ def point_in_front_of_plane(
     plane_pt: jp.ndarray, plane_normal: jp.ndarray, pt: jp.ndarray
 ) -> bool:
   """Checks if a point is strictly in front of a plane."""
-  return (pt - plane_pt).dot(plane_normal) > 1e-6
+  return (pt - plane_pt).dot(plane_normal) > 1e-6  # pytype: disable=bad-return-type  # jax-ndarray
 
 
 def clip_edge_to_planes(

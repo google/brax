@@ -95,4 +95,4 @@ def min_z(qp: QP, body: config_pb2.Body) -> float:
       # ignore planes and other stuff
       result = jp.amin(jp.array([result, 0.0]))
 
-  return result
+  return result  # pytype: disable=bad-return-type  # jax-ndarray

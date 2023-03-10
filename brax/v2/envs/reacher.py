@@ -34,7 +34,8 @@ class Reacher(env.PipelineEnv):
 
 
   # pyformat: disable
-  """### Description
+  """
+  ### Description
 
   "Reacher" is a two-jointed robot arm. The goal is to move the robot's end
   effector (called *fingertip*) close to a target that is spawned at a random
@@ -45,16 +46,10 @@ class Reacher(env.PipelineEnv):
   The action space is a `Box(-1, 1, (2,), float32)`. An action `(a, b)`
   represents the torques applied at the hinge joints.
 
-  | Num | Action
-  | Control Min | Control Max | Name (in corresponding config) | Joint | Unit
-  |
+  | Num | Action                                                                          | Control Min | Control Max | Name (in corresponding config) | Joint | Unit         |
   |-----|---------------------------------------------------------------------------------|-------------|-------------|--------------------------------|-------|--------------|
-  | 0   | Torque applied at the first hinge (connecting the link to the point of
-  fixture) | -1          | 1           | joint0                         | hinge
-  | torque (N m) |
-  | 1   | Torque applied at the second hinge (connecting the two links)
-  | -1          | 1           | joint1                         | hinge | torque
-  (N m) |
+  | 0   | Torque applied at the first hinge (connecting the link to the point of fixture) | -1          | 1           | joint0                         | hinge | torque (N m) |
+  | 1   | Torque applied at the second hinge (connecting the two links)                   | -1          | 1           | joint1                         | hinge | torque (N m) |
 
   ### Observation Space
 
@@ -70,43 +65,19 @@ class Reacher(env.PipelineEnv):
   The observation is a `ndarray` with shape `(11,)` where the elements
   correspond to the following:
 
-  | Num | Observation
-  | Min  | Max | Name (in corresponding config) | Joint | Unit
-  |
+  | Num | Observation                                                                                    | Min  | Max | Name (in corresponding config) | Joint | Unit                     |
   |-----|------------------------------------------------------------------------------------------------|------|-----|--------------------------------|-------|--------------------------|
-  | 0   | cosine of the angle of the first arm
-  | -Inf | Inf | cos(joint0)                    | hinge | unitless
-  |
-  | 1   | cosine of the angle of the second arm
-  | -Inf | Inf | cos(joint1)                    | hinge | unitless
-  |
-  | 2   | sine of the angle of the first arm
-  | -Inf | Inf | cos(joint0)                    | hinge | unitless
-  |
-  | 3   | sine of the angle of the second arm
-  | -Inf | Inf | cos(joint1)                    | hinge | unitless
-  |
-  | 4   | x-coordinate of the target
-  | -Inf | Inf | target_x                       | slide | position (m)
-  |
-  | 5   | y-coordinate of the target
-  | -Inf | Inf | target_y                       | slide | position (m)
-  |
-  | 6   | angular velocity of the first arm
-  | -Inf | Inf | joint0                         | hinge | angular velocity
-  (rad/s) |
-  | 7   | angular velocity of the second arm
-  | -Inf | Inf | joint1                         | hinge | angular velocity
-  (rad/s) |
-  | 8   | x-value of position_fingertip - position_target
-  | -Inf | Inf | NA                             | slide | position (m)
-  |
-  | 9   | y-value of position_fingertip - position_target
-  | -Inf | Inf | NA                             | slide | position (m)
-  |
-  | 10  | z-value of position_fingertip - position_target (0 since reacher is 2d
-  and z is same for both) | -Inf | Inf | NA                             | slide
-  | position (m)             |
+  | 0   | cosine of the angle of the first arm                                                           | -Inf | Inf | cos(joint0)                    | hinge | unitless                 |
+  | 1   | cosine of the angle of the second arm                                                          | -Inf | Inf | cos(joint1)                    | hinge | unitless                 |
+  | 2   | sine of the angle of the first arm                                                             | -Inf | Inf | cos(joint0)                    | hinge | unitless                 |
+  | 3   | sine of the angle of the second arm                                                            | -Inf | Inf | cos(joint1)                    | hinge | unitless                 |
+  | 4   | x-coordinate of the target                                                                     | -Inf | Inf | target_x                       | slide | position (m)             |
+  | 5   | y-coordinate of the target                                                                     | -Inf | Inf | target_y                       | slide | position (m)             |
+  | 6   | angular velocity of the first arm                                                              | -Inf | Inf | joint0                         | hinge | angular velocity (rad/s) |
+  | 7   | angular velocity of the second arm                                                             | -Inf | Inf | joint1                         | hinge | angular velocity (rad/s) |
+  | 8   | x-value of position_fingertip - position_target                                                | -Inf | Inf | NA                             | slide | position (m)             |
+  | 9   | y-value of position_fingertip - position_target                                                | -Inf | Inf | NA                             | slide | position (m)             |
+  | 10  | z-value of position_fingertip - position_target (0 since reacher is 2d and z is same for both) | -Inf | Inf | NA                             | slide | position (m)             |
 
   ### Rewards
 
@@ -184,6 +155,8 @@ class Reacher(env.PipelineEnv):
 
 
   def __init__(self, backend='generalized', **kwargs):
+    if backend == 'positional':
+      raise NotImplementedError('Not implemented for positional backend.')
     path = epath.resource_path('brax') / 'v2/envs/assets/reacher.xml'
     sys = mjcf.load(path)
 
@@ -213,7 +186,7 @@ class Reacher(env.PipelineEnv):
     q = q.at[2:].set(target)
     qd = qd.at[2:].set(0)
 
-    pipeline_state = self._pipeline.init(self.sys, q, qd)
+    pipeline_state = self.pipeline_init(q, qd)
 
     obs = self._get_obs(pipeline_state)
     reward, done, zero = jp.zeros(3)

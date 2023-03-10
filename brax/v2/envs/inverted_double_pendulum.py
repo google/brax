@@ -155,6 +155,8 @@ class InvertedDoublePendulum(env.PipelineEnv):
 
 
   def __init__(self, backend='generalized', **kwargs):
+    if backend == 'positional':
+      raise NotImplementedError('Not implemented for positional backend.')
     path = (
         epath.resource_path('brax')
         / 'v2/envs/assets/inverted_double_pendulum.xml'
@@ -179,7 +181,7 @@ class InvertedDoublePendulum(env.PipelineEnv):
         rng1, (self.sys.q_size(),), minval=-0.01, maxval=0.01
     )
     qd = jax.random.normal(rng2, (self.sys.qd_size(),)) * 0.01
-    pipeline_state = self._pipeline.init(self.sys, q, qd)
+    pipeline_state = self.pipeline_init(q, qd)
 
     obs = self._get_obs(pipeline_state)
     reward, done = jp.zeros(2)

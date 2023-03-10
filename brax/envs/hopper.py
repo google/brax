@@ -209,10 +209,10 @@ class Hopper(env.Env):
     min_z, max_z = self._healthy_z_range
     min_angle, max_angle = self._healthy_angle_range
     ang_y = math.quat_to_euler(qp.rot[0])[1]
-    is_healthy = jp.where(qp.pos[0, 2] < min_z, x=0.0, y=1.0)
-    is_healthy = jp.where(qp.pos[0, 2] > max_z, x=0.0, y=is_healthy)
-    is_healthy = jp.where(ang_y > max_angle, x=0.0, y=is_healthy)
-    is_healthy = jp.where(ang_y < min_angle, x=0.0, y=is_healthy)
+    is_healthy = jp.where(qp.pos[0, 2] < min_z, x=0.0, y=1.0)  # pytype: disable=wrong-arg-types  # jax-ndarray
+    is_healthy = jp.where(qp.pos[0, 2] > max_z, x=0.0, y=is_healthy)  # pytype: disable=wrong-arg-types  # jax-ndarray
+    is_healthy = jp.where(ang_y > max_angle, x=0.0, y=is_healthy)  # pytype: disable=wrong-arg-types  # jax-ndarray
+    is_healthy = jp.where(ang_y < min_angle, x=0.0, y=is_healthy)  # pytype: disable=wrong-arg-types  # jax-ndarray
     if self._terminate_when_unhealthy:
       healthy_reward = self._healthy_reward
     else:
