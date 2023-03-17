@@ -14,16 +14,15 @@
 
 """Tests for joints."""
 
+from absl.testing import absltest
 from brax.v2 import test_utils
 from brax.v2.positional import joints
 from brax.v2.positional import pipeline
 from jax import numpy as jp
 import numpy as np
 
-from google3.testing.pybase import googletest
 
-
-class JointsTest(googletest.TestCase):
+class JointsTest(absltest.TestCase):
 
   def test_sphericalize_humanoid(self):
     sys = test_utils.load_fixture('humanoid.xml')
@@ -108,4 +107,4 @@ class JointsTest(googletest.TestCase):
 
 
 if __name__ == '__main__':
-  googletest.main()
+  absltest.main()
