@@ -409,7 +409,7 @@ class Actuator(Base):
   """Actuator, transforms an input signal into a force (motor or thruster).
 
   Attributes:
-    ctrl_range: (num_actuators,) control range for each actuator
+    ctrl_range: (num_actuators, 2) control range for each actuator
     gear: (num_actuators,) a list of floats used as a scaling factor for each
       actuator torque output
   """
@@ -457,7 +457,8 @@ class System:
                 from one another
     spring_mass_scale: a float that scales mass as `mass^(1 - x)`
     spring_inertia_scale: a float that scales inertia diag as `inertia^(1 - x)`
-    joint_scale: fraction of position based joint update to apply
+    joint_scale_ang: scale for position-based joint rotation update
+    joint_scale_pos: scale for position-based joint position update
     collide_scale: fraction of position based collide update to apply
     geom_masks: 64-bit mask determines whether two geoms will be contact tested.
                 lower 32 bits are type, upper 32 bits are affinity.  two geoms
@@ -499,7 +500,8 @@ class System:
   spring_mass_scale: jp.float32
   spring_inertia_scale: jp.float32
   # only used in `brax.physics.positional`
-  joint_scale: jp.float32
+  joint_scale_ang: jp.float32
+  joint_scale_pos: jp.float32
   collide_scale: jp.float32
 
   geom_masks: List[int] = struct.field(pytree_node=False)
@@ -617,7 +619,7 @@ def _(m: Motion, self: Transform) -> Motion:
 @_transform_do.register(Force)
 def _(f: Force, self: Transform) -> Force:
   vel = math.rotate(f.vel, self.rot)
-  ang = math.rotate(f.ang, self.rot) + jp.cross(self.pos, f.vel)
+  ang = math.rotate(f.ang, self.rot) + jp.cross(self.pos, vel)
   return Force(ang, vel)
 
 

@@ -184,8 +184,6 @@ class Walker2d(env.PipelineEnv):
       backend: str, the physics backend to use
       **kwargs: Arguments that are passed to the base class.
     """
-    if backend == 'positional':
-      raise NotImplementedError('Not implemented for positional backend.')
     path = epath.resource_path('brax') / 'v2/envs/assets/walker2d.xml'
     sys = mjcf.load(path)
 

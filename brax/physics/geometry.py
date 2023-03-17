@@ -16,7 +16,7 @@
 """Geometry functions and classes to be used for collision detection."""
 
 import itertools
-from typing import List, Mapping, Tuple
+from typing import List, Mapping, Tuple, Union
 
 from brax import jumpy as jp
 from brax import math
@@ -710,11 +710,13 @@ def _create_sat_edge_contact(a0: math.Vector3, a1: math.Vector3,
   return contact
 
 
-def _create_sat_contact_manifold(clipping_poly: jp.ndarray,
-                                 subject_poly: jp.ndarray,
-                                 clipping_norm: math.Vector3,
-                                 subject_norm: math.Vector3,
-                                 sep_axis_sign: int) -> Contact:
+def _create_sat_contact_manifold(
+    clipping_poly: jp.ndarray,
+    subject_poly: jp.ndarray,
+    clipping_norm: math.Vector3,
+    subject_norm: math.Vector3,
+    sep_axis_sign: Union[int, jp.ndarray],
+) -> Contact:
   """Creates a contact manifold between two convex polygons.
 
   The polygon faces are expected to have a clockwise winding order so that

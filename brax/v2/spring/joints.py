@@ -45,7 +45,7 @@ def _one_dof(
   Returns:
     force in joint frame
   """
-  joint_motion, parity = kinematics.link_to_joint_motion(dof.motion)
+  joint_frame, parity = kinematics.link_to_joint_frame(dof.motion)
 
   # push the link to zero offset
   vel = -j.pos * link.constraint_stiffness
@@ -54,42 +54,42 @@ def _one_dof(
   is_rotational = dof.motion.ang.any()
   vel = (
       vel
-      - jp.dot(joint_motion.vel[0], vel)
-      * joint_motion.vel[0]
+      - jp.dot(joint_frame.vel[0], vel)
+      * joint_frame.vel[0]
       * is_translational
   )
 
   # add in force
-  vel += tau * joint_motion.vel[0] * is_translational
+  vel += tau * joint_frame.vel[0] * is_translational
   # linear damp
   damp = -jd.vel * link.constraint_vel_damping
   # if prismatic, don't damp along free axis
   vel += (
       damp
-      - jp.dot(joint_motion.vel[0], damp)
-      * joint_motion.vel[0]
+      - jp.dot(joint_frame.vel[0], damp)
+      * joint_frame.vel[0]
       * is_translational
   )
 
-  axis_c_x = math.rotate(joint_motion.ang[0], j.rot)
-  axis_c_y = math.rotate(joint_motion.ang[1], j.rot)
+  axis_c_x = math.rotate(joint_frame.ang[0], j.rot)
+  axis_c_y = math.rotate(joint_frame.ang[1], j.rot)
   (
       _,
       (psi, _, _),
       _,
-  ) = kinematics.axis_angle_ang(j, joint_motion, parity)
+  ) = kinematics.axis_angle_ang(j, joint_frame, parity)
 
   # torque to align to axis
-  ang = -1 * link.constraint_stiffness * jp.cross(joint_motion.ang[0], axis_c_x)
+  ang = -1 * link.constraint_stiffness * jp.cross(joint_frame.ang[0], axis_c_x)
   # remove second free rotational dof if prismatic and not revolute
   ang -= (
       link.constraint_stiffness
-      * jp.cross(joint_motion.ang[1], axis_c_y)
+      * jp.cross(joint_frame.ang[1], axis_c_y)
       * is_translational
       * (1 - is_rotational)
   )
   # add in force
-  ang += tau * joint_motion.ang[0] * is_rotational
+  ang += tau * joint_frame.ang[0] * is_rotational
   # angular damp
   ang -= link.constraint_ang_damping * jd.ang
 
@@ -100,17 +100,17 @@ def _one_dof(
     dang = jp.where(psi > limit_max, psi - limit_max, dang)
     ang -= (
         link.constraint_limit_stiffness
-        * joint_motion.ang[0]
+        * joint_frame.ang[0]
         * dang
         * (1 - is_translational)
     )
 
-    xp = jp.dot(j.pos, joint_motion.vel[0])
+    xp = jp.dot(j.pos, joint_frame.vel[0])
     dvel = jp.where(xp < limit_min, xp - limit_min, 0)
     dvel = jp.where(xp > limit_max, xp - limit_max, dvel)
     vel -= (
         link.constraint_limit_stiffness
-        * joint_motion.vel[0]
+        * joint_frame.vel[0]
         * dvel
         * (is_translational)
     )
@@ -135,7 +135,7 @@ def _two_dof(
   """
   is_translational = dof.motion.vel.any()
   is_universal = dof.motion.ang.any()
-  joint_motion, parity = kinematics.link_to_joint_motion(dof.motion)
+  joint_frame, parity = kinematics.link_to_joint_frame(dof.motion)
 
   # push the link to zero offset
   vel = -j.pos * link.constraint_stiffness
@@ -154,15 +154,15 @@ def _two_dof(
       axis_c,
       angles,
       _,
-  ) = kinematics.axis_angle_ang(j, joint_motion, parity)
-  axis_1, axis_2 = joint_motion.ang[0], axis_c[1]
+  ) = kinematics.axis_angle_ang(j, joint_frame, parity)
+  axis_1, axis_2 = joint_frame.ang[0], axis_c[1]
   axis_c_proj = axis_2 - jp.dot(axis_2, axis_1) * axis_1
   axis_c_proj = axis_c_proj / math.safe_norm(axis_c_proj)
   # if prismatic and revolute components, need to impose revolute ang update
-  axis_c_x = math.rotate(joint_motion.ang[0], j.rot)
-  axis_c_y = math.rotate(joint_motion.ang[1], j.rot)
+  axis_c_x = math.rotate(joint_frame.ang[0], j.rot)
+  axis_c_y = math.rotate(joint_frame.ang[1], j.rot)
   axis_c_cand = jp.where(
-      dof.motion.ang[0].any(), joint_motion.ang[0], joint_motion.ang[1]
+      dof.motion.ang[0].any(), joint_frame.ang[0], joint_frame.ang[1]
   )
   torque_axis_2 = jp.where(dof.motion.ang[0].any(), axis_c_x, axis_c_y)
 
@@ -185,10 +185,10 @@ def _two_dof(
   vel += jp.sum(vel_axis * tau[:, None], axis=0)
 
   # if no rotational dofs, pin rotational axes
-  axis_c_z = math.rotate(joint_motion.ang[2], j.rot)
+  axis_c_z = math.rotate(joint_frame.ang[2], j.rot)
   ang -= (
       link.constraint_stiffness
-      * jp.cross(joint_motion.ang[2], axis_c_z)
+      * jp.cross(joint_frame.ang[2], axis_c_z)
       * is_translational
       * (1 - is_universal)
   )
@@ -257,9 +257,9 @@ def _three_dof(
   ang = -1.0 * link.constraint_ang_damping * jd.ang
 
   # add in force
-  joint_motion, parity = kinematics.link_to_joint_motion(dof.motion)
-  axis_c, angles, _ = kinematics.axis_angle_ang(j, joint_motion, parity)
-  axes = (joint_motion.ang[0], axis_c[1], axis_c[2] * parity)
+  joint_frame, parity = kinematics.link_to_joint_frame(dof.motion)
+  axis_c, angles, _ = kinematics.axis_angle_ang(j, joint_frame, parity)
+  axes = (joint_frame.ang[0], axis_c[1], axis_c[2])
 
   ang_axis, angle = jp.array(axes), jp.array(angles)
   ang_axis = jax.vmap(jp.multiply)(ang_axis, dof.motion.ang.any(axis=1))

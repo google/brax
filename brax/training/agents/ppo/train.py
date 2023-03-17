@@ -58,6 +58,15 @@ def _unpmap(v):
   return jax.tree_util.tree_map(lambda x: x[0], v)
 
 
+def _strip_weak_type(tree):
+  # brax user code is sometimes ambiguous about weak_type.  in order to
+  # avoid extra jit recompilations we strip all weak types from user input
+  def f(leaf):
+    leaf = jnp.asarray(leaf)
+    return leaf.astype(leaf.dtype)
+  return jax.tree_util.tree_map(f, tree)
+
+
 def train(environment: Union[envs_v1.Env, envs.Env],
           num_timesteps: int,
           episode_length: int,
@@ -110,6 +119,16 @@ def train(environment: Union[envs_v1.Env, envs.Env],
   num_training_steps_per_epoch = -(
       -num_timesteps // (num_evals_after_init * env_step_per_training_step))
 
+  key = jax.random.PRNGKey(seed)
+  global_key, local_key = jax.random.split(key)
+  del key
+  local_key = jax.random.fold_in(local_key, process_id)
+  local_key, key_env, eval_key = jax.random.split(local_key, 3)
+  # key_networks should be global, so that networks are initialized the same
+  # way for different processes.
+  key_policy, key_value = jax.random.split(global_key)
+  del global_key
+
   assert num_envs % device_count == 0
   env = environment
   if isinstance(env, envs.Env):
@@ -121,12 +140,16 @@ def train(environment: Union[envs_v1.Env, envs.Env],
       env, episode_length=episode_length, action_repeat=action_repeat)
 
   reset_fn = jax.jit(jax.vmap(env.reset))
+  key_envs = jax.random.split(key_env, num_envs // process_count)
+  key_envs = jnp.reshape(key_envs,
+                         (local_devices_to_use, -1) + key_envs.shape[1:])
+  env_state = reset_fn(key_envs)
 
   normalize = lambda x, y: x
   if normalize_observations:
     normalize = running_statistics.normalize
   ppo_network = network_factory(
-      env.observation_size,
+      env_state.obs.shape[-1],
       env.action_size,
       preprocess_observations_fn=normalize)
   make_policy = ppo_networks.make_inference_fn(ppo_network)
@@ -243,8 +266,10 @@ def train(environment: Union[envs_v1.Env, envs.Env],
       key: PRNGKey) -> Tuple[TrainingState, envs.State, Metrics]:
     nonlocal training_walltime
     t = time.time()
-    (training_state, env_state,
-     metrics) = training_epoch(training_state, env_state, key)
+    training_state, env_state = _strip_weak_type((training_state, env_state))
+    result = training_epoch(training_state, env_state, key)
+    training_state, env_state, metrics = _strip_weak_type(result)
+
     metrics = jax.tree_util.tree_map(jnp.mean, metrics)
     jax.tree_util.tree_map(lambda x: x.block_until_ready(), metrics)
 
@@ -259,16 +284,6 @@ def train(environment: Union[envs_v1.Env, envs.Env],
     }
     return training_state, env_state, metrics
 
-  key = jax.random.PRNGKey(seed)
-  global_key, local_key = jax.random.split(key)
-  del key
-  local_key = jax.random.fold_in(local_key, process_id)
-  local_key, key_env, eval_key = jax.random.split(local_key, 3)
-  # key_networks should be global, so that networks are initialized the same
-  # way for different processes.
-  key_policy, key_value = jax.random.split(global_key)
-  del global_key
-
   init_params = ppo_losses.PPONetworkParams(
       policy=ppo_network.policy_network.init(key_policy),
       value=ppo_network.value_network.init(key_value))
@@ -276,16 +291,11 @@ def train(environment: Union[envs_v1.Env, envs.Env],
       optimizer_state=optimizer.init(init_params),
       params=init_params,
       normalizer_params=running_statistics.init_state(
-          specs.Array((env.observation_size,), jnp.float32)),
+          specs.Array(env_state.obs.shape[-1:], jnp.float32)),
       env_steps=0)
   training_state = jax.device_put_replicated(
       training_state,
       jax.local_devices()[:local_devices_to_use])
-
-  key_envs = jax.random.split(key_env, num_envs // process_count)
-  key_envs = jnp.reshape(key_envs,
-                         (local_devices_to_use, -1) + key_envs.shape[1:])
-  env_state = reset_fn(key_envs)
 
   if not eval_env:
     eval_env = env

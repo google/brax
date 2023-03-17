@@ -6,7 +6,7 @@
         <motor ctrllimited="true" ctrlrange="-.4 .4"/>
     </default>
     <!-- Removed RK4 integrator for brax. -->
-    <option iterations="8" timestep="0.003" />
+    <option iterations="8" timestep="0.003"/>
     <custom>
         <!-- brax custom params -->
         <numeric data="2500" name="constraint_limit_stiffness"/>
@@ -14,6 +14,8 @@
         <numeric data="30" name="constraint_ang_damping"/>
         <numeric data="80" name="constraint_vel_damping"/>
         <numeric data="-0.05" name="ang_damping"/>
+        <numeric data="0.5" name="joint_scale_pos"/>
+        <numeric data="0.02" name="joint_scale_ang"/>
         <numeric data="0" name="spring_mass_scale"/>
         <numeric data="1" name="spring_inertia_scale"/>
         <numeric data="20" name="matrix_inv_iterations"/>

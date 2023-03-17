@@ -31,8 +31,9 @@ class PPOTest(parameterized.TestCase):
 
   def testTrain(self):
     """Test PPO with a simple env."""
+    fast = envs.get_environment('fast')
     _, _, metrics = ppo.train(
-        envs.get_environment('fast'),
+        fast,
         num_timesteps=2**15,
         episode_length=128,
         num_envs=64,
@@ -45,9 +46,12 @@ class PPOTest(parameterized.TestCase):
         num_updates_per_batch=4,
         normalize_observations=True,
         seed=2,
+        num_evals=3,
         reward_scaling=10,
         normalize_advantage=False)
     self.assertGreater(metrics['eval/episode_reward'], 135)
+    self.assertEqual(fast.reset_count, 2)  # type: ignore
+    self.assertEqual(fast.step_count, 2)  # type: ignore
 
   def testTrainV2(self):
     """Test PPO with a v2 env."""

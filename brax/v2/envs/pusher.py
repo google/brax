@@ -175,17 +175,15 @@ class Pusher(env.PipelineEnv):
 
 
   def __init__(self, backend='generalized', **kwargs):
-    if backend == 'positional':
-      raise NotImplementedError('Not implemented for positional backend.')
     path = epath.resource_path('brax') / 'v2/envs/assets/pusher.xml'
     sys = mjcf.load(path)
 
     n_frames = 5
 
-    if backend == 'spring':
+    if backend in ['spring', 'positional']:
       sys = sys.replace(dt=0.001)
       sys = sys.replace(
-          actuator=sys.actuator.replace(gear=jp.array([10.0] * sys.act_size()))
+          actuator=sys.actuator.replace(gear=jp.array([20.0] * sys.act_size()))
       )
       n_frames = 50
 

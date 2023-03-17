@@ -143,7 +143,8 @@ def _get_custom(mj: mujoco.MjModel) -> Dict[str, np.ndarray]:
       'baumgarte_erp': (0.1, None),
       'spring_mass_scale': (0.0, None),
       'spring_inertia_scale': (0.0, None),
-      'joint_scale': (0.2, None),
+      'joint_scale_pos': (0.5, None),
+      'joint_scale_ang': (0.2, None),
       'collide_scale': (1.0, None),
       'matrix_inv_iterations': (10, None),
       'solver_maxls': (5, None),
@@ -330,7 +331,7 @@ def load_model(mj: mujoco.MjModel) -> System:
         'elasticity': custom['elasticity'][i],
     }
     mask = mj.geom_contype[i] | mj.geom_conaffinity[i] << 32
-    if typ == 0:    # Plane
+    if typ == 0:  # Plane
       geom = Plane(**kwargs)
       geom_groups.setdefault(key_fn(geom, mask), []).append(geom)
     elif typ == 2:  # Sphere
@@ -440,7 +441,8 @@ def load_model(mj: mujoco.MjModel) -> System:
       baumgarte_erp=custom['baumgarte_erp'],
       spring_mass_scale=custom['spring_mass_scale'],
       spring_inertia_scale=custom['spring_inertia_scale'],
-      joint_scale=custom['joint_scale'],
+      joint_scale_ang=custom['joint_scale_ang'],
+      joint_scale_pos=custom['joint_scale_pos'],
       collide_scale=custom['collide_scale'],
       geom_masks=geom_masks,
       link_names=link_names,

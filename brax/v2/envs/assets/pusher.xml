@@ -9,22 +9,12 @@
 
   <custom>
     <!-- brax custom params -->
-    <numeric data="1" name="constraint_stiffness"/>
-    <tuple name="constraint_stiffness">
-       <element objtype="body" objname="r_shoulder_pan_link" prm="10000"/>
-       <element objtype="body" objname="r_shoulder_lift_link" prm="5000"/>
-       <element objtype="body" objname="r_upper_arm_roll_link" prm="3000"/>
-       <element objtype="body" objname="r_elbow_flex_link" prm="3000"/>
-       <element objtype="body" objname="r_forearm_roll_link" prm="3000"/>
-       <element objtype="body" objname="r_wrist_flex_link" prm="500"/>
-       <element objtype="body" objname="r_wrist_roll_link" prm="1000"/>
-       <element objtype="body" objname="object" prm="100"/>
-    </tuple>
-		<numeric data="10000 5000 2000 500 500 100 100 1 1" name="constraint_limit_stiffness"/>
-    <numeric data="2 2 2 1 0.2 0.2 0.2 0 0" name="constraint_ang_damping"/>
-    <numeric data="80 50 50 50 50 1 5 0.1 0.1" name="constraint_vel_damping"/>
+    <numeric data="3000" name="constraint_stiffness"/>
+    <numeric data="2000" name="constraint_limit_stiffness"/>
+    <numeric data="10" name="constraint_ang_damping"/>
+    <numeric data="50" name="constraint_vel_damping"/>
     <numeric data="0" name="ang_damping"/>
-    <numeric data="0" name="spring_mass_scale"/>
+    <numeric data="1" name="spring_mass_scale"/>
 		<numeric data="1" name="spring_inertia_scale"/>
 		<numeric data="10" name="solver_maxls"/>
   </custom>

@@ -134,14 +134,12 @@ class InvertedPendulum(env.PipelineEnv):
 
 
   def __init__(self, backend='generalized', **kwargs):
-    if backend == 'positional':
-      raise NotImplementedError('Not implemented for positional backend.')
     path = epath.resource_path('brax') / 'v2/envs/assets/inverted_pendulum.xml'
     sys = mjcf.load(path)
 
     n_frames = 2
 
-    if backend == 'spring':
+    if backend in ['spring', 'positional']:
       sys = sys.replace(dt=0.005)
       n_frames = 4
 

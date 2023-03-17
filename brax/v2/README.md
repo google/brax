@@ -48,6 +48,7 @@ and closing the gap between simulation and the real world.
 
 Explore Brax easily and quickly through a series of colab notebooks:
 
+* [Brax v2 Basics](https://colab.research.google.com/github/google/brax/blob/main/notebooks/basics_v2.ipynb) introduces the Brax API, and shows how to simulate basic physics primitives.
 * [Brax v2 Training](https://colab.research.google.com/github/google/brax/blob/main/notebooks/Brax_v2_Training_Preview.ipynb)
 introduces the Brax v2 API, and shows how to train a policy with the
 generalized backend.

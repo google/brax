@@ -132,14 +132,14 @@ def world_to_joint(
   return j, jd, a_p, a_c
 
 
-def link_to_joint_motion(motion: Motion) -> Tuple[Motion, float]:
-  """Calculates 3-dof motions for joints corresponding to a given link motion.
+def link_to_joint_frame(motion: Motion) -> Tuple[Motion, float]:
+  """Calculates 3-dof frames for joints corresponding to a given link motion.
 
   Args:
     motion: Motion dof with leaves of shape (QD_WIDTH, 3)
 
   Returns:
-    Motion with all three dofs for this joint, and the handedness of the joint
+    Frame with all three dofs for this joint, and the handedness of the joint
 
   Joint axes are not always aligned along the local frame of a link. For
   example, a joint might be along the local z-axis, and we would need to
@@ -163,8 +163,10 @@ def link_to_joint_motion(motion: Motion) -> Tuple[Motion, float]:
   if motion.ang.shape[0] == 1:
     ortho_ang = math.orthogonals(motion.ang[0])
     ang_frame = jp.array([motion.ang[0], ortho_ang[0], ortho_ang[1]])
+    ang_frame = jp.where(motion.ang[0].any(), ang_frame, jp.eye(3))
     ortho_vel = math.orthogonals(motion.vel[0])
     vel_frame = jp.array([motion.vel[0], ortho_vel[0], ortho_vel[1]])
+    vel_frame = jp.where(motion.vel[0].any(), vel_frame, jp.eye(3))
     parity = 1
 
     return Motion(ang=ang_frame, vel=vel_frame), parity
@@ -191,11 +193,7 @@ def link_to_joint_motion(motion: Motion) -> Tuple[Motion, float]:
     vel = jp.where(is_translational, vel, jp.eye(3))
     ang_frame = ang
     vel_frame = vel
-    parity = jp.where(
-        is_translational,
-        jp.dot(jp.cross(motion.vel[0], motion.vel[1]), motion.vel[2]),
-        jp.dot(jp.cross(motion.ang[0], motion.ang[1]), motion.ang[2]),
-    )
+    parity = 1.0
 
     # logic for rp / pr
     axis_r_1 = jp.where(motion.ang[0].any(), motion.ang[0], ortho_ang[1][1])
@@ -332,8 +330,8 @@ def inverse(
     return jp.concatenate([x.pos, x.rot]), jp.concatenate([xd.vel, xd.ang])
 
   def x_dof(j, jd, motion, x):
-    joint_motion, parity = link_to_joint_motion(motion)
-    axis, angles, _ = axis_angle_ang(j, joint_motion, parity)
+    joint_frame, parity = link_to_joint_frame(motion)
+    axis, angles, _ = axis_angle_ang(j, joint_frame, parity)
     angle_vels = jax.tree_map(lambda x: jp.dot(x, jd.ang), axis)
     _, slides, slide_vels = axis_slide_vel(j, jd, motion)
     # TODO: investigate removing this `where`

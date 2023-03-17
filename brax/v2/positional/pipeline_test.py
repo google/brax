@@ -105,7 +105,7 @@ class PipelineTest(absltest.TestCase):
     )
     # capsule reflected off boundary.  pbd limit constraint forces are not
     # perfectly elastic so the rebound velocity is not fully 2.5 m/s
-    np.testing.assert_array_less(xd.vel[0], jp.array([-1.5, -1.5, -1.5]))
+    np.testing.assert_array_less(xd.vel[0], jp.array([-1.18, -1.18, -1.18]))
     np.testing.assert_allclose(xd.ang[0], jp.array([0.0, 0.0, 0.0]), atol=1e-7)
 
   def test_3d_prismaversal_joint(self):
@@ -129,10 +129,10 @@ class PipelineTest(absltest.TestCase):
     # note that pbd limit reflection not perfectly elastic
     np.testing.assert_array_less(
         jp.array([state.xd.vel[0, 0], state.xd.vel[0, 2]]),
-        jp.array([-1.5, -1.5]),
+        jp.array([-1.18, -1.18]),
     )
     np.testing.assert_array_less(
-        jp.array([state.xd.ang[0, 1]]), jp.array([-1.45])
+        jp.array([state.xd.ang[0, 1]]), jp.array([-1.15])
     )
 
   def test_sliding_capsule(self):

@@ -1,6 +1,10 @@
 <mujoco model="sliding_mass">
   <compiler inertiafromgeom="false" autolimits="true"/>
   <option gravity="0 0 0" timestep="0.001"/>
+  <custom>
+    <numeric data="0.2" name="joint_scale_pos"/>
+    <numeric data="0.2" name="joint_scale_ang"/>
+  </custom>
   <worldbody>
     <body name="body1" pos="0 0 0">
       <joint axis="0 1 0" name="hinge1" pos="0 0 0" range="-90 90" type="hinge"/>

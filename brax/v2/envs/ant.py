@@ -195,6 +195,14 @@ class Ant(env.PipelineEnv):
       sys = sys.replace(dt=0.005)
       n_frames = 10
 
+    if backend == 'positional':
+      # TODO: does the same actuator strength work as in spring
+      sys = sys.replace(
+          actuator=sys.actuator.replace(
+              gear=200 * jp.ones_like(sys.actuator.gear)
+          )
+      )
+
     kwargs['n_frames'] = kwargs.get('n_frames', n_frames)
 
     super().__init__(sys=sys, backend=backend, **kwargs)

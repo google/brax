@@ -36,7 +36,7 @@ def init(
     sys: a brax system
     q: (q_size,) joint angle vector
     qd: (qd_size,) joint velocity vector
-    debug_contact: if True, adds contact to the state for debugging
+    debug: if True, adds contact to the state for debugging
 
   Returns:
     state: initial physics state

@@ -71,7 +71,7 @@ class KinematicsTest(parameterized.TestCase):
     def _collect_frame(typ, motion):
       shape = base.QD_WIDTHS[typ]
       motion = jax.tree_map(lambda y: y.reshape((-1, shape, 3)), motion)
-      return jax.vmap(kinematics.link_to_joint_motion)(motion)[0]
+      return jax.vmap(kinematics.link_to_joint_frame)(motion)[0]
 
     # default setup
     joint_motion = scan.link_types(

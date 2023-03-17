@@ -216,21 +216,18 @@ class Humanoid(env.PipelineEnv):
       backend='generalized',
       **kwargs,
   ):
-    if backend == 'positional':
-      raise NotImplementedError('Not implemented for positional backend.')
     path = epath.resource_path('brax') / 'v2/envs/assets/humanoid.xml'
     sys = mjcf.load(path)
 
     n_frames = 5
 
-    if backend == 'spring':
+    if backend in ['spring', 'positional']:
       sys = sys.replace(dt=0.0015)
       n_frames = 10
-      sys = sys.replace(
-          actuator=sys.actuator.replace(
-              gear=jp.array([350.0, 350.0, 350.0, 350.0, 350.0, 350.0,
-                             350.0, 350.0, 350.0, 350.0, 350.0, 100.0, 100.0,
-                             100.0, 100.0, 100.0, 100.0])))  # pyformat: disable
+      gear = jp.array([
+          350.0, 350.0, 350.0, 350.0, 350.0, 350.0, 350.0, 350.0, 350.0, 350.0,
+          350.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0])  # pyformat: disable
+      sys = sys.replace(actuator=sys.actuator.replace(gear=gear))
 
     kwargs['n_frames'] = kwargs.get('n_frames', n_frames)
 

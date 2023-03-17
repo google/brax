@@ -95,7 +95,7 @@ def step(
 
   # calculate acceleration level updates
   tau = actuator.to_tau(sys, act, q)
-  xdd_i = joints.resolve_damping(sys, state, tau) + Motion.create(
+  xdd_i = joints.acceleration_update(sys, state, tau) + Motion.create(
       vel=sys.gravity
   )
 
@@ -114,7 +114,7 @@ def step(
   inv_inertia = com.inv_inertia(sys, x)
 
   # perform position level joint updates
-  p_j = joints.resolve_displacement(sys, x, xd, x_i, inv_inertia, state.mass)
+  p_j = joints.position_update(sys, x, xd, x_i, inv_inertia, state.mass)
 
   # apply position level joint updates
   x_i += p_j

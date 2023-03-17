@@ -4,6 +4,10 @@
 	<default>
 		<geom contype="0" conaffinity="0"/>
   </default>
+  <custom>
+    <numeric data="0.2" name="joint_scale_pos"/>
+    <numeric data="0.2" name="joint_scale_ang"/>
+  </custom>
   <worldbody>
     <body name="body1" pos="0 0 0">
       <joint axis="1 0 0" name="slide1" pos="0 0 0" range="-2 2" type="slide"/>

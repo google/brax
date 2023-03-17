@@ -71,7 +71,7 @@ def js(path):
 @flask_app.route('/play/<path:path>', methods=['GET'])
 def play_trajectory(path):
   """Renders a json-encoded brax trajectory from a local file path."""
-  system = path.read_text()
+  system = epath.Path(path).read_text()
   return html.render_from_json(
       system, height='100vh', colab=False, base_url='/js/viewer.js'
   )
