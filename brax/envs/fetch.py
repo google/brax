@@ -114,7 +114,7 @@ class Fetch(env.Env):
     vel_local = jp.reshape(vel_local, -1)
 
     contact_mag = jp.sum(jp.square(info.contact.vel), axis=-1)
-    contacts = jp.where(contact_mag > 0.00001, 1, 0)
+    contacts = jp.where(contact_mag > 0.00001, 1, 0)  # pytype: disable=wrong-arg-types  # jax-ndarray
 
     return jp.concatenate([
         torso_fwd, torso_up, target_local_mag, target_local_dir, pos_local,

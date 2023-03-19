@@ -14,77 +14,54 @@
 
 """Function to resolve collisions."""
 # pylint:disable=g-multiple-import
-from typing import Optional, Tuple
-
+from brax.v2 import geometry
 from brax.v2 import math
-from brax.v2.base import Contact, Motion, System, Transform
+from brax.v2.base import Force, Motion, System, Transform
+from brax.v2.spring.base import State
 import jax
 from jax import numpy as jp
-from jax import tree_map
+from jax.ops import segment_sum
 
 
-def resolve(
-    sys: System,
-    xi: Transform,
-    xdi: Motion,
-    inv_inertia: jp.ndarray,
-    contact: Optional[Contact],
-) -> Tuple[Motion, jp.ndarray, jp.ndarray]:
+def resolve(sys: System, state: State) -> Motion:
   """Resolves springy collision constraint.
 
   Args:
     sys: System to forward propagate
-    xi: Transform state of link center of mass
-    xdi: Motion state of link center of mass
-    inv_inertia: inverse inertia tensor at the center of mass in world frame
-    contact: Contact pytree
+    state: spring pipeline state
 
   Returns:
-    Tuple of
-    p: world space impulse to apply to each link
-    positions: location in world space to apply each impulse
-    idxs: link to which impulse is applied
+    xdv_i: delta-velocity to apply to link center of mass in world frame
   """
+  contact = geometry.contact(sys, state.x)
+
   if contact is None:
-    return Motion.zero((1,)), jp.array([]), jp.array([])
+    return Motion.zero((sys.num_links(),))
 
   @jax.vmap
-  def impulse(contact):
-    link_idx = jp.array(contact.link_idx)
-    rel_pos = contact.pos - xi.take(link_idx).pos
-    xd = xdi.take(link_idx)
-    rel_vel = xd.vel + jax.vmap(jp.cross)(xd.ang, rel_pos)
+  def impulse(contact, link_idx, x_i, xd_i, i_inv, i_mass):
+    rel_pos = contact.pos - x_i.pos
+    rel_vel = xd_i.vel + jax.vmap(jp.cross)(xd_i.ang, rel_pos)
     rel_vel *= (link_idx > -1).reshape(-1, 1)
     contact_vel = rel_vel[0] - rel_vel[1]
     normal_vel = jp.dot(contact.normal, contact_vel)
 
-    link = sys.link.take(link_idx)
-    i_inv = inv_inertia.take(link_idx, axis=0)
-    i_inv *= (link_idx > -1).reshape(-1, 1, 1)
-
-    temp1 = i_inv[0] @ jp.cross(rel_pos[0], contact.normal)
-    temp2 = i_inv[1] @ jp.cross(rel_pos[1], contact.normal)
+    temp = jax.vmap(jp.dot)(i_inv, jp.cross(rel_pos, contact.normal))
     ang = jp.dot(
-        contact.normal,
-        jp.cross(temp1, rel_pos[0]) + jp.cross(temp2, rel_pos[1]),
+        contact.normal, jp.sum(jp.cross(temp, rel_pos), axis=0)
     )
-    invmass = (1 / link.inertia.mass) * (link_idx > -1)
-    denom = invmass[0] + invmass[1] + ang
     baumgarte_vel = sys.baumgarte_erp / sys.dt * contact.penetration
     impulse = (
         -1.0 * (1.0 + contact.elasticity) * normal_vel + baumgarte_vel
-    ) / denom
+    ) / (i_mass[0] + i_mass[1] + ang)
     impulse_vec = impulse * contact.normal
 
     # apply drag due to friction acting parallel to the surface contact
     vel_d = contact_vel - normal_vel * contact.normal
     dir_d = vel_d / (1e-6 + math.safe_norm(vel_d))
-    temp1 = i_inv[0] @ jp.cross(rel_pos[0], dir_d)
-    temp2 = i_inv[1] @ jp.cross(rel_pos[1], dir_d)
-    ang_d = jp.dot(
-        dir_d, jp.cross(temp1, rel_pos[0]) + jp.cross(temp2, rel_pos[1])
-    )
-    impulse_d = math.safe_norm(vel_d) / (invmass[0] + invmass[1] + ang_d)
+    temp = jax.vmap(jp.dot)(i_inv, jp.cross(rel_pos, dir_d))
+    ang_d = jp.dot(dir_d, jp.sum(jp.cross(temp, rel_pos), axis=0))
+    impulse_d = math.safe_norm(vel_d) / (i_mass[0] + i_mass[1] + ang_d)
 
     # drag magnitude cannot exceed max friction
     impulse_d = jp.minimum(impulse_d, contact.friction * impulse)
@@ -95,14 +72,31 @@ def resolve(
     # apply drag if moving laterally above threshold
     apply_d = apply_n * (math.safe_norm(vel_d) > 1e-3)
 
-    return impulse_vec * apply_n + impulse_d_vec * apply_d, contact.pos
+    f = Force.create(vel=impulse_vec * apply_n + impulse_d_vec * apply_d)
 
-  p, pos = impulse(contact)
+    return f, jp.array(apply_n, dtype=jp.float32)
 
+  link_idx = jp.array(contact.link_idx).T
+  x_i, xd_i = state.x_i.take(link_idx), state.xd_i.take(link_idx)
+  i_inv = state.i_inv.take(link_idx) * (link_idx > -1)
+  i_mass = 1 / state.mass.take(link_idx) * (link_idx > -1)
+  p, is_contact = impulse(contact, link_idx, x_i, xd_i, i_inv, i_mass)
+
+  # calculate the impulse to each link center of mass
+  p = jax.tree_map(lambda x: jp.concatenate((x, -x)), p)
+  pos = jp.tile(contact.pos, (2, 1))
   link_idx = jp.concatenate(contact.link_idx)
-  p = tree_map(lambda *t: jp.concatenate(t), p, -p)
-  p *= link_idx.reshape((-1, 1)) != -1
-  p = Motion.create(vel=p)
-  pos = jp.tile(pos, (2, 1))
+  xp_i = Transform.create(pos=pos - state.x_i.take(link_idx).pos).vmap().do(p)
+  xp_i = jax.tree_map(lambda x: segment_sum(x, link_idx, sys.num_links()), xp_i)
 
-  return p, pos, link_idx
+  # average the impulse across multiple contacts
+  num_contacts = segment_sum(jp.tile(is_contact, 2), link_idx, sys.num_links())
+  xp_i = xp_i / (num_contacts.reshape((-1, 1)) + 1e-8)
+
+  # convert impulse to delta-velocity
+  xdv_i = Motion(
+      vel=jax.vmap(lambda x, y: x / y)(xp_i.vel, state.mass),
+      ang=jax.vmap(lambda x, y: x @ y)(state.i_inv, xp_i.ang),
+  )
+
+  return xdv_i

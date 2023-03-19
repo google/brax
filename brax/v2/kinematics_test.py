@@ -29,10 +29,7 @@ import numpy as np
 class KinematicsTest(parameterized.TestCase):
 
   @parameterized.parameters(
-      ('ant.xml',),
-      ('triple_pendulum.xml',),
-      ('humanoid.xml',),
-      ('halfcheetah.xml',),
+      ('ant.xml',), ('humanoid.xml',), ('reacher.xml',), ('half_cheetah.xml',)
   )
   def test_forward_q(self, xml_file):
     """Test dynamics forward q."""
@@ -50,7 +47,9 @@ class KinematicsTest(parameterized.TestCase):
         7,
     )
 
-  @parameterized.parameters(('ant.xml',), ('humanoid.xml',))
+  @parameterized.parameters(
+      ('ant.xml',), ('humanoid.xml',), ('reacher.xml',), ('half_cheetah.xml',)
+  )
   def test_inverse(self, xml_file):
     sys = test_utils.load_fixture(xml_file)
     # # test at random init
@@ -61,7 +60,8 @@ class KinematicsTest(parameterized.TestCase):
     rand_qd = jp.array(np.random.rand(sys.qd_size())) * 0.1
 
     x, xd = kinematics.forward(sys, rand_q, rand_qd)
-    q, qd = kinematics.inverse(sys, x, xd)
+    j, jd, _, _ = kinematics.world_to_joint(sys, x, xd)
+    q, qd = kinematics.inverse(sys, j, jd)
     np.testing.assert_array_almost_equal(q, rand_q, decimal=5)
     np.testing.assert_array_almost_equal(qd, rand_qd)
 
@@ -71,7 +71,7 @@ class KinematicsTest(parameterized.TestCase):
     def _collect_frame(typ, motion):
       shape = base.QD_WIDTHS[typ]
       motion = jax.tree_map(lambda y: y.reshape((-1, shape, 3)), motion)
-      return jax.vmap(kinematics.link_to_joint_motion)(motion)[0]
+      return jax.vmap(kinematics.link_to_joint_frame)(motion)[0]
 
     # default setup
     joint_motion = scan.link_types(

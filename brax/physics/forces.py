@@ -43,7 +43,7 @@ class Thruster:
 
   def apply_reduced(self, force: jp.ndarray) -> jp.ndarray:
     dvel = force * self.strength / self.body.mass
-    return dvel, jp.zeros_like(dvel)
+    return dvel, jp.zeros_like(dvel)  # pytype: disable=bad-return-type  # jax-ndarray
 
   def apply(self, qp: QP, force_data: jp.ndarray) -> P:
     """Applies a force to a body.
@@ -85,7 +85,7 @@ class Twister:
 
   def apply_reduced(self, torque: jp.ndarray) -> jp.ndarray:
     dang = torque * self.strength / self.body.mass
-    return jp.zeros_like(dang), dang
+    return jp.zeros_like(dang), dang  # pytype: disable=bad-return-type  # jax-ndarray
 
   def apply(self, qp: QP, force_data: jp.ndarray) -> P:
     """Applies a force to a body.

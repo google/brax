@@ -17,7 +17,7 @@
 
 import itertools
 import logging
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Union
 
 from brax.v2.base import Box, Convex, Mesh
 from jax import numpy as jp
@@ -121,7 +121,7 @@ def _box(b: Box, triangulated=True) -> Tuple[np.ndarray, np.ndarray]:
 def box_tri(b: Box) -> Mesh:
   """Creates a triangulated mesh from a box geometry."""
   vert, face = _box(b, triangulated=True)
-  return Mesh(
+  return Mesh(  # pytype: disable=wrong-arg-types  # jax-ndarray
       vert=vert,
       face=face,
       link_idx=b.link_idx,
@@ -131,10 +131,10 @@ def box_tri(b: Box) -> Mesh:
   )
 
 
-def box_hull(b: Box) -> Convex:
+def _box_hull(b: Box) -> Convex:
   """Creates a mesh for a box with rectangular faces."""
   vert, face = _box(b, triangulated=False)
-  return Convex(
+  return Convex(  # pytype: disable=wrong-arg-types  # jax-ndarray
       vert=vert,
       face=face,
       link_idx=b.link_idx,
@@ -145,7 +145,7 @@ def box_hull(b: Box) -> Convex:
   )
 
 
-def _convex_hull_2d(points: np.ndarray, normal: np.ndarray) -> np.ndarray:
+def convex_hull_2d(points: np.ndarray, normal: np.ndarray) -> np.ndarray:
   """Calculates the hull face for a set of points on a plane."""
   # project points onto the closest axis plane
   best_axis = np.abs(np.eye(3).dot(normal)).argmax()
@@ -158,6 +158,7 @@ def _convex_hull_2d(points: np.ndarray, normal: np.ndarray) -> np.ndarray:
   # TODO: consider sorting unique edges by their angle to get the hull
   c = spatial.ConvexHull(axis_points)
   order_ = np.where(axis.dot(normal) > 0, 1, -1)
+  order_ *= np.where(best_axis == 1, -1, 1)
   hull_point_idx = c.vertices[::order_]
   assert (axis_points - c.points).sum() == 0
 
@@ -184,7 +185,7 @@ def _merge_coplanar(tm: trimesh.Trimesh) -> np.ndarray:
     normal = tm.facets_normal[i]
 
     # convert triangulated facet to a polygon
-    hull_point_idx = _convex_hull_2d(points, normal)
+    hull_point_idx = convex_hull_2d(points, normal)
     face = point_idx[hull_point_idx]
 
     # resize faces that exceed max polygon vertices
@@ -215,7 +216,7 @@ def _convex_hull(m: Mesh) -> Convex:
   tm_convex = trimesh.convex.convex_hull(tm)
   vert = tm_convex.vertices.copy()
   face = _merge_coplanar(tm_convex)
-  return Convex(
+  return Convex(  # pytype: disable=wrong-arg-types  # jax-ndarray
       vert=vert,
       face=face,
       link_idx=m.link_idx,
@@ -226,12 +227,19 @@ def _convex_hull(m: Mesh) -> Convex:
   )
 
 
-def convex_hull(mesh: Mesh) -> Convex:
-  """Creates a convex hull from a mesh."""
-  def _key(mesh):
-    return (hash(mesh.vert.data.tobytes()), hash(mesh.face.data.tobytes()))
-  key = _key(mesh)
+def convex_hull(obj: Union[Box, Mesh]) -> Convex:
+  """Creates a convex hull from a box or mesh."""
+  if isinstance(obj, Box):
+    return _box_hull(obj)
+  key = (hash(obj.vert.data.tobytes()), hash(obj.face.data.tobytes()))  # pytype: disable=attribute-error  # jax-ndarray
   if key not in _CONVEX_CACHE:
     logging.info('Converting mesh %s into convex hull.', key)
-    _CONVEX_CACHE[key] = _convex_hull(mesh)
-  return _CONVEX_CACHE[key]
+    _CONVEX_CACHE[key] = _convex_hull(obj)
+  convex = _CONVEX_CACHE[key]
+  convex = convex.replace(
+      link_idx=obj.link_idx,
+      transform=obj.transform,
+      friction=obj.friction,
+      elasticity=obj.elasticity,
+  )
+  return convex

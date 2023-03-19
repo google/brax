@@ -167,7 +167,8 @@ class Pusher(env.Env):
   """
 
 
-  def __init__(self, **kwargs):
+  def __init__(self, legacy_spring=False, **kwargs):
+    del legacy_spring
     super().__init__(_SYSTEM_CONFIG, **kwargs)
     self._object_idx = self.sys.body.index['object']
     self._tips_arm_idx = self.sys.body.index['r_wrist_roll_link']
@@ -187,7 +188,7 @@ class Pusher(env.Env):
 
     # constraint maximum distance of object
     norm = jp.norm(cylinder_pos)
-    scale = jp.where(norm > .17, .17 / norm, 1.)
+    scale = jp.where(norm > .17, .17 / norm, 1.)  # pytype: disable=wrong-arg-types  # jax-ndarray
     cylinder_pos = scale * cylinder_pos + jp.array([0., 0., .05])
     qpos = self.sys.default_angle()
 

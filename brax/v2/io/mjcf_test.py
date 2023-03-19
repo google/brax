@@ -17,7 +17,7 @@
 
 from absl.testing import absltest
 from brax.v2 import test_utils
-from brax.v2.base import Box, Plane, Sphere, Mesh
+from brax.v2.base import Box, Convex, Plane, Sphere, Mesh
 import numpy as np
 
 assert_almost_equal = np.testing.assert_array_almost_equal
@@ -52,9 +52,6 @@ class MjcfTest(absltest.TestCase):
     self.assertEqual(sys.link_types, '111')
     self.assertEqual(sys.link_parents, (-1, 0, 1))
 
-    # check contacts
-    self.assertEmpty(sys.contacts)
-
   def test_load_ant(self):
     sys = test_utils.load_fixture('ant.xml')
 
@@ -69,8 +66,7 @@ class MjcfTest(absltest.TestCase):
     self.assertEqual(sys.link_parents, (-1, 0, 1, 0, 3, 0, 5, 0, 7))
 
     # check contacts
-    self.assertLen(sys.contacts, 1)
-    sphere, plane = sys.contacts[0]
+    plane, _, _, sphere = sys.geoms
     self.assertIsInstance(sphere, Sphere)
     self.assertIsInstance(plane, Plane)
     assert_almost_equal(
@@ -82,10 +78,7 @@ class MjcfTest(absltest.TestCase):
             [0.4, -0.4, 0.0],
         ])),
     )
-    assert_almost_equal(
-        plane.transform.pos,
-        np.array([[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]]),
-    )
+    assert_almost_equal(plane.transform.pos, np.array([[0, 0, 0]]))
     assert_almost_equal(sphere.link_idx, np.array([2, 4, 6, 8]))
     self.assertIsNone(plane.link_idx)
 
@@ -112,28 +105,36 @@ class MjcfTest(absltest.TestCase):
     self.assertEqual(sys.link_types, 'f2131312121')
 
     # check contacts
-    self.assertLen(sys.contacts, 1)
-    sphere, plane = sys.contacts[0]
+    plane, _, _, sphere = sys.geoms
     self.assertIsInstance(sphere, Sphere)
     self.assertIsInstance(plane, Plane)
     assert_almost_equal(
         sphere.transform.pos, np.array(([[0, 0, -0.35], [0, 0, -0.35]]))
     )
-    assert_almost_equal(plane.transform.pos, np.array([[0, 0, 0], [0, 0, 0]]))
+    assert_almost_equal(plane.transform.pos, np.array([[0, 0, 0]]))
     assert_almost_equal(sphere.link_idx, np.array([4, 6]))
     self.assertIsNone(plane.link_idx)
 
   def test_load_mesh_and_box(self):
     sys = test_utils.load_fixture('convex_convex.xml')
-    n_meshes = sum(isinstance(g, Mesh) for g in sys.geoms)
-    self.assertEqual(n_meshes, 3)
-    n_boxes = sum(isinstance(g, Box) for g in sys.geoms)
-    self.assertEqual(n_boxes, 1)
+    n_box, n_convex, n_mesh = 0, 0, 0
+    for g in sys.geoms:
+      if isinstance(g, Box):
+        n_box += 1
+      elif isinstance(g, Convex):
+        n_convex += 1
+      elif isinstance(g, Mesh):
+        n_mesh += 1
+    self.assertEqual(n_box, 1)
+    self.assertEqual(n_convex, 4)
+    self.assertEqual(n_mesh, 3)
 
   def test_load_urdf(self):
     sys = test_utils.load_fixture('laikago/laikago_toes_zup.urdf')
-    n_meshes = sum(isinstance(g, Mesh) for g in sys.geoms)
-    self.assertEqual(n_meshes, 26)
+    n_meshes = sum(
+        g.friction.shape[0] if isinstance(g, Mesh) else 0 for g in sys.geoms
+    )
+    self.assertEqual(n_meshes, 52)
 
   def test_custom(self):
     sys = test_utils.load_fixture('capsule.xml')
@@ -147,6 +148,11 @@ class MjcfTest(absltest.TestCase):
     for g in sys.geoms[1:]:
       self.assertSequenceEqual([colour for colour in g.rgba], [0.8, 0.6, 0.4, 1.])
       
+  def test_joint_ref_check(self):
+    with self.assertRaisesRegex(
+        NotImplementedError, '`ref` attribute'):
+      test_utils.load_fixture('nonzero_joint_ref.xml')
+
 
 if __name__ == '__main__':
   absltest.main()

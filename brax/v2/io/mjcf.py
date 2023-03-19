@@ -16,7 +16,7 @@
 """Function to load MuJoCo mjcf format to Brax system."""
 
 import itertools
-from typing import Dict, List, Tuple, TypeVar, Union
+from typing import Dict, Tuple, Union
 import warnings
 from xml.etree import ElementTree
 
@@ -24,9 +24,7 @@ from brax.v2.base import (
     Actuator,
     Box,
     Capsule,
-    Convex,
     DoF,
-    Geometry,
     Inertia,
     Link,
     Mesh,
@@ -38,17 +36,11 @@ from brax.v2.base import (
 )
 from brax.v2.geometry import mesh as geom_mesh
 from etils import epath
+import jax
 from jax import numpy as jp
-from jax.tree_util import tree_map
 import mujoco
 import numpy as np
 
-
-Geom = TypeVar('Geom', bound=Geometry)
-
-
-# map from mujoco geom_type to brax geometry string
-_GEOM_TYPE_CLS = {0: Plane, 2: Sphere, 3: Capsule, 6: Box, 7: Mesh}
 
 # map from mujoco joint type to brax joint type string
 _JOINT_TYPE_STR = {
@@ -63,24 +55,6 @@ _ACT_TYPE_STR = {
     0: 'm',  # motor
     1: 'p',  # position
 }
-
-_COLLIDABLES = [
-    # ((Geometry, is_static), (Geometry, is_static))
-    ((Sphere, False), (Plane, True)),
-    ((Sphere, False), (Sphere, False)),
-    ((Sphere, False), (Capsule, False)),
-    ((Sphere, False), (Box, False)),
-    ((Sphere, False), (Mesh, False)),
-    ((Capsule, False), (Plane, True)),
-    ((Capsule, False), (Capsule, False)),
-    ((Capsule, False), (Box, False)),
-    ((Capsule, False), (Mesh, False)),
-    ((Box, False), (Plane, True)),
-    ((Box, False), (Box, False)),
-    ((Box, False), (Mesh, False)),
-    ((Mesh, False), (Plane, True)),
-    ((Mesh, False), (Mesh, False)),
-]
 
 
 def _fuse_bodies(elem: ElementTree.Element):
@@ -147,20 +121,42 @@ def _get_name(mj: mujoco.MjModel, i: int) -> str:
   return names[: names.find('\x00')]
 
 
+def _check_custom(mj: mujoco.MjModel, custom: Dict[str, np.ndarray]) -> None:
+  """Validates fields in custom."""
+  if not (
+      0 <= custom['spring_mass_scale'] <= 1
+      and 0 <= custom['spring_inertia_scale'] <= 1
+  ):
+    raise ValueError('Spring inertia and mass scale must be in [0, 1].')
+  if 'init_qpos' in custom and custom['init_qpos'].shape[0] != mj.nq:
+    size = custom['init_qpos'].shape[0]
+    raise ValueError(
+        f'init_qpos had length {size} but expected length {mj.nq}.'
+    )
+
+
 def _get_custom(mj: mujoco.MjModel) -> Dict[str, np.ndarray]:
   """Gets custom mjcf parameters for brax, with defaults."""
   default = {
-      'vel_damping': (0.0, None),
       'ang_damping': (0.0, None),
+      'vel_damping': (0.0, None),
       'baumgarte_erp': (0.1, None),
+      'spring_mass_scale': (0.0, None),
+      'spring_inertia_scale': (0.0, None),
+      'joint_scale_pos': (0.5, None),
+      'joint_scale_ang': (0.2, None),
+      'collide_scale': (1.0, None),
+      'matrix_inv_iterations': (10, None),
+      'solver_maxls': (5, None),
       'elasticity': (0.0, 'geom'),
+      'convex': (True, 'geom'),
       'constraint_stiffness': (2000.0, 'body'),
-      'constraint_damping': (150.0, 'body'),
+      'constraint_vel_damping': (150.0, 'body'),
       'constraint_limit_stiffness': (1000.0, 'body'),
       'constraint_ang_damping': (0.0, 'body'),
   }
 
-  # get numeric default overrides
+  # add user provided overrides to the defaults
   for i, ni in enumerate(mj.name_numericadr):
     nsize = mj.numeric_size[i]
     name = _get_name(mj, ni)
@@ -168,10 +164,27 @@ def _get_custom(mj: mujoco.MjModel) -> Dict[str, np.ndarray]:
     typ = default[name][1] if name in default else None
     default[name] = (val, typ)
 
+  # gather custom overrides with correct sizes
   custom = {}
   for name, (val, typ) in default.items():
-    size = {'body': mj.nbody, 'geom': mj.ngeom}.get(typ)
-    custom[name] = np.repeat(val, size) if size else np.array(val).squeeze()
+    val = np.array([val])
+    size = {
+        'body': mj.nbody - 1,  # ignore the world body
+        'geom': mj.ngeom,
+    }.get(typ, val.shape[-1])
+    if val.shape[-1] != size and val.shape[-1] > 1:
+      # the provided shape does not match against our default size
+      raise ValueError(
+          f'"{name}" custom arg needed {size} values for the "{typ}" type, '
+          f'but got {val.shape[-1]} values.'
+      )
+    elif val.shape[-1] != size and val.shape[-1] == 1:
+      val = np.repeat(val, size)
+    val = val.squeeze() if not typ else val.reshape(size)
+    if typ == 'body':
+      # pad one value for the world body, which gets dropped at Link creation
+      val = np.concatenate([[val[0]], val])
+    custom[name] = val
 
   # get tuple custom overrides
   for i, ni in enumerate(mj.name_tupleadr):
@@ -201,93 +214,8 @@ def _get_custom(mj: mujoco.MjModel) -> Dict[str, np.ndarray]:
     arr[objid] = objprm
     custom[name] = arr
 
+  _check_custom(mj, custom)
   return custom
-
-
-def _contact_geoms(geom_a: Geom, geom_b: Geom) -> Tuple[Geom, Geom]:
-  """Converts geometries for contact functions."""
-  if isinstance(geom_a, Box) and isinstance(geom_b, Box):
-    geom_a = geom_mesh.box_hull(geom_a)
-    geom_b = geom_mesh.box_hull(geom_b)
-  elif isinstance(geom_a, Box) and isinstance(geom_b, Mesh):
-    geom_a = geom_mesh.box_hull(geom_a)
-    geom_b = geom_mesh.convex_hull(geom_b)
-  elif isinstance(geom_a, Mesh) and isinstance(geom_b, Box):
-    geom_a = geom_mesh.convex_hull(geom_a)
-    geom_b = geom_mesh.box_hull(geom_b)
-  elif isinstance(geom_a, Mesh) and isinstance(geom_b, Mesh):
-    geom_a = geom_mesh.convex_hull(geom_a)
-    geom_b = geom_mesh.convex_hull(geom_b)
-  elif isinstance(geom_a, Box):
-    geom_a = geom_mesh.box_tri(geom_a)
-  elif isinstance(geom_b, Box):
-    geom_b = geom_mesh.box_tri(geom_b)
-
-  # pad face vertices so that we can broadcast between geom_a and geom_b faces
-  if isinstance(geom_a, Convex) and isinstance(geom_b, Convex):
-    sa = geom_a.face.shape[-1]
-    sb = geom_b.face.shape[-1]
-    if sa < sb:
-      face = np.pad(geom_a.face, ((0, 0), (0, sb - sa)), 'edge')
-      geom_a = geom_a.replace(face=face)
-    elif sb < sa:
-      face = np.pad(geom_b.face, ((0, 0), (0, sa - sb)), 'edge')
-      geom_b = geom_b.replace(face=face)
-
-  return geom_a, geom_b
-
-
-def _contacts_from_geoms(
-    mj: mujoco.MjModel, geoms: List[Geom]
-) -> List[Tuple[Geom, Geom]]:
-  """Gets a list of contact geom pairs."""
-  collidables = []
-  for key_a, key_b in _COLLIDABLES:
-    if mj.opt.collision == 1:  # only check predefined pairs in mj.pair_*
-      geoms_ab = []
-      for geom_id_a, geom_id_b in zip(mj.pair_geom1, mj.pair_geom2):
-        geom_a, geom_b = geoms[geom_id_a], geoms[geom_id_b]
-        static_a, static_b = geom_a.link_idx is None, geom_b.link_idx is None
-        cls_a, cls_b = type(geom_a), type(geom_b)
-        if (cls_a, static_a) == key_a and (cls_b, static_b) == key_b:
-          geoms_ab.append((geom_a, geom_b))
-        elif (cls_a, static_a) == key_b and (cls_b, static_b) == key_a:
-          geoms_ab.append((geom_b, geom_a))
-    elif key_a == key_b:  # types match, avoid double counting (a, b), (b, a)
-      geoms_a = [g for g in geoms if (type(g), g.link_idx is None) == key_a]
-      geoms_ab = list(itertools.combinations(geoms_a, 2))
-    else:  # types don't match, take every permutation
-      geoms_a = [g for g in geoms if (type(g), g.link_idx is None) == key_a]
-      geoms_b = [g for g in geoms if (type(g), g.link_idx is None) == key_b]
-      geoms_ab = list(itertools.product(geoms_a, geoms_b))
-    if not geoms_ab:
-      continue
-    # filter out self-collisions
-    geoms_ab = [(a, b) for a, b in geoms_ab if a.link_idx != b.link_idx]
-    # convert the geometries so that they can be used for contact functions
-    geoms_ab = [_contact_geoms(a, b) for a, b in geoms_ab]
-    collidables.append(geoms_ab)
-
-  # meshes with different shapes cannot be stacked, so we group meshes by vert
-  # and face shape
-  def key_fn(x):
-    def get_key(x):
-      if isinstance(x, Convex):
-        return (x.vert.shape, x.face.shape, x.unique_edge.shape)
-      if isinstance(x, Mesh):
-        return (x.vert.shape, x.face.shape)
-      return -1
-
-    return get_key(x[0]), get_key(x[1])
-
-  contacts = []
-  for geoms_ab in collidables:
-    geoms_ab = sorted(geoms_ab, key=key_fn)
-    for _, g in itertools.groupby(geoms_ab, key=key_fn):
-      geom_a, geom_b = tree_map(lambda *x: np.stack(x), *g)
-      contacts.append((geom_a, geom_b))
-
-  return contacts
 
 
 def load_model(mj: mujoco.MjModel) -> System:
@@ -303,6 +231,13 @@ def load_model(mj: mujoco.MjModel) -> System:
     raise NotImplementedError(
         'Only joint transmission types are supported for actuators.'
     )
+  if mj.opt.collision == 1:
+    raise NotImplementedError('Predefined collisions not supported.')
+  q_width = {0: 7, 1: 4, 2: 1, 3: 1}
+  non_free = np.concatenate([[j != 0] * q_width[j] for j in mj.jnt_type])
+  if mj.qpos0[non_free].any():
+    raise NotImplementedError(
+        'The `ref` attribute on joint types is not supported.')
 
   custom = _get_custom(mj)
 
@@ -317,22 +252,22 @@ def load_model(mj: mujoco.MjModel) -> System:
     joint_positions.append(position[0])
   joint_position = np.array(joint_positions)
   identity = np.tile(np.array([1.0, 0.0, 0.0, 0.0]), (mj.nbody, 1))
-  link = Link(
-      transform=Transform(pos=mj.body_pos, rot=mj.body_quat),
-      inertia=Inertia(
-          transform=Transform(pos=mj.body_ipos, rot=mj.body_iquat),
+  link = Link(  # pytype: disable=wrong-arg-types  # jax-ndarray
+      transform=Transform(pos=mj.body_pos, rot=mj.body_quat),  # pytype: disable=wrong-arg-types  # jax-ndarray
+      inertia=Inertia(  # pytype: disable=wrong-arg-types  # jax-ndarray
+          transform=Transform(pos=mj.body_ipos, rot=mj.body_iquat),  # pytype: disable=wrong-arg-types  # jax-ndarray
           i=np.array([np.diag(i) for i in mj.body_inertia]),
           mass=mj.body_mass,
       ),
       invweight=mj.body_invweight0[:, 0],
-      joint=Transform(pos=joint_position, rot=identity),
+      joint=Transform(pos=joint_position, rot=identity),  # pytype: disable=wrong-arg-types  # jax-ndarray
       constraint_stiffness=custom['constraint_stiffness'],
-      constraint_damping=custom['constraint_damping'],
+      constraint_vel_damping=custom['constraint_vel_damping'],
       constraint_limit_stiffness=custom['constraint_limit_stiffness'],
       constraint_ang_damping=custom['constraint_ang_damping'],
   )
   # skip link 0 which is the world body in mujoco
-  link = tree_map(lambda x: x[1:], link)
+  link = jax.tree_map(lambda x: x[1:], link)
 
   # create dofs
   mj.jnt_range[~(mj.jnt_limited == 1), :] = np.array([-np.inf, np.inf])
@@ -365,14 +300,14 @@ def load_model(mj: mujoco.MjModel) -> System:
     motions.append(motion)
     limits.append(limit)
     stiffnesses.append(stiffness)
-  motion = tree_map(lambda *x: np.concatenate(x), *motions)
+  motion = jax.tree_map(lambda *x: np.concatenate(x), *motions)
 
   limit = None
   if np.any(mj.jnt_limited):
-    limit = tree_map(lambda *x: np.concatenate(x), *limits)
+    limit = jax.tree_map(lambda *x: np.concatenate(x), *limits)
   stiffness = np.concatenate(stiffnesses)
 
-  dof = DoF(
+  dof = DoF(  # pytype: disable=wrong-arg-types  # jax-ndarray
       motion=motion,
       armature=mj.dof_armature,
       stiffness=stiffness,
@@ -381,13 +316,14 @@ def load_model(mj: mujoco.MjModel) -> System:
       invweight=mj.dof_invweight0,
   )
 
-  # create geoms
-  geoms = []
-  for i, typ in enumerate(mj.geom_type):
-    if typ not in _GEOM_TYPE_CLS:
-      warnings.warn(f'unrecognized collider, geom_type: {typ}')
-      continue
+  # group geoms so that they can be stacked.  two geoms can be stacked if:
+  # - they have the same type
+  # - their fields have the same shape (e.g. Mesh verts might vary)
+  # - they have the same mask
+  key_fn = lambda g, m: (jax.tree_map(np.shape, g), m)
 
+  geom_groups = {}
+  for i, typ in enumerate(mj.geom_type):
     kwargs = {
         'link_idx': mj.geom_bodyid[i] - 1 if mj.geom_bodyid[i] > 0 else None,
         'transform': Transform(pos=mj.geom_pos[i], rot=mj.geom_quat[i]),
@@ -395,32 +331,60 @@ def load_model(mj: mujoco.MjModel) -> System:
         'elasticity': custom['elasticity'][i],
         'rgba': mj.geom_rgba[i], # if there is no colour specified, default is applied
     }
-
-    geom_cls = _GEOM_TYPE_CLS[typ]
-    if geom_cls is Plane:
+    mask = mj.geom_contype[i] | mj.geom_conaffinity[i] << 32
+    if typ == 0:  # Plane
       geom = Plane(**kwargs)
-    elif geom_cls is Sphere:
+      geom_groups.setdefault(key_fn(geom, mask), []).append(geom)
+    elif typ == 2:  # Sphere
       geom = Sphere(radius=mj.geom_size[i, 0], **kwargs)
-    elif geom_cls is Capsule:
-      geom = Capsule(
-          radius=mj.geom_size[i, 0], length=mj.geom_size[i, 1] * 2, **kwargs
-      )
-    elif geom_cls is Box:
+      geom_groups.setdefault(key_fn(geom, mask), []).append(geom)
+    elif typ == 3:  # Capsule
+      radius, halflength = mj.geom_size[i, 0:2]
+      geom = Capsule(radius=radius, length=halflength * 2, **kwargs)
+      geom_groups.setdefault(key_fn(geom, mask), []).append(geom)
+    elif typ == 6:  # Box
       geom = Box(halfsize=mj.geom_size[i, :], **kwargs)
-    elif geom_cls is Mesh:
+      geom_groups.setdefault(key_fn(geom, 0), []).append(geom)  # visual only
+      if custom['convex'][i]:
+        geom = geom_mesh.convex_hull(geom)
+      else:
+        geom = geom_mesh.box_tri(geom)
+      geom_groups.setdefault(key_fn(geom, mask), []).append(geom)
+    elif typ == 7:  # Mesh
       vert, face = _get_mesh(mj, mj.geom_dataid[i])
-      geom = Mesh(vert=vert, face=face, **kwargs)
-    geoms.append(geom)
+      geom = Mesh(vert=vert, face=face, **kwargs)  # pytype: disable=wrong-arg-types
+      if custom['convex'][i]:
+        geom_groups.setdefault(key_fn(geom, 0), []).append(geom)  # visual only
+        geom = geom_mesh.convex_hull(geom)
+      geom_groups.setdefault(key_fn(geom, mask), []).append(geom)
+    else:
+      warnings.warn(f'unrecognized collider, geom_type: {typ}')
+      continue
 
-  contacts = _contacts_from_geoms(mj, geoms)
+  geoms = [
+      jax.tree_map(lambda *x: jp.stack(x), *g) for g in geom_groups.values()
+  ]
+  geom_masks = [m for _, m in geom_groups.keys()]
 
   # create actuators
   ctrl_range = mj.actuator_ctrlrange
   ctrl_range[~(mj.actuator_ctrllimited == 1), :] = np.array([-np.inf, np.inf])
-  actuator = Actuator(
+  actuator = Actuator(  # pytype: disable=wrong-arg-types  # jax-ndarray
       gear=mj.actuator_gear[:, 0],
       ctrl_range=ctrl_range,
   )
+
+  # create generalized solver params
+  params_joint = jp.concatenate((mj.jnt_solref, mj.jnt_solimp), axis=1)
+  params_geom = jp.concatenate((mj.geom_solref, mj.geom_solimp), axis=1)
+  params_pair = jp.concatenate((mj.pair_solref, mj.pair_solimp), axis=1)
+  params_contact = jp.concatenate((params_geom, params_pair))
+  if (params_joint[0] != params_joint).any():
+    raise NotImplementedError('brax only supports one joint solver params')
+  if (params_contact[0] != params_contact).any():
+    raise NotImplementedError('brax only supports one contact solver params')
+  solver_params_joint = params_joint[0]
+  solver_params_contact = params_contact[0]
 
   # create non-pytree params.  these do not live on device directly, and they
   # cannot be differentiated, but they do change the emitted control flow
@@ -463,18 +427,25 @@ def load_model(mj: mujoco.MjModel) -> System:
     link.transform.pos[free_idx] = np.zeros(3)
     link.transform.rot[free_idx] = np.array([1.0, 0.0, 0.0, 0.0])
 
-  sys = System(
+  sys = System(  # pytype: disable=wrong-arg-types  # jax-ndarray
       dt=mj.opt.timestep,
       gravity=mj.opt.gravity,
       link=link,
       dof=dof,
       geoms=geoms,
-      contacts=contacts,
       actuator=actuator,
       init_q=custom['init_qpos'] if 'init_qpos' in custom else mj.qpos0,
+      solver_params_joint=solver_params_joint,
+      solver_params_contact=solver_params_contact,
       vel_damping=custom['vel_damping'],
       ang_damping=custom['ang_damping'],
       baumgarte_erp=custom['baumgarte_erp'],
+      spring_mass_scale=custom['spring_mass_scale'],
+      spring_inertia_scale=custom['spring_inertia_scale'],
+      joint_scale_ang=custom['joint_scale_ang'],
+      joint_scale_pos=custom['joint_scale_pos'],
+      collide_scale=custom['collide_scale'],
+      geom_masks=geom_masks,
       link_names=link_names,
       link_types=link_types,
       link_parents=link_parents,
@@ -482,10 +453,12 @@ def load_model(mj: mujoco.MjModel) -> System:
       actuator_link_id=actuator_link_id,
       actuator_qid=actuator_qid,
       actuator_qdid=actuator_qdid,
+      matrix_inv_iterations=int(custom['matrix_inv_iterations']),
       solver_iterations=mj.opt.iterations,
+      solver_maxls=int(custom['solver_maxls']),
   )
 
-  sys = tree_map(jp.array, sys)
+  sys = jax.tree_map(jp.array, sys)
 
   return sys
 

@@ -38,7 +38,7 @@ def actor_step(
   actions, policy_extras = policy(env_state.obs, key)
   nstate = env.step(env_state, actions)
   state_extras = {x: nstate.info[x] for x in extra_fields}
-  return nstate, Transition(
+  return nstate, Transition(  # pytype: disable=wrong-arg-types  # jax-ndarray
       observation=env_state.obs,
       action=actions,
       reward=nstate.reward,
@@ -136,4 +136,4 @@ class Evaluator:
         **metrics
     }
 
-    return metrics
+    return metrics  # pytype: disable=bad-return-type  # jax-ndarray

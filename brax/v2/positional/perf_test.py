@@ -13,10 +13,9 @@
 # limitations under the License.
 
 # pylint:disable=g-multiple-import
-"""Positional perf tests."""
+"""PBD perf tests."""
 
 from absl.testing import absltest
-from brax.v2 import kinematics
 from brax.v2 import test_utils
 from brax.v2.positional import pipeline
 import jax
@@ -32,14 +31,13 @@ class PerfTest(absltest.TestCase):
       rng1, rng2 = jax.random.split(rng, 2)
       q = jax.random.uniform(rng1, (sys.q_size(),), minval=-0.1, maxval=0.1)
       qd = 0.1 * jax.random.normal(rng2, (sys.qd_size(),))
-      x, xd = kinematics.forward(sys, q, qd)
-      return x, xd
+      return pipeline.init(sys, q, qd)
 
     def step_fn(state):
-      x, xd = state
-      return pipeline.step(sys, x, xd, jp.zeros(sys.qd_size()))
+      return pipeline.step(sys, state, jp.zeros(sys.qd_size()))
 
-    test_utils.benchmark('spring pipeline ant', init_fn, step_fn)
+    test_utils.benchmark('pbd pipeline ant', init_fn, step_fn)
+
 
 if __name__ == '__main__':
   absltest.main()

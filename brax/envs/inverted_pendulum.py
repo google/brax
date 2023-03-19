@@ -144,7 +144,7 @@ class InvertedPendulum(env.Env):
     qp, info = self.sys.step(state.qp, action)
     obs = self._get_obs(qp, info)
     reward = 1.0
-    done = jp.where(jp.abs(obs[1]) > .2, 1.0, 0.0)
+    done = jp.where(jp.abs(obs[1]) > .2, 1.0, 0.0)  # pytype: disable=wrong-arg-types  # jax-ndarray
 
     return state.replace(qp=qp, obs=obs, reward=reward, done=done)
 

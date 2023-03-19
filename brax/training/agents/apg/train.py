@@ -16,11 +16,10 @@
 
 import functools
 import time
-from typing import Callable, Optional, Tuple
+from typing import Callable, Optional, Tuple, Union
 
 from absl import logging
-from brax import envs
-from brax.envs import wrappers
+from brax import envs as envs_v1
 from brax.training import acting
 from brax.training import pmap
 from brax.training import types
@@ -29,6 +28,7 @@ from brax.training.acme import specs
 from brax.training.agents.apg import networks as apg_networks
 from brax.training.types import Params
 from brax.training.types import PRNGKey
+from brax.v2 import envs
 import flax
 import jax
 import jax.numpy as jnp
@@ -52,7 +52,7 @@ def _unpmap(v):
   return jax.tree_util.tree_map(lambda x: x[0], v)
 
 
-def train(environment: envs.Env,
+def train(environment: Union[envs_v1.Env, envs.Env],
           episode_length: int,
           action_repeat: int = 1,
           num_envs: int = 1,
@@ -91,7 +91,12 @@ def train(environment: envs.Env,
 
   assert num_envs % device_count == 0
   env = environment
-  env = wrappers.wrap_for_training(
+  if isinstance(env, envs.Env):
+    wrap_for_training = envs.wrapper.wrap_for_training
+  else:
+    wrap_for_training = envs_v1.wrappers.wrap_for_training
+
+  env = wrap_for_training(
       env, episode_length=episode_length, action_repeat=action_repeat)
 
   normalize = lambda x, y: x
@@ -105,7 +110,7 @@ def train(environment: envs.Env,
 
   optimizer = optax.adam(learning_rate=learning_rate)
 
-  def env_step(carry: Tuple[envs.State, PRNGKey], step_index: int,
+  def env_step(carry: Tuple[Union[envs.State, envs_v1.State], PRNGKey], step_index: int,
                policy: types.Policy):
     env_state, key = carry
     key, key_sample = jax.random.split(key)
@@ -207,7 +212,7 @@ def train(environment: envs.Env,
   if not eval_env:
     eval_env = env
   else:
-    eval_env = wrappers.wrap_for_training(
+    eval_env = wrap_for_training(
         eval_env, episode_length=episode_length, action_repeat=action_repeat)
 
   evaluator = acting.Evaluator(

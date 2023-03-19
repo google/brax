@@ -28,8 +28,10 @@ import numpy as np
 
 
 def load_fixture_mujoco(path: str) -> mujoco.MjModel:
-  path = epath.resource_path('brax') / f'v2/test_data/{path}'
-  xml = mjcf.fuse_bodies(path.read_text())
+  full_path = epath.resource_path('brax') / f'v2/test_data/{path}'
+  if not full_path.exists():
+    full_path = epath.resource_path('brax') / f'v2/envs/assets/{path}'
+  xml = mjcf.fuse_bodies(full_path.read_text())
   model = mujoco.MjModel.from_xml_string(xml)
 
   return model
@@ -39,9 +41,8 @@ def sample_mujoco_states(
     path: str, count: int = 500, modulo: int = 20, force_pgs: bool = False
 ) -> Iterable[Tuple[mujoco.MjData, mujoco.MjData]]:
   """Samples count / modulo states from mujoco for comparison."""
-  path = epath.resource_path('brax') / f'v2/test_data/{path}'
-  xml = mjcf.fuse_bodies(path.read_text())
-  model = mujoco.MjModel.from_xml_string(xml)
+  model = load_fixture_mujoco(path)
+  model.opt.iterations = 50  # return to default for high-precision comparison
   if force_pgs:
     model.opt.solver = 0
   data = mujoco.MjData(model)
@@ -61,8 +62,10 @@ def sample_mujoco_states(
 
 
 def load_fixture(path: str) -> System:
-  path = epath.resource_path('brax') / f'v2/test_data/{path}'
-  sys = mjcf.load(path)
+  full_path = epath.resource_path('brax') / f'v2/test_data/{path}'
+  if not full_path.exists():
+    full_path = epath.resource_path('brax') / f'v2/envs/assets/{path}'
+  sys = mjcf.load(full_path)
 
   return sys
 
@@ -74,7 +77,7 @@ def benchmark(
 
   @jax.jit
   def run_batch(seed: jp.ndarray):
-    rngs = jax.random.split(jax.random.PRNGKey(seed), batch_size)
+    rngs = jax.random.split(jax.random.PRNGKey(seed), batch_size)  # pytype: disable=wrong-arg-types  # jax-ndarray
     init_state = jax.vmap(init_fn)(rngs)
 
     @jax.vmap

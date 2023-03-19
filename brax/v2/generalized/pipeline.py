@@ -27,37 +27,41 @@ from brax.v2.generalized.base import State
 from jax import numpy as jp
 
 
-def init(sys: System, q: jp.ndarray, qd: jp.ndarray) -> State:
+def init(
+    sys: System, q: jp.ndarray, qd: jp.ndarray, debug: bool = False
+) -> State:
   """Initializes physics state.
 
   Args:
     sys: a brax system
     q: (q_size,) joint angle vector
     qd: (qd_size,) joint velocity vector
+    debug: if True, adds contact to the state for debugging
 
   Returns:
     state: initial physics state
   """
-  state = State.zero(sys)
-
-  # position/velocity level terms
   x, xd = kinematics.forward(sys, q, qd)
-  state = state.replace(q=q, qd=qd, x=x, xd=xd)
-  state = state.replace(contact=geometry.contact(sys, x))
+  state = State.init(q, qd, x, xd)  # pytype: disable=wrong-arg-types  # jax-ndarray
   state = dynamics.transform_com(sys, state)
   state = mass.matrix_inv(sys, state)
   state = constraint.jacobian(sys, state)
+  if debug:
+    state = state.replace(contact=geometry.contact(sys, state.x))
 
   return state
 
 
-def step(sys: System, state: State, act: jp.ndarray) -> State:
+def step(
+    sys: System, state: State, act: jp.ndarray, debug: bool = False
+) -> State:
   """Performs a physics step.
 
   Args:
     sys: a brax system
     state: physics state prior to step
     act: (act_size,) actuator input vector
+    debug: if True, adds contact to the state for debugging
 
   Returns:
     state: physics state after step
@@ -66,22 +70,18 @@ def step(sys: System, state: State, act: jp.ndarray) -> State:
   tau = actuator.to_tau(sys, act, state.q)
   state = state.replace(qf_smooth=dynamics.forward(sys, state, tau))
   state = state.replace(qf_constraint=constraint.force(sys, state))
-
-  # add dof damping to the mass matrix
-  # because we already have M^-1, we use the derivative of the inverse:
-  # (A +  εX)^-1 = A^-1 - εA^-1 @ X @ A^-1 + O(ε^2)
-  mx_inv = state.mass_mx_inv
-  mx_inv_damp = mx_inv - mx_inv @ (jp.diag(sys.dof.damping) * sys.dt) @ mx_inv
-  qdd = mx_inv_damp @ (state.qf_smooth + state.qf_constraint)
+  qdd = state.mass_mx_inv @ (state.qf_smooth + state.qf_constraint)
   state = state.replace(qdd=qdd)
 
   # update position/velocity level terms
   q, qd = integrator.integrate(sys, state.q, state.qd, qdd)
   x, xd = kinematics.forward(sys, q, qd)
   state = state.replace(q=q, qd=qd, x=x, xd=xd)
-  state = state.replace(contact=geometry.contact(sys, x))
   state = dynamics.transform_com(sys, state)
   state = mass.matrix_inv(sys, state, approximate=True)
   state = constraint.jacobian(sys, state)
+
+  if debug:
+    state = state.replace(contact=geometry.contact(sys, state.x))
 
   return state

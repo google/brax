@@ -14,13 +14,14 @@
 
 """RL training with an environment running entirely on an accelerator."""
 
+import functools
 import os
 
 from absl import app
 from absl import flags
 from absl import logging
-from brax import envs
-from brax.io import html
+from brax import envs as envs_v1
+from brax.io import html as html_v1
 from brax.io import metrics
 from brax.io import model
 from brax.io import npy_file
@@ -29,6 +30,8 @@ from brax.training.agents.ars import train as ars
 from brax.training.agents.es import train as es
 from brax.training.agents.ppo import train as ppo
 from brax.training.agents.sac import train as sac
+from brax.v2 import envs
+from brax.v2.io import html
 import jax
 
 
@@ -37,6 +40,14 @@ FLAGS = flags.FLAGS
 flags.DEFINE_enum('learner', 'ppo', ['ppo', 'apg', 'es', 'sac', 'ars'],
                   'Which algorithm to run.')
 flags.DEFINE_string('env', 'ant', 'Name of environment to train.')
+flags.DEFINE_bool('use_v2', True, 'Use Brax v2.')
+flags.DEFINE_enum(
+    'backend',
+    'generalized',
+    ['spring', 'generalized', 'positional'],
+    'The physics backend to use.',
+)
+flags.DEFINE_bool('legacy_spring', False, 'Brax v1 backend.')
 flags.DEFINE_integer('total_env_steps', 50000000,
                      'Number of env steps to run training for.')
 flags.DEFINE_integer('num_evals', 10, 'How many times to run an eval.')
@@ -124,7 +135,7 @@ def main(unused_argv):
     })
     if FLAGS.learner == 'sac':
       make_policy, params, _ = sac.train(
-          environment=envs.get_environment(FLAGS.env),
+          environment=get_environment(FLAGS.env),
           num_envs=FLAGS.num_envs,
           action_repeat=FLAGS.action_repeat,
           normalize_observations=FLAGS.normalize_observations,
@@ -143,7 +154,7 @@ def main(unused_argv):
           progress_fn=writer.write_scalars)
     if FLAGS.learner == 'es':
       make_policy, params, _ = es.train(
-          environment=envs.get_environment(FLAGS.env),
+          environment=get_environment(FLAGS.env),
           num_timesteps=FLAGS.total_env_steps,
           fitness_shaping=es.FitnessShaping[FLAGS.fitness_shaping.upper()],
           population_size=FLAGS.population_size,
@@ -160,7 +171,7 @@ def main(unused_argv):
           progress_fn=writer.write_scalars)
     if FLAGS.learner == 'ppo':
       make_policy, params, _ = ppo.train(
-          environment=envs.get_environment(FLAGS.env),
+          environment=get_environment(FLAGS.env),
           num_timesteps=FLAGS.total_env_steps,
           episode_length=FLAGS.episode_length,
           action_repeat=FLAGS.action_repeat,
@@ -182,7 +193,7 @@ def main(unused_argv):
           progress_fn=writer.write_scalars)
     if FLAGS.learner == 'apg':
       make_policy, params, _ = apg.train(
-          environment=envs.get_environment(FLAGS.env),
+          environment=get_environment(FLAGS.env),
           num_envs=FLAGS.num_envs,
           action_repeat=FLAGS.action_repeat,
           num_evals=FLAGS.num_evals,
@@ -196,7 +207,7 @@ def main(unused_argv):
           progress_fn=writer.write_scalars)
     if FLAGS.learner == 'ars':
       make_policy, params, _ = ars.train(
-          environment=envs.get_environment(FLAGS.env),
+          environment=get_environment(FLAGS.env),
           number_of_directions=FLAGS.number_of_directions,
           max_devices_per_host=FLAGS.max_devices_per_host,
           action_repeat=FLAGS.action_repeat,
@@ -217,7 +228,10 @@ def main(unused_argv):
   model.save_params(path, params)
 
   # Output an episode trajectory.
-  env = envs.create(FLAGS.env)
+  if FLAGS.use_v2:
+    env = envs.create(FLAGS.env, backend=FLAGS.backend)
+  else:
+    env = envs_v1.create(FLAGS.env, legacy_spring=FLAGS.legacy_spring)
 
   @jax.jit
   def jit_next_state(state, key):
@@ -228,11 +242,14 @@ def main(unused_argv):
   def do_rollout(rng):
     rng, env_key = jax.random.split(rng)
     state = env.reset(env_key)
-    qps = []
+    states = []
     while not state.done:
-      qps.append(state.qp)
+      if isinstance(env, envs.Env):
+        states.append(state.pipeline_state)
+      else:
+        states.append(state.qp)
       state, _, rng = jit_next_state(state, rng)
-    return qps, rng
+    return states, rng
 
   trajectories = []
   rng = jax.random.PRNGKey(FLAGS.seed)
@@ -243,7 +260,10 @@ def main(unused_argv):
   if hasattr(env, 'sys'):
     for i in range(FLAGS.num_videos):
       html_path = f'{FLAGS.logdir}/saved_videos/trajectory_{i:04d}.html'
-      html.save_html(html_path, env.sys, trajectories[i], make_dir=True)
+      if isinstance(env, envs.Env):
+        html.save(html_path, env.sys.replace(dt=env.dt), trajectories[i])
+      else:
+        html_v1.save_html(html_path, env.sys, trajectories[i], make_dir=True)
   elif FLAGS.num_videos > 0:
     logging.warn('Cannot save videos for non physics environments.')
 

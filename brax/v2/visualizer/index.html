@@ -24,6 +24,18 @@
     {%- endif %}
     }
   </style>
+  <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.150.1/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.150.1/examples/jsm/",
+        "lilgui": "https://cdn.jsdelivr.net/npm/lil-gui@0.18.0/+esm",
+        "viewer": "{{ js_url }}"
+      }
+    }
+  </script>
 
   <script type="application/javascript">
   var system = {{ system_json }};
@@ -34,7 +46,7 @@
     <div id="brax-viewer"></div>
 
     <script type="module">
-      import {Viewer} from '{{ js_url }}';
+      import {Viewer} from 'viewer';
       const domElement = document.getElementById("brax-viewer");
       var viewer = new Viewer(domElement, system);
     </script>

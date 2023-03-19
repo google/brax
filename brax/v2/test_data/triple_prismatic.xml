@@ -1,0 +1,20 @@
+<mujoco model="sliding_mass">
+  <compiler inertiafromgeom="false" autolimits="true"/>
+  <option gravity="0 0 0" timestep="0.001"/>
+	<default>
+		<geom contype="0" conaffinity="0"/>
+  </default>
+  <custom>
+    <numeric data="0.2" name="joint_scale_pos"/>
+    <numeric data="0.2" name="joint_scale_ang"/>
+  </custom>
+  <worldbody>
+    <body name="body1" pos="0 0 0">
+      <joint axis="1 0 0" name="slide1" pos="0 0 0" range="-2 2" type="slide"/>
+      <joint axis="0 1 0" name="slide2" pos="0 0 0" range="-2 2" type="slide"/>
+      <joint axis="0 0 1" name="slide3" pos="0 0 0" range="-2 2" type="slide"/>
+      <geom name="sphere1" pos="0.0 0.0 0" size=".15" mass="1" type="sphere"/>
+      <inertial pos="0 0.0 0" mass="1" diaginertia="1. 1. 1."/>
+    </body> 
+  </worldbody>
+</mujoco>

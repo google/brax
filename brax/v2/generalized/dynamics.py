@@ -33,10 +33,10 @@ def transform_com(sys: System, state: State) -> State:
     state: generalized state with com, cinr, cd, cdof, cdofd updated
   """
   # TODO: support multiple kinematic trees in the same system
-  xi = state.x.vmap().do(sys.link.inertia.transform)
+  x_i = state.x.vmap().do(sys.link.inertia.transform)
   mass = sys.link.inertia.mass
-  com = jp.sum(jax.vmap(jp.multiply)(mass, xi.pos), axis=0) / jp.sum(mass)
-  cinr = xi.replace(pos=xi.pos - com).vmap().do(sys.link.inertia)
+  com = jp.sum(jax.vmap(jp.multiply)(mass, x_i.pos), axis=0) / jp.sum(mass)
+  cinr = x_i.replace(pos=x_i.pos - com).vmap().do(sys.link.inertia)
 
   # motion dofs to global frame centered at subtree-CoM
   parent_idx = jp.array(
@@ -71,7 +71,7 @@ def transform_com(sys: System, state: State) -> State:
     # accumulate jds as successive j transforms around joint
     j, jds = Transform.zero(shape=(num_links,)), []
     for i in range(0, num_dofs):
-      jds.append(j.inv().vmap().do(jd_stack.take(i, axis=1)))
+      jds.append(j.vmap().inv_do(jd_stack.take(i, axis=1)))
       j = j.vmap().do(j_stack.take(i, axis=1))
 
     # interleave jds back together to match joint stack order
@@ -88,7 +88,8 @@ def transform_com(sys: System, state: State) -> State:
   # forward scan down tree: accumulate link center of mass velocity
   def cd_fn(cd_parent, cdof_qd, dof_idx):
     if cd_parent is None:
-      cd_parent = Motion.zero(shape=(1,))
+      num_roots = len([p for p in sys.link_parents if p == -1])
+      cd_parent = Motion.zero(shape=(num_roots,))
 
     # cd = cd[parent] + map-sum(cdof * qd)
     cd = cd_parent.index_sum(dof_idx, cdof_qd)
@@ -144,7 +145,8 @@ def inverse(sys: System, state: State) -> jp.ndarray:
   # forward scan over tree: accumulate link center of mass acceleration
   def cdd_fn(cdd_parent, cdofd, qd, dof_idx):
     if cdd_parent is None:
-      cdd_parent = Motion.create(vel=-sys.gravity.reshape((1, 3)))
+      num_roots = len([p for p in sys.link_parents if p == -1])
+      cdd_parent = Motion.create(vel=-jp.tile(sys.gravity, (num_roots, 1)))
 
     # cdd = cdd[parent] + map-sum(cdofd * qd)
     cdd = cdd_parent.index_sum(dof_idx, jax.vmap(lambda x, y: x * y)(cdofd, qd))

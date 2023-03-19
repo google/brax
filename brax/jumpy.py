@@ -36,7 +36,9 @@ def _in_jit() -> bool:
   """Returns true if currently inside a jax.jit call or jit is disabled."""
   if jax.config.jax_disable_jit:
     return True
-  return core.cur_sublevel().level > 0
+  return 'DynamicJaxprTrace' in str(
+      jax.core.thread_local_state.trace_state.trace_stack
+  )
 
 
 def _which_np(*args):
@@ -81,12 +83,13 @@ def vmap(fun: F, include: Optional[Sequence[bool]] = None) -> F:
       b_args = []
       for a, inc in zip(args, include):
         if inc:
-          b_args.append(take(a, b_idx))
+          b_args.append(take(a, b_idx))  # pytype: disable=wrong-arg-types  # jax-ndarray
         else:
           b_args.append(a)
       rets.append(fun(*b_args))
 
-    return jax.tree_util.tree_map(lambda *x: onp.stack(x), *rets)
+    np = _which_np(*rets)
+    return jax.tree_util.tree_map(lambda *x: np.stack(x), *rets)
 
   return _batched
 
@@ -114,8 +117,9 @@ def scan(f: Callable[[Carry, X], Tuple[Carry, Y]],
       xs_slice = [x[i] for x in xs_flat]
       carry, y = f(carry, jax.tree_util.tree_unflatten(xs_tree, xs_slice))
       ys.append(y)
-    stacked_y = jax.tree_util.tree_map(lambda *y: onp.stack(y),
-                                       *maybe_reversed(ys))
+    mry = maybe_reversed(ys)
+    np = _which_np(*mry)
+    stacked_y = jax.tree_util.tree_map(lambda *y: np.stack(y), *mry)
     return carry, stacked_y
 
 
@@ -316,7 +320,7 @@ def _safe_arccos_jvp(primal, tangent):
   x, = primal
   x_dot, = tangent
   primal_out = safe_arccos(x)
-  tangent_out = -x_dot / sqrt(1. - clip(x, -1 + 1e-7, 1 - 1e-7)**2.)
+  tangent_out = -x_dot / sqrt(1. - clip(x, -1 + 1e-7, 1 - 1e-7)**2.)  # pytype: disable=wrong-arg-types  # jax-ndarray
   return primal_out, tangent_out
 
 
@@ -336,7 +340,7 @@ def _safe_arcsin_jvp(primal, tangent):
   x, = primal
   x_dot, = tangent
   primal_out = safe_arccos(x)
-  tangent_out = x_dot / sqrt(1. - clip(x, -1 + 1e-7, 1 - 1e-7)**2.)
+  tangent_out = x_dot / sqrt(1. - clip(x, -1 + 1e-7, 1 - 1e-7)**2.)  # pytype: disable=wrong-arg-types  # jax-ndarray
   return primal_out, tangent_out
 
 
@@ -477,11 +481,11 @@ def segment_sum(data: ndarray,
 def top_k(operand: ndarray, k: int) -> ndarray:
   """Returns the ordered top k values and their indices along the last axis of operand."""
   if _which_np(operand) is jnp:
-    return jax.lax.top_k(operand, k)
+    return jax.lax.top_k(operand, k)  # pytype: disable=bad-return-type  # jax-ndarray
   else:
     top_ind = onp.argpartition(operand, -k)[-k:]
     sorted_ind = top_ind[onp.argsort(-operand[top_ind])]
-    return operand[sorted_ind], sorted_ind
+    return operand[sorted_ind], sorted_ind  # pytype: disable=bad-return-type  # jax-ndarray
 
 
 def stack(x: List[ndarray], axis=0) -> ndarray:
@@ -499,7 +503,8 @@ def sqrt(x: ndarray) -> ndarray:
   return _which_np(x).sqrt(x)
 
 
-def where(condition: ndarray, x: ndarray, y: ndarray) -> ndarray:
+def where(condition: jax.typing.ArrayLike, x: jax.typing.ArrayLike,
+          y: jax.typing.ArrayLike) -> ndarray:
   """Return elements chosen from `x` or `y` depending on `condition`."""
   return _which_np(condition, x, y).where(condition, x, y)
 

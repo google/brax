@@ -16,7 +16,7 @@
 """Base types for generalized pipeline."""
 
 from brax.v2 import base
-from brax.v2.base import Inertia, Motion, System, Transform
+from brax.v2.base import Inertia, Motion, Transform
 from flax import struct
 from jax import numpy as jp
 
@@ -35,8 +35,8 @@ class State(base.State):
     mass_mx_inv: (qd_size, qd_size) inverse mass matrix
     contact: calculated contacts
     con_jac: constraint jacobian
-    con_pos: constraint position
     con_diag: constraint A diagonal
+    con_aref: constraint reference acceleration
     qf_smooth: smooth dynamics force
     qf_constraint: (qd_size,) force from constraints (collision etc)
     qdd: (qd_size,) joint acceleration vector
@@ -51,37 +51,41 @@ class State(base.State):
   mass_mx: jp.ndarray
   mass_mx_inv: jp.ndarray
   con_jac: jp.ndarray
-  con_pos: jp.ndarray
   con_diag: jp.ndarray
+  con_aref: jp.ndarray
   # acceleration based terms are calculated using terms from the previous step:
   qf_smooth: jp.ndarray
   qf_constraint: jp.ndarray
   qdd: jp.ndarray
 
   @classmethod
-  def zero(cls, sys: System) -> 'State':
+  def init(
+      cls, q: jp.ndarray, qd: jp.ndarray, x: jp.ndarray, xd: jp.ndarray
+  ) -> 'State':
     """Returns an initial State given a brax system."""
-    return State(
-        q=jp.zeros(sys.q_size()),
-        qd=jp.zeros(sys.qd_size()),
-        x=Transform.zero((sys.num_links(),)),
-        xd=Motion.zero((sys.num_links(),)),
+    num_links = x.pos.shape[0]  # pytype: disable=attribute-error  # jax-ndarray
+    qd_size = qd.shape[0]
+    return State(  # pylint:disable=unexpected-keyword-arg  # pytype: disable=wrong-arg-types  # jax-ndarray
+        q=q,
+        qd=qd,
+        x=x,
+        xd=xd,
         contact=None,
-        com=jp.zeros((sys.num_links(), 3)),
+        com=jp.zeros(3),
         cinr=Inertia(
-            Transform.zero((sys.num_links(),)),
-            jp.zeros((sys.num_links(), 3, 3)),
-            jp.zeros((sys.num_links(),)),
+            Transform.zero((num_links,)),
+            jp.zeros((num_links, 3, 3)),
+            jp.zeros((num_links,)),
         ),
-        cd=Motion.zero((sys.num_links(),)),
-        cdof=Motion.zero((sys.num_links(),)),
-        cdofd=Motion.zero((sys.num_links(),)),
-        mass_mx=jp.zeros((sys.num_links(), sys.num_links())),
-        mass_mx_inv=jp.zeros((sys.num_links(), sys.num_links())),
+        cd=Motion.zero((num_links,)),
+        cdof=Motion.zero((num_links,)),
+        cdofd=Motion.zero((num_links,)),
+        mass_mx=jp.zeros((qd_size, qd_size)),
+        mass_mx_inv=jp.zeros((qd_size, qd_size)),
         con_jac=jp.zeros(()),
-        con_pos=jp.zeros(()),
         con_diag=jp.zeros(()),
-        qf_smooth=jp.zeros((sys.qd_size(),)),
-        qf_constraint=jp.zeros((sys.qd_size(),)),
-        qdd=jp.zeros(sys.qd_size()),
+        con_aref=jp.zeros(()),
+        qf_smooth=jp.zeros_like(qd),
+        qf_constraint=jp.zeros_like(qd),
+        qdd=jp.zeros_like(qd),
     )

@@ -343,8 +343,8 @@ class Spherical(Joint):
     def limit_angle(n, n_1, n_2, lim_num):
 
       ph = math.signed_angle(n, n_1, n_2)
-      mask = jp.where(ph < self.limit[lim_num][0], 1., 0.)
-      mask = jp.where(ph > self.limit[lim_num][1], 1., mask)
+      mask = jp.where(ph < self.limit[lim_num][0], 1., 0.)  # pytype: disable=wrong-arg-types  # jax-ndarray
+      mask = jp.where(ph > self.limit[lim_num][1], 1., mask)  # pytype: disable=wrong-arg-types  # jax-ndarray
       ph = jp.clip(ph, self.limit[lim_num][0], self.limit[lim_num][1])
       fixrot = math.quat_rot_axis(n, ph)
       n1 = math.rotate(n_1, fixrot)
@@ -405,7 +405,7 @@ class Spherical(Joint):
     axis_1_p_in_xz_c = axis_1_p_in_xz_c / (1e-10 +
                                            jp.safe_norm(axis_1_p_in_xz_c))
     ang_between_1_p_xz_c = jp.dot(axis_1_p_in_xz_c, axis_1_p)
-    theta = jp.safe_arccos(jp.clip(ang_between_1_p_xz_c, -1, 1)) * jp.sign(
+    theta = jp.safe_arccos(jp.clip(ang_between_1_p_xz_c, -1, 1)) * jp.sign(  # pytype: disable=wrong-arg-types  # jax-ndarray
         jp.dot(axis_1_p, axis_3_c))
     yc_n_normal = -axis_3_c
     phi = math.signed_angle(yc_n_normal, axis_2_c, line_of_nodes)

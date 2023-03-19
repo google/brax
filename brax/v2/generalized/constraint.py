@@ -16,6 +16,7 @@
 """Functions for constraint satisfaction."""
 from typing import Tuple
 
+from brax.v2 import geometry
 from brax.v2 import math
 from brax.v2 import scan
 from brax.v2.base import Motion, System, Transform
@@ -58,10 +59,13 @@ def _pt_jac(
   return pt
 
 
-def _imp_aref(pos: jp.ndarray, vel: jp.ndarray) -> jp.ndarray:
+def _imp_aref(
+    params: jp.ndarray, pos: jp.ndarray, vel: jp.ndarray
+) -> Tuple[jp.ndarray, jp.ndarray]:
   """Calculates impedance and offset acceleration in constraint frame.
 
   Args:
+    params: solver params
     pos: position in constraint frame
     vel: velocity in constraint frame
 
@@ -71,9 +75,7 @@ def _imp_aref(pos: jp.ndarray, vel: jp.ndarray) -> jp.ndarray:
   """
   # this formulation corresponds to the parameterization described here:
   # https://mujoco.readthedocs.io/en/latest/modeling.html#solver-parameters
-  # TODO: support custom solimp, solref
-  timeconst, dampratio = 0.02, 1.0
-  dmin, dmax, width, mid, power = 0.9, 0.95, 0.001, 0.5, 2.0
+  timeconst, dampratio, dmin, dmax, width, mid, power = params
 
   imp_x = jp.abs(pos) / width
   imp_a = (1.0 / jp.power(mid, power - 1)) * jp.power(imp_x, power)
@@ -97,7 +99,7 @@ def jac_limit(
   """Calculates the jacobian for angle limits in dof frame.
 
   Args:
-    sys: the brax system
+    sys: a brax system
     state: generalized state
 
   Returns:
@@ -117,9 +119,11 @@ def jac_limit(
 
   side = ((pos_min < pos_max) * 2 - 1) * (pos < 0)
   jac = jax.vmap(jp.multiply)(jp.eye(sys.qd_size())[qd_idx], side)
-  diag = sys.dof.invweight[qd_idx] * (pos < 0)
+  imp, aref = _imp_aref(sys.solver_params_joint, pos, jac @ state.qd)
+  diag = sys.dof.invweight[qd_idx] * (pos < 0) * (1 - imp) / (imp + 1e-8)
+  aref = jax.vmap(lambda x, y: x * y)(aref, (pos < 0))
 
-  return jac, pos, diag
+  return jac, diag, aref
 
 
 def jac_contact(
@@ -136,7 +140,9 @@ def jac_contact(
     pos: contact position in constraint frame
     diag: approximate diagonal of A matrix
   """
-  if state.contact is None:
+  contact = geometry.contact(sys, state.x)
+
+  if contact is None:
     return jp.zeros((0, sys.qd_size())), jp.zeros((0,)), jp.zeros((0,))
 
   def row_fn(contact):
@@ -153,15 +159,16 @@ def jac_contact(
 
     jac = jp.stack(jac)
     pos = -jp.tile(contact.penetration, 4)
+    imp, aref = _imp_aref(sys.solver_params_contact, pos, jac @ state.qd)
     t = sys.link.invweight[link_a] + sys.link.invweight[link_b] * (link_b > -1)
     diag = jp.tile(t + contact.friction * contact.friction * t, 4)
-    diag = 2 * contact.friction * contact.friction * diag
+    diag *= 2 * contact.friction * contact.friction * (1 - imp) / (imp + 1e-8)
 
     return jax.tree_map(
-        lambda x: x * (contact.penetration > 0), (jac, pos, diag)
+        lambda x: x * (contact.penetration > 0), (jac, diag, aref),
     )
 
-  return jax.tree_map(jp.concatenate, jax.vmap(row_fn)(state.contact))
+  return jax.tree_map(jp.concatenate, jax.vmap(row_fn)(contact))
 
 
 def jacobian(sys: System, state: State) -> State:
@@ -172,11 +179,11 @@ def jacobian(sys: System, state: State) -> State:
     state: generalized state
 
   Returns:
-    state: generalized state with jac, pos, diag updated
+    state: generalized state with jac, pos, diag, aref updated
   """
   jpds = jac_contact(sys, state), jac_limit(sys, state)
-  jac, pos, diag = jax.tree_map(lambda *x: jp.concatenate(x), *jpds)
-  return state.replace(con_jac=jac, con_pos=pos, con_diag=diag)
+  jac, diag, aref = jax.tree_map(lambda *x: jp.concatenate(x), *jpds)
+  return state.replace(con_jac=jac, con_diag=diag, con_aref=aref)
 
 
 def force(sys: System, state: State) -> jp.ndarray:
@@ -193,10 +200,9 @@ def force(sys: System, state: State) -> jp.ndarray:
     return jp.zeros(sys.qd_size())
 
   # calculate A matrix and b vector
-  imp, aref = _imp_aref(state.con_pos, state.con_jac @ state.qd)
   a = state.con_jac @ state.mass_mx_inv @ state.con_jac.T
-  a = a + jp.diag(state.con_diag * (1 - imp) / imp)
-  b = state.con_jac @ state.mass_mx_inv @ state.qf_smooth - aref
+  a = a + jp.diag(state.con_diag)
+  b = state.con_jac @ state.mass_mx_inv @ state.qf_smooth - state.con_aref
 
   # solve for forces in constraint frame, Ax + b = 0 s.t. x >= 0
   def objective(x):
@@ -220,7 +226,7 @@ def force(sys: System, state: State) -> jp.ndarray:
       jaxopt.projection.projection_non_negative,
       maxiter=sys.solver_iterations,
       implicit_diff=False,
-      maxls=5,
+      maxls=sys.solver_maxls,
   )
 
   # solve and convert back to q coordinates

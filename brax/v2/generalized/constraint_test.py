@@ -29,31 +29,33 @@ class ConstraintTest(parameterized.TestCase):
       ('ant.xml',),
       ('triple_pendulum.xml',),
       ('humanoid.xml',),
-      ('halfcheetah.xml',),
+      ('half_cheetah.xml',),
   )
   def test_jacobian(self, xml_file):
     """Test constraint jacobian."""
     sys = test_utils.load_fixture(xml_file)
     for mj_prev, mj_next in test_utils.sample_mujoco_states(xml_file):
       state = jax.jit(pipeline.init)(sys, mj_prev.qpos, mj_prev.qvel)
+      efc_j = np.reshape(mj_next.efc_J, (-1, sys.qd_size()))
+      efc_aref = np.reshape(mj_next.efc_aref, efc_j.shape[0:1])
 
       # ignore zero rows (brax jacobians are static size)
       np.testing.assert_almost_equal(
           np.sort(state.con_jac[np.any(state.con_jac, axis=1)], axis=0),
-          np.sort(mj_next.efc_J, axis=0),
+          np.sort(efc_j, axis=0),
           6,
       )
       np.testing.assert_almost_equal(
-          np.sort(state.con_pos[np.any(state.con_jac, axis=1)], axis=0),
-          np.sort(mj_next.efc_pos, axis=0),
-          6,
+          np.sort(state.con_aref[np.any(state.con_jac, axis=1)], axis=0),
+          np.sort(efc_aref, axis=0),
+          3,
       )
 
   @parameterized.parameters(
       ('ant.xml',),
       ('triple_pendulum.xml',),
       ('humanoid.xml',),
-      ('halfcheetah.xml',),
+      ('half_cheetah.xml',),
   )
   def test_force(self, xml_file):
     """Test constraint force."""
@@ -68,8 +70,9 @@ class ConstraintTest(parameterized.TestCase):
     for mj_prev, mj_next in samples:
       state = jax.jit(pipeline.init)(sys, mj_prev.qpos, mj_prev.qvel)
       state = jax.jit(pipeline.step)(sys, state, mj_prev.qfrc_applied)
+      efc_jt = np.reshape(mj_next.efc_J, (-1, sys.qd_size())).T
       # recover con_frc by backing it out from qf_constraint
-      con_frc = np.linalg.lstsq(mj_next.efc_J.T, state.qf_constraint, None)[0]
+      con_frc = np.linalg.lstsq(efc_jt, state.qf_constraint, None)[0]
       err += np.sum((mj_next.efc_AR @ con_frc + mj_next.efc_b) ** 2)
       mj_err += np.sum(
           (mj_next.efc_AR @ mj_next.efc_force + mj_next.efc_b) ** 2

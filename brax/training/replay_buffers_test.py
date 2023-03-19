@@ -336,5 +336,61 @@ class QueueReplayTest(parameterized.TestCase):
     self.assertSequenceEqual(list(samples), [10, 11, 12, 0, 0])
     self.assertEqual(buffer_state.current_size, 0)
 
+
+class PrimitiveReplayBufferTest(absltest.TestCase):
+
+  def testInsert(self):
+    replay_buffer = replay_buffers.PrimitiveReplayBuffer()
+    rng = jax.random.PRNGKey(0)
+    buffer_state = replay_buffer.init(rng)
+    self.assertEqual(replay_buffer.size(buffer_state), 0)
+
+    buffer_state = jax.jit(replay_buffer.insert)(
+        buffer_state, get_dummy_batch()
+    )
+    self.assertEqual(replay_buffer.size(buffer_state), 8)
+
+  def testInsertWhenFull(self):
+    replay_buffer = replay_buffers.PrimitiveReplayBuffer()
+    rng = jax.random.PRNGKey(0)
+    buffer_state = replay_buffer.init(rng)
+    self.assertEqual(replay_buffer.size(buffer_state), 0)
+
+    insert = jax.jit(replay_buffer.insert)
+    buffer_state = insert(buffer_state, get_dummy_batch())
+    with self.assertRaises(ValueError):
+      buffer_state = insert(buffer_state, get_dummy_batch())
+    self.assertEqual(replay_buffer.size(buffer_state), 8)
+
+  def testSample(self):
+    replay_buffer = replay_buffers.PrimitiveReplayBuffer()
+    rng = jax.random.PRNGKey(0)
+    buffer_state = replay_buffer.init(rng)
+    self.assertEqual(replay_buffer.size(buffer_state), 0)
+
+    insert = jax.jit(replay_buffer.insert)
+    sample = jax.jit(replay_buffer.sample)
+    buffer_state = insert(buffer_state, get_dummy_batch())
+    self.assertEqual(replay_buffer.size(buffer_state), 8)
+    buffer_state, samples = sample(buffer_state)
+    self.assertEqual(replay_buffer.size(buffer_state), 0)
+    self.assertEqual(samples['a'].shape, (8,))
+    self.assertEqual(samples['b'].shape, (8, 5, 5))
+    for sample in samples['b']:
+      self.assertSequenceEqual(
+          list(jnp.reshape(sample - sample[0, 0], (-1,))), range(5 * 5)
+      )
+
+  def testSampleWhenEmpty(self):
+    replay_buffer = replay_buffers.PrimitiveReplayBuffer()
+    rng = jax.random.PRNGKey(0)
+    buffer_state = replay_buffer.init(rng)
+    self.assertEqual(replay_buffer.size(buffer_state), 0)
+
+    sample = jax.jit(replay_buffer.sample)
+    with self.assertRaises(ValueError):
+      _, _ = sample(buffer_state)
+
+
 if __name__ == '__main__':
   absltest.main()

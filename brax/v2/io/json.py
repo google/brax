@@ -18,6 +18,7 @@
 import json
 from typing import List, Text
 
+from brax.v2 import geometry
 from brax.v2.base import State, System
 from etils import epath
 import jax
@@ -51,12 +52,12 @@ def _to_dict(obj):
   return obj
 
 
-def _compress_contact(states: List[State]) -> List[State]:
+def _compress_contact(states: State) -> State:
   """Reduces the number of contacts based on penetration > 0."""
-  stacked = jax.tree_map(lambda *x: jp.stack(x), *states)
-  if stacked.contact is None:
+  if states.contact is None:
     return states
-  contact_mask = stacked.contact.penetration > 0
+
+  contact_mask = states.contact.penetration > 0
   n_contact = contact_mask.sum(axis=1).max()
 
   def pad(arr, n):
@@ -66,12 +67,26 @@ def _compress_contact(states: List[State]) -> List[State]:
     r = r.at[: arr.shape[0]].set(arr)
     return r
 
-  def compress(i, s):
-    mask = contact_mask[i]
-    contact = jax.tree_map(lambda x: pad(x[mask], n_contact), s.contact)
-    return s.replace(contact=contact)
+  def compress(contact, i):
+    return jax.tree_map(
+        lambda x: pad(x[contact_mask[i]], n_contact), contact.take(i)
+    )
 
-  return [compress(i, s) for i, s in enumerate(states)]
+  c = [compress(states.contact, i) for i in range(states.x.pos.shape[0])]
+  return states.replace(contact=jax.tree_map(lambda *x: jp.stack(x), *c))
+
+
+def _take_i(d, i):
+  """Takes the ith entry of every leaf in a dict."""
+  new_d = {}
+  for k, v in d.items():
+    if isinstance(v, dict):
+      new_d[k] = _take_i(v, i)
+    elif isinstance(v, list):
+      new_d[k] = v[i]
+    else:
+      new_d[k] = v
+  return new_d
 
 
 def dumps(sys: System, states: List[State]) -> Text:
@@ -86,20 +101,26 @@ def dumps(sys: System, states: List[State]) -> Text:
   """
   d = _to_dict(sys)
 
+  # TODO: move the manipulations below to javascript
+
   # fill in empty link names
   link_names = [n or f'link {i}' for i, n in enumerate(sys.link_names)]
+  link_names += ['world']
 
   # key geoms by their link names
   link_geoms = {}
-  for g in d['geoms']:
-    link_name = 'world' if g['link_idx'] is None else link_names[g['link_idx']]
-    link_geoms.setdefault(link_name, []).append(g)
+  for batch in d['geoms']:
+    num_geoms = len(batch['friction'])
+    for i in range(num_geoms):
+      link_idx = -1 if batch['link_idx'] is None else batch['link_idx'][i]
+      link_geoms.setdefault(link_names[link_idx], []).append(_take_i(batch, i))
   d['geoms'] = link_geoms
 
+  # stack states for the viewer
+  states = jax.tree_map(lambda *x: jp.stack(x), *states)
   states = _compress_contact(states)
 
-  # stack states for the viewer
-  states = _to_dict(jax.tree_map(lambda *x: jp.stack(x), *states))
+  states = _to_dict(states)
   d['states'] = {k: states[k] for k in _STATE_ATTR}
 
   return json.dumps(_to_dict(d))

@@ -19,11 +19,10 @@ See: https://arxiv.org/pdf/1812.05905.pdf
 
 import functools
 import time
-from typing import Any, Callable, Optional, Tuple
+from typing import Any, Callable, Optional, Tuple, Union
 
 from absl import logging
-from brax import envs
-from brax.envs import wrappers
+from brax import envs as envs_v1
 from brax.io import model
 from brax.training import acting
 from brax.training import gradients
@@ -36,6 +35,7 @@ from brax.training.agents.sac import losses as sac_losses
 from brax.training.agents.sac import networks as sac_networks
 from brax.training.types import Params
 from brax.training.types import PRNGKey
+from brax.v2 import envs
 import flax
 import jax
 import jax.numpy as jnp
@@ -103,7 +103,7 @@ def _init_training_state(
                                    jax.local_devices()[:local_devices_to_use])
 
 
-def train(environment: envs.Env,
+def train(environment: Union[envs_v1.Env, envs.Env],
           num_timesteps,
           episode_length: int,
           action_repeat: int = 1,
@@ -160,7 +160,12 @@ def train(environment: envs.Env,
 
   assert num_envs % device_count == 0
   env = environment
-  env = wrappers.wrap_for_training(
+  if isinstance(env, envs.Env):
+    wrap_for_training = envs.wrapper.wrap_for_training
+  else:
+    wrap_for_training = envs_v1.wrappers.wrap_for_training
+
+  env = wrap_for_training(
       env, episode_length=episode_length, action_repeat=action_repeat)
 
   obs_size = env.observation_size
@@ -182,7 +187,7 @@ def train(environment: envs.Env,
 
   dummy_obs = jnp.zeros((obs_size,))
   dummy_action = jnp.zeros((action_size,))
-  dummy_transition = Transition(
+  dummy_transition = Transition(  # pytype: disable=wrong-arg-types  # jax-ndarray
       observation=dummy_obs,
       action=dummy_action,
       reward=0.,
@@ -204,11 +209,11 @@ def train(environment: envs.Env,
       reward_scaling=reward_scaling,
       discounting=discounting,
       action_size=action_size)
-  alpha_update = gradients.gradient_update_fn(
+  alpha_update = gradients.gradient_update_fn(  # pytype: disable=wrong-arg-types  # jax-ndarray
       alpha_loss, alpha_optimizer, pmap_axis_name=_PMAP_AXIS_NAME)
-  critic_update = gradients.gradient_update_fn(
+  critic_update = gradients.gradient_update_fn(  # pytype: disable=wrong-arg-types  # jax-ndarray
       critic_loss, q_optimizer, pmap_axis_name=_PMAP_AXIS_NAME)
-  actor_update = gradients.gradient_update_fn(
+  actor_update = gradients.gradient_update_fn(  # pytype: disable=wrong-arg-types  # jax-ndarray
       actor_loss, policy_optimizer, pmap_axis_name=_PMAP_AXIS_NAME)
 
   def sgd_step(
@@ -270,10 +275,10 @@ def train(environment: envs.Env,
 
   def get_experience(
       normalizer_params: running_statistics.RunningStatisticsState,
-      policy_params: Params, env_state: envs.State,
+      policy_params: Params, env_state: Union[envs.State, envs_v1.State],
       buffer_state: ReplayBufferState, key: PRNGKey
-  ) -> Tuple[running_statistics.RunningStatisticsState, envs.State,
-             ReplayBufferState]:
+  ) -> Tuple[running_statistics.RunningStatisticsState,
+             Union[envs.State, envs_v1.State], ReplayBufferState]:
     policy = make_policy((normalizer_params, policy_params))
     env_state, transitions = acting.actor_step(
         env, env_state, policy, key, extra_fields=('truncation',))
@@ -289,7 +294,8 @@ def train(environment: envs.Env,
   def training_step(
       training_state: TrainingState, env_state: envs.State,
       buffer_state: ReplayBufferState, key: PRNGKey
-  ) -> Tuple[TrainingState, envs.State, ReplayBufferState, Metrics]:
+  ) -> Tuple[TrainingState, Union[envs.State, envs_v1.State],
+             ReplayBufferState, Metrics]:
     experience_key, training_key = jax.random.split(key)
     normalizer_params, env_state, buffer_state = get_experience(
         training_state.normalizer_params, training_state.policy_params,
@@ -407,7 +413,7 @@ def train(environment: envs.Env,
   if not eval_env:
     eval_env = env
   else:
-    eval_env = wrappers.wrap_for_training(
+    eval_env = wrap_for_training(
         eval_env, episode_length=episode_length, action_repeat=action_repeat)
 
   evaluator = acting.Evaluator(
