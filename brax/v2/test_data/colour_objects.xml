@@ -1,9 +1,6 @@
 <mujoco model="ant">
   <compiler angle="degree" coordinate="local" inertiafromgeom="true" />
   <option timestep="0.01" collision="predefined" />
-  <custom>
-    <numeric data="0.0 0.0 0.55 1.0 0.0 0.0 0.0 0.0 1.0 0.0 -1.0 0.0 -1.0 0.0 1.0" name="init_qpos" />
-  </custom>
   <asset>
     <mesh name="pyramid" file="meshes/pyramid.stl" scale="0.1 0.1 0.1" />
   </asset>
@@ -15,7 +12,7 @@
     <geom conaffinity="1" condim="3" name="floor" pos="0 0 0" rgba="1 0 0.8 1" size="40 40 40" type="plane"/>
     <body name="sphere" pos="0 0 0.25">
       <joint axis="1 0 0" name="free1" pos="0 0 0" type="free"/>
-      <geom name="sphere" fromto="-0.5 0.0 0 0.5 0.0 0" pos="0 0 0" size="0.25" type="capsule"/>
+      <geom name="sphere" pos="0 0 1" size="0.25" type="sphere"/>
     </body>
     <body name="capsule" pos="0 0 0.25">
       <joint axis="1 0 0" name="free2" pos="0 0 0" type="free"/>
@@ -23,7 +20,7 @@
     </body>
     <body name="box" pos="0 0 0.25">
       <joint axis="1 0 0" name="free3" pos="0 0 0" type="free"/>
-      <geom name="box" fromto="-0.5 0.0 0 0.5 0.0 0" pos="0 0 0" size="0.25" type="capsule"/>
+      <geom name="box" pos="0 0 0" size="0.25 0.25 0.25" type="box"/>
     </body>
     <body name="mesh" pos="0.0 2.0 1.0" euler="0.1 -0.1 45">
       <joint axis="1 0 0" name="free4" pos="0 0 0" type="free"/>
