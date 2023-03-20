@@ -309,10 +309,11 @@ class Sphere(Geometry):
 
   Attributes:
     radius: radius of the sphere
+    rgba: (4,) the rgba to display in the renderer
   """
 
   radius: jp.ndarray
-  rgba: Optional[jp.ndarray] = None
+  rgba: jp.ndarray = None
 
 
 @struct.dataclass
@@ -322,11 +323,12 @@ class Capsule(Geometry):
   Attributes:
     radius: radius of the capsule end
     length: distance between the two capsule end centroids
+    rgba: (4,) the rgba to display in the renderer
   """
 
   radius: jp.ndarray
   length: jp.ndarray
-  rgba: Optional[jp.ndarray] = None
+  rgba: jp.ndarray = None
 
 
 @struct.dataclass
@@ -335,16 +337,21 @@ class Box(Geometry):
 
   Attributes:
     halfsize: (3,) half sizes for each box side
+    rgba: (4,) the rgba to display in the renderer
   """
 
   halfsize: jp.ndarray
-  rgba: Optional[jp.ndarray] = None
+  rgba: jp.ndarray = None
 
 
 @struct.dataclass
 class Plane(Geometry):
-  """An infinite plane whose normal points at +z in its coordinate space."""
-  rgba: Optional[jp.ndarray] = None
+  """An infinite plane whose normal points at +z in its coordinate space.
+  
+  Attributes:
+    rgba: (4,) the rgba to display in the renderer
+  """
+  rgba: jp.ndarray = None
 
 @struct.dataclass
 class Mesh(Geometry):
@@ -355,11 +362,12 @@ class Mesh(Geometry):
   Attributes:
     vert: (num_verts, 3) spatial coordinates associated with each vertex
     face: (num_faces, num_face_vertices) vertices associated with each face
+    rgba: (4,) the rgba to display in the renderer
   """
 
   vert: jp.ndarray
   face: jp.ndarray
-  rgba: Optional[jp.ndarray] = None
+  rgba: jp.ndarray = None
 
 
 @struct.dataclass
