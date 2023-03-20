@@ -44,23 +44,20 @@ def init(
   x, xd = kinematics.forward(sys, q, qd)
   j, jd, a_p, a_c = kinematics.world_to_joint(sys, x, xd)
   x_i, xd_i = com.from_world(sys, x, xd)
-  i_inv = com.inv_inertia(sys, x)
-  mass = sys.link.inertia.mass ** (1 - sys.spring_mass_scale)
+  contact = geometry.contact(sys, x) if debug else None
 
   return State(
       q=q,
       qd=qd,
       x=x,
       xd=xd,
-      contact=geometry.contact(sys, x) if debug else None,
+      contact=contact,
       x_i=x_i,
       xd_i=xd_i,
       j=j,
       jd=jd,
       a_p=a_p,
       a_c=a_c,
-      i_inv=i_inv,
-      mass=mass,
   )
 
 
@@ -92,29 +89,26 @@ def step(
   )
 
   x_i_prev = x_i
+  inv_mass = 1 / (sys.link.inertia.mass ** (1 - sys.spring_mass_scale))
+  inv_inertia = com.inv_inertia(sys, x)
 
   # calculate acceleration level updates
   tau = actuator.to_tau(sys, act, q)
-  xdd_i = joints.acceleration_update(sys, state, tau) + Motion.create(
-      vel=sys.gravity
-  )
+  xdd_i = Motion.create(vel=sys.gravity)
+  xdd_i += joints.acceleration_update(sys, state, tau, inv_inertia, inv_mass)
 
   xd_i = xd_i + xdd_i * sys.dt
 
   # now integrate and update position/velocity-level terms
-  x_i, xd_i = integrator.integrate(
-      sys,
-      x_i,
-      xd_i,
-      Motion(vel=jp.zeros_like(xd_i.vel), ang=jp.zeros_like(xd_i.ang)),
-  )
+  zero_dv = Motion.zero((sys.num_links(),))
+  x_i, xd_i = integrator.integrate(sys, x_i, xd_i, zero_dv)
 
   # TODO: consolidate coordinate transformation and inv_inertia calls
   x, xd = com.to_world(sys, x_i, xd_i)
   inv_inertia = com.inv_inertia(sys, x)
 
   # perform position level joint updates
-  p_j = joints.position_update(sys, x, xd, x_i, inv_inertia, state.mass)
+  p_j = joints.position_update(sys, x, xd, x_i, inv_inertia, inv_mass)
 
   # apply position level joint updates
   x_i += p_j
@@ -125,7 +119,7 @@ def step(
   # apply position level contact updates
   contact = geometry.contact(sys, x)
   p_c, dlambda = collisions.resolve_position(
-      sys, x_i, x_i_prev, inv_inertia, state.mass, contact=contact
+      sys, x_i, x_i_prev, inv_inertia, inv_mass, contact=contact
   )
   x_i += p_c
   x_i_before, xd_i_before = x_i, xd_i
@@ -144,7 +138,7 @@ def step(
       x_i_before,
       xd_i_before,
       inv_inertia,
-      state.mass,
+      inv_mass,
       contact,
       dlambda,
   )
@@ -155,6 +149,7 @@ def step(
 
   j, jd, a_p, a_c = kinematics.world_to_joint(sys, x, xd)
   q, qd = kinematics.inverse(sys, j, jd)
+  contact = geometry.contact(sys, x) if debug else None
   state = state.replace(
       q=q,
       qd=qd,
@@ -166,6 +161,6 @@ def step(
       xd_i=xd_i,
       x=x,
       xd=xd,
-      contact=geometry.contact(sys, x) if debug else None,
+      contact=contact,
   )
   return state

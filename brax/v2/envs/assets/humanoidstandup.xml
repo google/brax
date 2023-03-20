@@ -15,6 +15,8 @@
         <numeric data="27000" name="constraint_stiffness"/>
         <numeric data="30" name="constraint_ang_damping"/>
         <numeric data="80" name="constraint_vel_damping"/>
+        <numeric data="0.5" name="joint_scale_pos"/>
+        <numeric data="0.1" name="joint_scale_ang"/>
         <numeric data="-0.05" name="ang_damping"/>
         <numeric data="0" name="spring_mass_scale"/>
         <numeric data="1" name="spring_inertia_scale"/>

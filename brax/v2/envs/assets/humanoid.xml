@@ -15,7 +15,7 @@
         <numeric data="80" name="constraint_vel_damping"/>
         <numeric data="-0.05" name="ang_damping"/>
         <numeric data="0.5" name="joint_scale_pos"/>
-        <numeric data="0.02" name="joint_scale_ang"/>
+        <numeric data="0.1" name="joint_scale_ang"/>
         <numeric data="0" name="spring_mass_scale"/>
         <numeric data="1" name="spring_inertia_scale"/>
         <numeric data="20" name="matrix_inv_iterations"/>

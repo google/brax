@@ -18,7 +18,6 @@
 from brax.v2 import base
 from brax.v2.base import Motion, Transform
 from flax import struct
-from jax import numpy as jp
 
 
 @struct.dataclass
@@ -32,8 +31,6 @@ class State(base.State):
     jd: link motion in joint frame
     a_p: joint parent anchor in world frame
     a_c: joint child anchor in world frame
-    i_inv: link inverse inertia
-    mass: link mass
   """
 
   x_i: Transform
@@ -42,5 +39,3 @@ class State(base.State):
   jd: Motion
   a_p: Transform
   a_c: Transform
-  i_inv: jp.ndarray
-  mass: jp.ndarray

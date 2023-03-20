@@ -27,13 +27,21 @@ from jax import numpy as jp
 from jax.ops import segment_sum
 
 
-def acceleration_update(sys: System, state: State, tau: jp.ndarray) -> Motion:
+def acceleration_update(
+    sys: System,
+    state: State,
+    tau: jp.ndarray,
+    inv_inertia: jp.ndarray,
+    inv_mass: jp.ndarray,
+) -> Motion:
   """Calculates forces to apply to links resulting from joint constraints.
 
   Args:
     sys: System defining kinematic tree of joints
     state: spring pipeline state
     tau: joint force vector
+    inv_inertia: inverse of inertia matrix in world CoM frame
+    inv_mass: inverse link mass
 
   Returns:
     xdd_i: acceleration to apply to link center of mass in world frame
@@ -79,8 +87,8 @@ def acceleration_update(sys: System, state: State, tau: jp.ndarray) -> Motion:
 
   # convert to acceleration
   xdd_i = Motion(
-      ang=jax.vmap(lambda x, y: x @ y)(state.i_inv, xf_i.ang),
-      vel=jax.vmap(lambda x, y: x / y)(xf_i.vel, state.mass),
+      ang=jax.vmap(lambda x, y: x @ y)(inv_inertia, xf_i.ang),
+      vel=jax.vmap(lambda x, y: x * y)(inv_mass, xf_i.vel),
   )
 
   return xdd_i
@@ -92,7 +100,7 @@ def position_update(
     xd: Motion,
     xi: Transform,
     inv_inertia: jp.ndarray,
-    mass: jp.ndarray,
+    inv_mass: jp.ndarray,
 ) -> Transform:
   """Calculates position-level joint updates in CoM coordinates for joints.
 
@@ -102,64 +110,50 @@ def position_update(
     xd: link motion in world frame
     xi: link transform in world CoM frame
     inv_inertia: inverse of inertia matrix in world CoM frame
-    mass: link mass
+    inv_mass: inverse link mass
 
   Returns:
     dp: position level update Transform for links
   """
 
   p_idx = jp.array(sys.link_parents)
-  c_idx = jp.array(range(sys.num_links()))
-
   x_w_pad = jax.tree_map(
       lambda x, y: jp.vstack((x, y)), xi, Transform.zero((1,))
   )
   x_p_com = x_w_pad.take(p_idx)
   x_c_com = xi
-
   j, _, a_p, a_c = kinematics.world_to_joint(sys, x, xd)
 
   # pad sys and dof data withs 0s along inactive axes
   d_j = jax.vmap(_three_dof_joint_update)(j, *_sphericalize(sys, j))
   free_mask = jp.array([l != 'f' for l in sys.link_types])
   d_j = jax.tree_map(lambda x: jax.vmap(jp.multiply)(x, free_mask), d_j)
-
   d_w = jax.tree_map(lambda x: jax.vmap(math.rotate)(x, a_p.rot), d_j)
 
-  inv_mass = jp.concatenate([1.0 / mass, jp.array([0.0])])
-  inv_inertia = jp.concatenate([inv_inertia, jp.zeros((1, 3, 3))])
-
   # TODO: refactor this
+  inv_inertia_p = jax.vmap(jp.multiply)(inv_inertia[p_idx], p_idx > -1)
+  inv_mass_p = inv_mass[p_idx] * (p_idx > -1)
   dp_p_pos, dp_c_pos = jax.vmap(_translation_update)(
       a_p,
       x_p_com,
-      inv_inertia[p_idx],
-      inv_mass[p_idx],
+      inv_inertia_p,
+      inv_mass_p,
       a_c,
       x_c_com,
-      inv_inertia[c_idx],
-      inv_mass[c_idx],
+      inv_inertia,
+      inv_mass,
       -d_w.pos,
   )
 
   dp_p_ang, dp_c_ang = jax.vmap(_rotation_update)(
-      x_p_com, inv_inertia[p_idx], xi, inv_inertia[c_idx], d_w.rot
+      x_p_com, inv_inertia_p, xi, inv_inertia, d_w.rot
   )
 
-  dp = jax.tree_map(
-      lambda x, y: jp.vstack([x, y]),
-      dp_p_pos * sys.joint_scale_pos + dp_p_ang * sys.joint_scale_ang,
-      dp_c_pos * sys.joint_scale_pos + dp_c_ang * sys.joint_scale_ang,
-  )
+  dp_c = dp_c_pos * sys.joint_scale_pos + dp_c_ang * sys.joint_scale_ang
+  dp_p = dp_p_pos * sys.joint_scale_pos + dp_p_ang * sys.joint_scale_ang
+  dp_p = jax.tree_map(lambda f: segment_sum(f, p_idx, sys.num_links()), dp_p)
 
-  link_idx = jp.hstack((p_idx, c_idx))
-  dp *= link_idx.reshape((-1, 1)) != -1
-
-  dp = jax.tree_map(
-      lambda f: segment_sum(f, link_idx, xi.pos.shape[0]), dp  # pytype: disable=attribute-error
-  )
-
-  return dp
+  return dp_c + dp_p
 
 
 def _rotation_update(

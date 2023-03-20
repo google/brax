@@ -28,7 +28,7 @@ def resolve_position(
     x_i: Transform,
     x_i_old: Transform,
     inv_inertia: jp.ndarray,
-    mass: jp.ndarray,
+    inv_mass: jp.ndarray,
     contact: Optional[Contact],
 ) -> Tuple[Transform, jp.ndarray]:
   """Resolves springy collision constraint.
@@ -38,7 +38,7 @@ def resolve_position(
     x_i: Transform state of link center of mass
     x_i_old: Transform state of link center of mass after velocity projection
     inv_inertia: inverse inertia tensor at the center of mass in world frame
-    mass: link mass
+    inv_mass: inverse link mass
     contact: Contact pytree
 
   Returns:
@@ -76,7 +76,7 @@ def resolve_position(
 
     i_inv = inv_inertia.take(link_idx, axis=0)
     i_inv *= (link_idx > -1).reshape(-1, 1, 1)
-    invmass = (1 / mass.take(link_idx)) * (link_idx > -1)
+    invmass = inv_mass.take(link_idx) * (link_idx > -1)
 
     # only spherical inertia effects
     cr1 = jp.cross(pos_p, n)
@@ -166,7 +166,7 @@ def resolve_velocity(
     x_i_old: Transform,
     xd_i_old: Motion,
     inv_inertia: jp.ndarray,
-    mass: jp.ndarray,
+    inv_mass: jp.ndarray,
     contact: Contact,
     dlambda: jp.ndarray,
 ) -> Motion:
@@ -194,7 +194,7 @@ def resolve_velocity(
     xd_old = xd_i_old.take(link_idx)
     i_inv = inv_inertia.take(link_idx, axis=0)
     i_inv *= (link_idx > -1).reshape(-1, 1, 1)
-    invmass = (1 / mass.take(link_idx)) * (link_idx > -1)
+    invmass = inv_mass.take(link_idx) * (link_idx > -1)
 
     n = contact.normal
     rel_vel = (
@@ -270,7 +270,7 @@ def resolve_velocity(
 
   # convert impulse to delta-velocity
   xdv_i = Motion(
-      vel=jax.vmap(lambda x, y: x / y)(xp_i.vel, mass),
+      vel=jax.vmap(lambda x, y: x * y)(inv_mass, xp_i.vel),
       ang=jax.vmap(lambda x, y: x @ y)(inv_inertia, xp_i.ang),
   )
 
