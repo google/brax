@@ -24,15 +24,19 @@ class Fast(env.Env):
 
   def __init__(self, **kwargs):
     super().__init__(config='dt: .02', **kwargs)
+    self._reset_count = 0
+    self._step_count = 0
 
-  def reset(self, rng: jnp.ndarray) -> env.State:
+  def reset(self, rng: jnp.ndarray) -> env.State:  # pytype: disable=signature-mismatch  # jax-ndarray
+    self._reset_count += 1
     zero = jnp.zeros(1)
     qp = brax.QP(pos=zero, vel=zero, rot=zero, ang=zero)
     obs = jnp.zeros(2)
-    reward, done = jnp.zeros(2)
+    reward, done = jnp.array(0.0), jnp.array(0.0)
     return env.State(qp, obs, reward, done)
 
-  def step(self, state: env.State, action: jnp.ndarray) -> env.State:
+  def step(self, state: env.State, action: jnp.ndarray) -> env.State:  # pytype: disable=signature-mismatch  # jax-ndarray
+    self._step_count += 1
     vel = state.qp.vel + (action > 0) * self.sys.config.dt
     pos = state.qp.pos + vel * self.sys.config.dt
 
@@ -41,6 +45,14 @@ class Fast(env.Env):
     reward = pos[0]
 
     return state.replace(qp=qp, obs=obs, reward=reward)
+
+  @property
+  def reset_count(self):
+    return self._reset_count
+
+  @property
+  def step_count(self):
+    return self._step_count
 
   @property
   def observation_size(self):

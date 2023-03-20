@@ -257,7 +257,7 @@ class Swimmer(env.Env):
     vel = jp.vmap(math.rotate)(qp.vel, math.quat_inv(qp.rot))
     force -= jp.diag(self._fix_drag * jp.abs(vel) * vel)
     force = jp.vmap(math.rotate)(force, qp.rot)
-    force = jp.clip(force, -5., 5.)
+    force = jp.clip(force, -5., 5.)  # pytype: disable=wrong-arg-types  # jax-ndarray
 
     return force
 

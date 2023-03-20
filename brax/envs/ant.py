@@ -227,15 +227,15 @@ class Ant(env.Env):
     forward_reward = velocity[0]
 
     min_z, max_z = self._healthy_z_range
-    is_healthy = jp.where(qp.pos[0, 2] < min_z, x=0.0, y=1.0)
-    is_healthy = jp.where(qp.pos[0, 2] > max_z, x=0.0, y=is_healthy)
+    is_healthy = jp.where(qp.pos[0, 2] < min_z, x=0.0, y=1.0)  # pytype: disable=wrong-arg-types  # jax-ndarray
+    is_healthy = jp.where(qp.pos[0, 2] > max_z, x=0.0, y=is_healthy)  # pytype: disable=wrong-arg-types  # jax-ndarray
     if self._terminate_when_unhealthy:
       healthy_reward = self._healthy_reward
     else:
       healthy_reward = self._healthy_reward * is_healthy
     ctrl_cost = self._ctrl_cost_weight * jp.sum(jp.square(action))
     contact_cost = (self._contact_cost_weight *
-                    jp.sum(jp.square(jp.clip(info.contact.vel, -1, 1))))
+                    jp.sum(jp.square(jp.clip(info.contact.vel, -1, 1))))  # pytype: disable=wrong-arg-types  # jax-ndarray
     obs = self._get_obs(qp, info)
     reward = forward_reward + healthy_reward - ctrl_cost - contact_cost
     done = 1.0 - is_healthy if self._terminate_when_unhealthy else 0.0
@@ -271,8 +271,8 @@ class Ant(env.Env):
     # delta velocity (3,), delta ang (3,) * 10 bodies in the system
     if self._use_contact_forces:
       cfrc = [
-          jp.clip(info.contact.vel, -1, 1),
-          jp.clip(info.contact.ang, -1, 1)
+          jp.clip(info.contact.vel, -1, 1),  # pytype: disable=wrong-arg-types  # jax-ndarray
+          jp.clip(info.contact.ang, -1, 1)  # pytype: disable=wrong-arg-types  # jax-ndarray
       ]
       # flatten bottom dimension
       cfrc = [jp.reshape(x, x.shape[:-2] + (-1,)) for x in cfrc]

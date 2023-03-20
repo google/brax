@@ -6,7 +6,14 @@
 		<tendon/>
 		<motor ctrlrange="-3 3"/>
 	</default>
-	<option gravity="0 0 -9.81" integrator="RK4" timestep="0.02"/>
+	<option gravity="0 0 -9.81" timestep="0.02" />
+	<custom>
+		<!-- brax custom params -->
+    <numeric data="10000" name="constraint_stiffness"/>
+		<numeric data="10000" name="constraint_limit_stiffness"/>
+		<numeric data="0" name="spring_mass_scale"/>
+		<numeric data="1" name="spring_inertia_scale"/>
+	</custom>
 	<size nstack="3000"/>
 	<worldbody>
 		<!--geom name="ground" type="plane" pos="0 0 0" /-->

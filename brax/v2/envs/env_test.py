@@ -22,11 +22,7 @@ from brax.v2 import envs
 from brax.v2 import test_utils
 from jax import numpy as jp
 
-_EXPECTED_SPS = {
-    'spring': {
-        'ant': 1000,
-    }
-}
+_EXPECTED_SPS = {'spring': {'ant': 1000, 'humanoid': 1000}}
 
 
 
@@ -40,7 +36,7 @@ class EnvTest(parameterized.TestCase):
   @parameterized.parameters(params)
   def testSpeed(self, backend, env_name, expected_sps):
     batch_size = 128
-    episode_length = 1000
+    episode_length = 100 if expected_sps < 10_000 else 1000
 
     env = envs.create(
         env_name,

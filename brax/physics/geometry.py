@@ -16,7 +16,7 @@
 """Geometry functions and classes to be used for collision detection."""
 
 import itertools
-from typing import List, Mapping, Tuple
+from typing import List, Mapping, Tuple, Union
 
 from brax import jumpy as jp
 from brax import math
@@ -298,7 +298,7 @@ class HeightMap(Collidable):
     cell_sizes = []
     for h in heightmaps:
       col = h.colliders[0]
-      mesh_size = int(jp.sqrt(len(col.heightMap.data)))
+      mesh_size = int(jp.sqrt(len(col.heightMap.data)))  # pytype: disable=wrong-arg-types  # jax-ndarray
       if len(col.heightMap.data) != mesh_size**2:
         raise ValueError('height map data length should be a perfect square.')
       height = jp.array(col.heightMap.data).reshape((mesh_size, mesh_size))
@@ -362,7 +362,7 @@ def closest_segment_point(a: math.Vector3, b: math.Vector3,
   """Returns the closest point on the a-b line segment to a point pt."""
   ab = b - a
   t = jp.dot(pt - a, ab) / (jp.dot(ab, ab) + 1e-6)
-  return a + jp.clip(t, 0., 1.) * ab
+  return a + jp.clip(t, 0., 1.) * ab  # pytype: disable=wrong-arg-types  # jax-ndarray
 
 
 def closest_segment_point_and_dist(
@@ -386,7 +386,7 @@ def closest_segment_point_plane(a: math.Vector3, b: math.Vector3,
   d = jp.dot(p0, n)  # shortest distance from origin to plane
   denom = jp.dot(n, b - a)
   t = (d - jp.dot(n, a)) / (denom + 1e-6)
-  t = jp.clip(t, 0, 1)
+  t = jp.clip(t, 0, 1)  # pytype: disable=wrong-arg-types  # jax-ndarray
   segment_point = a + t * (b - a)
   return segment_point
 
@@ -620,7 +620,7 @@ def _clip_edge_to_planes(edge_p0, edge_p1, plane_pts, plane_normals):
   mask = ~jp.any(both_in_front)
   new_ps = jp.where(mask, clipped_pts, jp.array([p0, p1]))
   # Mask out crossing clipped edge points.
-  mask = jp.where((p0 - p1).dot(new_ps[0] - new_ps[1]) < 0, False, mask)
+  mask = jp.where((p0 - p1).dot(new_ps[0] - new_ps[1]) < 0, False, mask)  # pytype: disable=wrong-arg-types  # jax-ndarray
   return new_ps, jp.array([mask, mask])
 
 
@@ -696,9 +696,9 @@ def _create_sat_edge_contact(a0: math.Vector3, a1: math.Vector3,
   an, bn, ta, tb = _closest_segment_to_segment_points(a0, a1, b0, b1)
   valid_edge_contact = (
       maybe_edge_contact & (ta >= 0) & (ta <= 1) & (tb >= 0) & (tb <= 1))
-  pos = jp.where(valid_edge_contact, bn + (an - bn) * 0.5, jp.zeros_like(a0))
+  pos = jp.where(valid_edge_contact, bn + (an - bn) * 0.5, jp.zeros_like(a0))  # pytype: disable=wrong-arg-types  # jax-ndarray
   normal = -sep_axis
-  penetration = jp.where(valid_edge_contact, -sep_dist, -jp.ones_like(sep_dist))
+  penetration = jp.where(valid_edge_contact, -sep_dist, -jp.ones_like(sep_dist))  # pytype: disable=wrong-arg-types  # jax-ndarray
   contact = Contact(
       pos=pos, vel=jp.zeros_like(pos), normal=normal, penetration=penetration)
   # Create 4 contact points, even though we only use the first one. The first
@@ -710,11 +710,13 @@ def _create_sat_edge_contact(a0: math.Vector3, a1: math.Vector3,
   return contact
 
 
-def _create_sat_contact_manifold(clipping_poly: jp.ndarray,
-                                 subject_poly: jp.ndarray,
-                                 clipping_norm: math.Vector3,
-                                 subject_norm: math.Vector3,
-                                 sep_axis_sign: int) -> Contact:
+def _create_sat_contact_manifold(
+    clipping_poly: jp.ndarray,
+    subject_poly: jp.ndarray,
+    clipping_norm: math.Vector3,
+    subject_norm: math.Vector3,
+    sep_axis_sign: Union[int, jp.ndarray],
+) -> Contact:
   """Creates a contact manifold between two convex polygons.
 
   The polygon faces are expected to have a clockwise winding order so that
@@ -744,7 +746,7 @@ def _create_sat_contact_manifold(clipping_poly: jp.ndarray,
 
   # TODO: consider changing this to maximize the manifold area.
   ortho_1, ortho_2 = get_orthogonals(clipping_norm)
-  dist_mask = jp.where(mask, 0.0, -1e6)
+  dist_mask = jp.where(mask, 0.0, -1e6)  # pytype: disable=wrong-arg-types  # jax-ndarray
   best_x = jp.argmax(poly_ref.dot(ortho_1) + dist_mask)
   best_nx = jp.argmax(poly_ref.dot(-ortho_1) + dist_mask)
   best_y = jp.argmax(poly_ref.dot(ortho_2) + dist_mask)
@@ -813,7 +815,7 @@ def sat_hull_hull(faces_a: jp.ndarray, faces_b: jp.ndarray,
     edge_edge_axes = jp.vmap(jp.cross)(edges1, edges2)
     directions = jp.vmap(jp.dot)(points11p - origin_a, edge_edge_axes)
     directions = directions.reshape(-1, 1)
-    edge_edge_axes *= jp.where(directions > 0, 1, -1)
+    edge_edge_axes *= jp.where(directions > 0, 1, -1)  # pytype: disable=wrong-arg-types  # jax-ndarray
     return edge_edge_axes, points11p, points12p, points21p, points22p
 
   def get_face_support(vertices_b, plane_normals_a, plane_points_a):
@@ -841,7 +843,7 @@ def sat_hull_hull(faces_a: jp.ndarray, faces_b: jp.ndarray,
     support_point_on_edge_b2 = (edge_b2 - support_point).sum(axis=1) == 0
     mask = mask | ~(support_point_on_edge_b1 | support_point_on_edge_b2)
 
-    support_dist = jp.where(mask, -1e6, support_dist)
+    support_dist = jp.where(mask, -1e6, support_dist)  # pytype: disable=wrong-arg-types  # jax-ndarray
     best_dist_idx = jp.argmax(support_dist + aux_dists, axis=0)
     return support_dist[best_dist_idx], best_dist_idx
 
@@ -857,7 +859,7 @@ def sat_hull_hull(faces_a: jp.ndarray, faces_b: jp.ndarray,
   ref_face = jp.where(dist1 > dist2, faces_b[face_idx], faces_a[face_idx])
   ref_face_norm = jp.where(dist1 > dist2, normals_b[face_idx],
                            normals_a[face_idx])
-  sep_axis_sign = jp.where(dist1 > dist2, 1, -1)
+  sep_axis_sign = jp.where(dist1 > dist2, 1, -1)  # pytype: disable=wrong-arg-types  # jax-ndarray
 
   # Get the incident (most antiparallel) face on the other hull.
   incident_faces = jp.where(dist1 > dist2, faces_a, faces_b)

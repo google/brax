@@ -14,70 +14,84 @@
 
 """Joint definition and apply functions."""
 # pylint:disable=g-multiple-import
-from typing import Tuple
-
-from brax.v2 import base
 from brax.v2 import kinematics
 from brax.v2 import math
 from brax.v2 import scan
-from brax.v2.base import DoF, Link, Motion, System, Transform
+from brax.v2.base import DoF, Force, Link, Motion, System, Transform
+from brax.v2.spring.base import State
 import jax
 from jax import numpy as jp
+from jax.ops import segment_sum
 
 
-def _free(*_) -> Motion:
+def _free(*_) -> Force:
   """Returns force resulting from free constraint in joint frame."""
 
-  return Motion(vel=jp.zeros(3), ang=jp.zeros(3))
+  return Force(vel=jp.zeros(3), ang=jp.zeros(3))
 
 
-def _one_dof(link: Link, x: Transform, xd: Motion, dof: DoF) -> Motion:
+def _one_dof(
+    link: Link, j: Transform, jd: Motion, dof: DoF, tau: jp.ndarray
+) -> Force:
   """Returns force resulting from a 1-dof constraint in joint frame.
 
   Args:
     link: link in joint frame
-    x: transform in joint frame
-    xd: motion in joint frame
+    j: transform in joint frame
+    jd: motion in joint frame
     dof: dofs for joint
+    tau: joint force
 
   Returns:
-    Force in joint frame
+    force in joint frame
   """
-
-  joint_motion, _ = kinematics.link_to_joint_motion(dof.motion)
+  joint_frame, parity = kinematics.link_to_joint_frame(dof.motion)
 
   # push the link to zero offset
-  vel = -x.pos * link.constraint_stiffness
+  vel = -j.pos * link.constraint_stiffness
   # if prismatic, don't pin along free axis
-  is_prismatic = (dof.motion.vel > 0).any()
+  is_translational = dof.motion.vel.any()
+  is_rotational = dof.motion.ang.any()
   vel = (
       vel
-      - jp.dot(joint_motion.vel[0], vel) * joint_motion.vel[0] * is_prismatic
+      - jp.dot(joint_frame.vel[0], vel)
+      * joint_frame.vel[0]
+      * is_translational
   )
 
+  # add in force
+  vel += tau * joint_frame.vel[0] * is_translational
   # linear damp
-  damp = -xd.vel * link.constraint_damping
+  damp = -jd.vel * link.constraint_vel_damping
   # if prismatic, don't damp along free axis
   vel += (
       damp
-      - jp.dot(joint_motion.vel[0], damp) * joint_motion.vel[0] * is_prismatic
+      - jp.dot(joint_frame.vel[0], damp)
+      * joint_frame.vel[0]
+      * is_translational
   )
 
-  axis_c_x = math.rotate(joint_motion.ang[0], x.rot)
-  axis_c_y = math.rotate(joint_motion.ang[1], x.rot)
-  _, _, (psi, _, _), _ = kinematics.axis_angle_ang(x, xd, dof.motion)
+  axis_c_x = math.rotate(joint_frame.ang[0], j.rot)
+  axis_c_y = math.rotate(joint_frame.ang[1], j.rot)
+  (
+      _,
+      (psi, _, _),
+      _,
+  ) = kinematics.axis_angle_ang(j, joint_frame, parity)
 
   # torque to align to axis
-  ang = -1 * link.constraint_stiffness * jp.cross(joint_motion.ang[0], axis_c_x)
-  # remove second free rotational dof if prismatic
+  ang = -1 * link.constraint_stiffness * jp.cross(joint_frame.ang[0], axis_c_x)
+  # remove second free rotational dof if prismatic and not revolute
   ang -= (
       link.constraint_stiffness
-      * jp.cross(joint_motion.ang[1], axis_c_y)
-      * is_prismatic
+      * jp.cross(joint_frame.ang[1], axis_c_y)
+      * is_translational
+      * (1 - is_rotational)
   )
-
+  # add in force
+  ang += tau * joint_frame.ang[0] * is_rotational
   # angular damp
-  ang -= link.constraint_ang_damping * xd.ang
+  ang -= link.constraint_ang_damping * jd.ang
 
   # stay within angle limit
   if dof.limit is not None:
@@ -86,153 +100,257 @@ def _one_dof(link: Link, x: Transform, xd: Motion, dof: DoF) -> Motion:
     dang = jp.where(psi > limit_max, psi - limit_max, dang)
     ang -= (
         link.constraint_limit_stiffness
-        * joint_motion.ang[0]
+        * joint_frame.ang[0]
         * dang
-        * (1 - is_prismatic)
+        * (1 - is_translational)
     )
 
-    xp = jp.dot(x.pos, joint_motion.vel[0])
+    xp = jp.dot(j.pos, joint_frame.vel[0])
     dvel = jp.where(xp < limit_min, xp - limit_min, 0)
     dvel = jp.where(xp > limit_max, xp - limit_max, dvel)
     vel -= (
         link.constraint_limit_stiffness
-        * joint_motion.vel[0]
+        * joint_frame.vel[0]
         * dvel
-        * (is_prismatic)
+        * (is_translational)
     )
 
-  return Motion(ang=ang, vel=vel)
+  return Force(ang=ang, vel=vel)
 
 
-def _universal(link: Link, x: Transform, xd: Motion, dof: DoF) -> Motion:
+def _two_dof(
+    link: Link, j: Transform, jd: Motion, dof: DoF, tau: jp.ndarray
+) -> Force:
   """Returns force resulting from universal constraint in joint frame.
 
   Args:
     link: link in joint frame
-    x: transform in joint frame
-    xd: motion in joint frame
+    j: transform in joint frame
+    jd: motion in joint frame
     dof: dofs for joint
+    tau: joint force
 
   Returns:
-    Force in joint frame
+    force in joint frame
   """
+  is_translational = dof.motion.vel.any()
+  is_universal = dof.motion.ang.any()
+  joint_frame, parity = kinematics.link_to_joint_frame(dof.motion)
 
   # push the link to zero offset
-  vel = -x.pos * link.constraint_stiffness
+  vel = -j.pos * link.constraint_stiffness
 
   # linear damp
-  vel += -xd.vel * link.constraint_damping
+  vel += -jd.vel * link.constraint_vel_damping
+
+  # remove components of vel along prismatic axes
+  vel -= (
+      jp.dot(vel, dof.motion.vel[0]) * dof.motion.vel[0]
+      + jp.dot(vel, dof.motion.vel[1]) * dof.motion.vel[1]
+  ) * is_translational
 
   # torque the bodies to align to a joint plane
-  _, (axis_1, axis_2, _), angles, _ = kinematics.axis_angle_ang(
-      x, xd, dof.motion
-  )
+  (
+      axis_c,
+      angles,
+      _,
+  ) = kinematics.axis_angle_ang(j, joint_frame, parity)
+  axis_1, axis_2 = joint_frame.ang[0], axis_c[1]
   axis_c_proj = axis_2 - jp.dot(axis_2, axis_1) * axis_1
   axis_c_proj = axis_c_proj / math.safe_norm(axis_c_proj)
-  ang = -1.0 * link.constraint_limit_stiffness * jp.cross(axis_c_proj, axis_2)
+  # if prismatic and revolute components, need to impose revolute ang update
+  axis_c_x = math.rotate(joint_frame.ang[0], j.rot)
+  axis_c_y = math.rotate(joint_frame.ang[1], j.rot)
+  axis_c_cand = jp.where(
+      dof.motion.ang[0].any(), joint_frame.ang[0], joint_frame.ang[1]
+  )
+  torque_axis_2 = jp.where(dof.motion.ang[0].any(), axis_c_x, axis_c_y)
+
+  # if only one angular dof, update the torque axes
+  axis_c_proj = jp.where(is_translational, axis_c_cand, axis_c_proj)
+  torque_axis_2 = jp.where(is_translational, torque_axis_2, axis_2)
+
+  ang = (
+      -1.0
+      * link.constraint_limit_stiffness
+      * jp.cross(axis_c_proj, torque_axis_2)
+  )
+
+  # add in force
+  ang_axis = jp.array(
+      [axis_1 * dof.motion.ang[0].any(), axis_2 * dof.motion.ang[1].any()]
+  )
+  ang += jp.sum(ang_axis * tau[:, None], axis=0)
+  vel_axis = dof.motion.vel[0:2]
+  vel += jp.sum(vel_axis * tau[:, None], axis=0)
+
+  # if no rotational dofs, pin rotational axes
+  axis_c_z = math.rotate(joint_frame.ang[2], j.rot)
+  ang -= (
+      link.constraint_stiffness
+      * jp.cross(joint_frame.ang[2], axis_c_z)
+      * is_translational
+      * (1 - is_universal)
+  )
 
   # torque the bodies to stay within angle limits
   if dof.limit is not None:
     limit_min, limit_max = dof.limit
-    axis, angle = jp.array((axis_1, axis_2)), jp.array(angles)[:2]
+    angle = jp.array(angles)[:2]
     dang = jp.where(angle < limit_min, angle - limit_min, 0)
     dang = jp.where(angle > limit_max, angle - limit_max, dang)
-    ang -= link.constraint_limit_stiffness * jp.sum(
-        jax.vmap(jp.multiply)(axis, dang), 0
+    ang -= (
+        link.constraint_limit_stiffness
+        * jp.sum(jax.vmap(jp.multiply)(ang_axis, dang), 0)
+        * (is_universal)
+    )
+
+    xp = jp.array(
+        [jp.dot(j.pos, dof.motion.vel[0]), jp.dot(j.pos, dof.motion.vel[1])]
+    )
+    dvel = jp.where(xp < limit_min, xp - limit_min, 0)
+    dvel = jp.where(xp > limit_max, xp - limit_max, dvel)
+    vel -= (
+        link.constraint_limit_stiffness
+        * jp.sum(jax.vmap(jp.multiply)(vel_axis, dvel), 0)
+        * (is_translational)
     )
 
   # damp the angular motion
-  ang -= link.constraint_ang_damping * xd.ang
+  ang -= link.constraint_ang_damping * jd.ang
 
-  return Motion(ang=ang, vel=vel)
+  return Force(ang=ang, vel=vel)
 
 
-def _spherical(link: Link, x: Transform, xd: Motion, dof: DoF) -> Motion:
+def _three_dof(
+    link: Link, j: Transform, jd: Motion, dof: DoF, tau: jp.ndarray
+) -> Force:
   """Returns force resulting from spherical constraint in joint frame.
 
   Args:
     link: link in joint frame
-    x: transform in joint frame
-    xd: motion in joint frame
+    j: transform in joint frame
+    jd: motion in joint frame
     dof: dofs for joint
+    tau: joint force
 
   Returns:
-    Force in joint frame
+    force in joint frame
   """
+  is_translational = dof.motion.vel.any()
+  is_rotational = dof.motion.ang.any()
 
   # push the link to zero offset
-  vel = -x.pos * link.constraint_stiffness
+  vel = -j.pos * link.constraint_stiffness
 
   # linear damp
-  vel += -xd.vel * link.constraint_damping
+  vel += -jd.vel * link.constraint_vel_damping
+
+  # remove vel components along prismatic axes
+  vel -= (
+      jp.dot(dof.motion.vel[0], vel) * dof.motion.vel[0]
+      + jp.dot(dof.motion.vel[1], vel) * dof.motion.vel[1]
+      + jp.dot(dof.motion.vel[2], vel) * dof.motion.vel[2]
+  ) * is_translational
 
   # damp the angular motion
-  ang = -1.0 * link.constraint_ang_damping * xd.ang
+  ang = -1.0 * link.constraint_ang_damping * jd.ang
+
+  # add in force
+  joint_frame, parity = kinematics.link_to_joint_frame(dof.motion)
+  axis_c, angles, _ = kinematics.axis_angle_ang(j, joint_frame, parity)
+  axes = (joint_frame.ang[0], axis_c[1], axis_c[2])
+
+  ang_axis, angle = jp.array(axes), jp.array(angles)
+  ang_axis = jax.vmap(jp.multiply)(ang_axis, dof.motion.ang.any(axis=1))
+  ang += jp.sum(ang_axis * tau[:, None], axis=0)
+  vel_axis = dof.motion.vel
+  vel += jp.sum(vel_axis * tau[:, None], axis=0)
+
+  # if angular components, add constraint torque to align to axis
+  # (for any single rotational axis). we assume there is only one rotational
+  # dof present in dof.motion.ang.
+  ang += (
+      (
+          -1
+          * link.constraint_stiffness
+          * jp.cross(
+              jp.sum(dof.motion.ang, axis=0),
+              jp.sum(
+                  jax.vmap(math.rotate, in_axes=[0, None])(
+                      dof.motion.ang, j.rot
+                  ),
+                  axis=0,
+              ),
+          )
+      )
+      * is_translational
+      * is_rotational
+  )
 
   # torque the bodies to stay within angle limits
   if dof.limit is not None:
     limit_min, limit_max = dof.limit
-    _, axes, angles, _ = kinematics.axis_angle_ang(x, xd, dof.motion)
-    axis, angle = jp.array(axes), jp.array(angles)
     dang = jp.where(angle < limit_min, angle - limit_min, 0)
     dang = jp.where(angle > limit_max, angle - limit_max, dang)
     ang -= link.constraint_limit_stiffness * jp.sum(
-        jax.vmap(jp.multiply)(axis, dang), 0
+        jax.vmap(jp.multiply)(ang_axis, dang), 0
     )
 
-  return Motion(ang=ang, vel=vel)
+    xp = dof.motion.vel @ j.pos
+    dvel = jp.where(xp < limit_min, xp - limit_min, 0)
+    dvel = jp.where(xp > limit_max, xp - limit_max, dvel)
+    vel -= (
+        link.constraint_limit_stiffness
+        * jp.sum(jax.vmap(jp.multiply)(vel_axis, dvel), 0)
+        * (is_translational)
+    )
+
+  return Force(ang=ang, vel=vel)
 
 
-def resolve(
-    sys: System, x: Transform, xd: Motion
-) -> Tuple[Motion, jp.ndarray, jp.ndarray]:
-  """Calculates springy updates in center of mass coordinates for joints.
+def resolve(sys: System, state: State, tau: jp.ndarray) -> Motion:
+  """Calculates forces to apply to links resulting from joint constraints.
 
   Args:
     sys: System defining kinematic tree of joints
-    x: link transform in world frame
-    xd: link motion in world frame
+    state: spring pipeline state
+    tau: joint force vector
 
   Returns:
-    Tuple of
-    forces: world space forces to apply to each link
-    positions: location in world space to apply each force
-    idxs: link to which force is applied
+    xdd_i: acceleration to apply to link center of mass in world frame
   """
 
-  def j_fn(typ, link, x_j, xd_j, dof):
-    dof = jax.tree_map(lambda x: x.reshape((x_j.pos.shape[0], -1)), dof)
-    dof = dof.replace(
-        motion=jax.tree_map(
-            lambda x: x.reshape((-1, base.QD_WIDTHS[typ], 3)), dof.motion
-        )
-    )
+  def j_fn(typ, link, j, jd, dof, tau):
+    # change dof-shape variables into link-shape
+    reshape_fn = lambda x: x.reshape((j.pos.shape[0], -1) + x.shape[1:])
+    tau, dof = jax.tree_map(reshape_fn, (tau, dof))
     j_fn_map = {
         'f': _free,
         '1': _one_dof,
-        # TODO: support prismatic for 2-dof, 3-dof
-        '2': _universal,
-        '3': _spherical,
+        '2': _two_dof,
+        '3': _three_dof,
     }
 
-    return jax.vmap(j_fn_map[typ])(link, x_j, xd_j, dof)
+    return jax.vmap(j_fn_map[typ])(link, j, jd, dof, tau)
 
-  p_idx = jp.array(sys.link_parents)
-  c_idx = jp.array(range(sys.num_links()))
+  # calculate forces in joint frame, then convert to world frame
+  link, j, jd, dof = sys.link, state.j, state.jd, sys.dof
+  jf = scan.link_types(sys, j_fn, 'llldd', 'l', link, j, jd, dof, tau)
+  xf = Transform.create(rot=state.a_p.rot).vmap().do(jf)
+  # move force to center of mass offset
+  fc = Transform.create(pos=state.a_c.pos - state.x_i.pos).vmap().do(xf)
+  # also add opposite force to parent link at center of mass
+  parent_idx = jp.array(sys.link_parents)
+  x_i_parent = state.x_i.take(parent_idx)
+  fp = Transform.create(pos=state.a_p.pos - x_i_parent.pos).vmap().do(xf)
+  fp = jax.tree_map(lambda x: segment_sum(x, parent_idx, sys.num_links()), fp)
+  xf_i = fc - fp
 
-  x_pad = jax.tree_map(lambda x, y: jp.vstack((x, y)), x, Transform.zero((1,)))
-  x_p = x_pad.take(p_idx)
-  x_c = x.vmap().do(sys.link.joint)
-  x_joint = x_p.vmap().do(sys.link.transform).vmap().do(sys.link.joint)
+  # convert to acceleration
+  xdd_i = Motion(
+      ang=jax.vmap(lambda x, y: x @ y)(state.i_inv, xf_i.ang),
+      vel=jax.vmap(lambda x, y: x / y)(xf_i.vel, state.mass),
+  )
 
-  j, jd = kinematics.world_to_joint_frame(sys, x, xd)
-  f_j = scan.link_types(sys, j_fn, 'llld', 'l', sys.link, j, jd, sys.dof)
-
-  f_w = jax.tree_map(lambda x: jax.vmap(math.rotate)(x, x_joint.rot), f_j)
-
-  f = jax.tree_map(lambda x, y: jp.vstack([x, y]), f_w, -f_w)
-  pos = jp.vstack((x_c.pos, x_joint.pos))
-  link_idx = jp.hstack((c_idx, p_idx))
-  f *= link_idx.reshape((-1, 1)) != -1
-
-  return f, pos, link_idx
+  return xdd_i

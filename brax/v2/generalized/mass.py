@@ -95,9 +95,10 @@ def matrix_inv(sys: System, state: State, approximate: bool = False) -> State:
   """
 
   mx = matrix(sys, state)
+  mx_inv = state.mass_mx_inv
 
   if approximate:
-    mx_inv = math.inv_approximate(mx, state.mass_mx_inv)
+    mx_inv = math.inv_approximate(mx, mx_inv, sys.matrix_inv_iterations)
   else:
     mx_inv = jax.scipy.linalg.solve(mx, jp.eye(sys.qd_size()), assume_a='pos')
 

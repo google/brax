@@ -1,6 +1,6 @@
 <mujoco model="capsule">
   <compiler angle="degree" coordinate="local" inertiafromgeom="true"/>
-  <option timestep="0.01" collision="predefined" />
+  <option timestep="0.01" />
   <custom>
     <numeric data="0.1" name="baumgarte_erp"/>
     <numeric data="0.2" name="elasticity"/>
@@ -19,7 +19,4 @@
       <geom name="cap1" fromto="-0.5 0.0 0 0.5 0.0 0" pos="0 0 0" size="0.25" type="capsule"/>
     </body>
   </worldbody>
-  <contact>
-    <pair geom1="floor" geom2="cap1"/>
-  </contact>
 </mujoco>

@@ -151,7 +151,7 @@ class InvertedDoublePendulum(env.Env):
     qp, _ = self.sys.step(state.qp, action)
     _, joint_vel = self.sys.joints[0].angle_vel(qp)
 
-    tip_pos = jp.take(qp, 2).to_world(jp.array([0, 0, .3]))
+    tip_pos = jp.take(qp, 2).to_world(jp.array([0, 0, .3]))  # pytype: disable=wrong-arg-types  # jax-ndarray
     (x, _, y), _ = tip_pos
     dist_penalty = 0.01 * x**2 + (y - 2)**2
     v1, v2 = joint_vel

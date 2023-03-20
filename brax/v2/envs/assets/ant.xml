@@ -1,12 +1,23 @@
 <mujoco model="ant">
   <compiler angle="degree" coordinate="local" inertiafromgeom="true"/>
-  <option timestep="0.01" collision="predefined" />
+  <option timestep="0.01" iterations="4" />
   <custom>
+    <!-- brax custom params -->
     <numeric data="0.0 0.0 0.55 1.0 0.0 0.0 0.0 0.0 1.0 0.0 -1.0 0.0 -1.0 0.0 1.0" name="init_qpos"/>
+    <numeric data="1000" name="constraint_limit_stiffness"/>
+    <numeric data="4000" name="constraint_stiffness"/>
+    <numeric data="10" name="constraint_ang_damping"/>
+    <numeric data="20" name="constraint_vel_damping"/>
+    <numeric data="0.5" name="joint_scale_pos"/>
+    <numeric data="0.2" name="joint_scale_ang"/>
+    <numeric data="0.0" name="ang_damping"/>
+    <numeric data="1" name="spring_mass_scale"/>
+    <numeric data="1" name="spring_inertia_scale"/>
+    <numeric data="15" name="solver_maxls"/>
   </custom>
   <default>
     <joint armature="1" damping="1" limited="true"/>
-    <geom conaffinity="0" condim="3" density="5.0" friction="1 0.5 0.5" margin="0.01" rgba="0.8 0.6 0.4 1"/>
+    <geom contype="0" conaffinity="0" condim="3" density="5.0" friction="1 0.5 0.5" rgba="0.8 0.6 0.4 1"/>
   </default>
   <asset>
     <texture builtin="gradient" height="100" rgb1="1 1 1" rgb2="0 0 0" type="skybox" width="100"/>
@@ -30,7 +41,7 @@
           <body pos="0.2 0.2 0">
             <joint axis="-1 1 0" name="ankle_1" pos="0.0 0.0 0.0" range="30 70" type="hinge"/>
             <geom fromto="0.0 0.0 0.0 0.4 0.4 0.0" name="left_ankle_geom" size="0.08" type="capsule"/>
-            <geom name="left_foot_geom" pos="0.4 0.4 0" size="0.08" type="sphere" mass="0"/>
+            <geom name="left_foot_geom" contype="1" pos="0.4 0.4 0" size="0.08" type="sphere" mass="0"/>
           </body>
         </body>
       </body>
@@ -42,7 +53,7 @@
           <body pos="-0.2 0.2 0">
             <joint axis="1 1 0" name="ankle_2" pos="0.0 0.0 0.0" range="-70 -30" type="hinge"/>
             <geom fromto="0.0 0.0 0.0 -0.4 0.4 0.0" name="right_ankle_geom" size="0.08" type="capsule"/>
-            <geom name="right_foot_geom" pos="-0.4 0.4 0" size="0.08" type="sphere" mass="0"/>
+            <geom name="right_foot_geom" contype="1" pos="-0.4 0.4 0" size="0.08" type="sphere" mass="0"/>
           </body>
         </body>
       </body>
@@ -54,7 +65,7 @@
           <body pos="-0.2 -0.2 0">
             <joint axis="-1 1 0" name="ankle_3" pos="0.0 0.0 0.0" range="-70 -30" type="hinge"/>
             <geom fromto="0.0 0.0 0.0 -0.4 -0.4 0.0" name="third_ankle_geom" size="0.08" type="capsule"/>
-            <geom name="third_foot_geom" pos="-0.4 -0.4 0" size="0.08" type="sphere" mass="0"/>
+            <geom name="third_foot_geom" contype="1" pos="-0.4 -0.4 0" size="0.08" type="sphere" mass="0"/>
           </body>
         </body>
       </body>
@@ -66,7 +77,7 @@
           <body pos="0.2 -0.2 0">
             <joint axis="1 1 0" name="ankle_4" pos="0.0 0.0 0.0" range="30 70" type="hinge"/>
             <geom fromto="0.0 0.0 0.0 0.4 -0.4 0.0" name="fourth_ankle_geom" size="0.08" type="capsule"/>
-            <geom name="fourth_foot_geom" pos="0.4 -0.4 0" size="0.08" type="sphere" mass="0"/>
+            <geom name="fourth_foot_geom" contype="1" pos="0.4 -0.4 0" size="0.08" type="sphere" mass="0"/>
           </body>
         </body>
       </body>
@@ -82,10 +93,4 @@
     <motor ctrllimited="true" ctrlrange="-1.0 1.0" joint="hip_3" gear="150"/>
     <motor ctrllimited="true" ctrlrange="-1.0 1.0" joint="ankle_3" gear="150"/>
   </actuator>
-  <contact>
-    <pair geom1="floor" geom2="left_foot_geom"/>
-    <pair geom1="floor" geom2="right_foot_geom"/>
-    <pair geom1="floor" geom2="third_foot_geom"/>
-    <pair geom1="floor" geom2="fourth_foot_geom"/>
-  </contact>
 </mujoco>

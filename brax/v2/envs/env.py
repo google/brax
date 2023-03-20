@@ -20,6 +20,7 @@ from typing import Any, Dict
 
 from brax.v2 import base
 from brax.v2.generalized import pipeline as g_pipeline
+from brax.v2.positional import pipeline as p_pipeline
 from brax.v2.spring import pipeline as s_pipeline
 from flax import struct
 import jax
@@ -78,7 +79,11 @@ class PipelineEnv(Env):
   )
 
   def __init__(
-      self, sys: base.System, backend: str = 'generalized', n_frames: int = 1
+      self,
+      sys: base.System,
+      backend: str = 'generalized',
+      n_frames: int = 1,
+      debug: bool = False,
   ):
     """Initializes PipelineEnv.
 
@@ -87,23 +92,37 @@ class PipelineEnv(Env):
       backend: string specifying the physics pipeline
       n_frames: the number of times to step the physics pipeline for each
         environment step
+      debug: whether to get debug info from the pipeline init/step
     """
     self.sys = sys
 
-    pipeline = {'generalized': g_pipeline, 'spring': s_pipeline}
+    pipeline = {
+        'generalized': g_pipeline,
+        'spring': s_pipeline,
+        'positional': p_pipeline,
+    }
     if backend not in pipeline:
       raise ValueError(f'backend should be in {pipeline.keys()}.')
 
     self._backend = backend
     self._pipeline = pipeline[backend]
     self._n_frames = n_frames
+    self._debug = debug
+
+  def pipeline_init(self, q: jp.ndarray, qd: jp.ndarray) -> base.State:
+    """Initializes the pipeline state."""
+    return self._pipeline.init(self.sys, q, qd, self._debug)
 
   def pipeline_step(
       self, pipeline_state: Any, action: jp.ndarray
   ) -> base.State:
     """Takes a physics step using the physics pipeline."""
+
     def f(state, _):
-      return self._pipeline.step(self.sys, state, action), None
+      return (
+          self._pipeline.step(self.sys, state, action, self._debug),
+          None,
+      )
 
     return jax.lax.scan(f, pipeline_state, (), self._n_frames)[0]
 

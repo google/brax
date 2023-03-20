@@ -331,7 +331,7 @@ class VectorGymWrapper(gym.vector.VectorEnv):
     from brax.io import image
     if mode == 'rgb_array':
       sys = self._env.sys
-      qp = jp.take(self._state.qp, 0)
+      qp = jp.take(self._state.qp, 0)  # pytype: disable=wrong-arg-types  # jax-ndarray
       return image.render_array(sys, qp, 256, 256)
     else:
       return super().render(mode=mode)  # just raise an exception

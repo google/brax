@@ -27,7 +27,7 @@ Q_WIDTHS = {'f': 7, '1': 1, '2': 2, '3': 3}
 QD_WIDTHS = {'f': 6, '1': 1, '2': 2, '3': 3}
 
 
-class _Base:
+class Base:
   """Base functionality extending all brax types.
 
   These methods allow for brax types to be operated like arrays/matrices.
@@ -109,7 +109,7 @@ class _Base:
 
 
 @struct.dataclass
-class Transform(_Base):
+class Transform(Base):
   """Transforms the position and rotation of a coordinate frame.
 
   Attributes:
@@ -124,15 +124,15 @@ class Transform(_Base):
     """Apply the transform."""
     return _transform_do(o, self)
 
+  def inv_do(self, o):
+    """Apply the inverse of the transform."""
+    return _transform_inv_do(o, self)
+
   def to_local(self, t: 'Transform') -> 'Transform':
     """Move transform into basis of t."""
     pos = math.rotate(self.pos - t.pos, math.quat_inv(t.rot))
     rot = math.quat_mul(math.quat_inv(t.rot), self.rot)
     return Transform(pos=pos, rot=rot)
-
-  def inv(self):
-    """Invert the transform."""
-    return Transform(pos=-1.0 * self.pos, rot=math.quat_inv(self.rot))
 
   @classmethod
   def create(
@@ -156,7 +156,7 @@ class Transform(_Base):
 
 
 @struct.dataclass
-class Motion(_Base):
+class Motion(Base):
   """Spatial motion vector describing linear and angular velocity.
 
   More on spatial vectors: http://royfeatherstone.org/spatial/v2/index.html
@@ -197,7 +197,7 @@ class Motion(_Base):
 
 
 @struct.dataclass
-class Force(_Base):
+class Force(Base):
   """Spatial force vector describing linear and angular (torque) force.
 
   Attributes:
@@ -208,9 +208,20 @@ class Force(_Base):
   ang: jp.ndarray
   vel: jp.ndarray
 
+  @classmethod
+  def create(
+      cls, ang: Optional[jp.ndarray] = None, vel: Optional[jp.ndarray] = None
+  ) -> 'Force':
+    if ang is None and vel is None:
+      raise ValueError('must specify either ang or vel')
+    ang = jp.zeros_like(vel) if ang is None else ang
+    vel = jp.zeros_like(ang) if vel is None else vel
+
+    return Force(ang=ang, vel=vel)
+
 
 @struct.dataclass
-class Inertia(_Base):
+class Inertia(Base):
   """Angular inertia, mass, and center of mass location.
 
   Attributes:
@@ -233,7 +244,7 @@ class Inertia(_Base):
 
 
 @struct.dataclass
-class Link(_Base):
+class Link(Base):
   """A rigid segment of an articulated body.
 
   Links are connected to eachother by joints.  By moving (rotating or
@@ -245,7 +256,7 @@ class Link(_Base):
     inertia: mass, center of mass location, and inertia of this link
     invweight: mean inverse inertia at init_q
     constraint_stiffness: (num_link,) constraint spring for joint.
-    constraint_damping: (num_link,) damping for constraint spring.
+    constraint_vel_damping: (num_link,) linear damping for constraint spring.
     constraint_limit_stiffness: (num_link,) constraint for angle limits
     constraint_ang_damping: (num_link,) angular damping for constraint spring.
   """
@@ -256,14 +267,14 @@ class Link(_Base):
   invweight: jp.ndarray
   # only used by `brax.physics.spring`:
   constraint_stiffness: jp.ndarray
-  constraint_damping: jp.ndarray
+  constraint_vel_damping: jp.ndarray
   constraint_limit_stiffness: jp.ndarray
   # only used by `brax.physics.spring` and `brax.physics.pbd`:
   constraint_ang_damping: jp.ndarray
 
 
 @struct.dataclass
-class DoF(_Base):
+class DoF(Base):
   """A degree of freedom in the system.
 
   Attributes:
@@ -285,7 +296,7 @@ class DoF(_Base):
 
 
 @struct.dataclass
-class Geometry(_Base):
+class Geometry(Base):
   """A surface or spatial volume with a shape and material properties.
 
   Attributes:
@@ -383,7 +394,7 @@ class Convex(Geometry):
 
 
 @struct.dataclass
-class Contact(_Base):
+class Contact(Base):
   """Contact between two geometries.
 
   Attributes:
@@ -408,11 +419,11 @@ class Contact(_Base):
 
 
 @struct.dataclass
-class Actuator(_Base):
+class Actuator(Base):
   """Actuator, transforms an input signal into a force (motor or thruster).
 
   Attributes:
-    ctrl_range: (num_actuators,) control range for each actuator
+    ctrl_range: (num_actuators, 2) control range for each actuator
     gear: (num_actuators,) a list of floats used as a scaling factor for each
       actuator torque output
   """
@@ -435,8 +446,8 @@ class State:
 
   q: jp.ndarray
   qd: jp.ndarray
-  x: jp.ndarray
-  xd: jp.ndarray
+  x: Transform
+  xd: Motion
   contact: Optional[Contact]
 
 
@@ -449,14 +460,23 @@ class System:
     gravity: (3,) linear universal force applied during forward dynamics
     link: (num_link,) the links in the system
     dof: (qd_size,) every degree of freedom for the system
-    geoms: (num_geoms,) every geom in the system
-    contacts: a list of all geometry pairs to test for this system
+    geoms: list of batched geoms grouped by type
     actuator: actuators that can be applied to links
     init_q: (q_size,) initial q position for the system
+    solver_params_joint: (7,) joint limit constraint solver parameters
+    solver_params_contact: (7,) collision constraint solver parameters
     vel_damping: (1,) linear vel damping applied to each body.
     ang_damping: (1,) angular vel damping applied to each body.
     baumgarte_erp: how aggressively interpenetrating bodies should push away\
                 from one another
+    spring_mass_scale: a float that scales mass as `mass^(1 - x)`
+    spring_inertia_scale: a float that scales inertia diag as `inertia^(1 - x)`
+    joint_scale_ang: scale for position-based joint rotation update
+    joint_scale_pos: scale for position-based joint position update
+    collide_scale: fraction of position based collide update to apply
+    geom_masks: 64-bit mask determines whether two geoms will be contact tested.
+                lower 32 bits are type, upper 32 bits are affinity.  two geoms
+                a, b will be contact tested if a.type & b.affinity != 0
     link_names: (num_link,) link names
     link_types: (num_link,) string specifying the joint type of each link
                 valid types are:
@@ -472,7 +492,9 @@ class System:
     actuator_link_id: (num_actuators,) the link id associated with each actuator
     actuator_qid: (num_actuators,) the q index associated with each actuator
     actuator_qdid: (num_actuators,) the qd index associated with each actuator
+    matrix_inv_iterations: maximum number of iterations of the matrix inverse
     solver_iterations: maximum number of iterations of the constraint solver
+    solver_maxls: maximum number of line searches of the constraint solver
   """
 
   dt: jp.ndarray
@@ -480,14 +502,23 @@ class System:
   link: Link
   dof: DoF
   geoms: List[Geometry]
-  contacts: List[Tuple[Geometry, Geometry]]
   actuator: Actuator
   init_q: jp.ndarray
+  # only used in `brax.physics.generalized`
+  solver_params_joint: jp.ndarray
+  solver_params_contact: jp.ndarray
   # only used in `brax.physics.spring` and `brax.physics.pbd`:
   vel_damping: jp.float32
   ang_damping: jp.float32
   baumgarte_erp: jp.float32
+  spring_mass_scale: jp.float32
+  spring_inertia_scale: jp.float32
+  # only used in `brax.physics.positional`
+  joint_scale_ang: jp.float32
+  joint_scale_pos: jp.float32
+  collide_scale: jp.float32
 
+  geom_masks: List[int] = struct.field(pytree_node=False)
   link_names: List[str] = struct.field(pytree_node=False)
   link_types: str = struct.field(pytree_node=False)
   link_parents: Tuple[int, ...] = struct.field(pytree_node=False)
@@ -496,7 +527,9 @@ class System:
   actuator_qid: List[int] = struct.field(pytree_node=False)
   actuator_qdid: List[int] = struct.field(pytree_node=False)
   # only used in `brax.physics.generalized`:
+  matrix_inv_iterations: int = struct.field(pytree_node=False)
   solver_iterations: int = struct.field(pytree_node=False)
+  solver_maxls: int = struct.field(pytree_node=False)
 
   def num_links(self) -> int:
     """Returns the number of links in the system."""
@@ -568,11 +601,16 @@ def _transform_do(other, self: Transform):
   return NotImplemented
 
 
+@functools.singledispatch
+def _transform_inv_do(other, self: Transform):
+  del other, self
+  return NotImplemented
+
+
 @_transform_do.register(Transform)
 def _(t: Transform, self: Transform) -> Transform:
   pos = self.pos + math.rotate(t.pos, self.rot)
   rot = math.quat_mul(self.rot, t.rot)
-
   return Transform(pos, rot)
 
 
@@ -581,15 +619,21 @@ def _(m: Motion, self: Transform) -> Motion:
   rot_t = math.quat_inv(self.rot)
   ang = math.rotate(m.ang, rot_t)
   vel = math.rotate(m.vel - jp.cross(self.pos, m.ang), rot_t)
+  return Motion(ang, vel)
 
+
+@_transform_inv_do.register(Motion)
+def _(m: Motion, self: Transform) -> Motion:
+  rot_t = self.rot
+  ang = math.rotate(m.ang, rot_t)
+  vel = math.rotate(m.vel, rot_t) + jp.cross(self.pos, ang)
   return Motion(ang, vel)
 
 
 @_transform_do.register(Force)
 def _(f: Force, self: Transform) -> Force:
   vel = math.rotate(f.vel, self.rot)
-  ang = math.rotate(f.ang, self.rot) + jp.cross(self.pos, f.vel)
-
+  ang = math.rotate(f.ang, self.rot) + jp.cross(self.pos, vel)
   return Force(ang, vel)
 
 

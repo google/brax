@@ -59,7 +59,7 @@ class Joint(joints.Joint):
     self.stiffness = jp.array([j.stiffness for j in joints])
     self.spring_damping = jp.array([
         j.spring_damping if j.HasField('spring_damping') else
-        spring_damping_coeff * jp.sqrt(j.stiffness) for j in joints
+        spring_damping_coeff * jp.sqrt(j.stiffness) for j in joints  # pytype: disable=wrong-arg-types  # jax-ndarray
     ])
     self.limit_strength = jp.array([
         j.limit_strength if j.HasField('limit_strength') else j.stiffness
@@ -142,7 +142,7 @@ class Revolute(Joint):
     torque = self.stiffness * jp.cross(axis, axis_c)
 
     # torque the bodies to stay within angle limits
-    dang = jp.where(angle < self.limit[0][0], self.limit[0][0] - angle, 0)
+    dang = jp.where(angle < self.limit[0][0], self.limit[0][0] - angle, 0)  # pytype: disable=wrong-arg-types  # jax-ndarray
     dang = jp.where(angle > self.limit[0][1], self.limit[0][1] - angle, dang)
     torque -= self.limit_strength * axis * dang
 
@@ -195,7 +195,7 @@ class Universal(Joint):
 
     # torque the bodies to stay within angle limits
     axis, angle = jp.array((axis_1, axis_2)), jp.array(angles)
-    dang = jp.where(angle < self.limit[:, 0], self.limit[:, 0] - angle, 0)
+    dang = jp.where(angle < self.limit[:, 0], self.limit[:, 0] - angle, 0)  # pytype: disable=wrong-arg-types  # jax-ndarray
     dang = jp.where(angle > self.limit[:, 1], self.limit[:, 1] - angle, dang)
     torque -= self.limit_strength * jp.sum(jp.vmap(jp.multiply)(axis, dang), 0)
 
@@ -228,7 +228,7 @@ class Universal(Joint):
         axis_1_p, axis_2_c) * axis_2_c
     axis_1_p_in_xz_c = axis_1_p_in_xz_c / (1e-10 +
                                            jp.safe_norm(axis_1_p_in_xz_c))
-    theta = jp.safe_arccos(jp.clip(jp.dot(axis_1_p_in_xz_c, axis_1_p), -1,
+    theta = jp.safe_arccos(jp.clip(jp.dot(axis_1_p_in_xz_c, axis_1_p), -1,  # pytype: disable=wrong-arg-types  # jax-ndarray
                                    1)) * jp.sign(jp.dot(axis_1_p, axis_3_c))
     axis = (axis_1_p, axis_2_c)
     angle = (psi, theta)
@@ -261,7 +261,7 @@ class Spherical(Joint):
     # torque the bodies to stay within angle limits
     axes, angles = self.axis_angle(qp_p, qp_c)
     axis, angle = jp.array(axes), jp.array(angles)
-    dang = jp.where(angle < self.limit[:, 0], self.limit[:, 0] - angle, 0)
+    dang = jp.where(angle < self.limit[:, 0], self.limit[:, 0] - angle, 0)  # pytype: disable=wrong-arg-types  # jax-ndarray
     dang = jp.where(angle > self.limit[:, 1], self.limit[:, 1] - angle, dang)
     torque = -self.limit_strength * jp.sum(jp.vmap(jp.multiply)(axis, dang), 0)
 
@@ -293,7 +293,7 @@ class Spherical(Joint):
     axis_1_p_in_xz_c = axis_1_p_in_xz_c / (1e-10 +
                                            jp.safe_norm(axis_1_p_in_xz_c))
     ang_between_1_p_xz_c = jp.dot(axis_1_p_in_xz_c, axis_1_p)
-    theta = jp.safe_arccos(jp.clip(ang_between_1_p_xz_c, -1, 1)) * jp.sign(
+    theta = jp.safe_arccos(jp.clip(ang_between_1_p_xz_c, -1, 1)) * jp.sign(  # pytype: disable=wrong-arg-types  # jax-ndarray
         jp.dot(axis_1_p, axis_3_c))
     yc_n_normal = -axis_3_c
     phi = math.signed_angle(yc_n_normal, axis_2_c, line_of_nodes)

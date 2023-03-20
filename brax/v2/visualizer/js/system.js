@@ -1,26 +1,28 @@
-import * as THREE from 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r135/build/three.module.js';
+import * as THREE from 'three';
 
 function createCheckerBoard() {
   const width = 2;
   const height = 2;
 
   const size = width * height;
-  const data = new Uint8Array(3 * size);
+  const data = new Uint8Array(4 * size);
   const colors = [new THREE.Color(0x999999), new THREE.Color(0x888888)];
 
   for (let i = 0; i < size; i++) {
-    const stride = i * 3;
+    const stride = i * 4;
     const ck = [0, 1, 1, 0];
     const color = colors[ck[i]];
     data[stride + 0] = Math.floor(color.r * 255);
     data[stride + 1] = Math.floor(color.g * 255);
     data[stride + 2] = Math.floor(color.b * 255);
+    data[stride + 3] = 255;
   }
-  const texture = new THREE.DataTexture(data, width, height, THREE.RGBFormat);
+  const texture = new THREE.DataTexture(data, width, height, THREE.RGBAFormat);
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
   texture.repeat.set(1000, 1000);
-  return new THREE.MeshStandardMaterial({map: texture});
+  texture.needsUpdate = true;
+  return new THREE.MeshPhongMaterial({map: texture});
 }
 
 function getCapsuleAxisSize(capsule) {
@@ -58,16 +60,19 @@ function createCapsule(capsule, mat) {
   sphere1.baseMaterial = sphere1.material;
   sphere1.position.set(0, 0, capsule.length / 2);
   sphere1.castShadow = true;
+  sphere1.layers.enable(1);
 
   const sphere2 = new THREE.Mesh(sphere_geom, mat);
   sphere2.baseMaterial = sphere2.material;
   sphere2.position.set(0, 0, -capsule.length / 2);
   sphere2.castShadow = true;
+  sphere2.layers.enable(1);
 
   const cylinder = new THREE.Mesh(cylinder_geom, mat);
   cylinder.baseMaterial = cylinder.material;
   cylinder.castShadow = true;
   cylinder.rotation.x = -Math.PI / 2;
+  cylinder.layers.enable(1);
 
   const group = new THREE.Group();
   group.add(sphere1, sphere2, cylinder);
@@ -80,6 +85,7 @@ function createBox(box, mat) {
   const mesh = new THREE.Mesh(geom, mat);
   mesh.castShadow = true;
   mesh.baseMaterial = mesh.material;
+  mesh.layers.enable(1);
   return mesh;
 }
 
@@ -97,6 +103,7 @@ function createSphere(sphere, mat) {
   const mesh = new THREE.Mesh(geom, mat);
   mesh.castShadow = true;
   mesh.baseMaterial = mesh.material;
+  mesh.layers.enable(1);
   return mesh;
 }
 
@@ -119,6 +126,7 @@ function createMesh(meshGeom, mat) {
   const mesh = new THREE.Mesh(bufferGeometry, mat);
   mesh.castShadow = true;
   mesh.baseMaterial = mesh.material;
+  mesh.layers.enable(1);
   return mesh;
 }
 
@@ -171,6 +179,9 @@ function createScene(system) {
         axisSize = getMeshAxisSize(collider);
       } else if ('clippedPlane' in collider) {
         console.log('clippedPlane not implemented');
+        return;
+      } else if (collider.name == 'Convex') {
+        console.log('convex not implemented');
         return;
       }
       if (collider.transform.rot) {

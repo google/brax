@@ -3,9 +3,9 @@
  * connect to a remote brax engine for interactive visualization.
  */
 
-import * as THREE from 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r135/build/three.module.js';
-import {OrbitControls} from 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r135/examples/jsm/controls/OrbitControls.js';
-import {GUI} from 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r135/examples/jsm/libs/lil-gui.module.min.js';
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {GUI} from 'lilgui';
 
 import {Animator} from './animator.js';
 import {Selector} from './selector.js';
@@ -79,7 +79,7 @@ const selectMaterial = new THREE.MeshPhongMaterial({color: 0x2194ce});
 class Viewer {
   constructor(domElement, system) {
     // Set +z as pointing up, instead of +y which is the default.
-    THREE.Object3D.DefaultUp.set(0, 0, 1);
+    THREE.Object3D.DEFAULT_UP.set(0, 0, 1);
 
     this.domElement = domElement;
     this.system = system;
@@ -89,7 +89,6 @@ class Viewer {
 
     /* set up renderer, camera, and add default scene elements */
     this.renderer = new THREE.WebGLRenderer({antialias: true, alpha: true});
-    this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.shadowMap.enabled = true;
     this.renderer.outputEncoding = THREE.sRGBEncoding;
 
@@ -186,10 +185,10 @@ class Viewer {
     saveFolder.close();
 
     /* debugger */
-    this.contactDebug = false;
+    this.contactDebug = system.states.contact !== null;
     let debugFolder = this.gui.addFolder('Debugger');
     debugFolder.add(this, 'contactDebug')
-        .name('contacts')
+        .name(system.states.contact ? 'contacts' : 'axis')
         .onChange((value) => this.setContactDebug(value));
 
     /* done setting up the gui */
