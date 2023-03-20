@@ -1,6 +1,6 @@
 <mujoco model="ant">
   <compiler angle="degree" coordinate="local" inertiafromgeom="true" />
-  <option timestep="0.01" collision="predefined" />
+  <option timestep="0.01" />
   <asset>
     <mesh name="pyramid" file="meshes/pyramid.stl" scale="0.1 0.1 0.1" />
   </asset>
