@@ -143,10 +143,10 @@ class MjcfTest(absltest.TestCase):
   def test_rgba(self):
     sys = test_utils.load_fixture('colour_objects.xml')
     # non default colour in plane
-    self.assertSequenceEqual([colour for colour in sys.geoms[0].rgba], [1, 0, 0.8, 1])
+    self.assertTrue((sys.geoms[0].rgba == np.array([1, 0, 0.8, 1])).all())
     # rest of the Geometries with default colour
     for g in sys.geoms[1:]:
-      self.assertSequenceEqual([colour for colour in g.rgba], [0.8, 0.6, 0.4, 1.])
+      self.assertTrue((g.rgba == np.array([0.8, 0.6, 0.4, 1.])).all())
       
   def test_joint_ref_check(self):
     with self.assertRaisesRegex(
