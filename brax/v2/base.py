@@ -387,10 +387,12 @@ class Convex(Geometry):
 
   Attributes:
     unique_edge: (num_unique, 2) vert index associated with each unique edge
+    rgba: (4,) the rgba to display in the renderer
   """
   vert: jp.ndarray
   face: jp.ndarray
   unique_edge: jp.ndarray
+  rgba: jp.ndarray = None
 
 
 @struct.dataclass
