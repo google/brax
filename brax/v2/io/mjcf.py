@@ -329,6 +329,7 @@ def load_model(mj: mujoco.MjModel) -> System:
         'transform': Transform(pos=mj.geom_pos[i], rot=mj.geom_quat[i]),
         'friction': mj.geom_friction[i, 0],
         'elasticity': custom['elasticity'][i],
+        'rgba': np.array([0.4, 0.33, 0.26, 1.0]) if (mj.geom_rgba[i] == [0.5, 0.5,  0.5, 1. ]).all() else mj.geom_rgba[i], # if there is no colour specified, default is applied
     }
     mask = mj.geom_contype[i] | mj.geom_conaffinity[i] << 32
     if typ == 0:  # Plane
