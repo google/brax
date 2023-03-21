@@ -503,8 +503,7 @@ def sqrt(x: ndarray) -> ndarray:
   return _which_np(x).sqrt(x)
 
 
-def where(condition: jax.typing.ArrayLike, x: jax.typing.ArrayLike,
-          y: jax.typing.ArrayLike) -> ndarray:
+def where(condition, x, y) -> ndarray:
   """Return elements chosen from `x` or `y` depending on `condition`."""
   return _which_np(condition, x, y).where(condition, x, y)
 
