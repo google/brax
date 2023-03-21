@@ -313,7 +313,6 @@ class Geometry(Base):
   elasticity: jp.ndarray
 
 
-
 @struct.dataclass
 class Sphere(Geometry):
   """A sphere.
@@ -324,7 +323,7 @@ class Sphere(Geometry):
   """
 
   radius: jp.ndarray
-  rgba: jp.ndarray = None
+  rgba: Optional[jp.ndarray] = None
 
 
 @struct.dataclass
@@ -339,7 +338,7 @@ class Capsule(Geometry):
 
   radius: jp.ndarray
   length: jp.ndarray
-  rgba: jp.ndarray = None
+  rgba: Optional[jp.ndarray] = None
 
 
 @struct.dataclass
@@ -352,17 +351,19 @@ class Box(Geometry):
   """
 
   halfsize: jp.ndarray
-  rgba: jp.ndarray = None
+  rgba: Optional[jp.ndarray] = None
 
 
 @struct.dataclass
 class Plane(Geometry):
   """An infinite plane whose normal points at +z in its coordinate space.
-  
+
   Attributes:
-    rgba: (4,) the rgba to display in the renderer
+    rgba: (4,) the rgba to display in the renderer, currently unused
   """
-  rgba: jp.ndarray = None
+
+  rgba: Optional[jp.ndarray] = None
+
 
 @struct.dataclass
 class Mesh(Geometry):
@@ -373,12 +374,12 @@ class Mesh(Geometry):
   Attributes:
     vert: (num_verts, 3) spatial coordinates associated with each vertex
     face: (num_faces, num_face_vertices) vertices associated with each face
-    rgba: (4,) the rgba to display in the renderer
+    rgba: (4,) the rgba to display in the renderer, currently unused
   """
 
   vert: jp.ndarray
   face: jp.ndarray
-  rgba: jp.ndarray = None
+  rgba: Optional[jp.ndarray] = None
 
 
 @struct.dataclass
@@ -386,13 +387,16 @@ class Convex(Geometry):
   """A convex mesh geometry.
 
   Attributes:
+    vert: (num_verts, 3) spatial coordinates associated with each vertex
+    face: (num_faces, num_face_vertices) vertices associated with each face
     unique_edge: (num_unique, 2) vert index associated with each unique edge
-    rgba: (4,) the rgba to display in the renderer
+    rgba: (4,) the rgba to display in the renderer, currently unused
   """
+
   vert: jp.ndarray
   face: jp.ndarray
   unique_edge: jp.ndarray
-  rgba: jp.ndarray = None
+  rgba: Optional[jp.ndarray] = None
 
 
 @struct.dataclass

@@ -150,9 +150,8 @@ function createScene(system) {
     const parent = new THREE.Group();
     parent.name = name.replaceAll('/', '_');  // sanitize node name
     geom[1].forEach(function(collider) {
-      const rgba = collider.rgba
+      const rgba = collider.rgba;
       const color = new THREE.Color(rgba[0], rgba[1], rgba[2]);
-
       const mat = (collider.name == 'Plane') ?
           createCheckerBoard() :
           (collider.name == 'heightMap') ?

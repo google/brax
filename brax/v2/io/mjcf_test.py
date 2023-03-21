@@ -134,24 +134,29 @@ class MjcfTest(absltest.TestCase):
     n_meshes = sum(
         g.friction.shape[0] if isinstance(g, Mesh) else 0 for g in sys.geoms
     )
-    self.assertEqual(n_meshes, 52)
+    n_convex = sum(
+        g.friction.shape[0] if isinstance(g, Convex) else 0 for g in sys.geoms
+    )
+    self.assertEqual(n_meshes, 26)
+    self.assertEqual(n_convex, 26)
 
   def test_custom(self):
     sys = test_utils.load_fixture('capsule.xml')
     self.assertSequenceEqual([g.elasticity for g in sys.geoms], [0.2, 0.1])
 
+  def test_joint_ref_check(self):
+    with self.assertRaisesRegex(NotImplementedError, '`ref` attribute'):
+      test_utils.load_fixture('nonzero_joint_ref.xml')
+
   def test_rgba(self):
     sys = test_utils.load_fixture('colour_objects.xml')
     # non default colour in plane
-    self.assertTrue((sys.geoms[0].rgba == np.array([1, 0, 0.8, 1])).all())
-    # rest of the Geometries with default colour
+    assert_almost_equal(
+        sys.geoms[0].rgba.squeeze(), np.array([1, 0, 0.8, 1]), 6
+    )
+    # other geometris have default colour
     for g in sys.geoms[1:]:
-      self.assertTrue((g.rgba == np.array([0.8, 0.6, 0.4, 1.])).all())
-      
-  def test_joint_ref_check(self):
-    with self.assertRaisesRegex(
-        NotImplementedError, '`ref` attribute'):
-      test_utils.load_fixture('nonzero_joint_ref.xml')
+      assert_almost_equal(g.rgba.squeeze(), np.array([0.8, 0.6, 0.4, 1.0]), 6)
 
 
 if __name__ == '__main__':

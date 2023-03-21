@@ -128,6 +128,7 @@ def box_tri(b: Box) -> Mesh:
       transform=b.transform,
       friction=b.friction,
       elasticity=b.elasticity,
+      rgba=b.rgba,
   )
 
 
@@ -142,6 +143,7 @@ def _box_hull(b: Box) -> Convex:
       friction=b.friction,
       elasticity=b.elasticity,
       unique_edge=get_unique_edges(vert, face),
+      rgba=b.rgba,
   )
 
 
@@ -224,6 +226,7 @@ def _convex_hull(m: Mesh) -> Convex:
       friction=m.friction,
       elasticity=m.elasticity,
       unique_edge=get_unique_edges(vert, face),
+      rgba=m.rgba,
   )
 
 
@@ -241,5 +244,6 @@ def convex_hull(obj: Union[Box, Mesh]) -> Convex:
       transform=obj.transform,
       friction=obj.friction,
       elasticity=obj.elasticity,
+      rgba=obj.rgba,
   )
   return convex

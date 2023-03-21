@@ -324,12 +324,16 @@ def load_model(mj: mujoco.MjModel) -> System:
 
   geom_groups = {}
   for i, typ in enumerate(mj.geom_type):
+    rgba = mj.geom_rgba[i]
+    if (mj.geom_rgba[i] == [0.5, 0.5, 0.5, 1.0]).all():
+      # convert the default mjcf color to brax default color
+      rgba = np.array([0.4, 0.33, 0.26, 1.0])
     kwargs = {
         'link_idx': mj.geom_bodyid[i] - 1 if mj.geom_bodyid[i] > 0 else None,
         'transform': Transform(pos=mj.geom_pos[i], rot=mj.geom_quat[i]),
         'friction': mj.geom_friction[i, 0],
         'elasticity': custom['elasticity'][i],
-        'rgba': np.array([0.4, 0.33, 0.26, 1.0]) if (mj.geom_rgba[i] == [0.5, 0.5,  0.5, 1. ]).all() else mj.geom_rgba[i], # if there is no colour specified, default is applied
+        'rgba': rgba,
     }
     mask = mj.geom_contype[i] | mj.geom_conaffinity[i] << 32
     if typ == 0:  # Plane
