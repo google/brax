@@ -41,6 +41,7 @@ class MLP(linen.Module):
   kernel_init: Initializer = jax.nn.initializers.lecun_uniform()
   activate_final: bool = False
   bias: bool = True
+  layer_norm: bool = True
 
   @linen.compact
   def __call__(self, data: jnp.ndarray):
@@ -54,6 +55,8 @@ class MLP(linen.Module):
               hidden)
       if i != len(self.layer_sizes) - 1 or self.activate_final:
         hidden = self.activation(hidden)
+        if self.layer_norm:
+          hidden = linen.LayerNorm()(hidden)
     return hidden
 
 
@@ -86,11 +89,13 @@ def make_policy_network(
     preprocess_observations_fn: types.PreprocessObservationFn = types
     .identity_observation_preprocessor,
     hidden_layer_sizes: Sequence[int] = (256, 256),
-    activation: ActivationFn = linen.relu) -> FeedForwardNetwork:
+    activation: ActivationFn = linen.relu,
+    layer_norm: bool = False) -> FeedForwardNetwork:
   """Creates a policy network."""
   policy_module = MLP(
       layer_sizes=list(hidden_layer_sizes) + [param_size],
       activation=activation,
+      layer_norm=layer_norm,
       kernel_init=jax.nn.initializers.lecun_uniform())
 
   def apply(processor_params, policy_params, obs):
@@ -107,11 +112,13 @@ def make_value_network(
     preprocess_observations_fn: types.PreprocessObservationFn = types
     .identity_observation_preprocessor,
     hidden_layer_sizes: Sequence[int] = (256, 256),
-    activation: ActivationFn = linen.relu) -> FeedForwardNetwork:
+    activation: ActivationFn = linen.relu,
+    layer_norm: bool = False) -> FeedForwardNetwork:
   """Creates a policy network."""
   value_module = MLP(
       layer_sizes=list(hidden_layer_sizes) + [1],
       activation=activation,
+      layer_norm=layer_norm,
       kernel_init=jax.nn.initializers.lecun_uniform())
 
   def apply(processor_params, policy_params, obs):

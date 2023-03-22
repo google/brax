@@ -21,6 +21,7 @@ from typing import Callable, Optional, Type, Union, overload
 from brax.envs import acrobot
 from brax.envs import ant
 from brax.envs import fast
+from brax.envs import fast_differentiable
 from brax.envs import fetch
 from brax.envs import grasp
 from brax.envs import half_cheetah
@@ -44,6 +45,7 @@ _envs = {
     'acrobot': acrobot.Acrobot,
     'ant': functools.partial(ant.Ant, use_contact_forces=True),
     'fast': fast.Fast,
+    'fast_differentiable': fast_differentiable.FastDifferentiable,
     'fetch': fetch.Fetch,
     'grasp': grasp.Grasp,
     'halfcheetah': half_cheetah.Halfcheetah,

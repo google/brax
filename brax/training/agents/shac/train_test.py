@@ -12,51 +12,57 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Analytic policy gradient tests."""
+"""SHAC tests."""
 import pickle
 
 from absl.testing import absltest
 from absl.testing import parameterized
 from brax import envs
 from brax.training.acme import running_statistics
-from brax.training.agents.apg import networks as apg_networks
-from brax.training.agents.apg import train as apg
+from brax.training.agents.shac import networks as shac_networks
+from brax.training.agents.shac import train as shac
 import jax
 
 
-class APGTest(parameterized.TestCase):
-  """Tests for APG module."""
+class SHACTest(parameterized.TestCase):
+  """Tests for SHAC module."""
+
 
   def testTrain(self):
-    """Test APG with a simple env."""
-    _, _, metrics = apg.train(
+    """Test SHAC with a simple env."""
+    _, _, metrics = shac.train(
         envs.get_environment('fast_differentiable'),
+        num_timesteps=2**15,
         episode_length=128,
         num_envs=64,
-        num_evals=200,
-        learning_rate=3e-3,
+        actor_learning_rate=1.5e-2,
+        critic_learning_rate=1e-3,
+        entropy_cost=1e-2,
+        discounting=0.95,
+        unroll_length=10,
+        batch_size=64,
+        num_minibatches=8,
+        num_updates_per_batch=1,
         normalize_observations=True,
-    )
+        seed=2,
+        reward_scaling=10)
     self.assertGreater(metrics['eval/episode_reward'], 135)
 
   @parameterized.parameters(True, False)
   def testNetworkEncoding(self, normalize_observations):
     env = envs.get_environment('fast')
-    original_inference, params, _ = apg.train(
-        envs.get_environment('fast'),
-        episode_length=100,
-        action_repeat=4,
-        num_envs=16,
-        learning_rate=3e-3,
-        normalize_observations=normalize_observations,
-        num_evals=200,
-        truncation_length=10)
+    original_inference, params, _ = shac.train(
+        env,
+        num_timesteps=128,
+        episode_length=128,
+        num_envs=128,
+        normalize_observations=normalize_observations)
     normalize_fn = lambda x, y: x
     if normalize_observations:
       normalize_fn = running_statistics.normalize
-    apg_network = apg_networks.make_apg_networks(env.observation_size,
+    shac_network = shac_networks.make_shac_networks(env.observation_size,
                                                  env.action_size, normalize_fn)
-    inference = apg_networks.make_inference_fn(apg_network)
+    inference = shac_networks.make_inference_fn(shac_network)
     byte_encoding = pickle.dumps(params)
     decoded_params = pickle.loads(byte_encoding)
 
