@@ -1,4 +1,4 @@
-# Copyright 2022 The Brax Authors.
+# Copyright 2023 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ from brax import envs
 from brax.training.acme import running_statistics
 from brax.training.agents.ars import networks as ars_networks
 from brax.training.agents.ars import train as ars
+from brax.v1 import envs as envs_v1
 import jax
 
 

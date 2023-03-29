@@ -1,4 +1,4 @@
-# Copyright 2022 The Brax Authors.
+# Copyright 2023 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,16 +16,19 @@
 
 from typing import Tuple
 
-import brax
-from brax import jumpy as jp
-from brax import math
+from brax import base
 from brax.envs import env
+from brax.io import mjcf
+from etils import epath
+import jax
+from jax import numpy as jp
 
 
-class Walker2d(env.Env):
+class Walker2d(env.PipelineEnv):
 
 
 
+  # pyformat: disable
   """
   ### Description
 
@@ -148,19 +151,22 @@ class Walker2d(env.Env):
     reward_threshold to environments.
   * v0: Initial versions release (1.0.0)
   """
+  # pyformat: enable
 
 
-  def __init__(self,
-               forward_reward_weight: float = 1.0,
-               ctrl_cost_weight: float = 1e-3,
-               healthy_reward: float = 1.0,
-               terminate_when_unhealthy: bool = True,
-               healthy_z_range: Tuple[float, float] = (0.7, 2.0),
-               healthy_angle_range=(-1.0, 1.0),
-               reset_noise_scale=5e-3,
-               exclude_current_positions_from_observation=True,
-               legacy_spring=False,
-               **kwargs):
+  def __init__(
+      self,
+      forward_reward_weight: float = 1.0,
+      ctrl_cost_weight: float = 1e-3,
+      healthy_reward: float = 1.0,
+      terminate_when_unhealthy: bool = True,
+      healthy_z_range: Tuple[float, float] = (0.8, 2.0),
+      healthy_angle_range=(-1.0, 1.0),
+      reset_noise_scale=5e-3,
+      exclude_current_positions_from_observation=True,
+      backend='generalized',
+      **kwargs
+  ):
     """Creates a Walker environment.
 
     Args:
@@ -173,13 +179,18 @@ class Walker2d(env.Env):
       healthy_z_range: Range of the z-position for being healthy.
       healthy_angle_range: Range of joint angles for being healthy.
       reset_noise_scale: Scale of noise to add to reset states.
-      exclude_current_positions_from_observation: x-position will be hidden
-        from the observations if true.
-      legacy_spring: if True, reverts to legacy spring dynamics instead of pbd.
+      exclude_current_positions_from_observation: x-position will be hidden from
+        the observations if true.
+      backend: str, the physics backend to use
       **kwargs: Arguments that are passed to the base class.
     """
-    config = _SYSTEM_CONFIG_SPRING if legacy_spring else _SYSTEM_CONFIG
-    super().__init__(config=config, **kwargs)
+    path = epath.resource_path('brax') / 'envs/assets/walker2d.xml'
+    sys = mjcf.load(path)
+
+    n_frames = 4
+    kwargs['n_frames'] = kwargs.get('n_frames', n_frames)
+
+    super().__init__(sys=sys, backend=backend, **kwargs)
 
     self._forward_reward_weight = forward_reward_weight
     self._ctrl_cost_weight = ctrl_cost_weight
@@ -194,11 +205,19 @@ class Walker2d(env.Env):
 
   def reset(self, rng: jp.ndarray) -> env.State:
     """Resets the environment to an initial state."""
-    rng, rng1, rng2 = jp.random_split(rng, 3)
-    qpos = self.sys.default_angle() + self._noise(rng1)
-    qvel = self._noise(rng2)
-    qp = self.sys.default_qp(joint_angle=qpos, joint_velocity=qvel)
-    obs = self._get_obs(qp)
+    rng, rng1, rng2 = jax.random.split(rng, 3)
+
+    low, hi = -self._reset_noise_scale, self._reset_noise_scale
+    qpos = self.sys.init_q + jax.random.uniform(
+        rng1, (self.sys.q_size(),), minval=low, maxval=hi
+    )
+    qvel = jax.random.uniform(
+        rng2, (self.sys.qd_size(),), minval=low, maxval=hi
+    )
+
+    pipeline_state = self.pipeline_init(qpos, qvel)
+
+    obs = self._get_obs(pipeline_state)
     reward, done, zero = jp.zeros(3)
     metrics = {
         'reward_forward': zero,
@@ -207,22 +226,24 @@ class Walker2d(env.Env):
         'x_position': zero,
         'x_velocity': zero,
     }
-    return env.State(qp, obs, reward, done, metrics)
+    return env.State(pipeline_state, obs, reward, done, metrics)
 
   def step(self, state: env.State, action: jp.ndarray) -> env.State:
-    """Run one timestep of the environment's dynamics."""
-    qp, _ = self.sys.step(state.qp, action)
+    """Runs one timestep of the environment's dynamics."""
+    pipeline_state0 = state.pipeline_state
+    pipeline_state = self.pipeline_step(pipeline_state0, action)
 
-    x_velocity = (qp.pos[0, 0] - state.qp.pos[0, 0]) / self.sys.config.dt
+    x_velocity = (
+        pipeline_state.x.pos[0, 0] - pipeline_state0.x.pos[0, 0]
+    ) / self.dt
     forward_reward = self._forward_reward_weight * x_velocity
 
+    z, angle = pipeline_state.x.pos[0, 2], pipeline_state.q[2]
     min_z, max_z = self._healthy_z_range
     min_angle, max_angle = self._healthy_angle_range
-    ang_y = math.quat_to_euler(qp.rot[0])[1]
-    is_healthy = jp.where(qp.pos[0, 2] < min_z, x=0.0, y=1.0)  # pytype: disable=wrong-arg-types  # jax-ndarray
-    is_healthy = jp.where(qp.pos[0, 2] > max_z, x=0.0, y=is_healthy)  # pytype: disable=wrong-arg-types  # jax-ndarray
-    is_healthy = jp.where(ang_y > max_angle, x=0.0, y=is_healthy)  # pytype: disable=wrong-arg-types  # jax-ndarray
-    is_healthy = jp.where(ang_y < min_angle, x=0.0, y=is_healthy)  # pytype: disable=wrong-arg-types  # jax-ndarray
+    is_healthy = (
+        (z > min_z) & (z < max_z) * (angle > min_angle) & (angle < max_angle)
+    )
     if self._terminate_when_unhealthy:
       healthy_reward = self._healthy_reward
     else:
@@ -230,548 +251,28 @@ class Walker2d(env.Env):
 
     ctrl_cost = self._ctrl_cost_weight * jp.sum(jp.square(action))
 
-    obs = self._get_obs(qp)
+    obs = self._get_obs(pipeline_state)
     reward = forward_reward + healthy_reward - ctrl_cost
     done = 1.0 - is_healthy if self._terminate_when_unhealthy else 0.0
     state.metrics.update(
         reward_forward=forward_reward,
         reward_ctrl=-ctrl_cost,
         reward_healthy=healthy_reward,
-        x_position=qp.pos[0, 0],
-        x_velocity=x_velocity)
+        x_position=pipeline_state.x.pos[0, 0],
+        x_velocity=x_velocity,
+    )
 
-    return state.replace(qp=qp, obs=obs, reward=reward, done=done)
+    return state.replace(
+        pipeline_state=pipeline_state, obs=obs, reward=reward, done=done
+    )
 
-  def _get_obs(self, qp: brax.QP) -> jp.ndarray:
+  def _get_obs(self, pipeline_state: base.State) -> jp.ndarray:
     """Returns the environment observations."""
-    joint_angle, joint_vel = self.sys.joints[0].angle_vel(qp)
-    ang_y = math.quat_to_euler(qp.rot[0])[1:2]
+    position = pipeline_state.q
+    position = position.at[1].set(pipeline_state.x.pos[0, 2])
+    velocity = jp.clip(pipeline_state.qd, -10, 10)
 
-    # qpos: position and orientation of the torso and the joint angles
     if self._exclude_current_positions_from_observation:
-      qpos = [qp.pos[0, 2:], ang_y, joint_angle]
-    else:
-      qpos = [qp.pos[0, (0, 2)], ang_y, joint_angle]
+      position = position[1:]
 
-    # qvel: velocity of the torso and the joint angle velocities
-    qvel = [qp.vel[0, (0, 2)], qp.ang[0, 1:2], joint_vel]
-
-    return jp.concatenate(qpos + qvel)
-
-  def _noise(self, rng):
-    low, hi = -self._reset_noise_scale, self._reset_noise_scale
-    return jp.random_uniform(rng, (self.sys.num_joint_dof,), low, hi)
-
-
-_SYSTEM_CONFIG = """
-  bodies {
-    name: "torso"
-    colliders {
-      capsule {
-        radius: 0.05
-        length: 0.5
-      }
-    }
-    inertia { x: 1.0 y: 1.0 z: 1.0 }
-    mass: 3.6651914
-  }
-  bodies {
-    name: "thigh"
-    colliders {
-      position { z: -0.225 }
-      rotation {}
-      capsule {
-        radius: 0.05
-        length: 0.55
-      }
-    }
-    inertia { x: 1.0 y: 1.0 z: 1.0 }
-    mass: 4.0578904
-  }
-  bodies {
-    name: "leg"
-    colliders {
-      position {}
-      rotation {}
-      capsule {
-        radius: 0.04
-        length: 0.58
-      }
-    }
-    inertia { x: 1.0 y: 1.0 z: 1.0 }
-    mass: 2.7813568
-  }
-  bodies {
-    name: "foot"
-    colliders {
-      position {
-        x: -0.1
-        y: -0.2
-        z: -0.1
-      }
-      rotation { y: 90.0 }
-      capsule {
-        radius: 0.06
-        length: 0.32
-      }
-    }
-    inertia { x: 1.0 y: 1.0 z: 1.0 }
-    mass: 3.1667254
-  }
-  bodies {
-    name: "thigh_left"
-    colliders {
-      position { z: -0.225 }
-      rotation {}
-      capsule {
-        radius: 0.05
-        length: 0.55
-      }
-    }
-    inertia { x: 1.0 y: 1.0 z: 1.0 }
-    mass: 4.0578904
-  }
-  bodies {
-    name: "leg_left"
-    colliders {
-      position {}
-      rotation {}
-      capsule {
-        radius: 0.04
-        length: 0.58
-      }
-    }
-    inertia { x: 1.0 y: 1.0 z: 1.0 }
-    mass: 2.7813568
-  }
-  bodies {
-    name: "foot_left"
-    colliders {
-      position {
-        x: -0.1
-        y: -0.2
-        z: -0.1
-      }
-      rotation { y: 90.0 }
-      capsule {
-        radius: 0.06
-        length: 0.32
-      }
-    }
-    inertia { x: 1.0 y: 1.0 z: 1.0 }
-    mass: 3.1667254
-  }
-  bodies {
-    name: "floor"
-    colliders {
-      plane {}
-    }
-    inertia { x: 1.0 y: 1.0 z: 1.0 }
-    frozen { all: true }
-  }
-  joints {
-    name: "thigh_joint"
-    parent: "torso"
-    child: "thigh"
-    parent_offset { z: -0.2 }
-    rotation { z: -90.0 }
-    angle_limit { min: -150.0 }
-  }
-  joints {
-    name: "leg_joint"
-    parent: "thigh"
-    child: "leg"
-    parent_offset { z: -0.45 }
-    child_offset { z: 0.25 }
-    rotation { z: -90.0 }
-    angle_limit { min: -150.0 }
-  }
-  joints {
-    name: "foot_joint"
-    parent: "leg"
-    child: "foot"
-    parent_offset { z: -0.25 }
-    child_offset {
-      x: -0.2
-      y: -0.2
-      z: -0.1
-    }
-    rotation { z: -90.0 }
-    angle_limit { min: -45.0 max: 45.0 }
-  }
-  joints {
-    name: "thigh_left_joint"
-    parent: "torso"
-    child: "thigh_left"
-    parent_offset { z: -0.2 }
-    rotation { z: -90.0 }
-    angle_limit { min: -150.0 }
-  }
-  joints {
-    name: "leg_left_joint"
-    parent: "thigh_left"
-    child: "leg_left"
-    parent_offset { z: -0.45 }
-    child_offset { z: 0.25 }
-    rotation { z: -90.0 }
-    angle_limit { min: -150.0 }
-  }
-  joints {
-    name: "foot_left_joint"
-    parent: "leg_left"
-    child: "foot_left"
-    parent_offset { z: -0.25 }
-    child_offset {
-      x: -0.2
-      y: -0.2
-      z: -0.1
-    }
-    rotation { z: -90.0 }
-    angle_limit { min: -45.0 max: 45.0 }
-  }
-  actuators {
-    name: "thigh_joint"
-    joint: "thigh_joint"
-    strength: 100.0
-    torque {}
-  }
-  actuators {
-    name: "leg_joint"
-    joint: "leg_joint"
-    strength: 100.0
-    torque {}
-  }
-  actuators {
-    name: "foot_joint"
-    joint: "foot_joint"
-    strength: 100.0
-    torque {}
-  }
-  actuators {
-    name: "thigh_left_joint"
-    joint: "thigh_left_joint"
-    strength: 100.0
-    torque {}
-  }
-  actuators {
-    name: "leg_left_joint"
-    joint: "leg_left_joint"
-    strength: 100.0
-    torque {}
-  }
-  actuators {
-    name: "foot_left_joint"
-    joint: "foot_left_joint"
-    strength: 100.0
-    torque {}
-  }
-  friction: 0.94868329805
-  gravity { z: -9.81 }
-  velocity_damping: 1.0
-  angular_damping: -0.05
-  collide_include {
-    first: "floor"
-    second: "torso"
-  }
-  collide_include {
-    first: "floor"
-    second: "thigh"
-  }
-  collide_include {
-    first: "floor"
-    second: "leg"
-  }
-  collide_include {
-    first: "floor"
-    second: "foot"
-  }
-  collide_include {
-    first: "floor"
-    second: "thigh_left"
-  }
-  collide_include {
-    first: "floor"
-    second: "leg_left"
-  }
-  collide_include {
-    first: "floor"
-    second: "foot_left"
-  }
-  dt: 0.008
-  substeps: 4
-  frozen {
-    position { y: 1.0 }
-    rotation { x: 1.0 z: 1.0 }
-  }
-  defaults {
-    qps { name: "torso" pos { z: 1.19 } }
-    angles { name: "thigh_joint" angle {} }
-    angles { name: "leg_joint" angle {} }
-    angles { name: "thigh_left_joint" angle {} }
-    angles { name: "leg_left_joint" angle {} }
-  }
-  dynamics_mode: "pbd"
-  """
-
-_SYSTEM_CONFIG_SPRING = """
-  bodies {
-    name: "torso"
-    colliders {
-      capsule {
-        radius: 0.05
-        length: 0.5
-      }
-    }
-    inertia { x: 1.0 y: 1.0 z: 1.0 }
-    mass: 3.6651914
-  }
-  bodies {
-    name: "thigh"
-    colliders {
-      position { z: -0.225 }
-      rotation {}
-      capsule {
-        radius: 0.05
-        length: 0.55
-      }
-    }
-    inertia { x: 1.0 y: 1.0 z: 1.0 }
-    mass: 4.0578904
-  }
-  bodies {
-    name: "leg"
-    colliders {
-      position {}
-      rotation {}
-      capsule {
-        radius: 0.04
-        length: 0.58
-      }
-    }
-    inertia { x: 1.0 y: 1.0 z: 1.0 }
-    mass: 2.7813568
-  }
-  bodies {
-    name: "foot"
-    colliders {
-      position {
-        x: -0.1
-        y: -0.2
-        z: -0.1
-      }
-      rotation { y: 90.0 }
-      capsule {
-        radius: 0.06
-        length: 0.32
-      }
-    }
-    inertia { x: 1.0 y: 1.0 z: 1.0 }
-    mass: 3.1667254
-  }
-  bodies {
-    name: "thigh_left"
-    colliders {
-      position { z: -0.225 }
-      rotation {}
-      capsule {
-        radius: 0.05
-        length: 0.55
-      }
-    }
-    inertia { x: 1.0 y: 1.0 z: 1.0 }
-    mass: 4.0578904
-  }
-  bodies {
-    name: "leg_left"
-    colliders {
-      position {}
-      rotation {}
-      capsule {
-        radius: 0.04
-        length: 0.58
-      }
-    }
-    inertia { x: 1.0 y: 1.0 z: 1.0 }
-    mass: 2.7813568
-  }
-  bodies {
-    name: "foot_left"
-    colliders {
-      position {
-        x: -0.1
-        y: -0.2
-        z: -0.1
-      }
-      rotation { y: 90.0 }
-      capsule {
-        radius: 0.06
-        length: 0.32
-      }
-    }
-    inertia { x: 1.0 y: 1.0 z: 1.0 }
-    mass: 3.1667254
-  }
-  bodies {
-    name: "floor"
-    colliders {
-      plane {}
-    }
-    inertia { x: 1.0 y: 1.0 z: 1.0 }
-    frozen { all: true }
-  }
-  joints {
-    name: "thigh_joint"
-    stiffness: 10000.0
-    parent: "torso"
-    child: "thigh"
-    parent_offset { z: -0.2 }
-    rotation { z: -90.0 }
-    angle_limit { min: -150.0 }
-    angular_damping: 20.0
-  }
-  joints {
-    name: "leg_joint"
-    stiffness: 10000.0
-    parent: "thigh"
-    child: "leg"
-    parent_offset { z: -0.45 }
-    child_offset { z: 0.25 }
-    rotation { z: -90.0 }
-    angle_limit { min: -150.0 }
-    angular_damping: 20.0
-  }
-  joints {
-    name: "foot_joint"
-    stiffness: 10000.0
-    parent: "leg"
-    child: "foot"
-    parent_offset { z: -0.25 }
-    child_offset {
-      x: -0.2
-      y: -0.2
-      z: -0.1
-    }
-    rotation { z: -90.0 }
-    angle_limit { min: -45.0 max: 45.0 }
-    angular_damping: 20.0
-  }
-  joints {
-    name: "thigh_left_joint"
-    stiffness: 10000.0
-    parent: "torso"
-    child: "thigh_left"
-    parent_offset { z: -0.2 }
-    rotation { z: -90.0 }
-    angle_limit { min: -150.0 }
-    angular_damping: 20.0
-  }
-  joints {
-    name: "leg_left_joint"
-    stiffness: 10000.0
-    parent: "thigh_left"
-    child: "leg_left"
-    parent_offset { z: -0.45 }
-    child_offset { z: 0.25 }
-    rotation { z: -90.0 }
-    angle_limit { min: -150.0 }
-    angular_damping: 20.0
-  }
-  joints {
-    name: "foot_left_joint"
-    stiffness: 10000.0
-    parent: "leg_left"
-    child: "foot_left"
-    parent_offset { z: -0.25 }
-    child_offset {
-      x: -0.2
-      y: -0.2
-      z: -0.1
-    }
-    rotation { z: -90.0 }
-    angle_limit { min: -45.0 max: 45.0 }
-    angular_damping: 20.0
-  }
-  actuators {
-    name: "thigh_joint"
-    joint: "thigh_joint"
-    strength: 100.0
-    torque {}
-  }
-  actuators {
-    name: "leg_joint"
-    joint: "leg_joint"
-    strength: 100.0
-    torque {}
-  }
-  actuators {
-    name: "foot_joint"
-    joint: "foot_joint"
-    strength: 100.0
-    torque {}
-  }
-  actuators {
-    name: "thigh_left_joint"
-    joint: "thigh_left_joint"
-    strength: 100.0
-    torque {}
-  }
-  actuators {
-    name: "leg_left_joint"
-    joint: "leg_left_joint"
-    strength: 100.0
-    torque {}
-  }
-  actuators {
-    name: "foot_left_joint"
-    joint: "foot_left_joint"
-    strength: 100.0
-    torque {}
-  }
-  friction: 0.94868329805
-  gravity { z: -9.81 }
-  velocity_damping: 1.0
-  angular_damping: -0.05
-  baumgarte_erp: 0.1
-  collide_include {
-    first: "floor"
-    second: "torso"
-  }
-  collide_include {
-    first: "floor"
-    second: "thigh"
-  }
-  collide_include {
-    first: "floor"
-    second: "leg"
-  }
-  collide_include {
-    first: "floor"
-    second: "foot"
-  }
-  collide_include {
-    first: "floor"
-    second: "thigh_left"
-  }
-  collide_include {
-    first: "floor"
-    second: "leg_left"
-  }
-  collide_include {
-    first: "floor"
-    second: "foot_left"
-  }
-  dt: 0.008
-  substeps: 4
-  frozen {
-    position { y: 1.0 }
-    rotation { x: 1.0 z: 1.0 }
-  }
-  defaults {
-    qps { name: "torso" pos { z: 1.19 } }
-    angles { name: "thigh_joint" angle {} }
-    angles { name: "leg_joint" angle {} }
-    angles { name: "thigh_left_joint" angle {} }
-    angles { name: "leg_left_joint" angle {} }
-  }
-  dynamics_mode: "legacy_spring"
-  """
+    return jp.concatenate((position, velocity))

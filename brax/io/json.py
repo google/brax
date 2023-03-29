@@ -1,4 +1,4 @@
-# Copyright 2022 The Brax Authors.
+# Copyright 2023 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,68 +12,121 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# pylint:disable=g-multiple-import
 """Saves a system config and trajectory as json."""
 
 import json
-from typing import List, Optional, Text
+from typing import List, Text
 
-import brax
-from brax.io.file import File
-import jax.numpy as jnp
-import numpy as onp
+from brax import geometry
+from brax.base import State, System
+from etils import epath
+import jax
+import jax.numpy as jp
+import numpy as np
 
-from google.protobuf import json_format
-
-
-class JaxEncoder(json.JSONEncoder):
-
-  def default(self, obj):
-    if isinstance(obj, jnp.ndarray):
-      return obj.tolist()
-    if isinstance(obj, onp.ndarray):
-      return obj.tolist()
-    return json.JSONEncoder.default(self, obj)
+# State attributes needed for the visualizer.
+_STATE_ATTR = ['x', 'contact']
 
 
-def dumps(sys: brax.System,
-          qps: List[brax.QP],
-          info: Optional[List[brax.Info]] = None) -> Text:
-  """Creates a json string of the system config."""
-  d = {
-      'config': json_format.MessageToDict(sys.config, True),
-      'pos': [qp.pos for qp in qps],
-      'rot': [qp.rot for qp in qps],
-      'debug': info is not None,
-  }
-  if info:
-    # Add debug info for the contact points.
-    max_len = max([sum(onp.array(i.contact_penetration) > 0) for i in info])
-
-    def _pad_arr(arr):
-      arr = onp.array(arr)
-      padding = -onp.ones(max_len - arr.shape[0])
-      if len(arr.shape) > 1:
-        padding = -onp.ones((max_len - arr.shape[0], arr.shape[1]))
-      return onp.concatenate([arr, padding])
-
-    # Pad the contact points.
-    d['contact_pos'] = [
-        _pad_arr(i.contact_pos[i.contact_penetration > 0]) for i in info
-    ]
-    d['contact_normal'] = [
-        _pad_arr(i.contact_normal[i.contact_penetration > 0]) for i in info
-    ]
-    d['contact_penetration'] = [
-        _pad_arr(i.contact_penetration[i.contact_penetration > 0]) for i in info
-    ]
-  return json.dumps(d, cls=JaxEncoder)
+def _to_dict(obj):
+  """Converts python object to a json encodeable object."""
+  if isinstance(obj, list) or isinstance(obj, tuple):
+    return [_to_dict(s) for s in obj]
+  if isinstance(obj, dict):
+    return {k: _to_dict(v) for k, v in obj.items()}
+  if isinstance(obj, jax.Array):
+    return _to_dict(obj.tolist())
+  if hasattr(obj, '__dict__'):
+    d = dict(obj.__dict__)
+    d['name'] = obj.__class__.__name__
+    return _to_dict(d)
+  if isinstance(obj, np.ndarray):
+    return _to_dict(obj.tolist())
+  if isinstance(obj, np.floating):
+    return float(obj)
+  if isinstance(obj, np.integer):
+    return int(obj)
+  if isinstance(obj, float) and (np.isnan(obj) or np.isinf(obj)):
+    return str(obj)
+  return obj
 
 
-def save(path: str,
-         sys: brax.System,
-         qps: List[brax.QP],
-         info: Optional[List[brax.Info]] = None):
+def _compress_contact(states: State) -> State:
+  """Reduces the number of contacts based on penetration > 0."""
+  if states.contact is None:
+    return states
+
+  contact_mask = states.contact.penetration > 0
+  n_contact = contact_mask.sum(axis=1).max()
+
+  def pad(arr, n):
+    r = jp.zeros(n)
+    if len(arr.shape) > 1:
+      r = jp.zeros((n, arr.shape[1]))
+    r = r.at[: arr.shape[0]].set(arr)
+    return r
+
+  def compress(contact, i):
+    return jax.tree_map(
+        lambda x: pad(x[contact_mask[i]], n_contact), contact.take(i)
+    )
+
+  c = [compress(states.contact, i) for i in range(states.x.pos.shape[0])]
+  return states.replace(contact=jax.tree_map(lambda *x: jp.stack(x), *c))
+
+
+def _take_i(d, i):
+  """Takes the ith entry of every leaf in a dict."""
+  new_d = {}
+  for k, v in d.items():
+    if isinstance(v, dict):
+      new_d[k] = _take_i(v, i)
+    elif isinstance(v, list):
+      new_d[k] = v[i]
+    else:
+      new_d[k] = v
+  return new_d
+
+
+def dumps(sys: System, states: List[State]) -> Text:
+  """Creates a json string of the system config.
+
+  Args:
+    sys: brax System object
+    states: list of brax system states
+
+  Returns:
+    string containing json dump of system and states
+  """
+  d = _to_dict(sys)
+
+  # TODO: move the manipulations below to javascript
+
+  # fill in empty link names
+  link_names = [n or f'link {i}' for i, n in enumerate(sys.link_names)]
+  link_names += ['world']
+
+  # key geoms by their link names
+  link_geoms = {}
+  for batch in d['geoms']:
+    num_geoms = len(batch['friction'])
+    for i in range(num_geoms):
+      link_idx = -1 if batch['link_idx'] is None else batch['link_idx'][i]
+      link_geoms.setdefault(link_names[link_idx], []).append(_take_i(batch, i))
+  d['geoms'] = link_geoms
+
+  # stack states for the viewer
+  states = jax.tree_map(lambda *x: jp.stack(x), *states)
+  states = _compress_contact(states)
+
+  states = _to_dict(states)
+  d['states'] = {k: states[k] for k in _STATE_ATTR}
+
+  return json.dumps(_to_dict(d))
+
+
+def save(path: str, sys: System, states: List[State]):
   """Saves a system config and trajectory as json."""
-  with File(path, 'w') as fout:
-    system = dumps(sys, qps, info)
-    fout.write(system)
+  with epath.Path(path).open('w') as fout:
+    fout.write(dumps(sys, states))

@@ -1,4 +1,4 @@
-# Copyright 2022 The Brax Authors.
+# Copyright 2023 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ import time
 from typing import Callable, Optional, Tuple, Union
 
 from absl import logging
-from brax import envs as envs_v1
+from brax.v1 import envs as envs_v1
 from brax.training import acting
 from brax.training import types
 from brax.training.acme import running_statistics
@@ -31,7 +31,7 @@ from brax.training.acme import specs
 from brax.training.agents.es import networks as es_networks
 from brax.training.types import Params
 from brax.training.types import PRNGKey
-from brax.v2 import envs
+from brax import envs
 import flax
 import jax
 import jax.numpy as jnp
@@ -268,7 +268,7 @@ def train(
         'eval_scores_std': jnp.std(eval_scores),
         'weights': jnp.mean(weights),
     }
-    return (TrainingState(
+    return (TrainingState(  # pytype: disable=bad-return-type  # numpy-scalars
         normalizer_params=normalizer_params,
         optimizer_state=optimizer_state,
         policy_params=policy_params,

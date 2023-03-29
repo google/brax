@@ -1,4 +1,4 @@
-# Copyright 2022 The Brax Authors.
+# Copyright 2023 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,37 +14,45 @@
 
 """Gotta go fast!  This trivial Env is meant for unit testing."""
 
-import brax
+from brax import base
 from brax.envs import env
 import jax.numpy as jnp
 
 
-class Fast(env.Env):
+class Fast(env.PipelineEnv):
   """Trains an agent to go fast."""
 
   def __init__(self, **kwargs):
-    super().__init__(config='dt: .02', **kwargs)
+    self._dt = 0.02
     self._reset_count = 0
     self._step_count = 0
 
   def reset(self, rng: jnp.ndarray) -> env.State:  # pytype: disable=signature-mismatch  # jax-ndarray
     self._reset_count += 1
-    zero = jnp.zeros(1)
-    qp = brax.QP(pos=zero, vel=zero, rot=zero, ang=zero)
+    pipeline_state = base.State(
+        q=jnp.zeros(1),
+        qd=jnp.zeros(1),
+        x=base.Transform.create(pos=jnp.zeros(3)),
+        xd=base.Motion.create(vel=jnp.zeros(3)),
+        contact=None
+    )
     obs = jnp.zeros(2)
     reward, done = jnp.array(0.0), jnp.array(0.0)
-    return env.State(qp, obs, reward, done)
+    return env.State(pipeline_state, obs, reward, done)
 
   def step(self, state: env.State, action: jnp.ndarray) -> env.State:  # pytype: disable=signature-mismatch  # jax-ndarray
     self._step_count += 1
-    vel = state.qp.vel + (action > 0) * self.sys.config.dt
-    pos = state.qp.pos + vel * self.sys.config.dt
+    vel = state.pipeline_state.xd.vel + (action > 0) * self._dt
+    pos = state.pipeline_state.x.pos + vel * self._dt
 
-    qp = state.qp.replace(pos=pos, vel=vel)
+    qp = state.pipeline_state.replace(
+        x=state.pipeline_state.x.replace(pos=pos),
+        xd=state.pipeline_state.xd.replace(vel=vel),
+    )
     obs = jnp.array([pos[0], vel[0]])
     reward = pos[0]
 
-    return state.replace(qp=qp, obs=obs, reward=reward)
+    return state.replace(pipeline_state=qp, obs=obs, reward=reward)
 
   @property
   def reset_count(self):

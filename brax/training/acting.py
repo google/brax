@@ -1,4 +1,4 @@
-# Copyright 2022 The Brax Authors.
+# Copyright 2023 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,12 +17,13 @@
 import time
 from typing import Callable, Sequence, Tuple
 
-from brax import envs
 from brax.training.types import Metrics
 from brax.training.types import Policy
 from brax.training.types import PolicyParams
 from brax.training.types import PRNGKey
 from brax.training.types import Transition
+# TODO: use v2 envs here, some weird type annotations to figure out.
+from brax.v1 import envs
 import jax
 import numpy as np
 

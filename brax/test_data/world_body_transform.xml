@@ -1,0 +1,18 @@
+<mujoco model="capsule">
+  <compiler angle="degree" coordinate="local" inertiafromgeom="true"/>
+  <option timestep="0.01" />
+  <default>
+    <joint armature="1" damping="1" limited="true"/>
+    <geom conaffinity="0" condim="3" density="5.0" friction="1 0.5 0.5" margin="0.01" rgba="0.8 0.6 0.4 1"/>
+  </default>
+  <worldbody>
+    <geom conaffinity="1" condim="3" name="floor" pos="0 0 0" rgba="0.8 0.9 0.8 1" size="40 40 40" type="plane"/>
+    <body name="worldbody" pos="1 0 0" quat="0.7 0 0.7 0">
+      <geom name="capw" pos="0 0 0" size="0.25 1.0" type="capsule"/>
+      <body name="body2" pos="0 0 0.25" quat="0.7 0.7 0 0">
+        <joint axis="1 0 0" name="free2" pos="0 0 0" type="free"/>
+        <geom name="cap1" fromto="-0.5 0.0 0 0.5 0.0 0" pos="0 0 0" size="0.25" type="capsule"/>
+      </body>
+    </body>
+  </worldbody>
+</mujoco>

@@ -1,4 +1,4 @@
-# Copyright 2022 The Brax Authors.
+# Copyright 2023 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,15 +19,21 @@ Based on the OpenAI Gym MuJoCo Reacher environment.
 
 from typing import Tuple
 
-import brax
-from brax import jumpy as jp
+from brax import base
+from brax import math
+from brax.base import Transform
 from brax.envs import env
+from brax.io import mjcf
+from etils import epath
+import jax
+from jax import numpy as jp
 
 
-class Reacher(env.Env):
+class Reacher(env.PipelineEnv):
 
 
 
+  # pyformat: disable
   """
   ### Description
 
@@ -145,40 +151,57 @@ class Reacher(env.Env):
     environments.
   * v0: Initial versions release (1.0.0)
   """
+  # pyformat: enable
 
 
-  def __init__(self, legacy_spring=False, **kwargs):
-    config = _SYSTEM_CONFIG_SPRING if legacy_spring else _SYSTEM_CONFIG
-    super().__init__(config=config, **kwargs)
-    self._target_idx = self.sys.body.index['target']
-    self._arm_idx = self.sys.body.index['body1']
+  def __init__(self, backend='generalized', **kwargs):
+    path = epath.resource_path('brax') / 'envs/assets/reacher.xml'
+    sys = mjcf.load(path)
+
+    n_frames = 2
+
+    if backend in ['spring', 'positional']:
+      sys = sys.replace(dt=0.005)
+      sys = sys.replace(
+          actuator=sys.actuator.replace(gear=jp.array([25.0, 25.0]))
+      )
+      n_frames = 4
+
+    kwargs['n_frames'] = kwargs.get('n_frames', n_frames)
+
+    super().__init__(sys=sys, backend=backend, **kwargs)
 
   def reset(self, rng: jp.ndarray) -> env.State:
-    rng, rng1, rng2 = jp.random_split(rng, 3)
+    rng, rng1, rng2 = jax.random.split(rng, 3)
 
-    qpos = self.sys.default_angle() + jp.random_uniform(
-        rng1, (self.sys.num_joint_dof,), -.1, .1)
-    qvel = jp.random_uniform(rng2, (self.sys.num_joint_dof,), -.005, .005)
+    q = self.sys.init_q + jax.random.uniform(
+        rng1, (self.sys.q_size(),), minval=-0.1, maxval=0.1
+    )
+    qd = jax.random.uniform(
+        rng2, (self.sys.qd_size(),), minval=-0.005, maxval=0.005
+    )
 
-    qp = self.sys.default_qp(joint_angle=qpos, joint_velocity=qvel)
+    # set the target q, qd
     _, target = self._random_target(rng)
-    pos = jp.index_update(qp.pos, self._target_idx, target)
+    q = q.at[2:].set(target)
+    qd = qd.at[2:].set(0)
 
-    qp = qp.replace(pos=pos)
-    obs = self._get_obs(qp, self.sys.info(qp))
+    pipeline_state = self.pipeline_init(q, qd)
+
+    obs = self._get_obs(pipeline_state)
     reward, done, zero = jp.zeros(3)
     metrics = {
         'reward_dist': zero,
         'reward_ctrl': zero,
     }
-    return env.State(qp, obs, reward, done, metrics)
+    return env.State(pipeline_state, obs, reward, done, metrics)
 
   def step(self, state: env.State, action: jp.ndarray) -> env.State:
-    qp, info = self.sys.step(state.qp, action)
-    obs = self._get_obs(qp, info)
+    pipeline_state = self.pipeline_step(state.pipeline_state, action)
+    obs = self._get_obs(pipeline_state)
 
     # vector from tip to target is last 3 entries of obs vector
-    reward_dist = -jp.norm(obs[-3:])
+    reward_dist = -math.safe_norm(obs[-3:])
     reward_ctrl = -jp.square(action).sum()
     reward = reward_dist + reward_ctrl
 
@@ -187,342 +210,39 @@ class Reacher(env.Env):
         reward_ctrl=reward_ctrl,
     )
 
-    return state.replace(qp=qp, obs=obs, reward=reward)
+    return state.replace(pipeline_state=pipeline_state, obs=obs, reward=reward)
 
-  def _get_obs(self, qp: brax.QP, info: brax.Info) -> jp.ndarray:
-    """Egocentric observation of target and arm body."""
-    joint_angle, _ = self.sys.joints[0].angle_vel(qp)
+  def _get_obs(self, pipeline_state: base.State) -> jp.ndarray:
+    """Returns egocentric observation of target and arm body."""
+    theta = pipeline_state.q[:2]
+    target_pos = pipeline_state.x.pos[2]
+    tip_pos = (
+        pipeline_state.x.take(1)
+        .do(Transform.create(pos=jp.array([0.11, 0, 0])))
+        .pos
+    )
+    # tip_vel, instead of pipeline_state.qd[:2], leads to more sensible policies
+    # for a randomly initialized policy network
+    tip_vel = (
+        Transform.create(pos=jp.array([0.11, 0, 0]))
+        .do(pipeline_state.xd.take(1))
+        .vel
+    )
+    tip_to_target = tip_pos - target_pos
 
-    # qpos:
-    # x,y coord of target
-    qpos = [qp.pos[self._target_idx, :2]]
-
-    # dist to target and speed of tip
-    arm_qps = jp.take(qp, jp.array(self._arm_idx))
-    tip_pos, tip_vel = arm_qps.to_world(jp.array([0.11, 0., 0.]))
-    tip_to_target = [tip_pos - qp.pos[self._target_idx]]
-    cos_sin_angle = [jp.cos(joint_angle), jp.sin(joint_angle)]
-
-    # qvel:
-    # velocity of tip
-    qvel = [tip_vel[:2]]
-
-    return jp.concatenate(cos_sin_angle + qpos + qvel + tip_to_target)
+    return jp.concatenate([
+        jp.cos(theta),
+        jp.sin(theta),
+        pipeline_state.q[2:],  # target x, y
+        tip_vel[:2],
+        tip_to_target,
+    ])
 
   def _random_target(self, rng: jp.ndarray) -> Tuple[jp.ndarray, jp.ndarray]:
     """Returns a target location in a random circle slightly above xy plane."""
-    rng, rng1, rng2 = jp.random_split(rng, 3)
-    dist = .2 * jp.random_uniform(rng1)
-    ang = jp.pi * 2. * jp.random_uniform(rng2)
+    rng, rng1, rng2 = jax.random.split(rng, 3)
+    dist = 0.2 * jax.random.uniform(rng1)
+    ang = jp.pi * 2.0 * jax.random.uniform(rng2)
     target_x = dist * jp.cos(ang)
     target_y = dist * jp.sin(ang)
-    target_z = .01
-    target = jp.array([target_x, target_y, target_z]).transpose()
-    return rng, target
-
-
-_SYSTEM_CONFIG = """
-  bodies {
-    name: "ground"
-    colliders {
-      plane {
-      }
-    }
-    mass: 1.0
-    inertia {
-      x: 1.0
-      y: 1.0
-      z: 1.0
-    }
-    frozen {
-      all: true
-    }
-  }
-  bodies {
-    name: "body0"
-    colliders {
-      position {
-        x: 0.05
-      }
-      rotation {
-        y: 90.0
-      }
-      capsule {
-        radius: 0.01
-        length: 0.12
-      }
-    }
-    inertia {
-      x: 1.0
-      y: 1.0
-      z: 1.0
-    }
-    mass: 0.035604715
-  }
-  bodies {
-    name: "body1"
-    colliders {
-      position {
-        x: 0.05
-      }
-      rotation {
-        y: 90.0
-      }
-      capsule {
-        radius: 0.01
-        length: 0.12
-      }
-    }
-    colliders {
-      position { x: .11 }
-      sphere {
-        radius: 0.01
-      }
-    }
-    inertia {
-      x: 1.0
-      y: 1.0
-      z: 1.0
-    }
-    mass: 0.035604715
-  }
-  bodies {
-    name: "target"
-    colliders {
-      position {
-      }
-      sphere {
-        radius: 0.009
-      }
-    }
-    inertia {
-      x: 1.0
-      y: 1.0
-      z: 1.0
-    }
-    mass: 1.0
-    frozen { all: true }
-  }
-  joints {
-    name: "joint0"
-    parent: "ground"
-    child: "body0"
-    parent_offset {
-      z: 0.01
-    }
-    child_offset {
-    }
-    rotation {
-      y: -90.0
-    }
-    angle_limit {
-        min: -360
-        max: 360
-      }
-  }
-  joints {
-    name: "joint1"
-    parent: "body0"
-    child: "body1"
-    parent_offset {
-      x: 0.1
-    }
-    child_offset {
-    }
-    rotation {
-      y: -90.0
-    }
-    angle_limit {
-      min: -360
-      max: 360
-    }
-  }
-  actuators {
-    name: "joint0"
-    joint: "joint0"
-    strength: 25.0
-    torque {
-    }
-  }
-  actuators {
-    name: "joint1"
-    joint: "joint1"
-    strength: 25.0
-    torque {
-    }
-  }
-  collide_include {
-  }
-  gravity {
-    z: -9.81
-  }
-  dt: 0.02
-  substeps: 4
-  frozen {
-    position {
-      z: 1.0
-    }
-    rotation {
-      x: 1.0
-      y: 1.0
-    }
-  }
-  dynamics_mode: "pbd"
-  """
-
-
-_SYSTEM_CONFIG_SPRING = """
-  bodies {
-    name: "ground"
-    colliders {
-      plane {
-      }
-    }
-    mass: 1.0
-    inertia {
-      x: 1.0
-      y: 1.0
-      z: 1.0
-    }
-    frozen {
-      all: true
-    }
-  }
-  bodies {
-    name: "body0"
-    colliders {
-      position {
-        x: 0.05
-      }
-      rotation {
-        y: 90.0
-      }
-      capsule {
-        radius: 0.01
-        length: 0.12
-      }
-    }
-    inertia {
-      x: 1.0
-      y: 1.0
-      z: 1.0
-    }
-    mass: 0.035604715
-  }
-  bodies {
-    name: "body1"
-    colliders {
-      position {
-        x: 0.05
-      }
-      rotation {
-        y: 90.0
-      }
-      capsule {
-        radius: 0.01
-        length: 0.12
-      }
-    }
-    colliders {
-      position { x: .11 }
-      sphere {
-        radius: 0.01
-      }
-    }
-    inertia {
-      x: 1.0
-      y: 1.0
-      z: 1.0
-    }
-    mass: 0.035604715
-  }
-  bodies {
-    name: "target"
-    colliders {
-      position {
-      }
-      sphere {
-        radius: 0.009
-      }
-    }
-    inertia {
-      x: 1.0
-      y: 1.0
-      z: 1.0
-    }
-    mass: 1.0
-    frozen { all: true }
-  }
-  joints {
-    name: "joint0"
-    stiffness: 100.0
-    parent: "ground"
-    child: "body0"
-    parent_offset {
-      z: 0.01
-    }
-    child_offset {
-    }
-    rotation {
-      y: -90.0
-    }
-    angle_limit {
-        min: -360
-        max: 360
-      }
-    limit_strength: 0.0
-    spring_damping: 3.0
-  }
-  joints {
-    name: "joint1"
-    stiffness: 100.0
-    parent: "body0"
-    child: "body1"
-    parent_offset {
-      x: 0.1
-    }
-    child_offset {
-    }
-    rotation {
-      y: -90.0
-    }
-    angle_limit {
-      min: -360
-      max: 360
-    }
-    limit_strength: 0.0
-    spring_damping: 3.0
-  }
-  actuators {
-    name: "joint0"
-    joint: "joint0"
-    strength: 25.0
-    torque {
-    }
-  }
-  actuators {
-    name: "joint1"
-    joint: "joint1"
-    strength: 25.0
-    torque {
-    }
-  }
-  collide_include {
-  }
-  gravity {
-    z: -9.81
-  }
-  baumgarte_erp: 0.1
-  dt: 0.02
-  substeps: 4
-  frozen {
-    position {
-      z: 1.0
-    }
-    rotation {
-      x: 1.0
-      y: 1.0
-    }
-  }
-  dynamics_mode: "legacy_spring"
-  """
+    return rng, jp.array([target_x, target_y])

@@ -1,0 +1,11 @@
+<mujoco model="sliding_mass">
+  <compiler inertiafromgeom="false" autolimits="true"/>
+  <option gravity="0 0 -9.81" timestep="0.001"/>
+  <worldbody>
+    <body name="body1" pos="0 0 0">
+      <joint axis="1 1 1" name="slide1" pos="0 0 0" range="-10 10" type="slide"/>
+      <geom name="sphere1" pos="0.0 0.0 0" size=".15" mass="1" type="sphere"/>
+      <inertial pos="0 0.0 0" mass="1" diaginertia="1. 1. 1."/>
+    </body>
+  </worldbody>
+</mujoco>

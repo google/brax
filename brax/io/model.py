@@ -1,4 +1,4 @@
-# Copyright 2022 The Brax Authors.
+# Copyright 2023 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,17 +16,16 @@
 
 import pickle
 from typing import Any
-
-from brax.io.file import File
+from etils import epath
 
 
 def load_params(path: str) -> Any:
-  with File(path, 'rb') as fin:
+  with epath.Path(path).open('rb') as fin:
     buf = fin.read()
   return pickle.loads(buf)
 
 
 def save_params(path: str, params: Any):
-  """Saves parameters in Flax format."""
-  with File(path, 'wb') as fout:
+  """Saves parameters in flax format."""
+  with epath.Path(path).open('wb') as fout:
     fout.write(pickle.dumps(params))

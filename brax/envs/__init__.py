@@ -1,4 +1,4 @@
-# Copyright 2022 The Brax Authors.
+# Copyright 2023 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,116 +13,92 @@
 # limitations under the License.
 
 # pylint:disable=g-multiple-import
-"""Some example environments to help get started quickly with brax."""
+"""Environments for training and evaluating policies."""
 
 import functools
-from typing import Callable, Optional, Type, Union, overload
+from typing import Optional, Type
 
-from brax.envs import acrobot
 from brax.envs import ant
 from brax.envs import fast
-from brax.envs import fetch
-from brax.envs import grasp
 from brax.envs import half_cheetah
 from brax.envs import hopper
 from brax.envs import humanoid
-from brax.envs import humanoid_standup
+from brax.envs import humanoidstandup
 from brax.envs import inverted_double_pendulum
 from brax.envs import inverted_pendulum
 from brax.envs import pusher
 from brax.envs import reacher
-from brax.envs import reacherangle
-from brax.envs import swimmer
-from brax.envs import ur5e
 from brax.envs import walker2d
-from brax.envs import wrappers
-from brax.envs.env import Env, State, Wrapper
-import gym
-
+from brax.envs import wrapper
+from brax.envs.env import Env, State
 
 _envs = {
-    'acrobot': acrobot.Acrobot,
-    'ant': functools.partial(ant.Ant, use_contact_forces=True),
+    'ant': ant.Ant,
     'fast': fast.Fast,
-    'fetch': fetch.Fetch,
-    'grasp': grasp.Grasp,
     'halfcheetah': half_cheetah.Halfcheetah,
     'hopper': hopper.Hopper,
     'humanoid': humanoid.Humanoid,
-    'humanoidstandup': humanoid_standup.HumanoidStandup,
+    'humanoidstandup': humanoidstandup.HumanoidStandup,
     'inverted_pendulum': inverted_pendulum.InvertedPendulum,
     'inverted_double_pendulum': inverted_double_pendulum.InvertedDoublePendulum,
     'pusher': pusher.Pusher,
     'reacher': reacher.Reacher,
-    'reacherangle': reacherangle.ReacherAngle,
-    'swimmer': swimmer.Swimmer,
-    'ur5e': ur5e.Ur5e,
     'walker2d': walker2d.Walker2d,
 }
 
 
-def get_environment(env_name, **kwargs) -> Env:
+
+def get_environment(env_name: str, **kwargs) -> Env:
+  """Returns an environment from the environment registry.
+
+  Args:
+    env_name: environment name string
+    **kwargs: keyword arguments that get passed to the Env class constructor
+
+  Returns:
+    env: an environment
+  """
   return _envs[env_name](**kwargs)
 
 
 def register_environment(env_name: str, env_class: Type[Env]):
+  """Adds an environment to the registry.
+
+  Args:
+    env_name: environment name string
+    env_class: the Env class to add to the registry
+  """
   _envs[env_name] = env_class
 
 
-def create(env_name: str,
-           episode_length: int = 1000,
-           action_repeat: int = 1,
-           auto_reset: bool = True,
-           batch_size: Optional[int] = None,
-           eval_metrics: bool = False,
-           **kwargs) -> Env:
-  """Creates an Env with a specified brax system."""
+def create(
+    env_name: str,
+    episode_length: int = 1000,
+    action_repeat: int = 1,
+    auto_reset: bool = True,
+    batch_size: Optional[int] = None,
+    **kwargs,
+) -> Env:
+  """Creates an environment from the registry.
+
+  Args:
+    env_name: environment name string
+    episode_length: length of episode
+    action_repeat: how many repeated actions to take per environment step
+    auto_reset: whether to auto reset the environment after an episode is done
+    batch_size: the number of environments to batch together
+    **kwargs: keyword argments that get passed to the Env class constructor
+
+  Returns:
+    env: an environment
+  """
   env = _envs[env_name](**kwargs)
+
   if episode_length is not None:
-    env = wrappers.EpisodeWrapper(env, episode_length, action_repeat)
+    env = wrapper.EpisodeWrapper(env, episode_length, action_repeat)
   if batch_size:
-    env = wrappers.VectorWrapper(env, batch_size)
+    env = wrapper.VmapWrapper(env, batch_size)
   if auto_reset:
-    env = wrappers.AutoResetWrapper(env)
-  if eval_metrics:
-    env = wrappers.EvalWrapper(env)
+    env = wrapper.AutoResetWrapper(env)
 
   return env  # type: ignore
-
-
-def create_fn(env_name: str, **kwargs) -> Callable[..., Env]:
-  """Returns a function that when called, creates an Env."""
-  return functools.partial(create, env_name, **kwargs)
-
-
-@overload
-def create_gym_env(env_name: str,
-                   batch_size: None = None,
-                   seed: int = 0,
-                   backend: Optional[str] = None,
-                   **kwargs) -> gym.Env:
-  ...
-
-
-@overload
-def create_gym_env(env_name: str,
-                   batch_size: int,
-                   seed: int = 0,
-                   backend: Optional[str] = None,
-                   **kwargs) -> gym.vector.VectorEnv:
-  ...
-
-
-def create_gym_env(env_name: str,
-                   batch_size: Optional[int] = None,
-                   seed: int = 0,
-                   backend: Optional[str] = None,
-                   **kwargs) -> Union[gym.Env, gym.vector.VectorEnv]:
-  """Creates a `gym.Env` or `gym.vector.VectorEnv` from a Brax environment."""
-  environment = create(env_name=env_name, batch_size=batch_size, **kwargs)
-  if batch_size is None:
-    return wrappers.GymWrapper(environment, seed=seed, backend=backend)
-  if batch_size <= 0:
-    raise ValueError(
-        '`batch_size` should either be None or a positive integer.')
-  return wrappers.VectorGymWrapper(environment, seed=seed, backend=backend)

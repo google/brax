@@ -1,4 +1,4 @@
-# Copyright 2022 The Brax Authors.
+# Copyright 2023 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,15 +14,21 @@
 
 """Trains a robot arm to push a ball to a target."""
 
-import brax
-from brax import jumpy as jp
+from brax import base
+from brax import math
+from brax.base import Transform
 from brax.envs import env
+from brax.io import mjcf
+from etils import epath
+import jax
+from jax import numpy as jp
 
 
-class Pusher(env.Env):
+class Pusher(env.PipelineEnv):
 
 
 
+  # pyformat: disable
   """
   ### Description
 
@@ -165,599 +171,92 @@ class Pusher(env.Env):
     environments.
   * v0: Initial versions release (1.0.0)
   """
+  # pyformat: enable
 
 
-  def __init__(self, legacy_spring=False, **kwargs):
-    del legacy_spring
-    super().__init__(_SYSTEM_CONFIG, **kwargs)
-    self._object_idx = self.sys.body.index['object']
-    self._tips_arm_idx = self.sys.body.index['r_wrist_roll_link']
-    self._goal_idx = self.sys.body.index['goal']
-    self._table_idx = self.sys.body.index['table']
-    self._goal_pos = jp.array([0.45, 0.05, 0.05])
+  def __init__(self, backend='generalized', **kwargs):
+    path = epath.resource_path('brax') / 'envs/assets/pusher.xml'
+    sys = mjcf.load(path)
+
+    n_frames = 5
+
+    if backend in ['spring', 'positional']:
+      sys = sys.replace(dt=0.001)
+      sys = sys.replace(
+          actuator=sys.actuator.replace(gear=jp.array([20.0] * sys.act_size()))
+      )
+      n_frames = 50
+
+    kwargs['n_frames'] = kwargs.get('n_frames', n_frames)
+
+    super().__init__(sys=sys, backend=backend, **kwargs)
+
+    # The tips_arm body gets fused with r_wrist_roll_link, so we use the parent
+    # r_wrist_flex_link for tips_arm_idx.
+    self._tips_arm_idx = self.sys.link_names.index('r_wrist_flex_link')
+    self._object_idx = self.sys.link_names.index('object')
+    self._goal_idx = self.sys.link_names.index('goal')
 
   def reset(self, rng: jp.ndarray) -> env.State:
-    rng, rng1, rng2 = jp.random_split(rng, 3)
+    qpos = self.sys.init_q
 
-    # randomly orient object
+    rng, rng1, rng2 = jax.random.split(rng, 3)
+
+    # randomly orient the object
     cylinder_pos = jp.concatenate([
-        jp.random_uniform(rng, (1,), -0.3, 0),
-        jp.random_uniform(rng1, (1,), -0.2, 0.2),
-        jp.ones(1) * 0.0
+        jax.random.uniform(rng, (1,), minval=-0.3, maxval=-1e-6),
+        jax.random.uniform(rng1, (1,), minval=-0.2, maxval=0.2),
     ])
+    # constrain minimum distance of object to goal
+    goal_pos = jp.array([0.0, 0.0])
+    norm = math.safe_norm(cylinder_pos - goal_pos)
+    scale = jp.where(norm < 0.17, 0.17 / norm, 1.0)
+    cylinder_pos *= scale
+    qpos = qpos.at[-4:].set(jp.concatenate([cylinder_pos, goal_pos]))
 
-    # constraint maximum distance of object
-    norm = jp.norm(cylinder_pos)
-    scale = jp.where(norm > .17, .17 / norm, 1.)  # pytype: disable=wrong-arg-types  # jax-ndarray
-    cylinder_pos = scale * cylinder_pos + jp.array([0., 0., .05])
-    qpos = self.sys.default_angle()
+    qvel = jax.random.uniform(
+        rng2, (self.sys.qd_size(),), minval=-0.005, maxval=0.005
+    )
+    qvel = qvel.at[-4:].set(0.0)
 
-    qvel = jp.concatenate([
-        jp.random_uniform(rng2, (self.sys.num_joint_dof - 4,), -0.005, 0.005),
-        jp.zeros(4)
-    ])
-    qp = self.sys.default_qp(joint_angle=qpos, joint_velocity=qvel)
+    pipeline_state = self.pipeline_init(qpos, qvel)
 
-    # position cylinder and goal
-    pos = jp.index_update(qp.pos, self._goal_idx, self._goal_pos)
-    pos = jp.index_update(pos, self._object_idx, cylinder_pos)
-    pos = jp.index_update(pos, self._table_idx, jp.zeros(3))
-
-    qp = qp.replace(pos=pos)
-
-    obs = self._get_obs(qp)
+    obs = self._get_obs(pipeline_state)
     reward, done, zero = jp.zeros(3)
     metrics = {'reward_dist': zero, 'reward_ctrl': zero, 'reward_near': zero}
-    return env.State(qp, obs, reward, done, metrics)
+    return env.State(pipeline_state, obs, reward, done, metrics)
 
   def step(self, state: env.State, action: jp.ndarray) -> env.State:
-    vec_1 = state.qp.pos[self._object_idx] - state.qp.pos[self._tips_arm_idx]
-    vec_2 = state.qp.pos[self._object_idx] - state.qp.pos[self._goal_idx]
+    x_i = state.pipeline_state.x.vmap().do(
+        Transform.create(pos=self.sys.link.inertia.transform.pos)
+    )
+    vec_1 = x_i.pos[self._object_idx] - x_i.pos[self._tips_arm_idx]
+    vec_2 = x_i.pos[self._object_idx] - x_i.pos[self._goal_idx]
 
-    reward_near = -jp.norm(vec_1)
-    reward_dist = -jp.norm(vec_2)
+    reward_near = -math.safe_norm(vec_1)
+    reward_dist = -math.safe_norm(vec_2)
     reward_ctrl = -jp.square(action).sum()
-
-    qp, _ = self.sys.step(state.qp, action)
-    obs = self._get_obs(qp)
     reward = reward_dist + 0.1 * reward_ctrl + 0.5 * reward_near
+
+    pipeline_state = self.pipeline_step(state.pipeline_state, action)
+
+    obs = self._get_obs(pipeline_state)
     state.metrics.update(
         reward_near=reward_near,
         reward_dist=reward_dist,
         reward_ctrl=reward_ctrl,
     )
-    return state.replace(qp=qp, obs=obs, reward=reward)
+    return state.replace(pipeline_state=pipeline_state, obs=obs, reward=reward)
 
-  def _get_obs(self, qp: brax.QP) -> jp.ndarray:
-    """Observe pusher body position and velocities."""
-    joint_angle, joint_vel = self.sys.joints[0].angle_vel(qp)
-
+  def _get_obs(self, pipeline_state: base.State) -> jp.ndarray:
+    """Observes pusher body position and velocities."""
+    x_i = pipeline_state.x.vmap().do(
+        Transform.create(pos=self.sys.link.inertia.transform.pos)
+    )
     return jp.concatenate([
-        joint_angle,
-        joint_vel,
-        qp.pos[self._tips_arm_idx],
-        qp.pos[self._object_idx],
-        qp.pos[self._goal_idx],
+        pipeline_state.q[:7],
+        pipeline_state.qd[:7],
+        x_i.pos[self._tips_arm_idx],
+        x_i.pos[self._object_idx],
+        x_i.pos[self._goal_idx],
     ])
-
-
-_SYSTEM_CONFIG = """
-bodies {
-  name: "table"
-  colliders {
-    plane {
-    }
-  }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 1.0
-  frozen {
-    position {
-      x: 1.0
-      y: 1.0
-      z: 1.0
-    }
-    rotation {
-      x: 1.0
-      y: 1.0
-      z: 1.0
-    }
-  }
-}
-bodies {
-  name: "r_shoulder_pan_link"
-  colliders {
-    position {
-      z: -0.10000000149011612
-    }
-    rotation {
-      y: -0.0
-    }
-    capsule {
-      radius: 0.10000000149011612
-      length: 0.800000011920929
-    }
-  }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 1.0
-}
-bodies {
-  name: "r_shoulder_lift_link"
-  colliders {
-    position {
-    }
-    rotation {
-      x: -90.0
-    }
-    capsule {
-      radius: 0.10000000149011612
-      length: 0.4000000059604645
-    }
-  }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 1.0
-}
-bodies {
-  name: "r_upper_arm_roll_link"
-  colliders {
-    position {
-    }
-    rotation {
-      x: -0.0
-      y: 90.0
-    }
-    capsule {
-      radius: 0.019999999552965164
-      length: 0.23999999463558197
-    }
-  }
-  colliders {
-    position {
-      x: 0.20000000298023224
-    }
-    rotation {
-      x: -0.0
-      y: 90.0
-    }
-    capsule {
-      radius: 0.05999999865889549
-      length: 0.5199999809265137
-    }
-  }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 1.0
-}
-bodies {
-  name: "r_elbow_flex_link"
-  colliders {
-    position {
-    }
-    rotation {
-      x: -90.0
-    }
-    capsule {
-      radius: 0.05999999865889549
-      length: 0.1599999964237213
-    }
-  }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 1.0
-}
-bodies {
-  name: "r_forearm_roll_link"
-  colliders {
-    position {
-    }
-    rotation {
-      x: -0.0
-      y: 90.0
-    }
-    capsule {
-      radius: 0.019999999552965164
-      length: 0.23999999463558197
-    }
-  }
-  colliders {
-    position {
-      x: 0.14550000429153442
-    }
-    rotation {
-      x: -0.0
-      y: 90.0
-    }
-    capsule {
-      radius: 0.05000000074505806
-      length: 0.39100000262260437
-    }
-  }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 1.0
-}
-bodies {
-  name: "r_wrist_flex_link"
-  colliders {
-    position {
-    }
-    rotation {
-      x: -90.0
-    }
-    capsule {
-      radius: 0.009999999776482582
-      length: 0.05999999865889549
-    }
-  }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 1.0
-}
-bodies {
-  name: "r_wrist_roll_link"
-  colliders {
-    position {
-    }
-    rotation {
-      x: -90.0
-    }
-    capsule {
-      radius: 0.019999999552965164
-      length: 0.23999999463558197
-    }
-  }
-  colliders {
-    position {
-      x: 0.05000000074505806
-      y: -0.10000000149011612
-    }
-    rotation {
-      x: -0.0
-      y: 90.0
-    }
-    capsule {
-      radius: 0.019999999552965164
-      length: 0.14000000059604645
-    }
-  }
-  colliders {
-    position {
-      x: 0.05000000074505806
-      y: 0.10000000149011612
-    }
-    rotation {
-      x: -0.0
-      y: 90.0
-    }
-    capsule {
-      radius: 0.019999999552965164
-      length: 0.14000000059604645
-    }
-  }
-  colliders {
-    position {
-      x: 0.10000000149011612
-      y: -0.10000000149011612
-    }
-    sphere {
-      radius: 0.009999999776482582
-    }
-  }
-  colliders {
-    position {
-      x: 0.10000000149011612
-      y: 0.10000000149011612
-    }
-    sphere {
-      radius: 0.009999999776482582
-    }
-  }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 1.0
-}
-bodies {
-  name: "object"
-  colliders {
-    position {
-    }
-    sphere {
-      radius: 0.05000000074505806
-    }
-  }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 1.0
-  frozen {
-    position { z: 1 }
-    rotation { x: 1 y: 1 z: 1 }
-  }
-}
-bodies {
-  name: "goal"
-  colliders {
-    position {
-    }
-    rotation {
-      y: -0.0
-    }
-    capsule {
-      radius: 0.07999999821186066
-      length: 0.16
-    }
-    color: "red"
-  }
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 1.0
-  frozen {
-    all: true
-  }
-}
-bodies {
-  name: "mount"
-  inertia {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
-  mass: 1.0
-  frozen {
-    all: true
-  }
-}
-joints {
-  name: "r_shoulder_pan_joint"
-  parent: "mount"
-  child: "r_shoulder_pan_link"
-  parent_offset {
-    y: -0.6000000238418579
-  }
-  child_offset {
-  }
-  rotation {
-    y: -90.0
-  }
-  angular_damping: 20.0
-  angle_limit {
-    min: -130.9437713623047
-    max: 98.23945617675781
-  }
-  reference_rotation {
-    y: -0.0
-  }
-}
-joints {
-  name: "r_shoulder_lift_joint"
-  parent: "r_shoulder_pan_link"
-  child: "r_shoulder_lift_link"
-  parent_offset {
-    x: 0.10000000149011612
-  }
-  child_offset {
-  }
-  rotation {
-    y: -0.0
-    z: 90.0
-  }
-  angular_damping: 20.0
-  angle_limit {
-    min: -30.00006866455078
-    max: 80.0020980834961
-  }
-  reference_rotation {
-    y: -0.0
-  }
-}
-joints {
-  name: "r_upper_arm_roll_joint"
-  parent: "r_shoulder_lift_link"
-  child: "r_upper_arm_roll_link"
-  parent_offset {
-  }
-  child_offset {
-  }
-  rotation {
-    y: -0.0
-  }
-  angular_damping: 20.0
-  angle_limit {
-    min: -85.94367218017578
-    max: 97.40282440185547
-  }
-  reference_rotation {
-    y: -0.0
-  }
-}
-joints {
-  name: "r_elbow_flex_joint"
-  parent: "r_upper_arm_roll_link"
-  child: "r_elbow_flex_link"
-  parent_offset {
-    x: 0.4000000059604645
-  }
-  child_offset {
-  }
-  rotation {
-    y: -0.0
-    z: 90.0
-  }
-  angular_damping: 20.0
-  angle_limit {
-    min: -133.00070190429688
-  }
-  reference_rotation {
-    y: -0.0
-  }
-}
-joints {
-  name: "r_forearm_roll_joint"
-  parent: "r_elbow_flex_link"
-  child: "r_forearm_roll_link"
-  parent_offset {
-  }
-  child_offset {
-  }
-  rotation {
-    y: -0.0
-  }
-  angular_damping: 20.0
-  angle_limit {
-    min: -85.94367218017578
-    max: 85.94367218017578
-  }
-  reference_rotation {
-    y: -0.0
-  }
-}
-joints {
-  name: "r_wrist_flex_joint"
-  parent: "r_forearm_roll_link"
-  child: "r_wrist_flex_link"
-  parent_offset {
-    x: 0.32100000977516174
-  }
-  child_offset {
-  }
-  rotation {
-    y: -0.0
-    z: 90.0
-  }
-  angular_damping: 20.0
-  angle_limit {
-    min: -62.681583404541016
-  }
-  reference_rotation {
-    y: -0.0
-  }
-}
-joints {
-  name: "r_wrist_roll_joint"
-  parent: "r_wrist_flex_link"
-  child: "r_wrist_roll_link"
-  parent_offset {
-  }
-  child_offset {
-  }
-  rotation {
-    y: -0.0
-  }
-  angular_damping: 20.0
-  angle_limit {
-    min: -85.94367218017578
-    max: 85.94367218017578
-  }
-  reference_rotation {
-    y: -0.0
-  }
-}
-actuators {
-  name: "r_shoulder_pan_joint"
-  joint: "r_shoulder_pan_joint"
-  strength: 100.0
-  torque {
-  }
-}
-actuators {
-  name: "r_shoulder_lift_joint"
-  joint: "r_shoulder_lift_joint"
-  strength: 100.0
-  torque {
-  }
-}
-actuators {
-  name: "r_upper_arm_roll_joint"
-  joint: "r_upper_arm_roll_joint"
-  strength: 100.0
-  torque {
-  }
-}
-actuators {
-  name: "r_elbow_flex_joint"
-  joint: "r_elbow_flex_joint"
-  strength: 100.0
-  torque {
-  }
-}
-actuators {
-  name: "r_forearm_roll_joint"
-  joint: "r_forearm_roll_joint"
-  strength: 100.0
-  torque {
-  }
-}
-actuators {
-  name: "r_wrist_flex_joint"
-  joint: "r_wrist_flex_joint"
-  strength: 100.0
-  torque {
-  }
-}
-actuators {
-  name: "r_wrist_roll_joint"
-  joint: "r_wrist_roll_joint"
-  strength: 100.0
-  torque {
-  }
-}
-gravity {  # zero-gravity works in this env because the `object` body is constrained to the x-y plane via `frozen` fields
-}
-collide_include {
-  first: "table"
-  second: "object"
-}
-collide_include {
-  first: "r_wrist_roll_link"
-  second: "object"
-}
-collide_include {
-  first: "r_forearm_roll_link"
-  second: "object"
-}
-collide_include {
-  first: "r_forearm_roll_link"
-  second: "table"
-}
-collide_include {
-  first: "r_wrist_roll_link"
-  second: "table"
-}
-dt: 0.05000000074505806
-substeps: 50
-solver_scale_pos: 0.20000000298023224
-solver_scale_ang: 0.20000000298023224
-solver_scale_collide: 0.20000000298023224
-dynamics_mode: "pbd",
-"""

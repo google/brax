@@ -1,4 +1,3 @@
-include brax/tests/testdata/cylinder.stl
-include brax/v2/envs/assets/*.xml
-recursive-include brax/v2/test_data *.xml *.stl *.obj
-recursive-include brax/v2/visualizer *
+include brax/envs/assets/*.xml
+recursive-include brax/test_data *.xml *.stl *.obj
+recursive-include brax/visualizer *

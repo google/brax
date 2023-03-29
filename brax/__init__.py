@@ -1,4 +1,4 @@
-# Copyright 2022 The Brax Authors.
+# Copyright 2023 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 __version__ = '0.1.2'
 
-from brax.physics.base import Info
-from brax.physics.base import QP
-from brax.physics.config_pb2 import Config
-from brax.physics.system import System
+from brax.base import Motion
+from brax.base import State
+from brax.base import System
+from brax.base import Transform

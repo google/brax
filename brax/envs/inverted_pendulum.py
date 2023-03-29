@@ -1,4 +1,4 @@
-# Copyright 2022 The Brax Authors.
+# Copyright 2023 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,21 +14,25 @@
 
 """An inverted pendulum environment."""
 
-import brax
-from brax import jumpy as jp
+from brax import base
 from brax.envs import env
+from brax.io import mjcf
+from etils import epath
+import jax
+from jax import numpy as jp
 
 
-class InvertedPendulum(env.Env):
+class InvertedPendulum(env.PipelineEnv):
 
 
 
-  """
-  ### Description
+  # pyformat: disable
+  """### Description
 
   This environment is the cartpole environment based on the work done by Barto,
   Sutton, and Anderson in
-  ["Neuronlike adaptive elements that can solve difficult learning control problems"](https://ieeexplore.ieee.org/document/6313077).
+  ["Neuronlike adaptive elements that can solve difficult learning control
+  problems"](https://ieeexplore.ieee.org/document/6313077).
 
   This environment involves a cart that can moved linearly, with a pole fixed on
   it at one end and having another end free. The cart can be pushed left or
@@ -42,9 +46,11 @@ class InvertedPendulum(env.Env):
   force applied to the cart (with magnitude representing the amount of force and
   sign representing the direction)
 
-  | Num | Action                    | Control Min | Control Max | Name (in corresponding config) | Joint | Unit      |
+  | Num | Action                    | Control Min | Control Max | Name (in
+  corresponding config) | Joint | Unit      |
   |-----|---------------------------|-------------|-------------|--------------------------------|-------|-----------|
-  | 0   | Force applied on the cart | -1          | 1           | thruster                       | slide | Force (N) |
+  | 0   | Force applied on the cart | -1          | 1           | thruster
+  | slide | Force (N) |
 
   ### Observation Space
 
@@ -55,12 +61,17 @@ class InvertedPendulum(env.Env):
   The observation is a `ndarray` with shape `(4,)` where the elements correspond
   to the following:
 
-  | Num | Observation                                   | Min  | Max | Name (in corresponding config) | Joint | Unit                     |
+  | Num | Observation                                   | Min  | Max | Name (in
+  corresponding config) | Joint | Unit                     |
   |-----|-----------------------------------------------|------|-----|--------------------------------|-------|--------------------------|
-  | 0   | position of the cart along the linear surface | -Inf | Inf | thruster                       | slide | position (m)             |
-  | 1   | vertical angle of the pole on the cart        | -Inf | Inf | hinge                          | hinge | angle (rad)              |
-  | 2   | linear velocity of the cart                   | -Inf | Inf | thruster                       | slide | velocity (m/s)           |
-  | 3   | angular velocity of the pole on the cart      | -Inf | Inf | hinge                          | hinge | angular velocity (rad/s) |
+  | 0   | position of the cart along the linear surface | -Inf | Inf | thruster
+  | slide | position (m)             |
+  | 1   | vertical angle of the pole on the cart        | -Inf | Inf | hinge
+  | hinge | angle (rad)              |
+  | 2   | linear velocity of the cart                   | -Inf | Inf | thruster
+  | slide | velocity (m/s)           |
+  | 3   | angular velocity of the pole on the cart      | -Inf | Inf | hinge
+  | hinge | angular velocity (rad/s) |
 
 
   ### Rewards
@@ -119,155 +130,54 @@ class InvertedPendulum(env.Env):
     pendulum)
   * v0: Initial versions release (1.0.0)
   """
+  # pyformat: enable
 
 
-  def __init__(self, legacy_spring=False, **kwargs):
-    config = _SYSTEM_CONFIG_SPRING if legacy_spring else _SYSTEM_CONFIG
-    super().__init__(config=config, **kwargs)
+  def __init__(self, backend='generalized', **kwargs):
+    path = epath.resource_path('brax') / 'envs/assets/inverted_pendulum.xml'
+    sys = mjcf.load(path)
+
+    n_frames = 2
+
+    if backend in ['spring', 'positional']:
+      sys = sys.replace(dt=0.005)
+      n_frames = 4
+
+    kwargs['n_frames'] = kwargs.get('n_frames', n_frames)
+
+    super().__init__(sys=sys, backend=backend, **kwargs)
 
   def reset(self, rng: jp.ndarray) -> env.State:
     """Resets the environment to an initial state."""
-    rng, rng1, rng2 = jp.random_split(rng, 3)
+    rng, rng1, rng2 = jax.random.split(rng, 3)
 
-    qpos = self.sys.default_angle() + self._noise(rng1)
-    qvel = self._noise(rng2)
-
-    qp = self.sys.default_qp(joint_angle=qpos, joint_velocity=qvel)
-    obs = self._get_obs(qp, self.sys.info(qp))
+    q = self.sys.init_q + jax.random.uniform(
+        rng1, (self.sys.q_size(),), minval=-0.01, maxval=0.01
+    )
+    qd = jax.random.uniform(
+        rng2, (self.sys.qd_size(),), minval=-0.01, maxval=0.01
+    )
+    pipeline_state = self.pipeline_init(q, qd)
+    obs = self._get_obs(pipeline_state)
     reward, done = jp.zeros(2)
     metrics = {}
 
-    return env.State(qp, obs, reward, done, metrics)
+    return env.State(pipeline_state, obs, reward, done, metrics)
 
   def step(self, state: env.State, action: jp.ndarray) -> env.State:
     """Run one timestep of the environment's dynamics."""
-    qp, info = self.sys.step(state.qp, action)
-    obs = self._get_obs(qp, info)
+    pipeline_state = self.pipeline_step(state.pipeline_state, action)
+    obs = self._get_obs(pipeline_state)
     reward = 1.0
-    done = jp.where(jp.abs(obs[1]) > .2, 1.0, 0.0)  # pytype: disable=wrong-arg-types  # jax-ndarray
-
-    return state.replace(qp=qp, obs=obs, reward=reward, done=done)
+    done = jp.where(jp.abs(obs[1]) > 0.2, 1.0, 0.0)
+    return state.replace(
+        pipeline_state=pipeline_state, obs=obs, reward=reward, done=done
+    )
 
   @property
   def action_size(self):
     return 1
 
-  def _get_obs(self, qp: brax.QP, info: brax.Info) -> jp.ndarray:
+  def _get_obs(self, pipeline_state: base.State) -> jp.ndarray:
     """Observe cartpole body position and velocities."""
-    joint_angle, joint_vel = self.sys.joints[0].angle_vel(qp)
-
-    # [cart pos, joint angle, cart vel, joint vel]
-    obs = [qp.pos[0, :1], joint_angle, qp.vel[0, :1], joint_vel]
-
-    return jp.concatenate(obs)
-
-  def _noise(self, rng):
-    return jp.random_uniform(rng, (self.sys.num_joint_dof,), -0.01, 0.01)
-
-
-_SYSTEM_CONFIG = """
-  bodies {
-    name: "cart"
-    colliders {
-      rotation {
-      x: 90
-      z: 90
-      }
-      capsule {
-        radius: 0.1
-        length: 0.4
-      }
-    }
-    frozen { position { x:0 y:1 z:1 } rotation { x:1 y:1 z:1 } }
-    mass: 10.471975
-  }
-  bodies {
-    name: "pole"
-    colliders {
-      capsule {
-        radius: 0.049
-        length: 0.69800085
-      }
-    }
-    frozen { position { x: 0 y: 1 z: 0 } rotation { x: 1 y: 0 z: 1 } }
-    mass: 5.0185914
-  }
-  joints {
-    name: "hinge"
-    parent: "cart"
-    child: "pole"
-    child_offset { z: -.3 }
-    rotation {
-      z: 90.0
-    }
-    angle_limit { min: -360 max: 360 }
-  }
-  forces {
-    name: "thruster"
-    body: "cart"
-    strength: 100.0
-    thruster {}
-  }
-  collide_include {}
-  gravity {
-    z: -9.81
-  }
-  dt: 0.04
-  substeps: 8
-  dynamics_mode: "pbd"
-  """
-
-
-_SYSTEM_CONFIG_SPRING = """
-  bodies {
-    name: "cart"
-    colliders {
-      rotation {
-      x: 90
-      z: 90
-      }
-      capsule {
-        radius: 0.1
-        length: 0.4
-      }
-    }
-    frozen { position { x:0 y:1 z:1 } rotation { x:1 y:1 z:1 } }
-    mass: 10.471975
-  }
-  bodies {
-    name: "pole"
-    colliders {
-      capsule {
-        radius: 0.049
-        length: 0.69800085
-      }
-    }
-    frozen { position { x: 0 y: 1 z: 0 } rotation { x: 1 y: 0 z: 1 } }
-    mass: 5.0185914
-  }
-  joints {
-    name: "hinge"
-    stiffness: 10000.0
-    parent: "cart"
-    child: "pole"
-    child_offset { z: -.3 }
-    rotation {
-      z: 90.0
-    }
-    limit_strength: 0.0
-    angle_limit { min: 0.0 max: 0.0 }
-  }
-  forces {
-    name: "thruster"
-    body: "cart"
-    strength: 100.0
-    thruster {}
-  }
-  collide_include {}
-  gravity {
-    z: -9.81
-  }
-  dt: 0.04
-  substeps: 8
-  dynamics_mode: "legacy_spring"
-  """
+    return jp.concatenate([pipeline_state.q, pipeline_state.qd])

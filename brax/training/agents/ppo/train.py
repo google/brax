@@ -1,4 +1,4 @@
-# Copyright 2022 The Brax Authors.
+# Copyright 2023 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ import time
 from typing import Callable, Optional, Tuple, Union
 
 from absl import logging
-from brax import envs as envs_v1
+from brax.v1 import envs as envs_v1
 from brax.training import acting
 from brax.training import gradients
 from brax.training import pmap
@@ -33,7 +33,7 @@ from brax.training.agents.ppo import losses as ppo_losses
 from brax.training.agents.ppo import networks as ppo_networks
 from brax.training.types import Params
 from brax.training.types import PRNGKey
-from brax.v2 import envs
+from brax import envs
 import flax
 import jax
 import jax.numpy as jnp
@@ -225,7 +225,7 @@ def train(environment: Union[envs_v1.Env, envs.Env],
     (state, _), data = jax.lax.scan(
         f, (state, key_generate_unroll), (),
         length=batch_size * num_minibatches // num_envs)
-    # Have leading dimentions (batch_size * num_minibatches, unroll_length)
+    # Have leading dimensions (batch_size * num_minibatches, unroll_length)
     data = jax.tree_util.tree_map(lambda x: jnp.swapaxes(x, 1, 2), data)
     data = jax.tree_util.tree_map(lambda x: jnp.reshape(x, (-1,) + x.shape[2:]),
                                   data)
@@ -288,7 +288,7 @@ def train(environment: Union[envs_v1.Env, envs.Env],
       policy=ppo_network.policy_network.init(key_policy),
       value=ppo_network.value_network.init(key_value))
   training_state = TrainingState(  # pytype: disable=wrong-arg-types  # jax-ndarray
-      optimizer_state=optimizer.init(init_params),
+      optimizer_state=optimizer.init(init_params),  # pytype: disable=wrong-arg-types  # numpy-scalars
       params=init_params,
       normalizer_params=running_statistics.init_state(
           specs.Array(env_state.obs.shape[-1:], jnp.float32)),
