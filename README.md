@@ -9,7 +9,7 @@ on acceleration hardware. It is both efficient for single-device simulation, and
 scalable to massively parallel simulation on multiple devices, without the need
 for pesky datacenters.
 
-<img src="https://github.com/google/brax/raw/main/docs/img/humanoid_v2.gif" width="250" height="250"/><img src="https://github.com/google/brax/raw/main/docs/img/a1.gif" width="250" height="250"/><img src="https://github.com/google/brax/raw/main/docs/img/ant_v2.gif" width="250" height="250"/><img src="https://github.com/google/brax/raw/main/docs/img/ur5e.gif" width="250" height="250"/>
+<img src="https://github.com/google/brax/raw/main/docs/img/humanoid_v2.gif" width="160" height="160"/><img src="https://github.com/google/brax/raw/main/docs/img/a1.gif" width="160" height="160"/><img src="https://github.com/google/brax/raw/main/docs/img/ant_v2.gif" width="160" height="160"/><img src="https://github.com/google/brax/raw/main/docs/img/ur5e.gif" width="160" height="160"/>
 
 Brax simulates environments at millions of physics steps per second on TPU, and includes a suite of learning algorithms that train agents in seconds
 to minutes:

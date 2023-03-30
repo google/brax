@@ -22,6 +22,7 @@ from absl import flags
 from absl import logging
 from brax import envs
 from brax.io import html
+from brax.io import metrics
 from brax.io import model
 from brax.training.agents.apg import train as apg
 from brax.training.agents.ars import train as ars
@@ -30,9 +31,7 @@ from brax.training.agents.ppo import train as ppo
 from brax.training.agents.sac import train as sac
 from brax.v1 import envs as envs_v1
 from brax.v1.io import html as html_v1
-from brax.v1.io import metrics as metrics_v1
 from brax.v1.io import npy_file
-from brax.v1.io import rlds
 import jax
 
 
@@ -44,9 +43,100 @@ flags.DEFINE_string('env', 'ant', 'Name of environment to train.')
 
 # TODO move npy_file to v2.
 
+flags.DEFINE_bool('use_v2', True, 'Use Brax v2.')
+flags.DEFINE_enum(
+    'backend',
+    'generalized',
+    ['spring', 'generalized', 'positional'],
+    'The physics backend to use.',
+)
+flags.DEFINE_bool('legacy_spring', False, 'Brax v1 backend.')
+flags.DEFINE_integer('total_env_steps', 50000000,
+                     'Number of env steps to run training for.')
+flags.DEFINE_integer('num_evals', 10, 'How many times to run an eval.')
+flags.DEFINE_integer('seed', 0, 'Random seed.')
+flags.DEFINE_integer('num_envs', 4, 'Number of envs to run in parallel.')
+flags.DEFINE_integer('action_repeat', 1, 'Action repeat.')
+flags.DEFINE_integer('unroll_length', 30, 'Unroll length.')
+flags.DEFINE_integer('batch_size', 4, 'Batch size.')
+flags.DEFINE_integer('num_minibatches', 1, 'Number')
+flags.DEFINE_integer(
+    'num_updates_per_batch', 1,
+    'Number of times to reuse each transition for gradient '
+    'computation.')
+flags.DEFINE_float('reward_scaling', 10.0, 'Reward scale.')
+flags.DEFINE_float('entropy_cost', 3e-4, 'Entropy cost.')
+flags.DEFINE_integer('episode_length', 1000, 'Episode length.')
+flags.DEFINE_float('discounting', 0.99, 'Discounting.')
+flags.DEFINE_float('learning_rate', 5e-4, 'Learning rate.')
+flags.DEFINE_float('max_gradient_norm', 1e9,
+                   'Maximal norm of a gradient update.')
+flags.DEFINE_string('logdir', '', 'Logdir.')
+flags.DEFINE_bool('normalize_observations', True,
+                  'Whether to apply observation normalization.')
+flags.DEFINE_integer(
+    'max_devices_per_host', None,
+    'Maximum number of devices to use per host. If None, '
+    'defaults to use as much as it can.')
+flags.DEFINE_integer('num_videos', 1,
+                     'Number of videos to record after training.')
+flags.DEFINE_integer('num_trajectories_npy', 0,
+                     'Number of rollouts to write to disk as raw QP states.')
+# Evolution Strategy related flags
+flags.DEFINE_integer(
+    'population_size', 1,
+    'Number of environments in ES. The actual number is 2x '
+    'larger (used for antithetic sampling.')
+flags.DEFINE_float('perturbation_std', 0.1,
+                   'Std of a random noise added by ES.')
+flags.DEFINE_enum('fitness_shaping', 'original',
+                  ['original', 'centered_rank', 'wierstra'],
+                  'Defines a type of fitness shaping to apply.')
+flags.DEFINE_bool('center_fitness', False,
+                  'Whether to normalize fitness after the shaping.')
+flags.DEFINE_float('l2coeff', 0,
+                   'L2 regularization coefficient for model params.')
+# SAC hps.
+flags.DEFINE_integer('min_replay_size', 8192,
+                     'Minimal replay buffer size before the training starts.')
+flags.DEFINE_integer('max_replay_size', 1048576, 'Maximal replay buffer size.')
+flags.DEFINE_integer(
+    'grad_updates_per_step', 1,
+    'How many SAC gradient updates to run per one step in the '
+    'environment.')
+# PPO hps.
+flags.DEFINE_float('gae_lambda', .95, 'General advantage estimation lambda.')
+flags.DEFINE_float('clipping_epsilon', .3, 'Policy loss clipping epsilon.')
+# ARS hps.
+flags.DEFINE_integer(
+    'number_of_directions', 60,
+    'Number of directions to explore. The actual number is 2x '
+    'larger (used for antithetic sampling.')
+flags.DEFINE_integer('top_directions', 20,
+                     'Number of top directions to select.')
+flags.DEFINE_float('exploration_noise_std', 0.1,
+                   'Std of a random noise added by ARS.')
+flags.DEFINE_float('reward_shift', 0.,
+                   'A reward shift to get rid of "stay alive" bonus.')
+flags.DEFINE_enum('head_type', '', ['', 'clip', 'tanh'],
+                  'Which policy head to use.')
+# ARS hps.
+flags.DEFINE_integer('truncation_length', None,
+                     'Truncation for gradient propagation in APG.')
 
-  # TODO move metrics writer to v2.
-  with metrics_v1.Writer(FLAGS.logdir) as writer:
+
+def main(unused_argv):
+
+  if FLAGS.use_v2:
+    get_environment = functools.partial(
+        envs.get_environment, backend=FLAGS.backend
+    )
+  else:
+    get_environment = functools.partial(
+        envs_v1.get_environment, legacy_spring=FLAGS.legacy_spring
+    )
+
+  with metrics.Writer(FLAGS.logdir) as writer:
     writer.write_hparams({
         'num_evals': FLAGS.num_evals,
         'num_envs': FLAGS.num_envs,
