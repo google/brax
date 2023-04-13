@@ -15,7 +15,7 @@
 """Brax training acting functions."""
 
 import time
-from typing import Callable, Sequence, Tuple
+from typing import Callable, Sequence, Tuple, Union
 
 from brax import envs
 from brax.training.types import Metrics
@@ -27,8 +27,8 @@ from brax.v1 import envs as envs_v1
 import jax
 import numpy as np
 
-State = envs.State | envs_v1.State
-Env = envs.Env | envs_v1.Env | envs_v1.Wrapper
+State = Union[envs.State, envs_v1.State]
+Env = Union[envs.Env, envs_v1.Env, envs_v1.Wrapper]
 
 
 def actor_step(
