@@ -20,7 +20,9 @@ from absl.testing import absltest
 from absl.testing import parameterized
 from brax.training import replay_buffers
 import jax
+from jax.experimental.multihost_utils import process_allgather
 import jax.numpy as jnp
+import numpy as np
 
 
 def get_dummy_data():
@@ -29,367 +31,575 @@ def get_dummy_data():
 
 def get_dummy_batch(batch_size: int = 8):
   return {
-      'a':
-          jnp.arange(batch_size, dtype=jnp.float32),
-      'b':
-          jnp.reshape(
-              jnp.arange(batch_size * 5 * 5, dtype=jnp.float32),
-              (batch_size, 5, 5))
+      'a': jnp.arange(batch_size, dtype=jnp.float32),
+      'b': jnp.reshape(
+          jnp.arange(batch_size * 5 * 5, dtype=jnp.float32), (batch_size, 5, 5)
+      ),
   }
+
+
+AXIS_NAME = 'x'
+EXTRA_AXIS = 'y'
+
+
+def get_mesh():
+  devices = jax.devices()
+  return jax.sharding.Mesh(
+      np.array(devices).reshape(2 if len(devices) % 2 == 0 else 1, -1),
+      (AXIS_NAME, EXTRA_AXIS),
+  )
 
 
 def sorted_data(buffer_state: replay_buffers.ReplayBufferState) -> List[int]:
   """Returns the data of the buffer, rolled so set the current position to 0."""
-  return jnp.sort(jnp.squeeze(buffer_state.data, axis=1)).tolist()
+  return jnp.sort(jnp.ravel(buffer_state.data)).tolist()
 
 
-QUEUE_FACTORIES = [replay_buffers.UniformSamplingQueue, replay_buffers.Queue]
+def no_wrap(buffer):
+  return buffer
+
+
+def pjit_wrap(buffer):
+  return replay_buffers.PjitWrapper(
+      buffer,
+      mesh=get_mesh(),
+      axis_name=AXIS_NAME,
+  )
+
+
+def pmap_wrap(buffer):
+  buffer = replay_buffers.PmapWrapper(
+      buffer, local_device_count=2 if len(jax.devices()) > 1 else 1
+  )
+  buffer.insert_internal = jax.jit(buffer.insert_internal)
+  buffer.sample_internal = jax.jit(buffer.sample_internal)
+  return buffer
+
+
+def jit_wrap(buffer):
+  buffer.insert_internal = jax.jit(buffer.insert_internal)
+  buffer.sample_internal = jax.jit(buffer.sample_internal)
+  return buffer
+
+
+QUEUE_FACTORIES = [
+    (replay_buffers.UniformSamplingQueue, no_wrap),
+    (replay_buffers.UniformSamplingQueue, pjit_wrap),
+    (replay_buffers.UniformSamplingQueue, pmap_wrap),
+    (replay_buffers.UniformSamplingQueue, jit_wrap),
+    (replay_buffers.Queue, no_wrap),
+    (replay_buffers.Queue, pjit_wrap),
+    (replay_buffers.Queue, pmap_wrap),
+    (replay_buffers.Queue, jit_wrap),
+]
+
+
+WRAPPERS = [no_wrap, pjit_wrap, pmap_wrap, jit_wrap]
+
+
+def assert_equal(obj, data, expected_data):
+  data = process_allgather(data)
+  obj.assertTrue(
+      jnp.all(data == expected_data), f'Not equal: {data} and {expected_data}'
+  )
 
 
 class QueueReplayTest(parameterized.TestCase):
   """Tests for Replay Buffers."""
 
   @parameterized.parameters(QUEUE_FACTORIES)
-  def testInsert(self, queue_cls):
-    replay_buffer = queue_cls(
-        max_replay_size=10,
-        dummy_data_sample=get_dummy_data(),
-        sample_batch_size=2)
+  def testInsert(self, queue_cls, wrapper):
+    mesh = get_mesh()
+    size_denominator = (
+        1 if wrapper in [no_wrap, jit_wrap] else mesh.shape[AXIS_NAME]
+    )
+    replay_buffer = wrapper(
+        queue_cls(
+            max_replay_size=16 // size_denominator,
+            dummy_data_sample=get_dummy_data(),
+            sample_batch_size=2 // size_denominator,
+        )
+    )
     rng = jax.random.PRNGKey(0)
     buffer_state = replay_buffer.init(rng)
-    self.assertEqual(replay_buffer.size(buffer_state), 0)
+    assert_equal(self, replay_buffer.size(buffer_state), 0)
 
-    buffer_state = jax.jit(replay_buffer.insert)(buffer_state,
-                                                 get_dummy_batch())
-    self.assertEqual(replay_buffer.size(buffer_state), 8)
+    buffer_state = replay_buffer.insert(buffer_state, get_dummy_batch())
+    assert_equal(self, replay_buffer.size(buffer_state), 8)
 
     # Hit the max replay_size.
-    buffer_state = jax.jit(replay_buffer.insert)(buffer_state,
-                                                 get_dummy_batch())
-    self.assertEqual(replay_buffer.size(buffer_state), 10)
+    buffer_state = replay_buffer.insert(buffer_state, get_dummy_batch(16))
+    assert_equal(self, replay_buffer.size(buffer_state), 16)
 
   @parameterized.parameters(QUEUE_FACTORIES)
-  def testInvalidStateShape(self, queue_cls) -> None:
-    max_replay_size = 10
-    replay_buffer = queue_cls(
-        max_replay_size=max_replay_size,
-        dummy_data_sample=get_dummy_data(),
-        sample_batch_size=2)
+  def testInvalidStateShape(self, queue_cls, wrapper) -> None:
+    mesh = get_mesh()
+    size_denominator = (
+        1 if wrapper in [no_wrap, jit_wrap] else mesh.shape[AXIS_NAME]
+    )
+    max_replay_size = 16 // size_denominator
+    replay_buffer = wrapper(
+        queue_cls(
+            max_replay_size=max_replay_size,
+            dummy_data_sample=get_dummy_data(),
+            sample_batch_size=2 // mesh.shape[AXIS_NAME],
+        )
+    )
     rng = jax.random.PRNGKey(0)
     buffer_state = replay_buffer.init(rng)
-    insert = jax.jit(replay_buffer.insert)
 
     # Make sure inserting in the buffer works wihtout crashing.
-    insert(buffer_state, get_dummy_batch())
+    replay_buffer.insert(buffer_state, get_dummy_batch())
 
     # Expect an exception if `buffer_state.data` was corrupted.
     invalid_state = buffer_state.replace(data=jnp.arange(10))
     with self.assertRaises(ValueError) as context_manager:
-      insert(invalid_state, get_dummy_batch())
+      replay_buffer.insert(invalid_state, get_dummy_batch())
     self.assertContainsSubsequence(str(context_manager.exception), 'shape')
 
     # Expect an exception if batch_size is larger than max_replay_size.
-    insert(buffer_state, get_dummy_batch(max_replay_size))
-    with self.assertRaises(ValueError) as context_manager:
-      insert(buffer_state, get_dummy_batch(max_replay_size + 1))
-    self.assertContainsSubsequence(
-        str(context_manager.exception), 'maximum replay size')
+    if wrapper in [pjit_wrap, pmap_wrap] and len(jax.devices()) != 1:
+      return
+    replay_buffer.insert(buffer_state, get_dummy_batch(max_replay_size))
+    with self.assertRaisesRegex(
+        ValueError,
+        (
+            'Trying to insert a batch of samples larger than the maximum replay'
+            ' size. num_samples: 18, max replay size 16'
+        ),
+    ) as context_manager:
+      replay_buffer.insert(buffer_state, get_dummy_batch(max_replay_size + 2))
 
   @parameterized.parameters(QUEUE_FACTORIES)
-  def testInsertRollingBatches(self, queue_cls) -> None:
-    max_size = 5
-    replay_buffer = queue_cls(
-        max_replay_size=max_size, dummy_data_sample=0, sample_batch_size=2)
+  def testInsertRollingBatches(self, queue_cls, wrapper) -> None:
+    mesh = get_mesh()
+    size_denominator = (
+        1 if wrapper in [no_wrap, jit_wrap] else mesh.shape[AXIS_NAME]
+    )
+    max_size = 6 // size_denominator
+    replay_buffer = wrapper(
+        queue_cls(
+            max_replay_size=max_size, dummy_data_sample=0, sample_batch_size=2
+        )
+    )
     rng = jax.random.PRNGKey(0)
     buffer_state = replay_buffer.init(rng)
-    self.assertEqual(replay_buffer.size(buffer_state), 0)
-    self.assertEqual(sorted_data(buffer_state), [0, 0, 0, 0, 0])
+    assert_equal(self, replay_buffer.size(buffer_state), 0)
+    assert_equal(self, sorted_data(buffer_state), [0, 0, 0, 0, 0, 0])
 
-    @jax.jit
-    def insert(buffer_state, batch):
-      return replay_buffer.insert(buffer_state, jnp.array(batch))
+    buffer_state = replay_buffer.insert(buffer_state, jnp.array([1, 2, 3, 4]))
+    assert_equal(self, replay_buffer.size(buffer_state), 4)
+    assert_equal(self, sorted_data(buffer_state), [0, 0, 1, 2, 3, 4])
 
-    buffer_state = insert(buffer_state, [1, 2, 3])
-    self.assertEqual(replay_buffer.size(buffer_state), 3)
-    self.assertEqual(sorted_data(buffer_state), [0, 0, 1, 2, 3])
+    buffer_state = replay_buffer.insert(buffer_state, jnp.array([5, 6, 7, 8]))
+    assert_equal(self, replay_buffer.size(buffer_state), 6)
+    assert_equal(self, sorted_data(buffer_state), [3, 4, 5, 6, 7, 8])
 
-    buffer_state = insert(buffer_state, [4, 5, 6])
-    self.assertEqual(replay_buffer.size(buffer_state), 5)
-    self.assertEqual(sorted_data(buffer_state), [2, 3, 4, 5, 6])
-
-    buffer_state = insert(buffer_state, [7, 8, 9, 10, 11])
-    self.assertEqual(replay_buffer.size(buffer_state), 5)
-    self.assertEqual(sorted_data(buffer_state), [7, 8, 9, 10, 11])
+    buffer_state = replay_buffer.insert(
+        buffer_state, jnp.array([7, 8, 9, 10, 11, 12])
+    )
+    assert_equal(self, replay_buffer.size(buffer_state), 6)
+    assert_equal(self, sorted_data(buffer_state), [7, 8, 9, 10, 11, 12])
 
   @parameterized.parameters(QUEUE_FACTORIES)
-  def testInsertRolling2DimBatches(self, queue_cls) -> None:
-    max_size = 5
-    replay_buffer = queue_cls(
-        max_replay_size=max_size,
-        dummy_data_sample=jnp.zeros((2,)),
-        sample_batch_size=2)
+  def testInsertRolling2DimBatches(self, queue_cls, wrapper) -> None:
+    mesh = get_mesh()
+    size_denominator = (
+        1 if wrapper in [no_wrap, jit_wrap] else mesh.shape[AXIS_NAME]
+    )
+    max_size = 8
+    mesh = get_mesh()
+    replay_buffer = wrapper(
+        queue_cls(
+            max_replay_size=max_size // size_denominator,
+            dummy_data_sample=jnp.zeros((2,)),
+            sample_batch_size=2,
+        )
+    )
     rng = jax.random.PRNGKey(0)
     buffer_state = replay_buffer.init(rng)
-    self.assertEqual(replay_buffer.size(buffer_state), 0)
-    self.assertTrue(
-        jnp.all(buffer_state.data == jnp.array([[0, 0], [0, 0], [0, 0], [0, 0],
-                                                [0, 0]])))
+    assert_equal(self, replay_buffer.size(buffer_state), 0)
+    if len(jax.devices()) == 1:
+      assert_equal(
+          self,
+          buffer_state.data,
+          [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
+      )
 
-    @jax.jit
-    def insert(buffer_state, batch):
-      return replay_buffer.insert(buffer_state,
-                                  jnp.array(batch, dtype=jnp.float32))
+    buffer_state = replay_buffer.insert(
+        buffer_state,
+        jnp.array([[1, 1], [2, 2], [3, 3], [4, 4]], dtype=jnp.float32),
+    )
+    assert_equal(self, replay_buffer.size(buffer_state), 4)
+    if len(jax.devices()) == 1:
+      assert_equal(
+          self,
+          buffer_state.data,
+          [[1, 1], [2, 2], [3, 3], [4, 4], [0, 0], [0, 0], [0, 0], [0, 0]],
+      )
 
-    buffer_state = insert(buffer_state, [[1, 1], [2, 2], [3, 3]])
-    self.assertEqual(replay_buffer.size(buffer_state), 3)
-    self.assertTrue(
-        jnp.all(buffer_state.data == jnp.array([[1, 1], [2, 2], [3, 3], [0, 0],
-                                                [0, 0]])))
+    buffer_state = replay_buffer.insert(
+        buffer_state,
+        jnp.array(
+            [[5, 5], [6, 6], [7, 7], [8, 8], [9, 9], [10, 10]],
+            dtype=jnp.float32,
+        ),
+    )
+    assert_equal(self, replay_buffer.size(buffer_state), 8)
+    if len(jax.devices()) == 1:
+      assert_equal(
+          self,
+          buffer_state.data,
+          [[3, 3], [4, 4], [5, 5], [6, 6], [7, 7], [8, 8], [9, 9], [10, 10]],
+      )
 
-    buffer_state = insert(buffer_state, [[4, 4], [5, 5], [6, 6]])
-    self.assertEqual(replay_buffer.size(buffer_state), 5)
-    self.assertTrue(
-        jnp.all(buffer_state.data == jnp.array([[2, 2], [3, 3], [4, 4], [5, 5],
-                                                [6, 6]])))
-
-  def testUniformSamplingQueueSample(self):
-    replay_buffer = replay_buffers.UniformSamplingQueue(
-        max_replay_size=10,
-        dummy_data_sample=get_dummy_data(),
-        sample_batch_size=2)
+  @parameterized.parameters(WRAPPERS)
+  def testUniformSamplingQueueSample(self, wrapper):
+    mesh = get_mesh()
+    size_denominator = (
+        1 if wrapper in [no_wrap, jit_wrap] else mesh.shape[AXIS_NAME]
+    )
+    replay_buffer = wrapper(
+        replay_buffers.UniformSamplingQueue(
+            max_replay_size=10 // size_denominator,
+            dummy_data_sample=get_dummy_data(),
+            sample_batch_size=2 // size_denominator,
+        )
+    )
     rng = jax.random.PRNGKey(0)
     buffer_state = replay_buffer.init(rng)
-    self.assertEqual(replay_buffer.size(buffer_state), 0)
+    assert_equal(self, replay_buffer.size(buffer_state), 0)
 
-    buffer_state = jax.jit(replay_buffer.insert)(buffer_state,
-                                                 get_dummy_batch())
-    self.assertEqual(replay_buffer.size(buffer_state), 8)
+    buffer_state = replay_buffer.insert(buffer_state, get_dummy_batch(8))
+    assert_equal(self, replay_buffer.size(buffer_state), 8)
 
-    buffer_state, samples = jax.jit(replay_buffer.sample)(buffer_state)
-    self.assertEqual(replay_buffer.size(buffer_state), 8)
-    self.assertEqual(samples['a'].shape, (2,))
-    self.assertEqual(samples['b'].shape, (2, 5, 5))
+    buffer_state, samples = replay_buffer.sample(buffer_state)
+    assert_equal(self, replay_buffer.size(buffer_state), 8)
+    assert_equal(self, samples['a'].shape, (2,))
+    assert_equal(self, samples['b'].shape, (2, 5, 5))
     for sample in samples['b']:
-      self.assertSequenceEqual(
-          list(jnp.reshape(sample - sample[0, 0], (-1,))), range(5 * 5))
+      assert_equal(
+          self, jnp.reshape(sample - sample[0, 0], (-1,)), range(5 * 5)
+      )
 
-  def testUniformSamplingQueueCyclicSample(self):
-    replay_buffer = replay_buffers.UniformSamplingQueue(
-        max_replay_size=10, dummy_data_sample=0, sample_batch_size=2)
+  @parameterized.parameters(WRAPPERS)
+  def testUniformSamplingQueueCyclicSample(self, wrapper):
+    replay_buffer = wrapper(
+        replay_buffers.UniformSamplingQueue(
+            max_replay_size=10, dummy_data_sample=0, sample_batch_size=2
+        )
+    )
     rng = jax.random.PRNGKey(0)
     buffer_state = replay_buffer.init(rng)
-    insert = jax.jit(replay_buffer.insert)
 
-    self.assertEqual(replay_buffer.size(buffer_state), 0)
+    assert_equal(self, replay_buffer.size(buffer_state), 0)
 
-    buffer_state = insert(buffer_state, jnp.zeros(10, dtype=jnp.int32))
-    self.assertEqual(replay_buffer.size(buffer_state), 10)
-    self.assertEqual(buffer_state.current_position, 0)
+    buffer_state = replay_buffer.insert(
+        buffer_state, jnp.zeros(10, dtype=jnp.int32)
+    )
+    assert_equal(self, replay_buffer.size(buffer_state), 10)
+    if jax.device_count() == 1 or wrapper in [no_wrap, jit_wrap]:
+      assert_equal(self, buffer_state.current_position, 0)
+    else:
+      assert_equal(self, buffer_state.current_position, [5, 5])
 
-  def testQueueSamplePyTree(self):
-    replay_buffer = replay_buffers.Queue(
-        max_replay_size=10,
-        dummy_data_sample=get_dummy_data(),
-        sample_batch_size=2)
+  @parameterized.parameters(WRAPPERS)
+  def testQueueSamplePyTree(self, wrapper):
+    mesh = get_mesh()
+    size_denominator = (
+        1 if wrapper in [no_wrap, jit_wrap] else mesh.shape[AXIS_NAME]
+    )
+    replay_buffer = wrapper(
+        replay_buffers.Queue(
+            max_replay_size=16 // size_denominator,
+            dummy_data_sample=get_dummy_data(),
+            sample_batch_size=2 // size_denominator,
+        ),
+    )
     rng = jax.random.PRNGKey(0)
     buffer_state = replay_buffer.init(rng)
-    self.assertEqual(replay_buffer.size(buffer_state), 0)
+    assert_equal(self, replay_buffer.size(buffer_state), 0)
 
-    buffer_state = jax.jit(replay_buffer.insert)(buffer_state,
-                                                 get_dummy_batch())
-    self.assertEqual(replay_buffer.size(buffer_state), 8)
+    buffer_state = replay_buffer.insert(buffer_state, get_dummy_batch())
+    assert_equal(self, replay_buffer.size(buffer_state), 8)
 
-    buffer_state, samples = jax.jit(replay_buffer.sample)(buffer_state)
-    self.assertEqual(replay_buffer.size(buffer_state), 6)
-    self.assertEqual(samples['a'].shape, (2,))
-    self.assertEqual(samples['b'].shape, (2, 5, 5))
+    buffer_state, samples = replay_buffer.sample(buffer_state)
+    assert_equal(self, replay_buffer.size(buffer_state), 6)
+    assert_equal(self, samples['a'].shape, (2,))
+    assert_equal(self, samples['b'].shape, (2, 5, 5))
     for sample in samples['b']:
-      self.assertSequenceEqual(
-          list(jnp.reshape(sample - sample[0, 0], (-1,))), range(5 * 5))
+      assert_equal(
+          self, jnp.reshape(sample - sample[0, 0], (-1,)), range(5 * 5)
+      )
 
-  def testQueueSample(self):
-    replay_buffer = replay_buffers.Queue(
-        max_replay_size=10, dummy_data_sample=0, sample_batch_size=3)
+  @parameterized.parameters(WRAPPERS)
+  def testQueueSample(self, wrapper):
+    mesh = get_mesh()
+    size_denominator = (
+        1 if wrapper in [no_wrap, jit_wrap] else mesh.shape[AXIS_NAME]
+    )
+    mesh = get_mesh()
+    replay_buffer = wrapper(
+        replay_buffers.Queue(
+            max_replay_size=10 // size_denominator,
+            dummy_data_sample=0,
+            sample_batch_size=4 // size_denominator,
+        )
+    )
     rng = jax.random.PRNGKey(0)
 
     buffer_state = replay_buffer.init(rng)
-    insert = jax.jit(replay_buffer.insert)
-    sample = jax.jit(replay_buffer.sample)
 
-    buffer_state = insert(buffer_state, jnp.arange(4))
-    self.assertSequenceStartsWith([0, 1, 2, 3], list(buffer_state.data))
-    self.assertEqual(buffer_state.current_position, 4)
-    self.assertEqual(replay_buffer.size(buffer_state), 4)
+    buffer_state = replay_buffer.insert(buffer_state, jnp.arange(4))
+    if jax.device_count() == 1 or wrapper in [no_wrap, jit_wrap]:
+      assert_equal(
+          self,
+          buffer_state.data,
+          [[0], [1], [2], [3], [0], [0], [0], [0], [0], [0]],
+      )
+      assert_equal(self, buffer_state.current_position, 4)
+    else:
+      assert_equal(
+          self,
+          buffer_state.data,
+          [[[0], [2], [0], [0], [0]], [[1], [3], [0], [0], [0]]],
+      )
+      assert_equal(self, buffer_state.current_position, [2, 2])
+    assert_equal(self, replay_buffer.size(buffer_state), 4)
 
-    buffer_state = insert(buffer_state, jnp.arange(4, 10))
-    self.assertSequenceEqual(
-        list(buffer_state.data), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
-    self.assertEqual(buffer_state.current_position, 0)
-    self.assertEqual(replay_buffer.size(buffer_state), 10)
+    buffer_state = replay_buffer.insert(buffer_state, jnp.arange(4, 10))
+    if jax.device_count() == 1 or wrapper in [no_wrap, jit_wrap]:
+      assert_equal(
+          self,
+          buffer_state.data,
+          [[0], [1], [2], [3], [4], [5], [6], [7], [8], [9]],
+      )
+      assert_equal(self, buffer_state.current_position, [0, 0])
+    else:
+      assert_equal(
+          self,
+          buffer_state.data,
+          [[[0], [2], [4], [6], [8]], [[1], [3], [5], [7], [9]]],
+      )
+      assert_equal(self, buffer_state.current_position, 0)
+    assert_equal(self, replay_buffer.size(buffer_state), 10)
 
-    buffer_state, samples = sample(buffer_state)
-    self.assertSequenceEqual(list(samples), [0, 1, 2])
-    self.assertEqual(replay_buffer.size(buffer_state), 7)
+    buffer_state, samples = replay_buffer.sample(buffer_state)
+    assert_equal(self, samples, [0, 1, 2, 3])
+    assert_equal(self, replay_buffer.size(buffer_state), 6)
 
-    buffer_state, samples = sample(buffer_state)
-    self.assertSequenceEqual(list(samples), [3, 4, 5])
-    self.assertEqual(replay_buffer.size(buffer_state), 4)
+    buffer_state, samples = replay_buffer.sample(buffer_state)
+    assert_equal(self, samples, [4, 5, 6, 7])
+    assert_equal(self, replay_buffer.size(buffer_state), 2)
 
-    buffer_state, samples = sample(buffer_state)
-    self.assertSequenceEqual(list(samples), [6, 7, 8])
-    self.assertEqual(replay_buffer.size(buffer_state), 1)
+    with self.assertRaisesRegex(
+        ValueError, 'Trying to sample 4 elements, but only 2 available.'
+    ):
+      buffer_state, samples = replay_buffer.sample(buffer_state)
 
-    buffer_state = insert(buffer_state, jnp.arange(20, 25))
-    buffer_state, samples = sample(buffer_state)
-    self.assertSequenceEqual(list(samples), [9, 20, 21])
-    self.assertEqual(replay_buffer.size(buffer_state), 3)
+    buffer_state = replay_buffer.insert(buffer_state, jnp.arange(20, 24))
+    buffer_state, samples = replay_buffer.sample(buffer_state)
+    assert_equal(self, samples, [8, 9, 20, 21])
+    assert_equal(self, replay_buffer.size(buffer_state), 2)
 
-    buffer_state, samples = sample(buffer_state)
-    self.assertSequenceEqual(list(samples), [22, 23, 24])
-    self.assertEqual(replay_buffer.size(buffer_state), 0)
-
-  def testQueueInsertWhenFull(self):
-    replay_buffer = replay_buffers.Queue(
-        max_replay_size=10, dummy_data_sample=0, sample_batch_size=3)
+  @parameterized.parameters(WRAPPERS)
+  def testQueueInsertWhenFull(self, wrapper):
+    mesh = get_mesh()
+    size_denominator = (
+        1 if wrapper in [no_wrap, jit_wrap] else mesh.shape[AXIS_NAME]
+    )
+    max_replay_size = 10 // size_denominator
+    replay_buffer = wrapper(
+        replay_buffers.Queue(
+            max_replay_size=max_replay_size,
+            dummy_data_sample=0,
+            sample_batch_size=4 // size_denominator,
+        ),
+    )
     rng = jax.random.PRNGKey(0)
 
     buffer_state = replay_buffer.init(rng)
-    insert = jax.jit(replay_buffer.insert)
 
-    buffer_state = insert(buffer_state, jnp.arange(10))
-    buffer_state = insert(buffer_state, jnp.arange(10, 12))
-    self.assertSequenceEqual(
-        list(buffer_state.data), [10, 11, 2, 3, 4, 5, 6, 7, 8, 9])
-    self.assertEqual(buffer_state.current_position, 2)
-    self.assertEqual(replay_buffer.size(buffer_state), 10)
+    buffer_state = replay_buffer.insert(buffer_state, jnp.arange(10))
+    buffer_state = replay_buffer.insert(buffer_state, jnp.arange(10, 12))
+    if len(jax.devices()) == 1:
+      assert_equal(
+          self,
+          buffer_state.data,
+          [[10], [11], [2], [3], [4], [5], [6], [7], [8], [9]],
+      )
+      assert_equal(self, buffer_state.current_position, 2)
+    assert_equal(self, replay_buffer.size(buffer_state), 10)
 
-  def testQueueWrappedSample(self):
-    replay_buffer = replay_buffers.Queue(
-        max_replay_size=10, dummy_data_sample=0, sample_batch_size=7)
+  @parameterized.parameters(WRAPPERS)
+  def testQueueWrappedSample(self, wrapper):
+    mesh = get_mesh()
+    size_denominator = (
+        1 if wrapper in [no_wrap, jit_wrap] else mesh.shape[AXIS_NAME]
+    )
+    replay_buffer = wrapper(
+        replay_buffers.Queue(
+            max_replay_size=10 // size_denominator,
+            dummy_data_sample=0,
+            sample_batch_size=8 // size_denominator,
+        ),
+    )
     rng = jax.random.PRNGKey(0)
 
     buffer_state = replay_buffer.init(rng)
-    insert = jax.jit(replay_buffer.insert)
-    sample = jax.jit(replay_buffer.sample)
-
-    buffer_state = insert(buffer_state, jnp.arange(10))
-    buffer_state = insert(buffer_state, jnp.arange(10, 16))
-    self.assertSequenceEqual(
-        list(buffer_state.data), [10, 11, 12, 13, 14, 15, 6, 7, 8, 9])
-    self.assertEqual(replay_buffer.size(buffer_state), 10)
-    self.assertEqual(buffer_state.current_position, 6)
+    buffer_state = replay_buffer.insert(buffer_state, jnp.arange(10))
+    buffer_state = replay_buffer.insert(buffer_state, jnp.arange(10, 16))
+    if len(jax.devices()) == 1:
+      assert_equal(
+          self,
+          buffer_state.data,
+          [[10], [11], [12], [13], [14], [15], [6], [7], [8], [9]],
+      )
+    assert_equal(self, replay_buffer.size(buffer_state), 10)
+    if jax.device_count() == 1 or wrapper in [no_wrap, jit_wrap]:
+      assert_equal(self, buffer_state.current_position, 6)
+    else:
+      assert_equal(self, buffer_state.current_position, [3, 3])
 
     # This sample contains elements from both the beggining and the end of
     # the buffer.
-    buffer_state, samples = sample(buffer_state)
-    self.assertSequenceEqual(list(samples), [6, 7, 8, 9, 10, 11, 12])
-    self.assertEqual(replay_buffer.size(buffer_state), 3)
-    self.assertEqual(buffer_state.current_position, 6)
+    buffer_state, samples = replay_buffer.sample(buffer_state)
+    assert_equal(self, samples, jnp.array([6, 7, 8, 9, 10, 11, 12, 13]))
+    assert_equal(self, replay_buffer.size(buffer_state), 2)
+    if jax.device_count() == 1 or wrapper in [no_wrap, jit_wrap]:
+      assert_equal(self, buffer_state.current_position, 6)
+    else:
+      assert_equal(self, buffer_state.current_position, [3, 3])
 
-  def testQueueBatchSizeEqualsMaxSize(self):
-    batch_size = 5
-    replay_buffer = replay_buffers.Queue(
-        max_replay_size=batch_size,
-        dummy_data_sample=0,
-        sample_batch_size=batch_size)
-    rng = jax.random.PRNGKey(0)
-
-    buffer_state = replay_buffer.init(rng)
-    insert = jax.jit(replay_buffer.insert)
-    sample = jax.jit(replay_buffer.sample)
-
-    buffer_state = insert(buffer_state, jnp.arange(batch_size))
-    buffer_state, samples = sample(buffer_state)
-    self.assertSequenceEqual(list(samples), range(batch_size))
-    self.assertEqual(buffer_state.current_size, 0)
-
-    buffer_state = insert(buffer_state, jnp.zeros(batch_size, dtype=jnp.int32))
-    buffer_state = insert(buffer_state, jnp.ones(batch_size, dtype=jnp.int32))
-    buffer_state, samples = sample(buffer_state)
-    self.assertSequenceEqual(list(samples), [1] * batch_size)
-    self.assertEqual(buffer_state.current_size, 0)
-
-  def testQueueSampleFromEmpty(self):
-    batch_size = 5
-    replay_buffer = replay_buffers.Queue(
-        max_replay_size=batch_size,
-        dummy_data_sample=0,
-        sample_batch_size=batch_size)
-    rng = jax.random.PRNGKey(0)
-
-    buffer_state = replay_buffer.init(rng)
-    insert = jax.jit(replay_buffer.insert)
-    sample = jax.jit(replay_buffer.sample)
-
-    buffer_state = insert(buffer_state, jnp.arange(batch_size))
-    buffer_state, samples = sample(buffer_state)
-    self.assertSequenceEqual(list(samples), range(batch_size))
-    self.assertEqual(buffer_state.current_size, 0)
-
-    buffer_state, samples = sample(buffer_state)
-    self.assertSequenceEqual(list(samples), [0] * batch_size)
-    self.assertEqual(buffer_state.current_size, 0)
-
-    buffer_state = insert(buffer_state, jnp.arange(10, 13))
-    self.assertEqual(buffer_state.current_size, 3)
-    buffer_state, samples = sample(buffer_state)
-    self.assertSequenceEqual(list(samples), [10, 11, 12, 0, 0])
-    self.assertEqual(buffer_state.current_size, 0)
-
-
-class PrimitiveReplayBufferTest(absltest.TestCase):
-
-  def testInsert(self):
-    replay_buffer = replay_buffers.PrimitiveReplayBuffer()
-    rng = jax.random.PRNGKey(0)
-    buffer_state = replay_buffer.init(rng)
-    self.assertEqual(replay_buffer.size(buffer_state), 0)
-
-    buffer_state = jax.jit(replay_buffer.insert)(
-        buffer_state, get_dummy_batch()
+  @parameterized.parameters(WRAPPERS)
+  def testQueueBatchSizeEqualsMaxSize(self, wrapper):
+    batch_size = 8
+    mesh = get_mesh()
+    size_denominator = (
+        1 if wrapper in [no_wrap, jit_wrap] else mesh.shape[AXIS_NAME]
     )
-    self.assertEqual(replay_buffer.size(buffer_state), 8)
+    mesh = get_mesh()
+    replay_buffer = wrapper(
+        replay_buffers.Queue(
+            max_replay_size=batch_size // size_denominator,
+            dummy_data_sample=0,
+            sample_batch_size=batch_size // size_denominator,
+        )
+    )
+    rng = jax.random.PRNGKey(0)
 
-  def testInsertWhenFull(self):
-    replay_buffer = replay_buffers.PrimitiveReplayBuffer()
+    buffer_state = replay_buffer.init(rng)
+
+    buffer_state = replay_buffer.insert(buffer_state, jnp.arange(batch_size))
+    buffer_state, samples = replay_buffer.sample(buffer_state)
+    assert_equal(self, samples, range(batch_size))
+    assert_equal(self, buffer_state.current_size, 0)
+
+    buffer_state = replay_buffer.insert(
+        buffer_state, jnp.zeros(batch_size, dtype=jnp.int32)
+    )
+    buffer_state = replay_buffer.insert(
+        buffer_state, jnp.ones(batch_size, dtype=jnp.int32)
+    )
+    buffer_state, samples = replay_buffer.sample(buffer_state)
+    assert_equal(self, samples, [1] * batch_size)
+    assert_equal(self, buffer_state.current_size, 0)
+
+  @parameterized.parameters(WRAPPERS)
+  def testQueueSampleFromEmpty(self, wrapper) -> None:
+    batch_size = 10
+    mesh = get_mesh()
+    size_denominator = (
+        1 if wrapper in [no_wrap, jit_wrap] else mesh.shape[AXIS_NAME]
+    )
+    replay_buffer = wrapper(
+        replay_buffers.Queue(
+            max_replay_size=batch_size // size_denominator,
+            dummy_data_sample=0,
+            sample_batch_size=batch_size // size_denominator,
+        )
+    )
+    rng = jax.random.PRNGKey(0)
+
+    buffer_state = replay_buffer.init(rng)
+
+    buffer_state = replay_buffer.insert(buffer_state, jnp.arange(batch_size))
+    buffer_state, samples = replay_buffer.sample(buffer_state)
+    assert_equal(self, samples, range(batch_size))
+    assert_equal(self, buffer_state.current_size, 0)
+
+    with self.assertRaisesRegex(
+        ValueError, 'Trying to sample 10 elements, but only 0 available.'
+    ):
+      replay_buffer.sample(buffer_state)
+    assert_equal(self, buffer_state.current_size, 0)
+
+    buffer_state = replay_buffer.insert(buffer_state, jnp.arange(10, 14))
+    if jax.device_count() == 1 or wrapper in [no_wrap, jit_wrap]:
+      assert_equal(self, buffer_state.current_size, 4)
+    else:
+      assert_equal(self, buffer_state.current_size, [2, 2])
+    with self.assertRaisesRegex(
+        ValueError, 'Trying to sample 10 elements, but only 4 available.'
+    ):
+      buffer_state, samples = replay_buffer.sample(buffer_state)
+
+
+class PrimitiveReplayBufferTest(parameterized.TestCase):
+
+  @parameterized.parameters(WRAPPERS)
+  def testInsert(self, wrapper):
+    replay_buffer = wrapper(replay_buffers.PrimitiveReplayBuffer())
     rng = jax.random.PRNGKey(0)
     buffer_state = replay_buffer.init(rng)
-    self.assertEqual(replay_buffer.size(buffer_state), 0)
+    if wrapper not in [pjit_wrap, pmap_wrap]:
+      assert_equal(self, replay_buffer.size(buffer_state), 0)
+    buffer_state = replay_buffer.insert(buffer_state, get_dummy_batch(8))
+    assert_equal(self, replay_buffer.size(buffer_state), 8)
 
-    insert = jax.jit(replay_buffer.insert)
-    buffer_state = insert(buffer_state, get_dummy_batch())
+  @parameterized.parameters(WRAPPERS)
+  def testInsertWhenFull(self, wrapper):
+    replay_buffer = wrapper(replay_buffers.PrimitiveReplayBuffer())
+    rng = jax.random.PRNGKey(0)
+    buffer_state = replay_buffer.init(rng)
+    if wrapper not in [pjit_wrap, pmap_wrap]:
+      assert_equal(self, replay_buffer.size(buffer_state), 0)
+
+    buffer_state = replay_buffer.insert(buffer_state, get_dummy_batch(8))
     with self.assertRaises(ValueError):
-      buffer_state = insert(buffer_state, get_dummy_batch())
-    self.assertEqual(replay_buffer.size(buffer_state), 8)
+      buffer_state = replay_buffer.insert(buffer_state, get_dummy_batch(8))
+    assert_equal(self, replay_buffer.size(buffer_state), 8)
 
-  def testSample(self):
-    replay_buffer = replay_buffers.PrimitiveReplayBuffer()
+  @parameterized.parameters(WRAPPERS)
+  def testSample(self, wrapper):
+    replay_buffer = wrapper(replay_buffers.PrimitiveReplayBuffer())
     rng = jax.random.PRNGKey(0)
     buffer_state = replay_buffer.init(rng)
-    self.assertEqual(replay_buffer.size(buffer_state), 0)
+    if wrapper not in [pjit_wrap, pmap_wrap]:
+      assert_equal(self, replay_buffer.size(buffer_state), 0)
 
-    insert = jax.jit(replay_buffer.insert)
-    sample = jax.jit(replay_buffer.sample)
-    buffer_state = insert(buffer_state, get_dummy_batch())
-    self.assertEqual(replay_buffer.size(buffer_state), 8)
-    buffer_state, samples = sample(buffer_state)
-    self.assertEqual(replay_buffer.size(buffer_state), 0)
-    self.assertEqual(samples['a'].shape, (8,))
-    self.assertEqual(samples['b'].shape, (8, 5, 5))
+    buffer_state = replay_buffer.insert(buffer_state, get_dummy_batch(8))
+    assert_equal(self, replay_buffer.size(buffer_state), 8)
+    buffer_state, samples = replay_buffer.sample(buffer_state)
+    if wrapper not in [pjit_wrap, pmap_wrap]:
+      assert_equal(self, replay_buffer.size(buffer_state), 0)
+    assert_equal(self, samples['a'].shape, (8,))
+    assert_equal(self, samples['b'].shape, (8, 5, 5))
     for sample in samples['b']:
-      self.assertSequenceEqual(
-          list(jnp.reshape(sample - sample[0, 0], (-1,))), range(5 * 5)
+      assert_equal(
+          self, jnp.reshape(sample - sample[0, 0], (-1,)), range(5 * 5)
       )
 
-  def testSampleWhenEmpty(self):
-    replay_buffer = replay_buffers.PrimitiveReplayBuffer()
+  @parameterized.parameters(WRAPPERS)
+  def testSampleWhenEmpty(self, wrapper):
+    replay_buffer = wrapper(replay_buffers.PrimitiveReplayBuffer())
     rng = jax.random.PRNGKey(0)
     buffer_state = replay_buffer.init(rng)
-    self.assertEqual(replay_buffer.size(buffer_state), 0)
+    if wrapper not in [pjit_wrap, pmap_wrap]:
+      assert_equal(self, replay_buffer.size(buffer_state), 0)
 
-    sample = jax.jit(replay_buffer.sample)
     with self.assertRaises(ValueError):
-      _, _ = sample(buffer_state)
+      _, _ = replay_buffer.sample(buffer_state)
 
 
 if __name__ == '__main__':

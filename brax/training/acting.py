@@ -17,24 +17,27 @@
 import time
 from typing import Callable, Sequence, Tuple
 
+from brax import envs
 from brax.training.types import Metrics
 from brax.training.types import Policy
 from brax.training.types import PolicyParams
 from brax.training.types import PRNGKey
 from brax.training.types import Transition
-# TODO: use v2 envs here, some weird type annotations to figure out.
-from brax.v1 import envs
+from brax.v1 import envs as envs_v1
 import jax
 import numpy as np
 
+State = envs.State | envs_v1.State
+Env = envs.Env | envs_v1.Env | envs_v1.Wrapper
+
 
 def actor_step(
-    env: envs.Env,
-    env_state: envs.State,
+    env: Env,
+    env_state: State,
     policy: Policy,
     key: PRNGKey,
     extra_fields: Sequence[str] = ()
-) -> Tuple[envs.State, Transition]:
+) -> Tuple[State, Transition]:
   """Collect data."""
   actions, policy_extras = policy(env_state.obs, key)
   nstate = env.step(env_state, actions)
@@ -52,13 +55,13 @@ def actor_step(
 
 
 def generate_unroll(
-    env: envs.Env,
-    env_state: envs.State,
+    env: Env,
+    env_state: State,
     policy: Policy,
     key: PRNGKey,
     unroll_length: int,
     extra_fields: Sequence[str] = ()
-) -> Tuple[envs.State, Transition]:
+) -> Tuple[State, Transition]:
   """Collect trajectories of given unroll_length."""
 
   @jax.jit
@@ -95,10 +98,10 @@ class Evaluator:
     self._key = key
     self._eval_walltime = 0.
 
-    eval_env = envs.wrappers.EvalWrapper(eval_env)
+    eval_env = envs.wrapper.EvalWrapper(eval_env)
 
     def generate_eval_unroll(policy_params: PolicyParams,
-                             key: PRNGKey) -> envs.State:
+                             key: PRNGKey) -> State:
       reset_keys = jax.random.split(key, num_eval_envs)
       eval_first_state = eval_env.reset(reset_keys)
       return generate_unroll(

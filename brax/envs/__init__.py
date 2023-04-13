@@ -30,7 +30,7 @@ from brax.envs import pusher
 from brax.envs import reacher
 from brax.envs import walker2d
 from brax.envs import wrapper
-from brax.envs.env import Env, State
+from brax.envs.env import Env, State, Wrapper
 
 _envs = {
     'ant': ant.Ant,

@@ -20,6 +20,7 @@ from absl.testing import absltest
 from brax import test_utils
 from brax.generalized import pipeline
 from brax.io import json as bjson
+import jax
 import jax.numpy as jp
 
 
@@ -37,6 +38,13 @@ class JsonTest(absltest.TestCase):
         ['box', 'dodecahedron', 'pyramid', 'tetrahedron', 'world'],
     )
     self.assertLen(res['geoms']['world'], 1)
+
+  def test_dumps_invalidstate_raises(self):
+    sys = test_utils.load_fixture('convex_convex.xml')
+    state = pipeline.init(sys, sys.init_q, jp.zeros(sys.qd_size()))
+    state = jax.tree_map(lambda x: jp.stack([x, x]), state)
+    with self.assertRaises(RuntimeError):
+      bjson.dumps(sys, [state])
 
 
 if __name__ == '__main__':

@@ -59,7 +59,7 @@ class Viewer {
 
     this.domElement.appendChild(this.renderer.domElement);
 
-    this.camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+    this.camera = new THREE.PerspectiveCamera(40, 1, 0.01, 100);
     if (system.config.frozen?.position?.z) {
       this.camera.position.set(0, 0, 1);
     } else if (system.config.frozen?.position?.y) {

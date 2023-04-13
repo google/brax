@@ -98,7 +98,18 @@ def dumps(sys: System, states: List[State]) -> Text:
 
   Returns:
     string containing json dump of system and states
+
+  Raises:
+    RuntimeError: if states have invalid shape
   """
+  if any((len(s.x.pos.shape), len(s.x.rot.shape)) != (2, 2) for s in states):
+    pos_shape = max(len(s.x.pos.shape) for s in states)
+    rot_shape = max(len(s.x.rot.shape) for s in states)
+    raise RuntimeError(
+        'Expected state.x position and rotation to have 2 shape dimensions but '
+        f'received len(pos.shape)={pos_shape} and len(rot.shape)={rot_shape}'
+    )
+
   d = _to_dict(sys)
 
   # TODO: move the manipulations below to javascript
