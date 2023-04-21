@@ -225,8 +225,8 @@ class Inertia(Base):
   """Angular inertia, mass, and center of mass location.
 
   Attributes:
-    transform: transform from inertia frame to link frame, corresponding to
-      center of mass position and orientation
+    transform: transform for the inertial frame relative to the link frame
+      (i.e. center of mass position and orientation)
     i: (3, 3) inertia matrix about a point P
     mass: scalar mass
   """
@@ -251,8 +251,8 @@ class Link(Base):
   translating) the joints, the entire system can be articulated.
 
   Attributes:
-    transform: transform from link frame to its parent
-    joint: location of joint in link frame
+    transform: transform for the link frame relative to the parent frame
+    joint: transform for the joint frame relative to the link frame
     inertia: mass, center of mass location, and inertia of this link
     invweight: mean inverse inertia at init_q
     constraint_stiffness: (num_link,) constraint spring for joint.
@@ -301,8 +301,8 @@ class Geometry(Base):
 
   Attributes:
     link_idx: Link index to which this Geometry is attached
-    transform: transform from this geometry's coordinate space to its parent
-      link, or to world space in the case of unparented geometry
+    transform: transform for the geometry frame relative to the link frame, or
+      relative to the world frame in the case of unparented geometry
     friction: resistance encountered when sliding against another geometry
     elasticity: bounce/restitution encountered when hitting another geometry
   """

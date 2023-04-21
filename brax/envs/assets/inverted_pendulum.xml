@@ -13,6 +13,7 @@
 		<numeric data="10000" name="constraint_limit_stiffness"/>
 		<numeric data="0" name="spring_mass_scale"/>
 		<numeric data="1" name="spring_inertia_scale"/>
+    <numeric data="5" name="solver_maxls"/>
 	</custom>
 	<size nstack="3000"/>
 	<worldbody>

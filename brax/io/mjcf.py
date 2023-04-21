@@ -16,7 +16,7 @@
 """Function to load MuJoCo mjcf format to Brax system."""
 
 import itertools
-from typing import Dict, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 import warnings
 from xml.etree import ElementTree
 
@@ -43,14 +43,6 @@ import mujoco
 import numpy as np
 
 
-# map from mujoco joint type to brax joint type string
-_JOINT_TYPE_STR = {
-    0: 'f',  # free
-    1: 'b',  # ball
-    2: 'p',  # prismatic
-    3: 'r',  # revolute
-}
-
 # map from mujoco bias type to brax actuator type string
 _ACT_TYPE_STR = {
     0: 'm',  # motor
@@ -70,47 +62,59 @@ def _fuse_bodies(elem: ElementTree.Element):
   """Fuses together parent child bodies that have no joint."""
 
   for child in list(elem):  # we will modify elem children, so make a copy
-    if child.tag == 'body' and 'joint' not in [e.tag for e in child]:
-      cpos = child.attrib.get('pos', '0 0 0')
-      cpos = np.fromstring(cpos, sep=' ')
-      cquat = child.attrib.get('quat', '1 0 0 0')
-      cquat = np.fromstring(cquat, sep=' ')
-      for grandchild in child:
-        # TODO: might need to offset more than just body, geom
-        if grandchild.tag in ('body', 'geom') and (cpos != 0).any():
-          gcpos = grandchild.attrib.get('pos', '0 0 0')
-          gcquat = grandchild.attrib.get('quat', '1 0 0 0')
-          gcpos = np.fromstring(gcpos, sep=' ')
-          gcquat = np.fromstring(gcquat, sep=' ')
-          gcpos, gcquat = _transform_do(cpos, cquat, gcpos, gcquat)
-          gcpos = ' '.join('%f' % i for i in gcpos)
-          gcquat = ' '.join('%f' % i for i in gcquat)
-          grandchild.attrib['pos'] = gcpos
-          grandchild.attrib['quat'] = gcquat
-        elem.append(grandchild)
-      elem.remove(child)
     _fuse_bodies(child)
+    # this only applies to bodies with no joints
+    if child.tag != 'body':
+      continue
+    if child.find('joint') is not None or child.find('freejoint') is not None:
+      continue
+    cpos = child.attrib.get('pos', '0 0 0')
+    cpos = np.fromstring(cpos, sep=' ')
+    cquat = child.attrib.get('quat', '1 0 0 0')
+    cquat = np.fromstring(cquat, sep=' ')
+    for grandchild in child:
+      # TODO: might need to offset more than just body, geom
+      if grandchild.tag in ('body', 'geom') and (cpos != 0).any():
+        gcpos = grandchild.attrib.get('pos', '0 0 0')
+        gcquat = grandchild.attrib.get('quat', '1 0 0 0')
+        gcpos = np.fromstring(gcpos, sep=' ')
+        gcquat = np.fromstring(gcquat, sep=' ')
+        gcpos, gcquat = _transform_do(cpos, cquat, gcpos, gcquat)
+        gcpos = ' '.join('%f' % i for i in gcpos)
+        gcquat = ' '.join('%f' % i for i in gcquat)
+        grandchild.attrib['pos'] = gcpos
+        grandchild.attrib['quat'] = gcquat
+      elem.append(grandchild)
+    elem.remove(child)
 
 
 def _get_meshdir(elem: ElementTree.Element) -> Union[str, None]:
   """Gets the mesh directory specified by the mujoco compiler tag."""
-  elem = elem.find('./mujoco/compiler')
-  return elem.get('meshdir') if elem is not None else None
+  elems = list(elem.iter('compiler'))
+  return elems[0].get('meshdir') if elems else None
 
 
 def _find_assets(
     elem: ElementTree.Element,
-    path: Union[str, epath.Path],
-    meshdir: Union[str, None] = None,
+    path: epath.Path,
+    meshdir: Optional[str],
 ) -> Dict[str, bytes]:
   """Loads assets from an xml given a base path."""
   assets = {}
-  path = epath.Path(path)
-  meshdir = meshdir or _get_meshdir(elem)
+  path = path if path.is_dir() else path.parent
   fname = elem.attrib.get('file') or elem.attrib.get('filename')
-  if fname:
-    dirname = path if path.is_dir() else path.parent
-    assets[fname] = (dirname / (meshdir or '') / fname).read_bytes()
+  if fname and fname.endswith('.xml'):
+    # an asset can be another xml!  if so, we must traverse it, too
+    asset = (path / fname).read_text()
+    asset_xml = ElementTree.fromstring(asset)
+    _fuse_bodies(asset_xml)
+    asset_meshdir = _get_meshdir(asset_xml)
+    assets[fname] = ElementTree.tostring(asset_xml)
+    assets.update(_find_assets(asset_xml, path, asset_meshdir))
+  elif fname:
+    # mesh, png, etc
+    path = path / meshdir if meshdir else path
+    assets[fname] = (path / fname).read_bytes()
 
   for child in list(elem):
     assets.update(_find_assets(child, path, meshdir))
@@ -163,7 +167,7 @@ def _get_custom(mj: mujoco.MjModel) -> Dict[str, np.ndarray]:
       'joint_scale_ang': (0.2, None),
       'collide_scale': (1.0, None),
       'matrix_inv_iterations': (10, None),
-      'solver_maxls': (5, None),
+      'solver_maxls': (20, None),
       'elasticity': (0.0, 'geom'),
       'convex': (True, 'geom'),
       'constraint_stiffness': (2000.0, 'body'),
@@ -494,7 +498,11 @@ def loads(xml: str, asset_path: Union[str, epath.Path, None] = None) -> System:
   """Loads a brax system from a MuJoCo mjcf xml string."""
   elem = ElementTree.fromstring(xml)
   _fuse_bodies(elem)
-  assets = {} if asset_path is None else _find_assets(elem, asset_path)
+  assets = {}
+  if asset_path is not None:
+    meshdir = _get_meshdir(elem)
+    asset_path = epath.Path(asset_path)
+    assets = _find_assets(elem, asset_path, meshdir)
   xml = ElementTree.tostring(elem, encoding='unicode')
   mj = mujoco.MjModel.from_xml_string(xml, assets=assets)
 
@@ -505,7 +513,8 @@ def load(path: Union[str, epath.Path]):
   """Loads a brax system from a MuJoCo mjcf file path."""
   elem = ElementTree.fromstring(epath.Path(path).read_text())
   _fuse_bodies(elem)
-  assets = _find_assets(elem, path)
+  meshdir = _get_meshdir(elem)
+  assets = _find_assets(elem, epath.Path(path), meshdir)
   xml = ElementTree.tostring(elem, encoding='unicode')
   mj = mujoco.MjModel.from_xml_string(xml, assets=assets)
 

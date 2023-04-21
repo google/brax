@@ -89,9 +89,9 @@ def simulate(path):
   steps = int(request.args.get('steps', 1000))
   act_fn = request.args.get('act', 'sin')
   solver_iterations = int(request.args.get('solver_iterations', 100))
-  force_floor = request.args.get('force_floor', 'true').lower() == 'true'
-  add_floor = request.args.get('add_floor', 'true').lower() == 'true'
-  add_act = request.args.get('add_act', 'true').lower() == 'true'
+  force_floor = request.args.get('force_floor', 'false').lower() == 'true'
+  add_floor = request.args.get('add_floor', 'false').lower() == 'true'
+  add_act = request.args.get('add_act', 'false').lower() == 'true'
 
   is_mesh = lambda g: isinstance(g, Mesh) and not isinstance(g, Convex)
 

@@ -51,6 +51,7 @@ class KinematicsTest(parameterized.TestCase):
       ('ant.xml',), ('humanoid.xml',), ('reacher.xml',), ('half_cheetah.xml',)
   )
   def test_inverse(self, xml_file):
+    np.random.seed(0)
     sys = test_utils.load_fixture(xml_file)
     # # test at random init
     rand_q = np.random.rand(sys.init_q.shape[0])

@@ -16,6 +16,7 @@
     <numeric data="0.0" name="ang_damping"/>
     <numeric data="0" name="spring_mass_scale"/>
 		<numeric data="1" name="spring_inertia_scale"/>
+    <numeric data="5" name="solver_maxls"/>
   </custom>
 	<worldbody>
 		<!-- Arena -->
