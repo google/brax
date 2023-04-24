@@ -38,11 +38,15 @@ setup(
     install_requires=[
         "absl-py",
         "dataclasses; python_version < '3.7'",
+        # TODO: remove dm_env after dropping legacy v1 code
+        "dm_env",
         "etils",
         "flask",
         "flask_cors",
         "flax",
+        # TODO: remove grpcio and gym after dropping legacy v1 code
         "grpcio",
+        "gym",
         "jax>=0.4.6",
         "jaxlib>=0.4.6",
         "jaxopt",
