@@ -38,13 +38,11 @@ setup(
     install_requires=[
         "absl-py",
         "dataclasses; python_version < '3.7'",
-        "dm_env",
         "etils",
         "flask",
         "flask_cors",
         "flax",
         "grpcio",
-        "gym",
         "jax>=0.4.6",
         "jaxlib>=0.4.6",
         "jaxopt",

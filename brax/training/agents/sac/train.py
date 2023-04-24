@@ -22,7 +22,7 @@ import time
 from typing import Any, Callable, Optional, Tuple, Union
 
 from absl import logging
-from brax.v1 import envs as envs_v1
+from brax import envs
 from brax.io import model
 from brax.training import acting
 from brax.training import gradients
@@ -35,7 +35,7 @@ from brax.training.agents.sac import losses as sac_losses
 from brax.training.agents.sac import networks as sac_networks
 from brax.training.types import Params
 from brax.training.types import PRNGKey
-from brax import envs
+from brax.v1 import envs as envs_v1
 import flax
 import jax
 import jax.numpy as jnp
@@ -161,7 +161,7 @@ def train(environment: Union[envs_v1.Env, envs.Env],
   assert num_envs % device_count == 0
   env = environment
   if isinstance(env, envs.Env):
-    wrap_for_training = envs.wrapper.wrap_for_training
+    wrap_for_training = envs.training.wrap
   else:
     wrap_for_training = envs_v1.wrappers.wrap_for_training
 

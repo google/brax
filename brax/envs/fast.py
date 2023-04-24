@@ -12,14 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Gotta go fast!  This trivial Env is meant for unit testing."""
+# pylint:disable=g-multiple-import
+"""Gotta go fast!  This trivial Env is for unit testing."""
 
 from brax import base
-from brax.envs import env
-import jax.numpy as jnp
+from brax.envs.base import PipelineEnv, State
+from jax import numpy as jp
 
 
-class Fast(env.PipelineEnv):
+class Fast(PipelineEnv):
   """Trains an agent to go fast."""
 
   def __init__(self, **kwargs):
@@ -27,20 +28,20 @@ class Fast(env.PipelineEnv):
     self._reset_count = 0
     self._step_count = 0
 
-  def reset(self, rng: jnp.ndarray) -> env.State:  # pytype: disable=signature-mismatch  # jax-ndarray
+  def reset(self, rng: jp.ndarray) -> State:
     self._reset_count += 1
     pipeline_state = base.State(
-        q=jnp.zeros(1),
-        qd=jnp.zeros(1),
-        x=base.Transform.create(pos=jnp.zeros(3)),
-        xd=base.Motion.create(vel=jnp.zeros(3)),
+        q=jp.zeros(1),
+        qd=jp.zeros(1),
+        x=base.Transform.create(pos=jp.zeros(3)),
+        xd=base.Motion.create(vel=jp.zeros(3)),
         contact=None
     )
-    obs = jnp.zeros(2)
-    reward, done = jnp.array(0.0), jnp.array(0.0)
-    return env.State(pipeline_state, obs, reward, done)
+    obs = jp.zeros(2)
+    reward, done = jp.array(0.0), jp.array(0.0)
+    return State(pipeline_state, obs, reward, done)
 
-  def step(self, state: env.State, action: jnp.ndarray) -> env.State:  # pytype: disable=signature-mismatch  # jax-ndarray
+  def step(self, state: State, action: jp.ndarray) -> State:
     self._step_count += 1
     vel = state.pipeline_state.xd.vel + (action > 0) * self._dt
     pos = state.pipeline_state.x.pos + vel * self._dt
@@ -49,7 +50,7 @@ class Fast(env.PipelineEnv):
         x=state.pipeline_state.x.replace(pos=pos),
         xd=state.pipeline_state.xd.replace(vel=vel),
     )
-    obs = jnp.array([pos[0], vel[0]])
+    obs = jp.array([pos[0], vel[0]])
     reward = pos[0]
 
     return state.replace(pipeline_state=qp, obs=obs, reward=reward)

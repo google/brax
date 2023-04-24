@@ -29,8 +29,8 @@ from brax.envs import inverted_pendulum
 from brax.envs import pusher
 from brax.envs import reacher
 from brax.envs import walker2d
-from brax.envs import wrapper
-from brax.envs.env import Env, State, Wrapper
+from brax.envs.base import Env, PipelineEnv, State, Wrapper
+from brax.envs.wrappers import training
 
 _envs = {
     'ant': ant.Ant,
@@ -95,10 +95,10 @@ def create(
   env = _envs[env_name](**kwargs)
 
   if episode_length is not None:
-    env = wrapper.EpisodeWrapper(env, episode_length, action_repeat)
+    env = training.EpisodeWrapper(env, episode_length, action_repeat)
   if batch_size:
-    env = wrapper.VmapWrapper(env, batch_size)
+    env = training.VmapWrapper(env, batch_size)
   if auto_reset:
-    env = wrapper.AutoResetWrapper(env)
+    env = training.AutoResetWrapper(env)
 
-  return env  # type: ignore
+  return env

@@ -12,19 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# pylint:disable=g-multiple-import
 """Trains a hopper to run in the +x direction."""
 
 from typing import Tuple
 
 from brax import base
-from brax.envs import env
+from brax.envs.base import PipelineEnv, State
 from brax.io import mjcf
 from etils import epath
 import jax
 from jax import numpy as jp
 
 
-class Hopper(env.PipelineEnv):
+class Hopper(PipelineEnv):
 
 
 
@@ -194,7 +195,7 @@ class Hopper(env.PipelineEnv):
         exclude_current_positions_from_observation
     )
 
-  def reset(self, rng: jp.ndarray) -> env.State:
+  def reset(self, rng: jp.ndarray) -> State:
     """Resets the environment to an initial state."""
     rng, rng1, rng2 = jax.random.split(rng, 3)
 
@@ -217,9 +218,9 @@ class Hopper(env.PipelineEnv):
         'x_position': zero,
         'x_velocity': zero,
     }
-    return env.State(pipeline_state, obs, reward, done, metrics)
+    return State(pipeline_state, obs, reward, done, metrics)
 
-  def step(self, state: env.State, action: jp.ndarray) -> env.State:
+  def step(self, state: State, action: jp.ndarray) -> State:
     """Runs one timestep of the environment's dynamics."""
     pipeline_state0 = state.pipeline_state
     pipeline_state = self.pipeline_step(pipeline_state0, action)

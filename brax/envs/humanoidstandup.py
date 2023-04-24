@@ -12,19 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# pylint:disable=g-multiple-import
 """Trains a humanoid to stand up."""
 
 from brax import actuator
 from brax import base
-from brax.base import Transform
-from brax.envs import env
+from brax.envs.base import PipelineEnv, State
 from brax.io import mjcf
 from etils import epath
 import jax
 from jax import numpy as jp
 
 
-class HumanoidStandup(env.PipelineEnv):
+class HumanoidStandup(PipelineEnv):
 
 
 
@@ -173,43 +173,6 @@ class HumanoidStandup(env.PipelineEnv):
   The episode terminates when any of the following happens:
 
   1. The episode duration reaches a 1000 timesteps
-
-  ### Arguments
-
-  No additional arguments are currently supported (in v2 and lower), but
-  modifications can be made to the XML file in the assets folder (or by changing
-  the path to a modified XML file in another folder).
-
-  ```
-  env = gym.make('HumanoidStandup-v2')
-  ```
-
-  There is no v3 for HumanoidStandup, unlike the robot environments where a v3
-  take gym.make kwargs such as xml_file, ctrl_cost_weight, reset_noise_scale etc.
-
-  There is a v4 version that uses the mujoco-bindings
-
-  ```
-  env = gym.make('HumanoidStandup-v4')
-  ```
-
-  And a v5 version that uses Brax:
-
-  ```
-  env = gym.make('HumanoidStandup-v5')
-  ```
-
-  ### Version History
-
-  * v5: ported to Brax.
-  * v4: all mujoco environments now use the mujoco bindings in mujoco>=2.1.3
-  * v3: support for gym.make kwargs such as xml_file, ctrl_cost_weight,
-        reset_noise_scale etc. rgb rendering comes from tracking camera (so
-        agent does not run away from screen)
-  * v2: All continuous control environments now use mujoco_py >= 1.50
-  * v1: max_time_steps raised to 1000 for robot based tasks. Added
-        reward_threshold to environments.
-  * v0: Initial versions release (1.0.0)
   """
   # pyformat: enable
 
@@ -233,7 +196,7 @@ class HumanoidStandup(env.PipelineEnv):
 
     super().__init__(sys=sys, backend=backend, **kwargs)
 
-  def reset(self, rng: jp.ndarray) -> env.State:
+  def reset(self, rng: jp.ndarray) -> State:
     """Resets the environment to an initial state."""
     rng, rng1, rng2 = jax.random.split(rng, 3)
 
@@ -252,9 +215,9 @@ class HumanoidStandup(env.PipelineEnv):
         'reward_linup': zero,
         'reward_quadctrl': zero,
     }
-    return env.State(pipeline_state, obs, reward, done, metrics)
+    return State(pipeline_state, obs, reward, done, metrics)
 
-  def step(self, state: env.State, action: jp.ndarray) -> env.State:
+  def step(self, state: State, action: jp.ndarray) -> State:
     """Runs one timestep of the environment's dynamics."""
     pipeline_state = self.pipeline_step(state.pipeline_state, action)
 
@@ -283,7 +246,7 @@ class HumanoidStandup(env.PipelineEnv):
     )
 
     xd_i = (
-        Transform.create(pos=x_i.pos - pipeline_state.x.pos)
+        base.Transform.create(pos=x_i.pos - pipeline_state.x.pos)
         .vmap()
         .do(pipeline_state.xd)
     )

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# pylint:disable=g-multiple-import
 """Trains a reacher to reach a target.
 
 Based on the OpenAI Gym MuJoCo Reacher environment.
@@ -21,15 +22,14 @@ from typing import Tuple
 
 from brax import base
 from brax import math
-from brax.base import Transform
-from brax.envs import env
+from brax.envs.base import PipelineEnv, State
 from brax.io import mjcf
 from etils import epath
 import jax
 from jax import numpy as jp
 
 
-class Reacher(env.PipelineEnv):
+class Reacher(PipelineEnv):
 
 
 
@@ -171,7 +171,7 @@ class Reacher(env.PipelineEnv):
 
     super().__init__(sys=sys, backend=backend, **kwargs)
 
-  def reset(self, rng: jp.ndarray) -> env.State:
+  def reset(self, rng: jp.ndarray) -> State:
     rng, rng1, rng2 = jax.random.split(rng, 3)
 
     q = self.sys.init_q + jax.random.uniform(
@@ -194,9 +194,9 @@ class Reacher(env.PipelineEnv):
         'reward_dist': zero,
         'reward_ctrl': zero,
     }
-    return env.State(pipeline_state, obs, reward, done, metrics)
+    return State(pipeline_state, obs, reward, done, metrics)
 
-  def step(self, state: env.State, action: jp.ndarray) -> env.State:
+  def step(self, state: State, action: jp.ndarray) -> State:
     pipeline_state = self.pipeline_step(state.pipeline_state, action)
     obs = self._get_obs(pipeline_state)
 
@@ -218,13 +218,13 @@ class Reacher(env.PipelineEnv):
     target_pos = pipeline_state.x.pos[2]
     tip_pos = (
         pipeline_state.x.take(1)
-        .do(Transform.create(pos=jp.array([0.11, 0, 0])))
+        .do(base.Transform.create(pos=jp.array([0.11, 0, 0])))
         .pos
     )
     # tip_vel, instead of pipeline_state.qd[:2], leads to more sensible policies
     # for a randomly initialized policy network
     tip_vel = (
-        Transform.create(pos=jp.array([0.11, 0, 0]))
+        base.Transform.create(pos=jp.array([0.11, 0, 0]))
         .do(pipeline_state.xd.take(1))
         .vel
     )

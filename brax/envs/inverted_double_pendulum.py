@@ -12,18 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# pylint:disable=g-multiple-import
 """An inverted pendulum environment."""
 
 from brax import base
-from brax.base import Transform
-from brax.envs import env
+from brax.envs.base import PipelineEnv, State
 from brax.io import mjcf
 from etils import epath
 import jax
 from jax import numpy as jp
 
 
-class InvertedDoublePendulum(env.PipelineEnv):
+class InvertedDoublePendulum(PipelineEnv):
 
 
 
@@ -112,44 +112,6 @@ class InvertedDoublePendulum(env.PipelineEnv):
   1. The episode duration reaches 1000 timesteps.
   2. The absolute value of the vertical angle between the pole and the cart is
   greater than 0.2 radians.
-
-  ### Arguments
-
-  No additional arguments are currently supported (in v2 and lower), but
-  modifications can be made to the XML file in the assets folder (or by changing
-  the path to a modified XML file in another folder).
-
-  ```
-  env = gym.make('InvertedDoublePendulum-v2')
-  ```
-
-  There is no v3 for InvertedDoublePendulum, unlike the robot environments where
-  a v3 and beyond take gym.make kwargs such as ctrl_cost_weight,
-  reset_noise_scale etc.
-
-  There is a v4 version that uses the mujoco-bindings
-
-  ```
-  env = gym.make('InvertedDoublePendulum-v4')
-  ```
-
-  And a v5 version that uses Brax:
-
-  ```
-  env = gym.make('InvertedDoublePendulum-v5')
-  ```
-
-  ### Version History
-
-  * v5: ported to Brax.
-  * v4: all mujoco environments now use the mujoco bindings in mujoco>=2.1.3
-  * v3: support for gym.make kwargs such as ctrl_cost_weight, reset_noise_scale
-    etc. rgb rendering comes from tracking camera (so agent does not run away
-    from screen)
-  * v2: All continuous control environments now use mujoco_py >= 1.50
-  * v1: max_time_steps raised to 1000 for robot based tasks (including inverted
-    pendulum)
-  * v0: Initial versions release (1.0.0)
   """
   # pyformat: enable
 
@@ -171,7 +133,7 @@ class InvertedDoublePendulum(env.PipelineEnv):
 
     super().__init__(sys=sys, backend=backend, **kwargs)
 
-  def reset(self, rng: jp.ndarray) -> env.State:
+  def reset(self, rng: jp.ndarray) -> State:
     """Resets the environment to an initial state."""
     rng, rng1, rng2 = jax.random.split(rng, 3)
 
@@ -185,13 +147,13 @@ class InvertedDoublePendulum(env.PipelineEnv):
     reward, done = jp.zeros(2)
     metrics = {}
 
-    return env.State(pipeline_state, obs, reward, done, metrics)
+    return State(pipeline_state, obs, reward, done, metrics)
 
-  def step(self, state: env.State, action: jp.ndarray) -> env.State:
+  def step(self, state: State, action: jp.ndarray) -> State:
     """Run one timestep of the environment's dynamics."""
     pipeline_state = self.pipeline_step(state.pipeline_state, action)
 
-    tip = Transform.create(pos=jp.array([0.0, 0.0, 0.6])).do(
+    tip = base.Transform.create(pos=jp.array([0.0, 0.0, 0.6])).do(
         pipeline_state.x.take(2)
     )
     x, _, y = tip.pos

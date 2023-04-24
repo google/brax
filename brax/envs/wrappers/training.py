@@ -12,19 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Wrappers for Brax to support different upstream use cases."""
+# pylint:disable=g-multiple-import
+"""Wrappers to support Brax training."""
 
 from typing import Dict, Optional
 
-from brax.envs import env as brax_env
+from brax.envs.base import Env, State, Wrapper
 from flax import struct
 import jax
 from jax import numpy as jp
 
 
-def wrap_for_training(
-    env: brax_env.Env, episode_length: int = 1000, action_repeat: int = 1
-) -> brax_env.Wrapper:
+def wrap(
+    env: Env, episode_length: int = 1000, action_repeat: int = 1
+) -> Wrapper:
   """Common wrapper pattern for all training agents.
 
   Args:
@@ -43,39 +44,37 @@ def wrap_for_training(
   return env
 
 
-class VmapWrapper(brax_env.Wrapper):
+class VmapWrapper(Wrapper):
   """Vectorizes Brax env."""
 
-  def __init__(self, env: brax_env.Env, batch_size: Optional[int] = None):
+  def __init__(self, env: Env, batch_size: Optional[int] = None):
     super().__init__(env)
     self.batch_size = batch_size
 
-  def reset(self, rng: jp.ndarray) -> brax_env.State:
+  def reset(self, rng: jp.ndarray) -> State:
     if self.batch_size is not None:
       rng = jax.random.split(rng, self.batch_size)
     return jax.vmap(self.env.reset)(rng)
 
-  def step(self, state: brax_env.State, action: jp.ndarray) -> brax_env.State:
+  def step(self, state: State, action: jp.ndarray) -> State:
     return jax.vmap(self.env.step)(state, action)
 
 
-class EpisodeWrapper(brax_env.Wrapper):
+class EpisodeWrapper(Wrapper):
   """Maintains episode step count and sets done at episode end."""
 
-  def __init__(
-      self, env: brax_env.Env, episode_length: int, action_repeat: int
-  ):
+  def __init__(self, env: Env, episode_length: int, action_repeat: int):
     super().__init__(env)
     self.episode_length = episode_length
     self.action_repeat = action_repeat
 
-  def reset(self, rng: jp.ndarray) -> brax_env.State:
+  def reset(self, rng: jp.ndarray) -> State:
     state = self.env.reset(rng)
     state.info['steps'] = jp.zeros(rng.shape[:-1])
     state.info['truncation'] = jp.zeros(rng.shape[:-1])
     return state
 
-  def step(self, state: brax_env.State, action: jp.ndarray) -> brax_env.State:
+  def step(self, state: State, action: jp.ndarray) -> State:
     def f(state, _):
       nstate = self.env.step(state, action)
       return nstate, nstate.reward
@@ -94,16 +93,16 @@ class EpisodeWrapper(brax_env.Wrapper):
     return state.replace(done=done)
 
 
-class AutoResetWrapper(brax_env.Wrapper):
+class AutoResetWrapper(Wrapper):
   """Automatically resets Brax envs that are done."""
 
-  def reset(self, rng: jp.ndarray) -> brax_env.State:
+  def reset(self, rng: jp.ndarray) -> State:
     state = self.env.reset(rng)
     state.info['first_pipeline_state'] = state.pipeline_state
     state.info['first_obs'] = state.obs
     return state
 
-  def step(self, state: brax_env.State, action: jp.ndarray) -> brax_env.State:
+  def step(self, state: State, action: jp.ndarray) -> State:
     if 'steps' in state.info:
       steps = state.info['steps']
       steps = jp.where(state.done, jp.zeros_like(steps), steps)
@@ -140,10 +139,10 @@ class EvalMetrics:
   episode_steps: jp.ndarray
 
 
-class EvalWrapper(brax_env.Wrapper):
+class EvalWrapper(Wrapper):
   """Brax env with eval metrics."""
 
-  def reset(self, rng: jp.ndarray) -> brax_env.State:
+  def reset(self, rng: jp.ndarray) -> State:
     reset_state = self.env.reset(rng)
     reset_state.metrics['reward'] = reset_state.reward
     eval_metrics = EvalMetrics(
@@ -156,7 +155,7 @@ class EvalWrapper(brax_env.Wrapper):
     reset_state.info['eval_metrics'] = eval_metrics
     return reset_state
 
-  def step(self, state: brax_env.State, action: jp.ndarray) -> brax_env.State:
+  def step(self, state: State, action: jp.ndarray) -> State:
     state_metrics = state.info['eval_metrics']
     if not isinstance(state_metrics, EvalMetrics):
       raise ValueError(

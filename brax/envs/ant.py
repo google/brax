@@ -17,14 +17,14 @@
 
 from brax import base
 from brax import math
-from brax.envs import env
+from brax.envs.base import PipelineEnv, State
 from brax.io import mjcf
 from etils import epath
 import jax
 from jax import numpy as jp
 
 
-class Ant(env.PipelineEnv):
+class Ant(PipelineEnv):
 
 
 
@@ -139,35 +139,6 @@ class Ant(env.PipelineEnv):
   1. The episode duration reaches a 1000 timesteps
   2. The y-orientation (index 2) in the state is **not** in the range
      `[0.2, 1.0]`
-
-  ### Arguments
-
-  No additional arguments are currently supported (in v2 and lower), but
-  modifications can be made to the XML file in the assets folder (or by changing
-  the path to a modified XML file in another folder).
-
-  ```
-  env = gym.make('Ant-v2')
-  ```
-
-  v3, v4, and v5 take gym.make kwargs such as ctrl_cost_weight,
-  reset_noise_scale etc.
-
-  ```
-  env = gym.make('Ant-v5', ctrl_cost_weight=0.1, ....)
-  ```
-
-  ### Version History
-
-  * v5: ported to Brax.
-  * v4: all mujoco environments now use the mujoco bindings in mujoco>=2.1.3
-  * v3: support for gym.make kwargs such as xml_file, ctrl_cost_weight,
-        reset_noise_scale etc. rgb rendering comes from tracking camera (so
-        agent does not run away from screen)
-  * v2: All continuous control environments now use mujoco_py >= 1.50
-  * v1: max_time_steps raised to 1000 for robot based tasks. Added
-        reward_threshold to environments.
-  * v0: Initial versions release (1.0.0)
   """
   # pyformat: enable
 
@@ -222,7 +193,7 @@ class Ant(env.PipelineEnv):
     if self._use_contact_forces:
       raise NotImplementedError('use_contact_forces not implemented.')
 
-  def reset(self, rng: jp.ndarray) -> env.State:
+  def reset(self, rng: jp.ndarray) -> State:
     """Resets the environment to an initial state."""
     rng, rng1, rng2 = jax.random.split(rng, 3)
 
@@ -248,9 +219,9 @@ class Ant(env.PipelineEnv):
         'y_velocity': zero,
         'forward_reward': zero,
     }
-    return env.State(pipeline_state, obs, reward, done, metrics)
+    return State(pipeline_state, obs, reward, done, metrics)
 
-  def step(self, state: env.State, action: jp.ndarray) -> env.State:
+  def step(self, state: State, action: jp.ndarray) -> State:
     """Run one timestep of the environment's dynamics."""
     pipeline_state0 = state.pipeline_state
     pipeline_state = self.pipeline_step(pipeline_state0, action)
