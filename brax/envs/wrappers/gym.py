@@ -21,7 +21,7 @@ import gym
 from gym import spaces
 from gym.vector import utils
 import jax
-from jax import numpy as jp
+import numpy as np
 
 
 class GymWrapper(gym.Env):
@@ -44,11 +44,11 @@ class GymWrapper(gym.Env):
     self.backend = backend
     self._state = None
 
-    obs_high = jp.inf * jp.ones(self._env.observation_size, dtype='float32')
-    self.observation_space = spaces.Box(-obs_high, obs_high, dtype='float32')
+    obs = np.inf * np.ones(self._env.observation_size, dtype='float32')
+    self.observation_space = spaces.Box(-obs, obs, dtype='float32')
 
-    action_high = jp.ones(self._env.action_size, dtype='float32')
-    self.action_space = spaces.Box(-action_high, action_high, dtype='float32')
+    action = np.ones(self._env.action_size, dtype='float32')
+    self.action_space = spaces.Box(-action, action, dtype='float32')
 
     def reset(key):
       key1, key2 = jax.random.split(key)
@@ -111,20 +111,16 @@ class VectorGymWrapper(gym.vector.VectorEnv):
     self.backend = backend
     self._state = None
 
-    obs_high = jp.inf * jp.ones(self._env.observation_size, dtype='float32')
-    self.single_observation_space = spaces.Box(
-        -obs_high, obs_high, dtype='float32')
-    self.observation_space = utils.batch_space(self.single_observation_space,
-                                               self.num_envs)
+    obs = np.inf * np.ones(self._env.observation_size, dtype='float32')
+    obs_space = spaces.Box(-obs, obs, dtype='float32')
+    self.observation_space = utils.batch_space(obs_space, self.num_envs)
 
-    action_high = jp.ones(self._env.action_size, dtype='float32')
-    self.single_action_space = spaces.Box(
-        -action_high, action_high, dtype='float32')
-    self.action_space = utils.batch_space(self.single_action_space,
-                                          self.num_envs)
+    action = np.ones(self._env.action_size, dtype='float32')
+    action_space = spaces.Box(-action, action, dtype='float32')
+    self.action_space = utils.batch_space(action_space, self.num_envs)
 
     def reset(key):
-      key1, key2 = jp.random_split(key)
+      key1, key2 = jax.random.split(key)
       state = self._env.reset(key2)
       return state, state.obs, key1
 

@@ -33,7 +33,7 @@ E.g.
        e.g. equivalent to agent1=(..., action_agents=('agent1',), ...)
 
 agent_groups currently defines which rewards/actions belong to which agent.
-observation is the same among all agents (TODO: add optionality).
+observation is the same among all agents (TODO -.
 """
 
 from collections import OrderedDict as odict
