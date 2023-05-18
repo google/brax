@@ -1,0 +1,14 @@
+<mujoco model="fluid-box">
+  <custom>
+    <numeric data="0.2" name="baumgarte_erp"/>
+    <numeric data="0.5" name="elasticity"/>
+  </custom>
+  <option timestep="0.01" density="1.2" viscosity="0.15"/>
+  <worldbody>
+    <geom name="floor" pos="0 0 0" size="40 40 40" type="plane"/>
+    <body name="box" pos="0.0 0.0 2.0" euler="0 -45 45">
+      <joint axis="1 0 0" name="free3" pos="0 0 0" type="free"/>
+      <geom name="box1" pos="0 0 0" size="0.2 0.2 0.2" type="box" fluidcoef="0.47 0.25 1.5 1.0 1.0" fluidshape="ellipsoid"/>
+    </body>
+  </worldbody>
+</mujoco>

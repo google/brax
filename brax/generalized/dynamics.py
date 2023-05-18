@@ -14,10 +14,14 @@
 
 # pylint:disable=g-multiple-import
 """Functions for smooth forward and inverse dynamics."""
+import functools
+
+from brax import fluid
 from brax import math
 from brax import scan
 from brax.base import Motion, System, Transform
 from brax.generalized.base import State
+from brax.generalized.constraint import point_jacobian
 import jax
 from jax import numpy as jp
 
@@ -180,16 +184,27 @@ def inverse(sys: System, state: State) -> jp.ndarray:
   return tau
 
 
-def _passive(sys: System, q: jp.ndarray, qd: jp.ndarray) -> jp.ndarray:
+def _passive(sys: System, state: State) -> jp.ndarray:
   """Calculates the system's passive forces given input motion and position."""
-
   def stiffness_fn(typ, q, dof):
     if typ in 'fb':
       return jp.zeros_like(dof.stiffness)
     return -q * dof.stiffness
 
-  frc = scan.link_types(sys, stiffness_fn, 'qd', 'd', q, sys.dof)
-  frc -= sys.dof.damping * qd
+  frc = scan.link_types(sys, stiffness_fn, 'qd', 'd', state.q, sys.dof)
+  frc -= sys.dof.damping * state.qd
+
+  fluid_frc, pos = fluid.force(
+      sys,
+      state.x,
+      state.cd,
+      sys.link.inertia.mass,
+      sys.link.inertia.i,
+      state.com,
+  )
+  cdof_fn = functools.partial(point_jacobian, sys, state.com, state.cdof)
+  jac = jax.vmap(cdof_fn)(pos, jp.arange(sys.num_links()))
+  frc += jax.vmap(lambda x, y: x.dot(y))(jac, fluid_frc).sum(axis=0)
 
   return frc
 
@@ -210,7 +225,7 @@ def forward(sys: System, state: State, tau: jp.ndarray) -> jp.ndarray:
   Returns:
     qfrc: joint force vector
   """
-  qfrc_passive = _passive(sys, state.q, state.qd)
+  qfrc_passive = _passive(sys, state)
   qfrc_bias = inverse(sys, state)
   qfrc = qfrc_passive - qfrc_bias + tau
 

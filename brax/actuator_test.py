@@ -55,7 +55,7 @@ class ActuatorTest(parameterized.TestCase):
 
     tau = jp.array([0.5 * 9.81])  # -mgl sin(theta)
     act = jp.array([1.0 / 150.0 * 0.5 * 9.81])
-    tau2 = actuator.to_tau(sys, act, q)
+    tau2 = actuator.to_tau(sys, act, q, qd)
     np.testing.assert_array_almost_equal(tau, tau2, 5)
 
     q2, qd2 = _actuator_step(pipeline, sys, q, qd, act=act, dt=dt, n=n)
@@ -73,7 +73,7 @@ class ActuatorTest(parameterized.TestCase):
 
     # a position actuator at the bottom should not move the pendulum
     act = jp.array([theta])
-    tau = actuator.to_tau(sys, act, q)
+    tau = actuator.to_tau(sys, act, q, qd)
     np.testing.assert_array_almost_equal(tau, jp.array([0]), 5)
 
     # put the pendulum into the horizontal position with the positional actuator
@@ -82,6 +82,24 @@ class ActuatorTest(parameterized.TestCase):
     act = jp.array([-(theta * 0.5**2) / (0.01**2 * 10.0) + theta])
     q2, _ = _actuator_step(g_pipeline, sys, q, qd, act=act, dt=0.01, n=1)
     np.testing.assert_array_almost_equal(q2, jp.array([0]), 1)
+
+  def test_velocity(self):
+    """Tests a single pendulum with velocity actuator."""
+    sys = test_utils.load_fixture('single_pendulum_velocity.xml')
+    mj_model = test_utils.load_fixture_mujoco('single_pendulum_velocity.xml')
+    mj_data = mujoco.MjData(mj_model)
+    q, qd = jp.array(mj_data.qpos), jp.array(mj_data.qvel)
+    theta = jp.pi / 2.0  # pendulum is vertical
+    q = jp.array([theta])
+
+    act = jp.array([0])
+    tau = actuator.to_tau(sys, act, q, qd)
+    np.testing.assert_array_almost_equal(tau, jp.array([0]), 5)
+
+    # set the act to rotate at 1/s
+    act = jp.array([1])
+    _, qd = _actuator_step(g_pipeline, sys, q, qd, act=act, dt=0.001, n=200)
+    np.testing.assert_array_almost_equal(qd, jp.array([1]), 3)
 
   @parameterized.parameters((g_pipeline,), (s_pipeline,), (p_pipeline,))
   def test_three_link_pendulum(self, pipeline):

@@ -1,0 +1,13 @@
+<mujoco model="sliding_mass">
+  <compiler autolimits="true"/>
+  <option gravity="0 0 -9.81" timestep="0.001"/>
+  <default>
+    <joint solreflimit="-1 -0.1"/>
+  </default>
+  <worldbody>
+    <body name="body1" pos="0 0 0">
+      <joint axis="0 0 1" name="slide1" pos="0 0 0" range="-1 1" type="slide"/>
+      <geom name="sphere1" pos="0.0 0.0 0.0" size="0.3" type="sphere"/>
+    </body>
+  </worldbody>
+</mujoco>

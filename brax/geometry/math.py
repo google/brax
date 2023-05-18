@@ -40,6 +40,15 @@ def closest_segment_point_and_dist(
   return closest, dist
 
 
+def closest_line_point(
+    a: jp.ndarray, b: jp.ndarray, pt: jp.ndarray
+) -> jp.ndarray:
+  """Returns the closest point on the a-b line to a point pt."""
+  ab = b - a
+  t = jp.dot(pt - a, ab) / (jp.dot(ab, ab) + 1e-6)
+  return a + t * ab
+
+
 def closest_segment_to_segment_points(
     a0: jp.ndarray, a1: jp.ndarray, b0: jp.ndarray, b1: jp.ndarray
 ) -> Tuple[jp.ndarray, jp.ndarray]:
@@ -432,6 +441,7 @@ def _create_contact_manifold(
       penetration=penetration,
       friction=jp.array([]),
       elasticity=jp.array([]),
+      solver_params=jp.array([]),
       link_idx=jp.array([]),
   )
 

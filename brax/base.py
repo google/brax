@@ -269,7 +269,7 @@ class Link(Base):
   constraint_stiffness: jp.ndarray
   constraint_vel_damping: jp.ndarray
   constraint_limit_stiffness: jp.ndarray
-  # only used by `brax.physics.spring` and `brax.physics.pbd`:
+  # only used by `brax.physics.spring` and `brax.physics.positional`:
   constraint_ang_damping: jp.ndarray
 
 
@@ -284,6 +284,7 @@ class DoF(Base):
     damping: restorative force back to zero velocity
     limit: tuple of min, max angle limits
     invweight: diagonal inverse inertia at init_qpos
+    solver_params: (7,) limit constraint solver parameters
   """
 
   motion: Motion
@@ -293,6 +294,7 @@ class DoF(Base):
   limit: Tuple[jp.ndarray, jp.ndarray]
   # only used by `brax.physics.generalized`:
   invweight: jp.ndarray
+  solver_params: jp.ndarray
 
 
 @struct.dataclass
@@ -305,12 +307,14 @@ class Geometry(Base):
       relative to the world frame in the case of unparented geometry
     friction: resistance encountered when sliding against another geometry
     elasticity: bounce/restitution encountered when hitting another geometry
+    solver_params: (7,) solver parameters (reference, impedance)
   """
 
   link_idx: Optional[jp.ndarray]
   transform: Transform
   friction: jp.ndarray
   elasticity: jp.ndarray
+  solver_params: jp.ndarray
 
 
 @struct.dataclass
@@ -351,6 +355,21 @@ class Box(Geometry):
   """
 
   halfsize: jp.ndarray
+  rgba: Optional[jp.ndarray] = None
+
+
+@struct.dataclass
+class Cylinder(Geometry):
+  """A cylinder.
+
+  Attributes:
+    radius: (1,) radius of the top and bottom of the cylinder
+    length: (1,) length of the cylinder
+    rgba: (4,) the rgba to display in the renderer
+  """
+
+  radius: jp.ndarray
+  length: jp.ndarray
   rgba: Optional[jp.ndarray] = None
 
 
@@ -410,6 +429,7 @@ class Contact(Base):
       two geometries are interpenetrating, negative means they are not
     friction: resistance encountered when sliding against another geometry
     elasticity: bounce/restitution encountered when hitting another geometry
+    solver_params: (7,) collision constraint solver parameters
     link_idx: Tuple of link indices participating in contact.  The second part
       of the tuple can be None if the second geometry is static.
   """
@@ -418,8 +438,9 @@ class Contact(Base):
   normal: jp.ndarray
   penetration: jp.ndarray
   friction: jp.ndarray
-  # only used by `brax.physics.spring` and `brax.physics.pbd`:
+  # only used by `brax.physics.spring` and `brax.physics.positional`:
   elasticity: jp.ndarray
+  solver_params: jp.ndarray
 
   link_idx: Tuple[jp.ndarray, Optional[jp.ndarray]]
 
@@ -429,13 +450,20 @@ class Actuator(Base):
   """Actuator, transforms an input signal into a force (motor or thruster).
 
   Attributes:
-    ctrl_range: (num_actuators, 2) control range for each actuator
-    gear: (num_actuators,) a list of floats used as a scaling factor for each
-      actuator torque output
+    q_id: (num_actuators,) q index associated with an actuator
+    qd_id: (num_actuators,) qd index associated with an actuator
+    ctrl_range: (num_actuators, 2) actuator control range
+    gear: (num_actuators,) scaling factor for each actuator torque output
+    bias_q: (num_actuators,) bias applied by q (e.g. position actuators)
+    bias_qd: (num_actuators,) bias applied by qd (e.g. velocity actuators)
   """
 
+  q_id: jp.ndarray
+  qd_id: jp.ndarray
   ctrl_range: jp.ndarray
   gear: jp.ndarray
+  bias_q: jp.ndarray
+  bias_qd: jp.ndarray
 
 
 @struct.dataclass
@@ -464,13 +492,13 @@ class System:
   Attributes:
     dt: timestep used for the simulation
     gravity: (3,) linear universal force applied during forward dynamics
+    viscosity: (1,) viscosity of the medium applied to all links
+    density: (1,) density of the medium applied to all links
     link: (num_link,) the links in the system
     dof: (qd_size,) every degree of freedom for the system
     geoms: list of batched geoms grouped by type
     actuator: actuators that can be applied to links
     init_q: (q_size,) initial q position for the system
-    solver_params_joint: (7,) joint limit constraint solver parameters
-    solver_params_contact: (7,) collision constraint solver parameters
     vel_damping: (1,) linear vel damping applied to each body.
     ang_damping: (1,) angular vel damping applied to each body.
     baumgarte_erp: how aggressively interpenetrating bodies should push away\
@@ -492,12 +520,6 @@ class System:
                 * '3': spherical, 3 dof, like a ball joint
     link_parents: (num_link,) int list specifying the index of each link's
                   parent link, or -1 if the link has no parent
-    actuator_types: (num_actuators,) string specifying the actuator types:
-                * 't': torque
-                * 'p': position
-    actuator_link_id: (num_actuators,) the link id associated with each actuator
-    actuator_qid: (num_actuators,) the q index associated with each actuator
-    actuator_qdid: (num_actuators,) the qd index associated with each actuator
     matrix_inv_iterations: maximum number of iterations of the matrix inverse
     solver_iterations: maximum number of iterations of the constraint solver
     solver_maxls: maximum number of line searches of the constraint solver
@@ -505,33 +527,28 @@ class System:
 
   dt: jp.ndarray
   gravity: jp.ndarray
+  viscosity: jp.float32
+  density: jp.float32
   link: Link
   dof: DoF
   geoms: List[Geometry]
   actuator: Actuator
   init_q: jp.ndarray
-  # only used in `brax.physics.generalized`
-  solver_params_joint: jp.ndarray
-  solver_params_contact: jp.ndarray
-  # only used in `brax.physics.spring` and `brax.physics.pbd`:
+  # only used in `brax.physics.spring` and `brax.physics.positional`:
   vel_damping: jp.float32
   ang_damping: jp.float32
   baumgarte_erp: jp.float32
   spring_mass_scale: jp.float32
   spring_inertia_scale: jp.float32
-  # only used in `brax.physics.positional`
+  # only used in `brax.physics.positional`:
   joint_scale_ang: jp.float32
   joint_scale_pos: jp.float32
   collide_scale: jp.float32
-
+  # non-pytree nodes
   geom_masks: List[int] = struct.field(pytree_node=False)
   link_names: List[str] = struct.field(pytree_node=False)
   link_types: str = struct.field(pytree_node=False)
   link_parents: Tuple[int, ...] = struct.field(pytree_node=False)
-  actuator_types: str = struct.field(pytree_node=False)
-  actuator_link_id: List[int] = struct.field(pytree_node=False)
-  actuator_qid: List[int] = struct.field(pytree_node=False)
-  actuator_qdid: List[int] = struct.field(pytree_node=False)
   # only used in `brax.physics.generalized`:
   matrix_inv_iterations: int = struct.field(pytree_node=False)
   solver_iterations: int = struct.field(pytree_node=False)
@@ -595,7 +612,7 @@ class System:
 
   def act_size(self) -> int:
     """Returns the act dimension for the system."""
-    return sum({'m': 1, 'p': 1}[act_typ] for act_typ in self.actuator_types)
+    return self.actuator.q_id.shape[0]
 
 
 # below are some operation dispatch derivations

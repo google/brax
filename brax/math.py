@@ -40,6 +40,19 @@ def rotate(vec: jp.ndarray, quat: jp.ndarray):
   return r
 
 
+def inv_rotate(vec: jp.ndarray, quat: jp.ndarray):
+  """Rotates a vector vec by an inverted unit quaternion quat.
+
+  Args:
+    vec: (3,) a vector
+    quat: (4,) a quaternion
+
+  Returns:
+    ndarray(3) containing vec rotated by the inverse of quat.
+  """
+  return rotate(vec, quat_inv(quat))
+
+
 def rotate_np(vec: np.ndarray, quat: np.ndarray):
   """Rotates a vector vec by a unit quaternion quat.
 

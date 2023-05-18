@@ -20,6 +20,7 @@ from typing import Iterator, Optional, Tuple
 from brax import math
 from brax.base import (
     Capsule,
+    Cylinder,
     Contact,
     Convex,
     Geometry,
@@ -35,19 +36,6 @@ import jax
 from jax import numpy as jp
 
 
-def _combine(
-    geom_a: Geometry, geom_b: Geometry
-) -> Tuple[float, float, Tuple[int, int]]:
-  # default is to take maximum, but can override
-  friction = jp.maximum(geom_a.friction, geom_b.friction)
-  elasticity = jp.maximum(geom_a.elasticity, geom_b.elasticity)
-  link_idx = (
-      geom_a.link_idx,
-      geom_b.link_idx if geom_b.link_idx is not None else -1,
-  )
-  return friction, elasticity, link_idx  # pytype: disable=bad-return-type  # jax-ndarray
-
-
 def _sphere_plane(sphere: Sphere, plane: Plane) -> Contact:
   """Calculates one contact between a sphere and a plane."""
   n = math.rotate(jp.array([0.0, 0.0, 1.0]), plane.transform.rot)
@@ -55,8 +43,8 @@ def _sphere_plane(sphere: Sphere, plane: Plane) -> Contact:
   penetration = sphere.radius - t
   # halfway between contact points on sphere and on plane
   pos = sphere.transform.pos - n * (sphere.radius - 0.5 * penetration)
-  c = Contact(pos, n, penetration, *_combine(sphere, plane))  # pytype: disable=wrong-arg-types  # jax-ndarray
-  # add a batch dimension of size 1
+  c = Contact(pos, n, penetration, *_combine(sphere, plane))
+  # returns 1 contact, so add a batch dimension of size 1
   return jax.tree_map(lambda x: jp.expand_dims(x, axis=0), c)
 
 
@@ -67,8 +55,8 @@ def _sphere_sphere(s_a: Sphere, s_b: Sphere) -> Contact:
   s_a_pos = s_a.transform.pos - n * s_a.radius
   s_b_pos = s_b.transform.pos + n * s_b.radius
   pos = (s_a_pos + s_b_pos) * 0.5
-  c = Contact(pos, n, penetration, *_combine(s_a, s_b))  # pytype: disable=wrong-arg-types  # jax-ndarray
-  # add a batch dimension of size 1
+  c = Contact(pos, n, penetration, *_combine(s_a, s_b))
+  # returns 1 contact, so add a batch dimension of size 1
   return jax.tree_map(lambda x: jp.expand_dims(x, axis=0), c)
 
 
@@ -88,8 +76,57 @@ def _sphere_capsule(sphere: Sphere, capsule: Capsule) -> Contact:
   cap_pos = pt + n * capsule.radius
   pos = (sphere_pos + cap_pos) * 0.5
 
-  c = Contact(pos, n, penetration, *_combine(sphere, capsule))  # pytype: disable=wrong-arg-types  # jax-ndarray
-  # add a batch dimension of size 1
+  c = Contact(pos, n, penetration, *_combine(sphere, capsule))
+  # returns 1 contact, so add a batch dimension of size 1
+  return jax.tree_map(lambda x: jp.expand_dims(x, axis=0), c)
+
+
+def _sphere_circle(sphere: Sphere, circle: Cylinder) -> Contact:
+  """Calculates one contact between a sphere and a circle."""
+  n = math.rotate(jp.array([0.0, 0.0, 1.0]), circle.transform.rot)
+
+  # orient the normal s.t. it points at the CoM of the sphere
+  normal_dir = jp.sign(
+      (sphere.transform.pos - circle.transform.pos).dot(n))
+  n = n * normal_dir
+
+  pos = sphere.transform.pos - n * sphere.radius
+  plane_pt = circle.transform.pos
+  penetration = jp.dot(plane_pt - pos, n)
+
+  # check if the sphere radius is within the cylinder in the normal dir of the
+  # circle
+  plane_pt2 = plane_pt + n
+  line_pt = geom_math.closest_line_point(
+      plane_pt, plane_pt2, sphere.transform.pos
+  )
+  in_cylinder = (sphere.transform.pos - line_pt).dot(
+      sphere.transform.pos - line_pt
+  ) <= circle.radius**2
+
+  # get closest point on circle edge
+  perp_dir = jp.cross(n, sphere.transform.pos - plane_pt)
+  perp_dir = math.rotate(perp_dir, math.quat_rot_axis(n, -jp.pi / 2.0))
+  perp_dir, _ = math.normalize(perp_dir)
+  edge_pt = plane_pt + perp_dir * circle.radius
+  edge_contact = (sphere.transform.pos - edge_pt).dot(
+      sphere.transform.pos - edge_pt
+  ) <= sphere.radius**2
+  edge_to_sphere = sphere.transform.pos - edge_pt
+  edge_to_sphere = math.normalize(edge_to_sphere)[0]
+
+  penetration = jp.where(in_cylinder, penetration, -jp.ones_like(penetration))
+  penetration = jp.where(
+      edge_contact,
+      sphere.radius
+      - jp.sqrt(
+          (sphere.transform.pos - edge_pt).dot(sphere.transform.pos - edge_pt)
+      ),
+      penetration,
+  )
+  n = jp.where(edge_contact, edge_to_sphere, n)
+  pos = jp.where(edge_contact, edge_pt, pos)
+  c = Contact(pos, n, penetration, *_combine(sphere, circle))  # pytype: disable=wrong-arg-types  # jax-ndarray
   return jax.tree_map(lambda x: jp.expand_dims(x, axis=0), c)
 
 
@@ -154,7 +191,7 @@ def _sphere_convex(sphere: Sphere, convex: Convex) -> Contact:
   penetration = sphere.radius - d
   pos = (pt + spt) * 0.5
 
-  c = Contact(pos, n, penetration, *_combine(sphere, convex))  # pytype: disable=wrong-arg-types  # jax-ndarray
+  c = Contact(pos, n, penetration, *_combine(sphere, convex))
   return jax.tree_map(lambda x: jp.expand_dims(x, axis=0), c)
 
 
@@ -174,7 +211,7 @@ def _sphere_mesh(sphere: Sphere, mesh: Mesh) -> Contact:
     penetration = sphere.radius - dist
     sph_p = sphere.transform.pos - n * sphere.radius
     pos = (tri_p + sph_p) * 0.5
-    return Contact(pos, n, penetration, *_combine(sphere, mesh))  # pytype: disable=wrong-arg-types  # jax-ndarray
+    return Contact(pos, n, penetration, *_combine(sphere, mesh))
 
   return sphere_face(jp.take(mesh.vert, mesh.face, axis=0))
 
@@ -187,11 +224,12 @@ def _capsule_plane(capsule: Capsule, plane: Plane) -> Contact:
   results = []
   for off in [segment, -segment]:
     sphere = Sphere(
+        radius=capsule.radius,
         link_idx=capsule.link_idx,
         transform=Transform.create(pos=capsule.transform.pos + off),
         friction=capsule.friction,
         elasticity=capsule.elasticity,
-        radius=capsule.radius,
+        solver_params=capsule.solver_params,
     )
     results.append(_sphere_plane(sphere, plane))
 
@@ -217,8 +255,8 @@ def _capsule_capsule(cap_a: Capsule, cap_b: Capsule) -> Contact:
   cap_b_pos = pt_b + n * cap_b.radius
   pos = (cap_a_pos + cap_b_pos) * 0.5
 
-  c = Contact(pos, n, penetration, *_combine(cap_a, cap_b))  # pytype: disable=wrong-arg-types  # jax-ndarray
-  # add a batch dimension of size 1
+  c = Contact(pos, n, penetration, *_combine(cap_a, cap_b))
+  # returns 1 contact, so add a batch dimension of size 1
   return jax.tree_map(lambda x: jp.expand_dims(x, axis=0), c)
 
 
@@ -306,10 +344,9 @@ def _capsule_convex(capsule: Capsule, convex: Convex) -> Contact:
   penetration = jp.where(
       has_edge_contact, penetration.at[0].set(edge_penetration), penetration
   )
-  friction, elasticity, link_idx = jax.tree_map(
-      lambda x: jp.repeat(x, 2), _combine(capsule, convex)
-  )
-  return Contact(pos, norm, penetration, friction, elasticity, link_idx)
+  tile_fn = lambda x: jp.tile(x, (2,) + tuple([1 for _ in x.shape]))
+  params = jax.tree_map(tile_fn, _combine(capsule, convex))
+  return Contact(pos, norm, penetration, *params)
 
 
 def _capsule_mesh(capsule: Capsule, mesh: Mesh) -> Contact:
@@ -335,7 +372,7 @@ def _capsule_mesh(capsule: Capsule, mesh: Mesh) -> Contact:
     penetration = capsule.radius - dist
     cap_p = seg_p - n * capsule.radius
     pos = (tri_p + cap_p) * 0.5
-    return Contact(pos, n, penetration, *_combine(capsule, mesh))  # pytype: disable=wrong-arg-types  # jax-ndarray
+    return Contact(pos, n, penetration, *_combine(capsule, mesh))
 
   face_vert = jp.take(mesh.vert, mesh.face, axis=0)
   face_norm = geom_mesh.get_face_norm(mesh.vert, mesh.face)
@@ -360,10 +397,9 @@ def _convex_plane(convex: Convex, plane: Plane) -> Contact:
   normal = jp.stack([n] * 4, axis=0)
   unique = jp.tril(idx == idx[:, None]).sum(axis=1) == 1
   penetration = jp.where(unique, support[idx], -1)
-  friction, elasticity, link_idx = jax.tree_map(
-      lambda x: jp.repeat(x, 4), _combine(convex, plane)
-  )
-  return Contact(pos, normal, penetration, friction, elasticity, link_idx)
+  tile_fn = lambda x: jp.tile(x, (4,) + tuple([1 for _ in x.shape]))
+  params = jax.tree_map(tile_fn, _combine(convex, plane))
+  return Contact(pos, normal, penetration, *params)
 
 
 def _convex_convex(convex_a: Convex, convex_b: Convex) -> Contact:
@@ -416,18 +452,10 @@ def _convex_convex(convex_a: Convex, convex_b: Convex) -> Contact:
       unique_edges_a,
       unique_edges_b,
   )
-  friction, elasticity, link_idx = jax.tree_map(
-      lambda x: jp.repeat(x, 4), _combine(convex_a, convex_b)
-  )
+  tile_fn = lambda x: jp.tile(x, (4,) + tuple([1 for _ in x.shape]))
+  params = jax.tree_map(tile_fn, _combine(convex_a, convex_b))
 
-  return Contact(
-      c.pos,
-      c.normal,
-      c.penetration,
-      friction,
-      elasticity,
-      link_idx,
-  )
+  return Contact(c.pos, c.normal, c.penetration, *params)
 
 
 def _mesh_plane(mesh: Mesh, plane: Plane) -> Contact:
@@ -438,15 +466,30 @@ def _mesh_plane(mesh: Mesh, plane: Plane) -> Contact:
     n = math.rotate(jp.array([0.0, 0.0, 1.0]), plane.transform.rot)
     pos = mesh.transform.pos + math.rotate(vert, mesh.transform.rot)
     penetration = jp.dot(plane.transform.pos - pos, n)
-    return Contact(pos, n, penetration, *_combine(mesh, plane))  # pytype: disable=wrong-arg-types  # jax-ndarray
+    return Contact(pos, n, penetration, *_combine(mesh, plane))
 
   return point_plane(mesh.vert)
+
+
+def _combine(
+    geom_a: Geometry, geom_b: Geometry
+) -> Tuple[jp.ndarray, jp.ndarray, jp.ndarray, Tuple[jp.ndarray, jp.ndarray]]:
+  # default is to take maximum, but can override
+  friction = jp.maximum(geom_a.friction, geom_b.friction)
+  elasticity = (geom_a.elasticity + geom_b.elasticity) * 0.5
+  solver_params = (geom_a.solver_params + geom_b.solver_params) * 0.5
+  link_idx = (
+      jp.array(geom_a.link_idx if geom_a.link_idx is not None else -1),
+      jp.array(geom_b.link_idx if geom_b.link_idx is not None else -1),
+  )
+  return friction, elasticity, solver_params, link_idx
 
 
 _TYPE_FUN = {
     (Sphere, Plane): _sphere_plane,
     (Sphere, Sphere): _sphere_sphere,
     (Sphere, Capsule): _sphere_capsule,
+    (Sphere, Cylinder): _sphere_circle,
     (Sphere, Convex): _sphere_convex,
     (Sphere, Mesh): _sphere_mesh,
     (Capsule, Plane): _capsule_plane,

@@ -87,7 +87,7 @@ def step(
   state = state.replace(i_inv=com.inv_inertia(sys, state.x))
 
   # calculate acceleration and delta-velocity terms
-  tau = actuator.to_tau(sys, act, state.q)
+  tau = actuator.to_tau(sys, act, state.q, state.qd)
   xdd_i = joints.resolve(sys, state, tau) + Motion.create(vel=sys.gravity)
   # semi-implicit euler: apply acceleration update before resolving collisions
   state = state.replace(xd_i=state.xd_i + xdd_i * sys.dt)

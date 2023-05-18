@@ -70,7 +70,7 @@ def step(
   x_i_prev = state.x_i
 
   # calculate acceleration level updates
-  tau = actuator.to_tau(sys, act, state.q)
+  tau = actuator.to_tau(sys, act, state.q, state.qd)
   xdd_i = Motion.create(vel=sys.gravity)
   xdd_i += joints.acceleration_update(sys, state, tau)
 

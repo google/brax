@@ -15,18 +15,20 @@
 # pylint:disable=g-multiple-import
 """Functions for applying actuators to a physics pipeline."""
 
-from brax import scan
 from brax.base import System
 from jax import numpy as jp
 
 
-def to_tau(sys: System, act: jp.ndarray, q: jp.ndarray) -> jp.ndarray:
+def to_tau(
+    sys: System, act: jp.ndarray, q: jp.ndarray, qd: jp.ndarray
+) -> jp.ndarray:
   """Convert actuator to a joint force tau.
 
   Args:
     sys: system defining the kinematic tree and other properties
     act: (act_size,) actuator force input vector
     q: joint position vector
+    qd: joint velocity vector
 
   Returns:
     tau: (qd_size,) vector of joint forces
@@ -34,21 +36,12 @@ def to_tau(sys: System, act: jp.ndarray, q: jp.ndarray) -> jp.ndarray:
   if sys.act_size() == 0:
     return jp.zeros(sys.qd_size())
 
-  def act_fn(act_type, act, actuator, q, qd_idx):
-    if act_type not in ('p', 'm'):
-      raise RuntimeError(f'unrecognized act type: {act_type}')
-
-    force = jp.clip(act, actuator.ctrl_range[:, 0], actuator.ctrl_range[:, 1])
-    if act_type == 'p':
-      force -= q  # positional actuators have a bias
-    tau = actuator.gear * force
-
-    return tau, qd_idx
-
-  qd_idx = jp.arange(sys.qd_size())
-  tau, qd_idx = scan.actuator_types(
-      sys, act_fn, 'aaqd', 'a', act, sys.actuator, q, qd_idx
-  )
-  tau = jp.zeros(sys.qd_size()).at[qd_idx].add(tau)
+  q, qd = q[sys.actuator.q_id], qd[sys.actuator.qd_id]
+  ctrl_range = sys.actuator.ctrl_range
+  act = jp.clip(act, ctrl_range[:, 0], ctrl_range[:, 1])
+  # TODO: incorporate gain
+  act = act + q * sys.actuator.bias_q + qd * sys.actuator.bias_qd
+  act_force = sys.actuator.gear * act
+  tau = jp.zeros(sys.qd_size()).at[sys.actuator.qd_id].add(act_force)
 
   return tau

@@ -91,6 +91,28 @@ class SphereTest(absltest.TestCase):
     np.testing.assert_array_almost_equal(c.pos, jp.array([0.0, 0.3, 0.045]))
     np.testing.assert_array_almost_equal(c.normal, jp.array([0, 0.0, -1.0]))
 
+  _SPHERE_CYLINDER = """
+    <mujoco model="sphere_cylinder">
+      <worldbody>
+        <body name="body1" pos="0 0 0">
+          <joint axis="1 0 0" name="free1" pos="0 0 0" type="free"/>
+          <geom name="sphere1" pos="0 0.04 0" size="0.05" type="sphere"/>
+        </body>
+        <body name="body2" pos="0 0 0">
+          <joint axis="1 0 0" name="free2" pos="0 0 0" type="free"/>
+          <geom name="cyl" pos="0 0 0" size="0.1 0.001" type="cylinder"/>
+        </body>
+      </worldbody>
+    </mujoco>
+  """
+
+  def test_sphere_cylinder(self):
+    sys = mjcf.loads(self._SPHERE_CYLINDER)
+    x, _ = kinematics.forward(sys, sys.init_q, jp.zeros(sys.qd_size()))
+    c = geometry.contact(sys, x).take(0)
+
+    np.testing.assert_array_almost_equal(c.penetration, 0.01)
+
   _SPHERE_CONVEX = """
     <mujoco model="sphere_convex">
       <worldbody>

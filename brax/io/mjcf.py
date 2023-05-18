@@ -25,6 +25,7 @@ from brax.base import (
     Actuator,
     Box,
     Capsule,
+    Cylinder,
     DoF,
     Inertia,
     Link,
@@ -41,13 +42,6 @@ import jax
 from jax import numpy as jp
 import mujoco
 import numpy as np
-
-
-# map from mujoco bias type to brax actuator type string
-_ACT_TYPE_STR = {
-    0: 'm',  # motor
-    1: 'p',  # position
-}
 
 
 def _transform_do(
@@ -251,6 +245,10 @@ def load_model(mj: mujoco.MjModel) -> System:
     raise NotImplementedError(
         'Only joint transmission types are supported for actuators.'
     )
+  if (mj.geom_solmix[0] != mj.geom_solmix).any():
+    raise NotImplementedError('geom_solmix parameter not supported.')
+  if (mj.geom_priority[0] != mj.geom_priority).any():
+    raise NotImplementedError('geom_priority parameter not supported.')
   if mj.opt.collision == 1:
     raise NotImplementedError('Predefined collisions not supported.')
   q_width = {0: 7, 1: 4, 2: 1, 3: 1}
@@ -258,7 +256,10 @@ def load_model(mj: mujoco.MjModel) -> System:
   if mj.qpos0[non_free].any():
     raise NotImplementedError(
         'The `ref` attribute on joint types is not supported.')
-
+  if (mj.geom_fluid != 0).any():
+    raise NotImplementedError('Ellipsoid fluid model not implemented.')
+  if mj.opt.wind.any():
+    raise NotImplementedError('option.wind is not implemented.')
   custom = _get_custom(mj)
 
   # create links
@@ -326,22 +327,25 @@ def load_model(mj: mujoco.MjModel) -> System:
   if np.any(mj.jnt_limited):
     limit = jax.tree_map(lambda *x: np.concatenate(x), *limits)
   stiffness = np.concatenate(stiffnesses)
+  solver_params_jnt = np.concatenate((mj.jnt_solref, mj.jnt_solimp), axis=1)
+  solver_params_dof = solver_params_jnt[mj.dof_jntid]
 
-  dof = DoF(  # pytype: disable=wrong-arg-types  # jax-ndarray
+  dof = DoF(  # pytype: disable=wrong-arg-types
       motion=motion,
       armature=mj.dof_armature,
       stiffness=stiffness,
       damping=mj.dof_damping,
       limit=limit,
       invweight=mj.dof_invweight0,
+      solver_params=solver_params_dof,
   )
 
+  solver_params_geom = np.concatenate((mj.geom_solref, mj.geom_solimp), axis=1)
   # group geoms so that they can be stacked.  two geoms can be stacked if:
   # - they have the same type
   # - their fields have the same shape (e.g. Mesh verts might vary)
   # - they have the same mask
   key_fn = lambda g, m: (jax.tree_map(np.shape, g), m)
-
   geom_groups = {}
   for i, typ in enumerate(mj.geom_type):
     rgba = mj.geom_rgba[i]
@@ -353,11 +357,20 @@ def load_model(mj: mujoco.MjModel) -> System:
         'transform': Transform(pos=mj.geom_pos[i], rot=mj.geom_quat[i]),
         'friction': mj.geom_friction[i, 0],
         'elasticity': custom['elasticity'][i],
+        'solver_params': solver_params_geom[i],
         'rgba': rgba,
     }
     mask = mj.geom_contype[i] | mj.geom_conaffinity[i] << 32
     if typ == 0:  # Plane
       geom = Plane(**kwargs)
+      geom_groups.setdefault(key_fn(geom, mask), []).append(geom)
+    elif typ == 5:  # Cylinder
+      radius, halflength = mj.geom_size[i, 0:2]
+      if halflength > 0.001 and mask > 0:
+        # TODO: support cylinders with depth.
+        raise NotImplementedError(
+            'Cylinders of half-length>0.001 are not supported for collision.')
+      geom = Cylinder(radius=radius, length=halflength * 2, **kwargs)
       geom_groups.setdefault(key_fn(geom, mask), []).append(geom)
     elif typ == 2:  # Sphere
       geom = Sphere(radius=mj.geom_size[i, 0], **kwargs)
@@ -386,29 +399,27 @@ def load_model(mj: mujoco.MjModel) -> System:
       continue
 
   geoms = [
-      jax.tree_map(lambda *x: jp.stack(x), *g) for g in geom_groups.values()
+      jax.tree_map(lambda *x: np.stack(x), *g) for g in geom_groups.values()
   ]
   geom_masks = [m for _, m in geom_groups.keys()]
 
   # create actuators
   ctrl_range = mj.actuator_ctrlrange
   ctrl_range[~(mj.actuator_ctrllimited == 1), :] = np.array([-np.inf, np.inf])
-  actuator = Actuator(  # pytype: disable=wrong-arg-types  # jax-ndarray
+  q_id = np.array([mj.jnt_qposadr[i] for i in mj.actuator_trnid[:, 0]])
+  qd_id = np.array([mj.jnt_dofadr[i] for i in mj.actuator_trnid[:, 0]])
+  bias_q = mj.actuator_biasprm[:, 1]
+  bias_qd = mj.actuator_biasprm[:, 2]
+
+  # TODO: might be nice to add actuator names for debugging
+  actuator = Actuator(  # pytype: disable=wrong-arg-types
+      q_id=q_id,
+      qd_id=qd_id,
       gear=mj.actuator_gear[:, 0],
       ctrl_range=ctrl_range,
+      bias_q=bias_q,
+      bias_qd=bias_qd,
   )
-
-  # create generalized solver params
-  params_joint = jp.concatenate((mj.jnt_solref, mj.jnt_solimp), axis=1)
-  params_geom = jp.concatenate((mj.geom_solref, mj.geom_solimp), axis=1)
-  params_pair = jp.concatenate((mj.pair_solref, mj.pair_solimp), axis=1)
-  params_contact = jp.concatenate((params_geom, params_pair))
-  if (params_joint[0] != params_joint).any():
-    raise NotImplementedError('brax only supports one joint solver params')
-  if (params_contact[0] != params_contact).any():
-    raise NotImplementedError('brax only supports one contact solver params')
-  solver_params_joint = params_joint[0]
-  solver_params_contact = params_contact[0]
 
   # create non-pytree params.  these do not live on device directly, and they
   # cannot be differentiated, but they do change the emitted control flow
@@ -430,21 +441,6 @@ def load_model(mj: mujoco.MjModel) -> System:
     link_types += typ
   link_parents = tuple(mj.body_parentid - 1)[1:]
 
-  # create non-pytree params for actuators.
-  actuator_types = ''.join([_ACT_TYPE_STR[bt] for bt in mj.actuator_biastype])
-  actuator_link_id = [mj.jnt_bodyid[i] - 1 for i in mj.actuator_trnid[:, 0]]
-  unsupported_act_links = set(link_types[i] for i in actuator_link_id) - {
-      '1',
-      '2',
-      '3',
-  }
-  if unsupported_act_links:
-    raise NotImplementedError(
-        f'Link types {unsupported_act_links} are not supported for actuators.'
-    )
-  actuator_qid = [mj.jnt_qposadr[i] for i in mj.actuator_trnid[:, 0]]
-  actuator_qdid = [mj.jnt_dofadr[i] for i in mj.actuator_trnid[:, 0]]
-
   # mujoco stores free q in world frame, so clear link transform for free links
   if 'f' in link_types:
     free_idx = np.array([i for i, typ in enumerate(link_types) if typ == 'f'])
@@ -454,13 +450,13 @@ def load_model(mj: mujoco.MjModel) -> System:
   sys = System(  # pytype: disable=wrong-arg-types  # jax-ndarray
       dt=mj.opt.timestep,
       gravity=mj.opt.gravity,
+      viscosity=mj.opt.viscosity,
+      density=mj.opt.density,
       link=link,
       dof=dof,
       geoms=geoms,
       actuator=actuator,
       init_q=custom['init_qpos'] if 'init_qpos' in custom else mj.qpos0,
-      solver_params_joint=solver_params_joint,
-      solver_params_contact=solver_params_contact,
       vel_damping=custom['vel_damping'],
       ang_damping=custom['ang_damping'],
       baumgarte_erp=custom['baumgarte_erp'],
@@ -473,10 +469,6 @@ def load_model(mj: mujoco.MjModel) -> System:
       link_names=link_names,
       link_types=link_types,
       link_parents=link_parents,
-      actuator_types=actuator_types,
-      actuator_link_id=actuator_link_id,
-      actuator_qid=actuator_qid,
-      actuator_qdid=actuator_qdid,
       matrix_inv_iterations=int(custom['matrix_inv_iterations']),
       solver_iterations=mj.opt.iterations,
       solver_maxls=int(custom['solver_maxls']),

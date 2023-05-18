@@ -21,6 +21,7 @@ from brax import base
 from brax import kinematics
 from brax import scan
 from brax import test_utils
+from brax.base import Motion
 import jax
 import jax.numpy as jp
 import numpy as np
@@ -31,13 +32,32 @@ class KinematicsTest(parameterized.TestCase):
   @parameterized.parameters(
       ('ant.xml',), ('humanoid.xml',), ('reacher.xml',), ('half_cheetah.xml',)
   )
-  def test_forward_q(self, xml_file):
+  def test_forward(self, xml_file):
     """Test dynamics forward q."""
     sys = test_utils.load_fixture(xml_file)
-    for mj_prev, mj_next in test_utils.sample_mujoco_states(xml_file):
-      x, _ = jax.jit(kinematics.forward)(sys, mj_prev.qpos, mj_prev.qvel)
+
+    for mj_prev, mj_next in test_utils.sample_mujoco_states(
+        xml_file, random_init=True, vel_to_local=False):
+      x, xd = jax.jit(kinematics.forward)(sys, mj_prev.qpos, mj_prev.qvel)
+
       np.testing.assert_almost_equal(x.pos, mj_next.xpos[1:], 3)
+      # handle quat rotations +/- 2pi
+      quat_sign = np.allclose(
+          np.sum(mj_next.xquat[1:]) - np.sum(x.rot), 0, atol=1e-2)
+      quat_sign = 1 if quat_sign else -1
+      x = x.replace(rot=x.rot * quat_sign)
       np.testing.assert_almost_equal(x.rot, mj_next.xquat[1:], 3)
+
+      # xd vel/ang were added to linvel/angmom in `sample_mujoco_states`
+      xd_mj = Motion(
+          vel=mj_next.subtree_linvel[1:], ang=mj_next.subtree_angmom[1:])
+
+      if xml_file == 'humanoid.xml':
+        # TODO: get forward to match MJ for stacked/offset joints
+        return
+
+      np.testing.assert_array_almost_equal(xd.ang, xd_mj.ang, 3)
+      np.testing.assert_array_almost_equal(xd.vel, xd_mj.vel, 3)
 
   def test_init_q(self):
     sys = test_utils.load_fixture('ant.xml')
@@ -53,10 +73,11 @@ class KinematicsTest(parameterized.TestCase):
   def test_inverse(self, xml_file):
     np.random.seed(0)
     sys = test_utils.load_fixture(xml_file)
-    # # test at random init
+    # test at random init
     rand_q = np.random.rand(sys.init_q.shape[0])
-    # normalize quaternion part of init_q
-    rand_q[3:7] = rand_q[3:7] / np.linalg.norm(rand_q[3:7])
+    if sys.link_types[0] == 'f':
+      # normalize quaternion part of init_q
+      rand_q[3:7] = rand_q[3:7] / np.linalg.norm(rand_q[3:7])
     rand_q = jp.array(rand_q)
     rand_qd = jp.array(np.random.rand(sys.qd_size())) * 0.1
 
@@ -94,10 +115,11 @@ class KinematicsTest(parameterized.TestCase):
                 ),
             ),
             armature=np.array([0.0, 0.0, 0.0, 0.0]),
-            invweight=np.array([0.0, 0.0, 0.0, 0.0]),
             stiffness=np.array([0.0, 0.0, 0.0, 0.0]),
             damping=np.array([0.0, 0.0, 0.0, 0.0]),
             limit=None,
+            invweight=np.array([0.0, 0.0, 0.0, 0.0]),
+            solver_params=np.zeros((4, 7)),
         )
     )
 
@@ -129,10 +151,11 @@ class KinematicsTest(parameterized.TestCase):
                 ]),
             ),
             armature=np.array([0.0, 0.0, 0.0, 0.0]),
-            invweight=np.array([0.0, 0.0, 0.0, 0.0]),
             stiffness=np.array([0.0, 0.0, 0.0, 0.0]),
             damping=np.array([0.0, 0.0, 0.0, 0.0]),
             limit=None,
+            invweight=np.array([0.0, 0.0, 0.0, 0.0]),
+            solver_params=np.zeros((4, 7)),
         )
     )
 

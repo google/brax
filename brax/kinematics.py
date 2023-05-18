@@ -70,6 +70,7 @@ def forward(
       for i in range(1, num_dofs):
         j_i, jd_i = j_stack.take(i, axis=1), jd_stack.take(i, axis=1)
         j = j.vmap().do(j_i)
+        # TODO: fix qd->jd calculation for stacked/offset joints
         jd = jd + Motion(
             ang=jax.vmap(math.rotate)(jd_i.ang, j_i.rot),
             vel=jax.vmap(math.rotate)(
@@ -88,16 +89,16 @@ def forward(
   def world(parent, j, jd):
     """Convert transform/motion from joint frame to world frame."""
     if parent is None:
+      jd = jd.replace(ang=jax.vmap(math.rotate)(jd.ang, j.rot))
       return j, jd
-    x, xd = parent
-    # TODO: determine why the motion `do` is inverted
-    x = x.vmap().do(j)
-    xd = xd + Motion(
-        ang=jax.vmap(math.rotate)(jd.ang, x.rot),
-        vel=jax.vmap(math.rotate)(
-            jd.vel + jax.vmap(jp.cross)(x.pos, jd.ang), x.rot
-        ),
-    )
+    x_p, xd_p = parent
+    x = x_p.vmap().do(j)
+    # get the linear velocity at the tip of the parent
+    vel = xd_p.vel + jax.vmap(jp.cross)(xd_p.ang, x.pos - x_p.pos)
+    # add in the child linear velocity in the world frame
+    vel += jax.vmap(math.rotate)(jd.vel, x_p.rot)
+    ang = xd_p.ang + jax.vmap(math.rotate)(jd.ang, x.rot)
+    xd = Motion(vel=vel, ang=ang)
     return x, xd
 
   x, xd = scan.tree(sys, world, 'll', j, jd)
@@ -126,7 +127,7 @@ def world_to_joint(
 
   # move into joint coordinates
   xd_joint = xd - xd_wj
-  inv_rotate = jax.vmap(lambda x, y: math.rotate(x, math.quat_inv(y)))
+  inv_rotate = jax.vmap(math.inv_rotate)
   jd = jax.tree_map(lambda x: inv_rotate(x, a_p.rot), xd_joint)
 
   return j, jd, a_p, a_c
@@ -158,6 +159,9 @@ def link_to_joint_frame(motion: Motion) -> Tuple[Motion, float]:
   We also need translational components because the prismatic components of a
   joint might not be aligned with the rotational components of the joint.
   """
+  if motion.ang.shape[0] > 3 or motion.ang.shape[0] == 0:
+    raise AssertionError('Motion shape must be in (0, 3], '
+                         f'got {motion.ang.shape[0]}')
 
   # 1-dof
   if motion.ang.shape[0] == 1:
@@ -282,16 +286,14 @@ def axis_angle_ang(
   child_frame = v_rot(joint_motion.ang, j.rot)
 
   line_of_nodes = jp.cross(child_frame[2], joint_motion.ang[0])
-  line_of_nodes = line_of_nodes / (1e-10 + math.safe_norm(line_of_nodes))
+  line_of_nodes, _ = math.normalize(line_of_nodes)
   y_n_normal = joint_motion.ang[0]
   psi = math.signed_angle(y_n_normal, joint_motion.ang[1], line_of_nodes)
   axis_1_p_in_xz_c = (
       jp.dot(joint_motion.ang[0], child_frame[0]) * child_frame[0]
       + jp.dot(joint_motion.ang[0], child_frame[1]) * child_frame[1]
   )
-  axis_1_p_in_xz_c = axis_1_p_in_xz_c / (
-      1e-10 + math.safe_norm(axis_1_p_in_xz_c)
-  )
+  axis_1_p_in_xz_c, _ = math.normalize(axis_1_p_in_xz_c)
   ang_between_1_p_xz_c = jp.dot(axis_1_p_in_xz_c, joint_motion.ang[0])
   theta = math.safe_arccos(jp.clip(ang_between_1_p_xz_c, -1, 1)) * jp.sign(
       jp.dot(joint_motion.ang[0], child_frame[2])
@@ -331,10 +333,13 @@ def inverse(
 ) -> Tuple[jp.ndarray, jp.ndarray]:
   """Translates maximal coordinates into reduced coordinates."""
 
-  def free(x, xd, _):
-    return jp.concatenate([x.pos, x.rot]), jp.concatenate([xd.vel, xd.ang])
+  def free(x, xd, *_):
+    ang = math.inv_rotate(xd.ang, x.rot)
+    return jp.concatenate([x.pos, x.rot]), jp.concatenate([xd.vel, ang])
 
-  def x_dof(j, jd, motion, x):
+  def x_dof(j, jd, parent_idx, motion, x):
+    j_rot = jp.where(parent_idx == -1, j.rot, jp.array([1.0, 0.0, 0.0, 0.0]))
+    jd = jd.replace(ang=math.inv_rotate(jd.ang, j_rot))
     joint_frame, parity = link_to_joint_frame(motion)
     axis, angles, _ = axis_angle_ang(j, joint_frame, parity)
     angle_vels = jax.tree_map(lambda x: jp.dot(x, jd.ang), axis)
@@ -350,7 +355,7 @@ def inverse(
     )
     return q, qd
 
-  def q_fn(typ, j, jd, motion):
+  def q_fn(typ, j, jd, parent_idx, motion):
     motion = jax.tree_map(
         lambda y: y.reshape((-1, base.QD_WIDTHS[typ], 3)), motion
     )
@@ -361,10 +366,12 @@ def inverse(
         '3': functools.partial(x_dof, x=3),
     }
 
-    q, qd = jax.vmap(q_fn_map[typ])(j, jd, motion)
+    q, qd = jax.vmap(q_fn_map[typ])(j, jd, parent_idx, motion)
 
     # transposed to preserve order of outputs
     return jp.array(q).reshape(-1), jp.array(qd).reshape(-1)
 
-  q, qd = scan.link_types(sys, q_fn, 'lld', 'qd', j, jd, sys.dof.motion)
+  parent_idx = jp.array(sys.link_parents)
+  q, qd = scan.link_types(sys, q_fn, 'llld', 'qd', j, jd, parent_idx,
+                          sys.dof.motion)
   return q, qd

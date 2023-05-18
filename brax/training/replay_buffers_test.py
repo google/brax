@@ -299,9 +299,9 @@ class QueueReplayTest(parameterized.TestCase):
     )
     assert_equal(self, replay_buffer.size(buffer_state), 10)
     if jax.device_count() == 1 or wrapper in [no_wrap, jit_wrap]:
-      assert_equal(self, buffer_state.current_position, 0)
+      assert_equal(self, buffer_state.insert_position, 10)
     else:
-      assert_equal(self, buffer_state.current_position, [5, 5])
+      assert_equal(self, buffer_state.insert_position, [5, 5])
 
   @parameterized.parameters(WRAPPERS)
   def testQueueSamplePyTree(self, wrapper):
@@ -357,14 +357,14 @@ class QueueReplayTest(parameterized.TestCase):
           buffer_state.data,
           [[0], [1], [2], [3], [0], [0], [0], [0], [0], [0]],
       )
-      assert_equal(self, buffer_state.current_position, 4)
+      assert_equal(self, buffer_state.insert_position, 4)
     else:
       assert_equal(
           self,
           buffer_state.data,
           [[[0], [2], [0], [0], [0]], [[1], [3], [0], [0], [0]]],
       )
-      assert_equal(self, buffer_state.current_position, [2, 2])
+      assert_equal(self, buffer_state.insert_position, [2, 2])
     assert_equal(self, replay_buffer.size(buffer_state), 4)
 
     buffer_state = replay_buffer.insert(buffer_state, jnp.arange(4, 10))
@@ -374,14 +374,14 @@ class QueueReplayTest(parameterized.TestCase):
           buffer_state.data,
           [[0], [1], [2], [3], [4], [5], [6], [7], [8], [9]],
       )
-      assert_equal(self, buffer_state.current_position, [0, 0])
+      assert_equal(self, buffer_state.insert_position, 10)
     else:
       assert_equal(
           self,
           buffer_state.data,
           [[[0], [2], [4], [6], [8]], [[1], [3], [5], [7], [9]]],
       )
-      assert_equal(self, buffer_state.current_position, 0)
+      assert_equal(self, buffer_state.insert_position, [5, 5])
     assert_equal(self, replay_buffer.size(buffer_state), 10)
 
     buffer_state, samples = replay_buffer.sample(buffer_state)
@@ -401,6 +401,92 @@ class QueueReplayTest(parameterized.TestCase):
     buffer_state, samples = replay_buffer.sample(buffer_state)
     assert_equal(self, samples, [8, 9, 20, 21])
     assert_equal(self, replay_buffer.size(buffer_state), 2)
+
+  @parameterized.parameters(WRAPPERS)
+  def testCyclicQueueSample(self, wrapper):
+    mesh = get_mesh()
+    size_denominator = (
+        1 if wrapper in [no_wrap, jit_wrap] else mesh.shape[AXIS_NAME]
+    )
+    mesh = get_mesh()
+    replay_buffer = wrapper(
+        replay_buffers.Queue(
+            max_replay_size=10 // size_denominator,
+            dummy_data_sample=0,
+            sample_batch_size=4 // size_denominator,
+            cyclic=True,
+        )
+    )
+    rng = jax.random.PRNGKey(0)
+
+    buffer_state = replay_buffer.init(rng)
+
+    buffer_state = replay_buffer.insert(buffer_state, jnp.arange(6))
+    if jax.device_count() == 1 or wrapper in [no_wrap, jit_wrap]:
+      assert_equal(
+          self,
+          buffer_state.data,
+          [[0], [1], [2], [3], [4], [5], [0], [0], [0], [0]],
+      )
+      assert_equal(self, buffer_state.insert_position, 6)
+    else:
+      assert_equal(
+          self,
+          buffer_state.data,
+          [[[0], [2], [4], [0], [0]], [[1], [3], [5], [0], [0]]],
+      )
+      assert_equal(self, buffer_state.insert_position, [3, 3])
+    assert_equal(self, replay_buffer.size(buffer_state), 6)
+
+    buffer_state, samples = replay_buffer.sample(buffer_state)
+    assert_equal(self, samples, [0, 1, 2, 3])
+    assert_equal(self, replay_buffer.size(buffer_state), 6)
+
+    buffer_state, samples = replay_buffer.sample(buffer_state)
+    assert_equal(self, samples, [4, 5, 0, 1])
+    assert_equal(self, replay_buffer.size(buffer_state), 6)
+
+    buffer_state = replay_buffer.insert(buffer_state, jnp.arange(6, 10))
+    if jax.device_count() == 1 or wrapper in [no_wrap, jit_wrap]:
+      assert_equal(
+          self,
+          buffer_state.data,
+          [[0], [1], [2], [3], [4], [5], [6], [7], [8], [9]],
+      )
+      assert_equal(self, buffer_state.insert_position, 10)
+      assert_equal(self, buffer_state.sample_position, 2)
+    else:
+      assert_equal(
+          self,
+          buffer_state.data,
+          [[[0], [2], [4], [6], [8]], [[1], [3], [5], [7], [9]]],
+      )
+      assert_equal(self, buffer_state.insert_position, [5, 5])
+      assert_equal(self, buffer_state.sample_position, [1, 1])
+    assert_equal(self, replay_buffer.size(buffer_state), 10)
+
+    buffer_state, samples = replay_buffer.sample(buffer_state)
+    assert_equal(self, samples, [2, 3, 4, 5])
+    assert_equal(self, replay_buffer.size(buffer_state), 10)
+
+    buffer_state, samples = replay_buffer.sample(buffer_state)
+    assert_equal(self, samples, [6, 7, 8, 9])
+    assert_equal(self, replay_buffer.size(buffer_state), 10)
+
+    buffer_state = replay_buffer.insert(buffer_state, jnp.arange(20, 24))
+    assert_equal(self, replay_buffer.size(buffer_state), 10)
+
+    buffer_state, samples = replay_buffer.sample(buffer_state)
+    assert_equal(self, samples, [4, 5, 6, 7])
+    assert_equal(self, replay_buffer.size(buffer_state), 10)
+
+    buffer_state, samples = replay_buffer.sample(buffer_state)
+    assert_equal(self, samples, [8, 9, 20, 21])
+    assert_equal(self, replay_buffer.size(buffer_state), 10)
+
+    buffer_state, samples = replay_buffer.sample(buffer_state)
+    assert_equal(self, samples, [22, 23, 4, 5])
+    assert_equal(self, replay_buffer.size(buffer_state), 10)
 
   @parameterized.parameters(WRAPPERS)
   def testQueueInsertWhenFull(self, wrapper):
@@ -426,9 +512,9 @@ class QueueReplayTest(parameterized.TestCase):
       assert_equal(
           self,
           buffer_state.data,
-          [[10], [11], [2], [3], [4], [5], [6], [7], [8], [9]],
+          [[2], [3], [4], [5], [6], [7], [8], [9], [10], [11]],
       )
-      assert_equal(self, buffer_state.current_position, 2)
+      assert_equal(self, buffer_state.insert_position, 10)
     assert_equal(self, replay_buffer.size(buffer_state), 10)
 
   @parameterized.parameters(WRAPPERS)
@@ -453,13 +539,13 @@ class QueueReplayTest(parameterized.TestCase):
       assert_equal(
           self,
           buffer_state.data,
-          [[10], [11], [12], [13], [14], [15], [6], [7], [8], [9]],
+          [[6], [7], [8], [9], [10], [11], [12], [13], [14], [15]],
       )
     assert_equal(self, replay_buffer.size(buffer_state), 10)
     if jax.device_count() == 1 or wrapper in [no_wrap, jit_wrap]:
-      assert_equal(self, buffer_state.current_position, 6)
+      assert_equal(self, buffer_state.insert_position, 10)
     else:
-      assert_equal(self, buffer_state.current_position, [3, 3])
+      assert_equal(self, buffer_state.insert_position, [5, 5])
 
     # This sample contains elements from both the beggining and the end of
     # the buffer.
@@ -467,9 +553,9 @@ class QueueReplayTest(parameterized.TestCase):
     assert_equal(self, samples, jnp.array([6, 7, 8, 9, 10, 11, 12, 13]))
     assert_equal(self, replay_buffer.size(buffer_state), 2)
     if jax.device_count() == 1 or wrapper in [no_wrap, jit_wrap]:
-      assert_equal(self, buffer_state.current_position, 6)
+      assert_equal(self, buffer_state.insert_position, 10)
     else:
-      assert_equal(self, buffer_state.current_position, [3, 3])
+      assert_equal(self, buffer_state.insert_position, [5, 5])
 
   @parameterized.parameters(WRAPPERS)
   def testQueueBatchSizeEqualsMaxSize(self, wrapper):
@@ -493,7 +579,10 @@ class QueueReplayTest(parameterized.TestCase):
     buffer_state = replay_buffer.insert(buffer_state, jnp.arange(batch_size))
     buffer_state, samples = replay_buffer.sample(buffer_state)
     assert_equal(self, samples, range(batch_size))
-    assert_equal(self, buffer_state.current_size, 0)
+    if jax.device_count() == 1 or wrapper in [no_wrap, jit_wrap]:
+      assert_equal(self, buffer_state.sample_position, 8)
+    else:
+      assert_equal(self, buffer_state.sample_position, [4, 4])
 
     buffer_state = replay_buffer.insert(
         buffer_state, jnp.zeros(batch_size, dtype=jnp.int32)
@@ -503,7 +592,10 @@ class QueueReplayTest(parameterized.TestCase):
     )
     buffer_state, samples = replay_buffer.sample(buffer_state)
     assert_equal(self, samples, [1] * batch_size)
-    assert_equal(self, buffer_state.current_size, 0)
+    if jax.device_count() == 1 or wrapper in [no_wrap, jit_wrap]:
+      assert_equal(self, buffer_state.sample_position, 8)
+    else:
+      assert_equal(self, buffer_state.sample_position, [4, 4])
 
   @parameterized.parameters(WRAPPERS)
   def testQueueSampleFromEmpty(self, wrapper) -> None:
@@ -526,19 +618,25 @@ class QueueReplayTest(parameterized.TestCase):
     buffer_state = replay_buffer.insert(buffer_state, jnp.arange(batch_size))
     buffer_state, samples = replay_buffer.sample(buffer_state)
     assert_equal(self, samples, range(batch_size))
-    assert_equal(self, buffer_state.current_size, 0)
+    if jax.device_count() == 1 or wrapper in [no_wrap, jit_wrap]:
+      assert_equal(self, buffer_state.sample_position, 10)
+    else:
+      assert_equal(self, buffer_state.sample_position, [5, 5])
 
     with self.assertRaisesRegex(
         ValueError, 'Trying to sample 10 elements, but only 0 available.'
     ):
       replay_buffer.sample(buffer_state)
-    assert_equal(self, buffer_state.current_size, 0)
+    if jax.device_count() == 1 or wrapper in [no_wrap, jit_wrap]:
+      assert_equal(self, buffer_state.sample_position, 10)
+    else:
+      assert_equal(self, buffer_state.sample_position, [5, 5])
 
     buffer_state = replay_buffer.insert(buffer_state, jnp.arange(10, 14))
     if jax.device_count() == 1 or wrapper in [no_wrap, jit_wrap]:
-      assert_equal(self, buffer_state.current_size, 4)
+      assert_equal(self, buffer_state.sample_position, 6)
     else:
-      assert_equal(self, buffer_state.current_size, [2, 2])
+      assert_equal(self, buffer_state.sample_position, [3, 3])
     with self.assertRaisesRegex(
         ValueError, 'Trying to sample 10 elements, but only 4 available.'
     ):

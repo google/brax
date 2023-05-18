@@ -18,7 +18,6 @@
 import json
 from typing import List, Text
 
-from brax import geometry
 from brax.base import State, System
 from etils import epath
 import jax

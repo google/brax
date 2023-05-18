@@ -26,38 +26,6 @@ from jax import numpy as jp
 import jaxopt
 
 
-def _pt_jac(
-    sys: System,
-    com: jp.ndarray,
-    cdof: Motion,
-    pos: jp.ndarray,
-    link_idx: jp.ndarray,
-) -> jp.ndarray:
-  """Calculates the point jacobian.
-
-  Args:
-    sys: a brax system
-    com: center of mass position
-    cdof: dofs in com frame
-    pos: position in world frame
-    link_idx: index of link frame to transform point jacobian
-
-  Returns:
-    pt: point jacobian
-  """
-  # backward scan up tree: build the link mask corresponding to link_idx
-  def mask_fn(mask_child, link):
-    mask = link == link_idx
-    if mask_child is not None:
-      mask += mask_child
-    return mask
-
-  mask = scan.tree(sys, mask_fn, 'l', jp.arange(sys.num_links()), reverse=True)
-  cdof = jax.vmap(lambda a, b: a * b)(cdof, jp.take(mask, sys.dof_link()))
-  off = Transform.create(pos=pos - com[link_idx])
-  return off.vmap(in_axes=(None, 0)).do(cdof).vel
-
-
 def _imp_aref(
     params: jp.ndarray, pos: jp.ndarray, vel: jp.ndarray
 ) -> Tuple[jp.ndarray, jp.ndarray]:
@@ -87,9 +55,47 @@ def _imp_aref(
   b = 2 / (dmax * timeconst)
   k = 1 / (dmax * dmax * timeconst * timeconst * dampratio * dampratio)
 
+  # See https://mujoco.readthedocs.io/en/latest/modeling.html#solver-parameters
+  stiffness, damping = params[:2]
+  use_v2_params = (stiffness < 0) & (damping < 0)
+  b = jp.where(use_v2_params, -damping / dmax, b)
+  k = jp.where(use_v2_params, -stiffness / (dmax * dmax), k)
+
   aref = -b * vel - k * imp * pos
 
   return imp, aref
+
+
+def point_jacobian(
+    sys: System,
+    com: jp.ndarray,
+    cdof: Motion,
+    pos: jp.ndarray,
+    link_idx: jp.ndarray,
+) -> Motion:
+  """Calculates the jacobian of a point on a link.
+
+  Args:
+    sys: a brax system
+    com: center of mass position
+    cdof: dofs in com frame
+    pos: position in world frame to calculate the jacobian
+    link_idx: index of link frame to transform point jacobian
+
+  Returns:
+    pt: point jacobian
+  """
+  # backward scan up tree: build the link mask corresponding to link_idx
+  def mask_fn(mask_child, link):
+    mask = link == link_idx
+    if mask_child is not None:
+      mask += mask_child
+    return mask
+
+  mask = scan.tree(sys, mask_fn, 'l', jp.arange(sys.num_links()), reverse=True)
+  cdof = jax.vmap(lambda a, b: a * b)(cdof, jp.take(mask, sys.dof_link()))
+  off = Transform.create(pos=pos - com[link_idx])
+  return off.vmap(in_axes=(None, 0)).do(cdof)
 
 
 def jac_limit(
@@ -118,7 +124,8 @@ def jac_limit(
 
   side = ((pos_min < pos_max) * 2 - 1) * (pos < 0)
   jac = jax.vmap(jp.multiply)(jp.eye(sys.qd_size())[qd_idx], side)
-  imp, aref = _imp_aref(sys.solver_params_joint, pos, jac @ state.qd)
+  params = sys.dof.solver_params[qd_idx]
+  imp, aref = jax.vmap(_imp_aref)(params, pos, jac @ state.qd)
   diag = sys.dof.invweight[qd_idx] * (pos < 0) * (1 - imp) / (imp + 1e-8)
   aref = jax.vmap(lambda x, y: x * y)(aref, (pos < 0))
 
@@ -146,8 +153,8 @@ def jac_contact(
 
   def row_fn(contact):
     link_a, link_b = contact.link_idx
-    a = _pt_jac(sys, state.com, state.cdof, contact.pos, link_a)
-    b = _pt_jac(sys, state.com, state.cdof, contact.pos, link_b)
+    a = point_jacobian(sys, state.com, state.cdof, contact.pos, link_a).vel
+    b = point_jacobian(sys, state.com, state.cdof, contact.pos, link_b).vel
     diff = b - a
 
     # 4 pyramidal friction directions
@@ -158,7 +165,7 @@ def jac_contact(
 
     jac = jp.stack(jac)
     pos = -jp.tile(contact.penetration, 4)
-    imp, aref = _imp_aref(sys.solver_params_contact, pos, jac @ state.qd)
+    imp, aref = _imp_aref(contact.solver_params, pos, jac @ state.qd)
     t = sys.link.invweight[link_a] + sys.link.invweight[link_b] * (link_b > -1)
     diag = jp.tile(t + contact.friction * contact.friction * t, 4)
     diag *= 2 * contact.friction * contact.friction * (1 - imp) / (imp + 1e-8)

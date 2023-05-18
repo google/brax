@@ -20,6 +20,7 @@ from absl.testing import parameterized
 from brax import test_utils
 from brax.generalized import pipeline
 import jax
+from jax import numpy as jp
 import numpy as np
 
 
@@ -55,8 +56,9 @@ class DynamicsTest(parameterized.TestCase):
     """Test dynamics forward."""
     sys = test_utils.load_fixture(xml_file)
     for mj_prev, mj_next in test_utils.sample_mujoco_states(xml_file):
+      act = jp.zeros(sys.act_size())
       state = jax.jit(pipeline.init)(sys, mj_prev.qpos, mj_prev.qvel)
-      state = jax.jit(pipeline.step)(sys, state, mj_prev.qfrc_applied)
+      state = jax.jit(pipeline.step)(sys, state, act)
 
       np.testing.assert_allclose(
           state.qf_smooth, mj_next.qfrc_smooth, rtol=1e-4, atol=1e-4
