@@ -24,38 +24,29 @@ import jax
 from jax import numpy as jp
 import numpy as onp
 from PIL import Image
-from pytinyrenderer import TinyRenderCamera as Camera
-from pytinyrenderer import TinyRenderLight as Light
-from pytinyrenderer import TinySceneRenderer as Renderer
+from renderer import CameraParameters as Camera
+from renderer import LightParameters as Light
+from renderer import Model as RendererMesh
+from renderer import ShadowParameters as Shadow
+from renderer import Renderer, Scene, UpAxis, transpose_for_display
 import trimesh
 
 
-class TextureRGB888:
-
-  def __init__(self, pixels):
-    self.pixels = pixels
-    self.width = int(onp.sqrt(len(pixels) / 3))
-    self.height = int(onp.sqrt(len(pixels) / 3))
-
-
-class Grid(TextureRGB888):
-
-  def __init__(self, grid_size, color):
-    grid = onp.zeros((grid_size, grid_size, 3), dtype=onp.int32)
-    grid[:, :] = onp.array(color)
-    grid[0] = onp.zeros((grid_size, 3), dtype=onp.int32)
-    grid[:, 0] = onp.zeros((grid_size, 3), dtype=onp.int32)
-    super().__init__(list(grid.ravel()))
+def grid(grid_size, color):
+  grid = onp.zeros((grid_size, grid_size, 3), dtype=onp.single)
+  grid[:, :] = onp.array(color) / 255.0
+  grid[0] = onp.zeros((grid_size, 3), dtype=onp.single)
+  # to reverse texture along y direction
+  grid[:, -1] = onp.zeros((grid_size, 3), dtype=onp.single)
+  return jp.asarray(grid)
 
 
-_BASIC = TextureRGB888([133, 118, 102])
-_TARGET = TextureRGB888([255, 34, 34])
-_GROUND = Grid(100, [200, 200, 200])
+_GROUND = grid(100, [200, 200, 200])
 
 
-def _scene(sys: brax.System, state: brax.State) -> Tuple[Renderer, List[int]]:
-  """Converts a brax System and state to a pytinyrenderer scene and instances."""
-  scene = Renderer()
+def _scene(sys: brax.System, state: brax.State) -> Tuple[Scene, List[int]]:
+  """Converts a brax System and state to a jaxrenderer scene and instances."""
+  scene = Scene()
   instances = []
 
   def take_i(obj, i):
@@ -72,50 +63,60 @@ def _scene(sys: brax.System, state: brax.State) -> Tuple[Renderer, List[int]]:
 
   for _, geom in link_geoms.items():
     for col in geom:
-      tex = TextureRGB888((col.rgba[:3] * 255).astype('uint32'))
+      tex = col.rgba[:3].reshape((1, 1, 3))
       if isinstance(col, base.Capsule):
         half_height = col.length / 2
-        model = scene.create_capsule(col.radius, half_height, 2,
-                                     tex.pixels, tex.width, tex.height)
+        scene, model = scene.add_capsule(
+          radius=col.radius,
+          half_height=half_height,
+          up_axis=UpAxis.Z,
+          diffuse_map=tex,
+        )
       elif isinstance(col, base.Box):
-        model = scene.create_cube(col.halfsize, tex.pixels, tex.width,
-                                  tex.height, 16.)
+        scene, model = scene.add_cube(
+          half_extents=col.halfsize,
+          diffuse_map=tex,
+          texture_scaling=16.,
+        )
       elif isinstance(col, base.Sphere):
-        model = scene.create_capsule(
-            col.radius, 0, 2, tex.pixels, tex.width, tex.height
+        scene, model = scene.add_capsule(
+          radius=col.radius,
+          half_height=0.,
+          up_axis=UpAxis.Z,
+          diffuse_map=tex,
         )
       elif isinstance(col, base.Plane):
         tex = _GROUND
-        model = scene.create_cube([1000.0, 1000.0, 0.0001], tex.pixels,
-                                  tex.width, tex.height, 8192)
+        scene, model = scene.add_cube(
+          half_extents=[1000.0, 1000.0, 0.0001],
+          diffuse_map=tex,
+          texture_scaling=8192.,
+        )
       elif isinstance(col, base.Convex):
         # convex objects are not visual
         continue
       elif isinstance(col, base.Mesh):
         tm = trimesh.Trimesh(vertices=col.vert, faces=col.face)
-        vert_norm = tm.vertex_normals
-        model = scene.create_mesh(
-            col.vert.reshape((-1)).tolist(),
-            vert_norm.reshape((-1)).tolist(),
-            [0] * col.vert.shape[0] * 2,
-            col.face.reshape((-1)).tolist(),
-            tex.pixels,
-            tex.width,
-            tex.height,
-            1.0,
+        mesh = RendererMesh.create(
+            verts=tm.vertices,
+            norms=tm.vertex_normals,
+            uvs=jp.zeros((tm.vertices.shape[0], 2), dtype=int),
+            faces=tm.faces,
+            diffuse_map=tex,
         )
+        scene, model = scene.add_model(mesh)
       else:
         raise RuntimeError(f'unrecognized collider: {type(col)}')
 
       i = col.link_idx if col.link_idx is not None else -1
       x = state.x.concatenate(base.Transform.zero((1,)))
-      instance = scene.create_object_instance(model)
+      scene, instance = scene.add_object_instance(model)
       off = col.transform.pos
-      pos = onp.array(x.pos[i]) + math.rotate(off, x.rot[i])
+      pos = x.pos[i] + math.rotate(off, x.rot[i])
       rot = col.transform.rot
       rot = math.quat_mul(x.rot[i], rot)
-      scene.set_object_position(instance, list(pos))
-      scene.set_object_orientation(instance, [rot[1], rot[2], rot[3], rot[0]])
+      scene = scene.set_object_position(instance, pos)
+      scene = scene.set_object_orientation(instance, rot)
       instances.append(instance)
 
   return scene, instances
@@ -132,7 +133,7 @@ def _eye(sys: brax.System, state: brax.State) -> List[float]:
 
 def _up(unused_sys: brax.System) -> List[float]:
   """Determines the up orientation of the camera."""
-  return [0, 0, 1]
+  return [0., 0., 1.]
 
 
 def get_camera(
@@ -160,7 +161,9 @@ def render_array(sys: brax.System,
                  height: int,
                  light: Optional[Light] = None,
                  camera: Optional[Camera] = None,
-                 ssaa: int = 2) -> onp.ndarray:
+                 ssaa: int = 2,
+                 shadow: Optional[Shadow] = None,
+                 enable_shadow: bool = True) -> onp.ndarray:
   """Renders an RGB array of a brax system and QP."""
   if (len(state.x.pos.shape), len(state.x.rot.shape)) != (2, 2):
     raise RuntimeError('unexpected shape in state')
@@ -173,7 +176,7 @@ def render_array(sys: brax.System,
         ambient=0.8,
         diffuse=0.8,
         specular=0.6,
-        shadowmap_center=target)
+    )
   if camera is None:
     eye, up = _eye(sys, state), _up(sys)
     hfov = 58.0
@@ -186,12 +189,22 @@ def render_array(sys: brax.System,
         up=up,
         hfov=hfov,
         vfov=vfov)
-  img = scene.get_camera_image(instances, light, camera).rgb
-  arr = onp.reshape(
-      onp.array(img, dtype=onp.uint8),
-      (camera.view_height, camera.view_width, -1))
+  if shadow is None and enable_shadow:
+    shadow = Shadow(centre=camera.target)
+  objects = [scene.objects[inst] for inst in instances]
+  img = Renderer.get_camera_image(
+    objects=objects,
+    light=light,
+    camera=camera,
+    width=camera.viewWidth,
+    height=camera.viewHeight,
+    shadow_param=shadow,
+  )
+  arr = transpose_for_display(jax.lax.clamp(0., img * 255, 255.).astype(jp.uint8))
   if ssaa > 1:
-    arr = onp.asarray(Image.fromarray(arr).resize((width, height)))
+    arr = onp.asarray(Image.fromarray(onp.asarray(arr)).resize((width, height)))
+  else:
+    arr = onp.asarray(arr)
   return arr
 
 
