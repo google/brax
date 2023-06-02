@@ -453,7 +453,9 @@ class Actuator(Base):
     q_id: (num_actuators,) q index associated with an actuator
     qd_id: (num_actuators,) qd index associated with an actuator
     ctrl_range: (num_actuators, 2) actuator control range
-    gear: (num_actuators,) scaling factor for each actuator torque output
+    force_range: (num_actuators, 2) actuator force range
+    gain: (num_actuators,) scaling factor for each actuator control input
+    gear: (num_actuators,) scaling factor for each actuator force output
     bias_q: (num_actuators,) bias applied by q (e.g. position actuators)
     bias_qd: (num_actuators,) bias applied by qd (e.g. velocity actuators)
   """
@@ -461,6 +463,8 @@ class Actuator(Base):
   q_id: jp.ndarray
   qd_id: jp.ndarray
   ctrl_range: jp.ndarray
+  force_range: jp.ndarray
+  gain: jp.ndarray
   gear: jp.ndarray
   bias_q: jp.ndarray
   bias_qd: jp.ndarray
@@ -508,6 +512,8 @@ class System:
     joint_scale_ang: scale for position-based joint rotation update
     joint_scale_pos: scale for position-based joint position update
     collide_scale: fraction of position based collide update to apply
+    enable_fluid: (1,) enables or disables fluid forces based on the
+      default viscosity and density parameters provided in the XML
     geom_masks: 64-bit mask determines whether two geoms will be contact tested.
                 lower 32 bits are type, upper 32 bits are affinity.  two geoms
                 a, b will be contact tested if a.type & b.affinity != 0
@@ -545,6 +551,7 @@ class System:
   joint_scale_pos: jp.float32
   collide_scale: jp.float32
   # non-pytree nodes
+  enable_fluid: bool = struct.field(pytree_node=False)
   geom_masks: List[int] = struct.field(pytree_node=False)
   link_names: List[str] = struct.field(pytree_node=False)
   link_types: str = struct.field(pytree_node=False)

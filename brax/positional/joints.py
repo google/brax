@@ -27,7 +27,7 @@ from jax import numpy as jp
 from jax.ops import segment_sum
 
 
-def acceleration_update(sys: System, state: State, tau: jp.ndarray) -> Motion:
+def acceleration_update(sys: System, state: State, tau: jp.ndarray) -> Force:
   """Calculates forces to apply to links resulting from joint constraints.
 
   Args:
@@ -36,7 +36,7 @@ def acceleration_update(sys: System, state: State, tau: jp.ndarray) -> Motion:
     tau: joint force vector
 
   Returns:
-    xdd_i: acceleration to apply to link center of mass in world frame
+    xf_i: force to apply to link center of mass in world frame
   """
 
   def _free_joint(*_) -> Force:
@@ -77,16 +77,7 @@ def acceleration_update(sys: System, state: State, tau: jp.ndarray) -> Motion:
   fp = Transform.create(pos=state.a_p.pos - x_i_parent.pos).vmap().do(xf)
   fp = jax.tree_map(lambda x: segment_sum(x, parent_idx, sys.num_links()), fp)
   xf_i = fc - fp
-
-  # convert to acceleration
-  inv_mass = 1 / (sys.link.inertia.mass ** (1 - sys.spring_mass_scale))
-  inv_inertia = com.inv_inertia(sys, state.x)
-  xdd_i = Motion(
-      ang=jax.vmap(lambda x, y: x @ y)(inv_inertia, xf_i.ang),
-      vel=jax.vmap(lambda x, y: x * y)(inv_mass, xf_i.vel),
-  )
-
-  return xdd_i
+  return xf_i
 
 
 def position_update(sys: System, state: State) -> Transform:

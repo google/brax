@@ -15,6 +15,6 @@
     </body>
   </worldbody>
   <actuator>
-    <position ctrllimited="false" joint="hinge1" gear="10 0 0 0 0 0"/>
+    <position ctrllimited="false" joint="hinge1" kp="10"/>
   </actuator>
 </mujoco>

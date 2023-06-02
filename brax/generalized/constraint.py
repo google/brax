@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# pylint:disable=g-multiple-import
+# pylint:disable=g-multiple-import, g-importing-member
 """Functions for constraint satisfaction."""
 from typing import Tuple
 
@@ -57,9 +57,8 @@ def _imp_aref(
 
   # See https://mujoco.readthedocs.io/en/latest/modeling.html#solver-parameters
   stiffness, damping = params[:2]
-  use_v2_params = (stiffness < 0) & (damping < 0)
-  b = jp.where(use_v2_params, -damping / dmax, b)
-  k = jp.where(use_v2_params, -stiffness / (dmax * dmax), k)
+  b = jp.where(damping <= 0, -damping / dmax, b)
+  k = jp.where(stiffness <= 0, -stiffness / (dmax * dmax), k)
 
   aref = -b * vel - k * imp * pos
 
@@ -153,9 +152,9 @@ def jac_contact(
 
   def row_fn(contact):
     link_a, link_b = contact.link_idx
-    a = point_jacobian(sys, state.com, state.cdof, contact.pos, link_a).vel
-    b = point_jacobian(sys, state.com, state.cdof, contact.pos, link_b).vel
-    diff = b - a
+    a = point_jacobian(sys, state.root_com, state.cdof, contact.pos, link_a)
+    b = point_jacobian(sys, state.root_com, state.cdof, contact.pos, link_b)
+    diff = b.vel - a.vel
 
     # 4 pyramidal friction directions
     jac = []

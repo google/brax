@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# pylint:disable=g-multiple-import
+# pylint:disable=g-multiple-import, g-importing-member
 """Functions for forces/torques through fluids."""
 
-from typing import Tuple, Union
+from typing import Union
 from brax.base import Force, Motion, System, Transform
 import jax
 import jax.numpy as jp
@@ -58,13 +58,13 @@ def force(
     xd: Motion,
     mass: jp.ndarray,
     inertia: jp.ndarray,
-    subtree_com: Union[jp.ndarray, None] = None,
-) -> Tuple[Force, jp.ndarray]:
+    root_com: Union[jp.ndarray, None] = None,
+) -> Force:
   """Returns force due to motion through a fluid."""
   # get the velocity at the com position/orientation
   x_i = x.vmap().do(sys.link.inertia.transform)
-  # TODO: remove subtree_com when xd is fixed for stacked joints
-  offset = x_i.pos - x.pos if subtree_com is None else x_i.pos - subtree_com
+  # TODO: remove root_com when xd is fixed for stacked joints
+  offset = x_i.pos - x.pos if root_com is None else x_i.pos - root_com
   xd_i = x_i.replace(pos=offset).vmap().do(xd)
 
   # TODO: add ellipsoid fluid model from mujoco
@@ -80,4 +80,5 @@ def force(
 
   # rotate back to the world orientation
   frc = Transform.create(rot=x_i.rot).vmap().do(frc)
-  return frc, x_i.pos
+
+  return frc

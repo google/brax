@@ -17,6 +17,7 @@
 
 from brax import actuator
 from brax import com
+from brax import fluid
 from brax import geometry
 from brax import kinematics
 from brax.base import Motion, System
@@ -24,6 +25,7 @@ from brax.spring import collisions
 from brax.spring import integrator
 from brax.spring import joints
 from brax.spring.base import State
+import jax
 from jax import numpy as jp
 
 
@@ -88,7 +90,16 @@ def step(
 
   # calculate acceleration and delta-velocity terms
   tau = actuator.to_tau(sys, act, state.q, state.qd)
-  xdd_i = joints.resolve(sys, state, tau) + Motion.create(vel=sys.gravity)
+  xdd_i = Motion.create(vel=sys.gravity)
+  xf_i = joints.resolve(sys, state, tau)
+  if sys.enable_fluid:
+    inertia = sys.link.inertia.i ** (1 - sys.spring_inertia_scale)
+    xf_i += fluid.force(sys, state.x, state.xd, state.mass, inertia)
+  xdd_i += Motion(
+      ang=jax.vmap(lambda x, y: x @ y)(state.i_inv, xf_i.ang),
+      vel=jax.vmap(lambda x, y: x / y)(xf_i.vel, state.mass),
+  )
+
   # semi-implicit euler: apply acceleration update before resolving collisions
   state = state.replace(xd_i=state.xd_i + xdd_i * sys.dt)
   xdv_i = collisions.resolve(sys, state)

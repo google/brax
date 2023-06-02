@@ -237,6 +237,8 @@ def load_model(mj: mujoco.MjModel) -> System:
   # do some validation up front
   if any(i not in [0, 1] for i in mj.actuator_biastype):
     raise NotImplementedError('Only actuator_biastype in [0, 1] are supported.')
+  if any(i != 0 for i in mj.actuator_gaintype):
+    raise NotImplementedError('Only actuator_gaintype in [0] is supported.')
   if mj.opt.integrator != 0:
     raise NotImplementedError('Only euler integration is supported.')
   if mj.opt.cone != 0:
@@ -406,17 +408,21 @@ def load_model(mj: mujoco.MjModel) -> System:
   # create actuators
   ctrl_range = mj.actuator_ctrlrange
   ctrl_range[~(mj.actuator_ctrllimited == 1), :] = np.array([-np.inf, np.inf])
+  force_range = mj.actuator_forcerange
+  force_range[~(mj.actuator_forcelimited == 1), :] = np.array([-np.inf, np.inf])
   q_id = np.array([mj.jnt_qposadr[i] for i in mj.actuator_trnid[:, 0]])
   qd_id = np.array([mj.jnt_dofadr[i] for i in mj.actuator_trnid[:, 0]])
-  bias_q = mj.actuator_biasprm[:, 1]
-  bias_qd = mj.actuator_biasprm[:, 2]
+  bias_q = mj.actuator_biasprm[:, 1] * (mj.actuator_biastype != 0)
+  bias_qd = mj.actuator_biasprm[:, 2] * (mj.actuator_biastype != 0)
 
   # TODO: might be nice to add actuator names for debugging
   actuator = Actuator(  # pytype: disable=wrong-arg-types
       q_id=q_id,
       qd_id=qd_id,
+      gain=mj.actuator_gainprm[:, 0],
       gear=mj.actuator_gear[:, 0],
       ctrl_range=ctrl_range,
+      force_range=force_range,
       bias_q=bias_q,
       bias_qd=bias_qd,
   )
@@ -465,6 +471,7 @@ def load_model(mj: mujoco.MjModel) -> System:
       joint_scale_ang=custom['joint_scale_ang'],
       joint_scale_pos=custom['joint_scale_pos'],
       collide_scale=custom['collide_scale'],
+      enable_fluid=(mj.opt.viscosity > 0) | (mj.opt.density > 0),
       geom_masks=geom_masks,
       link_names=link_names,
       link_types=link_types,

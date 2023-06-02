@@ -108,7 +108,8 @@ class PipelineTest(absltest.TestCase):
     # from generalized and plug it back into pbd
     # TODO: remove this xd override once kinematics.forward is fixed
     state_g = g_pipeline.init(sys, init_q, init_qd)
-    xd = Transform.create(pos=state_g.x.pos - state_g.com).vmap().do(state_g.cd)
+    off = state_g.x.pos - state_g.root_com
+    xd = Transform.create(pos=off).vmap().do(state_g.cd)
     state = state.replace(xd=xd, xd_i=com.from_world(sys, state.x, xd)[1])
 
     j_spring_step = jax.jit(pipeline.step)
