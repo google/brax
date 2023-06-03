@@ -155,6 +155,7 @@ def get_camera(
   return camera
 
 
+@jax.default_matmul_precision("float32")
 def render_array(sys: brax.System,
                  state: brax.State,
                  width: int,
