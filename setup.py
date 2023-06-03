@@ -50,7 +50,7 @@ setup(
         "jax>=0.4.6",
         "jaxlib>=0.4.6",
         "jaxopt",
-        "jaxrenderer>=0.1.3",
+        "jaxrenderer>=0.2.0",
         "jinja2",
         "mujoco",
         "numpy",
