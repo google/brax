@@ -242,7 +242,7 @@ def render_instances(
 
   return arr
 
-@jax.default_matmul_precision("float32")
+
 def render_array(sys: brax.System,
                  state: brax.State,
                  width: int,
@@ -298,11 +298,10 @@ def render(sys: brax.System,
     render_instances,
     static_argnames=("width", "height", "enable_shadow"),
   )
-  frames: List[Image.Image] = []
+  images: List[jp.ndarray] = []
   for state, camera in zip(states, cameras):
     x = state.x.concatenate(base.Transform.zero((1,)))
     instances = _with_state(objs, x)
-    target = state.x.pos[0, :]
     img = _render(
       instances=instances,
       width=width * ssaa,
@@ -314,11 +313,14 @@ def render(sys: brax.System,
       enable_shadow=enable_shadow,
     )
     arr = transpose_for_display((img * 255).astype(jp.uint8))
-    frame = Image.fromarray(onp.asarray(arr))
-    if ssaa > 1:
-      frame = frame.resize((width, height))
+    images.append(arr)
 
-    frames.append(frame)
+  images_in_device: List[jp.ndarray] = jax.device_get(images)
+  np_arrays: Iterable[onp.ndarray] = map(onp.asarray, images_in_device)
+  frames: List[Image.Image] = [
+    Image.fromarray(arr).resize((width, height))
+    if ssaa > 1 else Image.fromarray(arr)
+    for arr in np_arrays]
 
   f = io.BytesIO()
   if len(frames) == 1:
