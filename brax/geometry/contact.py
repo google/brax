@@ -503,15 +503,22 @@ _TYPE_FUN = {
 
 
 def _geom_pairs(sys: System) -> Iterator[Tuple[Geometry, Geometry]]:
+  """Returns geometry pairs that undergo collision."""
   for i in range(len(sys.geoms)):
     for j in range(i, len(sys.geoms)):
       mask_i, mask_j = sys.geom_masks[i], sys.geom_masks[j]
       if (mask_i & mask_j >> 32) | (mask_i >> 32 & mask_j) == 0:
         continue
       geom_i, geom_j = sys.geoms[i], sys.geoms[j]
-      if i == j and geom_i.link_idx is None:
+      if geom_i.link_idx is None and geom_j.link_idx is None:
+        # skip collisions between world geoms
         continue
+      if geom_i.link_idx is None:
+        # geom_j is expected to be the world geom
+        geom_i, geom_j = geom_j, geom_i
       if i == j and geom_j.transform.pos.shape[0] == 1:
+        # no self-collisions, unless the geom batch dimension is g.t. 1 where
+        # self-collisions are more easily filtered out with contype/conaffinity.
         continue
       yield (geom_i, geom_j)
 

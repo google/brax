@@ -199,6 +199,10 @@ class MjcfTest(absltest.TestCase):
     ):
       test_utils.load_fixture('fluid_wind.xml')
 
+  def test_world_fromto(self):
+    """Tests that a world element with fromto does not break mjcf.load."""
+    test_utils.load_fixture('world_fromto.xml')
+
 
 if __name__ == '__main__':
   absltest.main()

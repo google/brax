@@ -60,12 +60,12 @@ class State(base.State):
 
   @classmethod
   def init(
-      cls, q: jp.ndarray, qd: jp.ndarray, x: jp.ndarray, xd: jp.ndarray
+      cls, q: jp.ndarray, qd: jp.ndarray, x: Transform, xd: Motion
   ) -> 'State':
     """Returns an initial State given a brax system."""
-    num_links = x.pos.shape[0]  # pytype: disable=attribute-error  # jax-ndarray
+    num_links = x.pos.shape[0]
     qd_size = qd.shape[0]
-    return State(  # pylint:disable=unexpected-keyword-arg  # pytype: disable=wrong-arg-types  # jax-ndarray
+    return State(
         q=q,
         qd=qd,
         x=x,

@@ -48,10 +48,10 @@ class DmEnvWrapper(dm_env.Environment):
     if hasattr(self._env, 'action_spec'):
       self._action_spec = self._env.action_spec()
     else:
-      action_high = jp.ones(self._env.action_size, dtype='float32')
+      action = self._env.sys.actuator.ctrl_range
       self._action_spec = specs.BoundedArray((self._env.action_size,),
-                                             minimum=-action_high,
-                                             maximum=action_high,
+                                             minimum=action[:, 0],
+                                             maximum=action[:, 1],
                                              dtype='float32',
                                              name='action')
 

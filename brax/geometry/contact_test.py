@@ -476,5 +476,20 @@ class MeshTest(absltest.TestCase):
     self.assertTrue((c.normal == jp.array([0.0, 0.0, 1.0])).all())
 
 
+class GeomPairTest(absltest.TestCase):
+  """Tests for colliding geom pairs."""
+
+  def test_no_world_self_collision(self):
+    sys = test_utils.load_fixture('world_self_collision.xml')
+    x, _ = kinematics.forward(sys, sys.init_q, jp.zeros(sys.qd_size()))
+    c = geometry.contact(sys, x)
+    self.assertEqual(c.pos.shape[0], 13)
+
+  def test_collision_with_world_geom(self):
+    sys = test_utils.load_fixture('world_fromto.xml')
+    x, _ = kinematics.forward(sys, sys.init_q, jp.zeros(sys.qd_size()))
+    c = geometry.contact(sys, x)
+    self.assertEqual(c.pos.shape[0], 1)
+
 if __name__ == '__main__':
   absltest.main()
