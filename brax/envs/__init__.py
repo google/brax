@@ -92,7 +92,7 @@ def create(
   Returns:
     env: an environment
   """
-  env = _envs[env_name](**kwargs)
+  env = get_environment(env_name, **kwargs)
 
   if episode_length is not None:
     env = training.EpisodeWrapper(env, episode_length, action_repeat)
