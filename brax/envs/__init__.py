@@ -79,7 +79,7 @@ def create(
     batch_size: Optional[int] = None,
     **kwargs,
 ) -> Env:
-  """Creates an environment from the registry.
+  """Creates an environment with wrappers that depend on the parameters, from the registry.
 
   Args:
     env_name: environment name string
