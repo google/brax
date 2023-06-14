@@ -47,7 +47,7 @@ class GymWrapper(gym.Env):
     obs = np.inf * np.ones(self._env.observation_size, dtype='float32')
     self.observation_space = spaces.Box(-obs, obs, dtype='float32')
 
-    action = self._env.sys.actuator.ctrl_range
+    action = jax.tree_map(np.array, self._env.sys.actuator.ctrl_range)
     self.action_space = spaces.Box(action[:, 0], action[:, 1], dtype='float32')
 
     def reset(key):
@@ -115,7 +115,7 @@ class VectorGymWrapper(gym.vector.VectorEnv):
     obs_space = spaces.Box(-obs, obs, dtype='float32')
     self.observation_space = utils.batch_space(obs_space, self.num_envs)
 
-    action = self._env.sys.actuator.ctrl_range
+    action = jax.tree_map(np.array, self._env.sys.actuator.ctrl_range)
     action_space = spaces.Box(action[:, 0], action[:, 1], dtype='float32')
     self.action_space = utils.batch_space(action_space, self.num_envs)
 
