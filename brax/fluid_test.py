@@ -20,6 +20,8 @@ from absl.testing import parameterized
 from brax import test_utils
 from brax.generalized import dynamics
 from brax.generalized import pipeline as g_pipeline
+from brax.positional import pipeline as p_pipeline
+from brax.spring import pipeline as s_pipeline
 import jax
 from jax import numpy as jp
 import mujoco
@@ -76,6 +78,42 @@ class FluidTest(parameterized.TestCase):
 
     np.testing.assert_array_almost_equal(gq, mq, 2)
     np.testing.assert_array_almost_equal(gqd, mqd, 2)
+
+  @parameterized.parameters(
+      ('fluid_sphere.xml', p_pipeline, 0.0, 0.0),
+      ('fluid_sphere.xml', p_pipeline, 0.0, 1.3),
+      ('fluid_sphere.xml', p_pipeline, 2.0, 0.0),
+      ('fluid_sphere.xml', p_pipeline, 2.0, 1.3),
+      ('fluid_sphere.xml', s_pipeline, 0.0, 0.0),
+      ('fluid_sphere.xml', s_pipeline, 0.0, 1.3),
+      ('fluid_sphere.xml', s_pipeline, 2.0, 0.0),
+      ('fluid_sphere.xml', s_pipeline, 2.0, 1.3),
+      ('fluid_two_spheres.xml', p_pipeline, 2.0, 1.3),
+      ('fluid_two_spheres.xml', s_pipeline, 2.0, 1.3),
+  )
+  def test_fluid_positional_spring(self, config, pipeline, density, viscosity):
+    """Tests fluid interactions for pbd/spring compared to generalized."""
+    sys = test_utils.load_fixture(config)
+    sys = sys.replace(density=density, viscosity=viscosity)
+
+    q, qd = sys.init_q, jp.zeros(sys.qd_size())
+    qd = qd.at[:3].set(jp.array([1, 2, 4]))
+    qd = qd.at[3].set(jp.pi)
+
+    state_g = jax.jit(g_pipeline.init)(sys, q, qd)
+    for _ in range(500):
+      state_g = jax.jit(g_pipeline.step)(
+          sys, state_g, jp.zeros((sys.act_size(),))
+      )
+    gq, gqd = state_g.q, state_g.qd
+
+    state = jax.jit(pipeline.init)(sys, q, qd)
+    for _ in range(500):
+      state = jax.jit(pipeline.step)(sys, state, jp.zeros((sys.act_size(),)))
+    tq, tqd = state.q, state.qd
+
+    np.testing.assert_array_almost_equal(tq, gq, 3)
+    np.testing.assert_array_almost_equal(tqd, gqd, 2)
 
 
 if __name__ == '__main__':

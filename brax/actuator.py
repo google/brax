@@ -36,12 +36,21 @@ def to_tau(
   if sys.act_size() == 0:
     return jp.zeros(sys.qd_size())
 
-  q, qd = q[sys.actuator.q_id], qd[sys.actuator.qd_id]
   ctrl_range = sys.actuator.ctrl_range
+  force_range = sys.actuator.force_range
+
+  q, qd = q[sys.actuator.q_id], qd[sys.actuator.qd_id]
   act = jp.clip(act, ctrl_range[:, 0], ctrl_range[:, 1])
-  # TODO: incorporate gain
-  act = act + q * sys.actuator.bias_q + qd * sys.actuator.bias_qd
-  act_force = sys.actuator.gear * act
-  tau = jp.zeros(sys.qd_size()).at[sys.actuator.qd_id].add(act_force)
+  # See https://github.com/deepmind/mujoco/discussions/754 for why gear is
+  # used for the bias term.
+  bias = sys.actuator.gear * (
+      q * sys.actuator.bias_q + qd * sys.actuator.bias_qd
+  )
+
+  force = sys.actuator.gain * act + bias
+  force = jp.clip(force, force_range[:, 0], force_range[:, 1])
+
+  force *= sys.actuator.gear
+  tau = jp.zeros(sys.qd_size()).at[sys.actuator.qd_id].add(force)
 
   return tau

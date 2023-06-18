@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# pylint:disable=g-multiple-import
+# pylint:disable=g-multiple-import, g-importing-member
 """Base types for generalized pipeline."""
 
 from brax import base
@@ -26,24 +26,24 @@ class State(base.State):
   """Dynamic state that changes after every step.
 
   Attributes:
-    com: center of mass position of the kinematic tree containing the link
-    cinr: inertia in com frame
-    cd: body velocities in com frame
-    cdof: dofs in com frame
-    cdofd: cdof velocity
+    root_com: (num_links,) center of mass position of link root kinematic tree
+    cinr: (num_links,) inertia in com frame
+    cd: (num_links,) link velocities in com frame
+    cdof: (qd_size,) dofs in com frame
+    cdofd: (qd_size,) cdof velocity
     mass_mx: (qd_size, qd_size) mass matrix
     mass_mx_inv: (qd_size, qd_size) inverse mass matrix
     contact: calculated contacts
     con_jac: constraint jacobian
     con_diag: constraint A diagonal
     con_aref: constraint reference acceleration
-    qf_smooth: smooth dynamics force
+    qf_smooth: (qd_size,) smooth dynamics force
     qf_constraint: (qd_size,) force from constraints (collision etc)
     qdd: (qd_size,) joint acceleration vector
   """
 
   # position/velocity based terms are updated at the end of each step:
-  com: jp.ndarray
+  root_com: jp.ndarray
   cinr: Inertia
   cd: Motion
   cdof: Motion
@@ -60,18 +60,18 @@ class State(base.State):
 
   @classmethod
   def init(
-      cls, q: jp.ndarray, qd: jp.ndarray, x: jp.ndarray, xd: jp.ndarray
+      cls, q: jp.ndarray, qd: jp.ndarray, x: Transform, xd: Motion
   ) -> 'State':
     """Returns an initial State given a brax system."""
-    num_links = x.pos.shape[0]  # pytype: disable=attribute-error  # jax-ndarray
+    num_links = x.pos.shape[0]
     qd_size = qd.shape[0]
-    return State(  # pylint:disable=unexpected-keyword-arg  # pytype: disable=wrong-arg-types  # jax-ndarray
+    return State(
         q=q,
         qd=qd,
         x=x,
         xd=xd,
         contact=None,
-        com=jp.zeros(3),
+        root_com=jp.zeros(3),
         cinr=Inertia(
             Transform.zero((num_links,)),
             jp.zeros((num_links, 3, 3)),

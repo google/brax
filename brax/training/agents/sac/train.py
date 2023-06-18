@@ -424,6 +424,7 @@ def train(environment: Union[envs_v1.Env, envs.Env],
       key=eval_key)
 
   # Run initial eval
+  metrics = {}
   if process_id == 0 and num_evals > 1:
     metrics = evaluator.run_evaluation(
         _unpmap(

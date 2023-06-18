@@ -63,7 +63,7 @@ def pjit_wrap(buffer):
   return replay_buffers.PjitWrapper(
       buffer,
       mesh=get_mesh(),
-      axis_name=AXIS_NAME,
+      axis_names=(AXIS_NAME,),
   )
 
 
@@ -641,63 +641,6 @@ class QueueReplayTest(parameterized.TestCase):
         ValueError, 'Trying to sample 10 elements, but only 4 available.'
     ):
       buffer_state, samples = replay_buffer.sample(buffer_state)
-
-
-class PrimitiveReplayBufferTest(parameterized.TestCase):
-
-  @parameterized.parameters(WRAPPERS)
-  def testInsert(self, wrapper):
-    replay_buffer = wrapper(replay_buffers.PrimitiveReplayBuffer())
-    rng = jax.random.PRNGKey(0)
-    buffer_state = replay_buffer.init(rng)
-    if wrapper not in [pjit_wrap, pmap_wrap]:
-      assert_equal(self, replay_buffer.size(buffer_state), 0)
-    buffer_state = replay_buffer.insert(buffer_state, get_dummy_batch(8))
-    assert_equal(self, replay_buffer.size(buffer_state), 8)
-
-  @parameterized.parameters(WRAPPERS)
-  def testInsertWhenFull(self, wrapper):
-    replay_buffer = wrapper(replay_buffers.PrimitiveReplayBuffer())
-    rng = jax.random.PRNGKey(0)
-    buffer_state = replay_buffer.init(rng)
-    if wrapper not in [pjit_wrap, pmap_wrap]:
-      assert_equal(self, replay_buffer.size(buffer_state), 0)
-
-    buffer_state = replay_buffer.insert(buffer_state, get_dummy_batch(8))
-    with self.assertRaises(ValueError):
-      buffer_state = replay_buffer.insert(buffer_state, get_dummy_batch(8))
-    assert_equal(self, replay_buffer.size(buffer_state), 8)
-
-  @parameterized.parameters(WRAPPERS)
-  def testSample(self, wrapper):
-    replay_buffer = wrapper(replay_buffers.PrimitiveReplayBuffer())
-    rng = jax.random.PRNGKey(0)
-    buffer_state = replay_buffer.init(rng)
-    if wrapper not in [pjit_wrap, pmap_wrap]:
-      assert_equal(self, replay_buffer.size(buffer_state), 0)
-
-    buffer_state = replay_buffer.insert(buffer_state, get_dummy_batch(8))
-    assert_equal(self, replay_buffer.size(buffer_state), 8)
-    buffer_state, samples = replay_buffer.sample(buffer_state)
-    if wrapper not in [pjit_wrap, pmap_wrap]:
-      assert_equal(self, replay_buffer.size(buffer_state), 0)
-    assert_equal(self, samples['a'].shape, (8,))
-    assert_equal(self, samples['b'].shape, (8, 5, 5))
-    for sample in samples['b']:
-      assert_equal(
-          self, jnp.reshape(sample - sample[0, 0], (-1,)), range(5 * 5)
-      )
-
-  @parameterized.parameters(WRAPPERS)
-  def testSampleWhenEmpty(self, wrapper):
-    replay_buffer = wrapper(replay_buffers.PrimitiveReplayBuffer())
-    rng = jax.random.PRNGKey(0)
-    buffer_state = replay_buffer.init(rng)
-    if wrapper not in [pjit_wrap, pmap_wrap]:
-      assert_equal(self, replay_buffer.size(buffer_state), 0)
-
-    with self.assertRaises(ValueError):
-      _, _ = replay_buffer.sample(buffer_state)
 
 
 if __name__ == '__main__':

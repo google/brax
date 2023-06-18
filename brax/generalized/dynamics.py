@@ -12,10 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# pylint:disable=g-multiple-import
+# pylint:disable=g-multiple-import, g-importing-member
 """Functions for smooth forward and inverse dynamics."""
-import functools
-
 from brax import fluid
 from brax import math
 from brax import scan
@@ -42,8 +40,8 @@ def transform_com(sys: System, state: State) -> State:
   mass_xi = jax.vmap(jp.multiply)(sys.link.inertia.mass, x_i.pos)
   mass_xi_sum = jax.ops.segment_sum(mass_xi, root, sys.num_links())
   mass_sum = jax.ops.segment_sum(sys.link.inertia.mass, root, sys.num_links())
-  com = jax.vmap(jp.divide)(mass_xi_sum[root], mass_sum[root])
-  cinr = x_i.replace(pos=x_i.pos - com).vmap().do(sys.link.inertia)
+  root_com = jax.vmap(jp.divide)(mass_xi_sum[root], mass_sum[root])
+  cinr = x_i.replace(pos=x_i.pos - root_com).vmap().do(sys.link.inertia)
 
   # motion dofs to global frame centered at subtree-CoM
   parent_idx = jp.array(
@@ -89,7 +87,8 @@ def transform_com(sys: System, state: State) -> State:
   cdof = scan.link_types(sys, cdof_fn, 'qd', 'd', state.q, sys.dof.motion)
   ang = jax.vmap(math.rotate)(cdof.ang, j.take(sys.dof_link()).rot)
   cdof = cdof.replace(ang=ang)
-  cdof = Transform.create(pos=com - j.pos).take(sys.dof_link()).vmap().do(cdof)
+  off = Transform.create(pos=root_com - j.pos)
+  cdof = off.take(sys.dof_link()).vmap().do(cdof)
   cdof_qd = jax.vmap(lambda x, y: x * y)(cdof, state.qd)
 
   # forward scan down tree: accumulate link center of mass velocity
@@ -132,7 +131,9 @@ def transform_com(sys: System, state: State) -> State:
   cd_p = cd.concatenate(Motion.zero(shape=(1,))).take(parent_idx)
   cdofd = scan.link_types(sys, cdofd_fn, 'ldd', 'd', cd_p, cdof, cdof_qd)
 
-  return state.replace(com=com, cinr=cinr, cd=cd, cdof=cdof, cdofd=cdofd)
+  return state.replace(
+      root_com=root_com, cinr=cinr, cd=cd, cdof=cdof, cdofd=cdofd
+  )
 
 
 def inverse(sys: System, state: State) -> jp.ndarray:
@@ -194,17 +195,20 @@ def _passive(sys: System, state: State) -> jp.ndarray:
   frc = scan.link_types(sys, stiffness_fn, 'qd', 'd', state.q, sys.dof)
   frc -= sys.dof.damping * state.qd
 
-  fluid_frc, pos = fluid.force(
-      sys,
-      state.x,
-      state.cd,
-      sys.link.inertia.mass,
-      sys.link.inertia.i,
-      state.com,
-  )
-  cdof_fn = functools.partial(point_jacobian, sys, state.com, state.cdof)
-  jac = jax.vmap(cdof_fn)(pos, jp.arange(sys.num_links()))
-  frc += jax.vmap(lambda x, y: x.dot(y))(jac, fluid_frc).sum(axis=0)
+  if sys.enable_fluid:
+    fluid_frc = fluid.force(
+        sys,
+        state.x,
+        state.cd,
+        sys.link.inertia.mass,
+        sys.link.inertia.i,
+        state.root_com,
+    )
+    link_idx = jp.arange(sys.num_links())
+    x_i = state.x.vmap().do(sys.link.inertia.transform)
+    jac_fn = jax.vmap(point_jacobian, in_axes=(None, None, None, 0, 0))
+    jac = jac_fn(sys, state.root_com, state.cdof, x_i.pos, link_idx)
+    frc += jax.vmap(lambda x, y: x.dot(y))(jac, fluid_frc).sum(axis=0)
 
   return frc
 

@@ -1,6 +1,6 @@
 <mujoco model="pendulum">
-  <compiler inertiafromgeom="true"/>
-  <option gravity="0 0 0" timestep="0.001"/>
+  <compiler inertiafromgeom="true" autolimits="true"/>
+  <option gravity="0 0 -9.81" timestep="0.001"/>
   <custom>
     <!-- brax physics parameters -->
     <numeric data="1000.0" name="constraint_limit_stiffness"/>
@@ -15,6 +15,6 @@
     </body>
   </worldbody>
   <actuator>
-    <velocity ctrllimited="false" joint="hinge1" kv="10"/>
+    <position forcerange="-2.5 3.1" joint="hinge1" kp="10" gear="10"/>
   </actuator>
 </mujoco>

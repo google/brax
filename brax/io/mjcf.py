@@ -45,11 +45,36 @@ import numpy as np
 
 
 def _transform_do(
-    pos: np.ndarray, quat: np.ndarray, cpos: np.ndarray, cquat: np.ndarray
+    parent_pos: np.ndarray, parent_quat: np.ndarray, pos: np.ndarray,
+    quat: np.ndarray
 ) -> Tuple[np.ndarray, np.ndarray]:
-  pos = pos + math.rotate_np(cpos, quat)
-  rot = math.quat_mul_np(quat, cquat)
+  pos = parent_pos + math.rotate_np(pos, parent_quat)
+  rot = math.quat_mul_np(parent_quat, quat)
   return pos, rot
+
+
+def _offset(
+    elem: ElementTree.Element, parent_pos: np.ndarray, parent_quat: np.ndarray):
+  """Offsets an element."""
+  pos = elem.attrib.get('pos', '0 0 0')
+  quat = elem.attrib.get('quat', '1 0 0 0')
+  pos = np.fromstring(pos, sep=' ')
+  quat = np.fromstring(quat, sep=' ')
+  fromto = elem.attrib.get('fromto', None)
+  if fromto:
+    # fromto attributes are not compatible with pos/quat attributes
+    from_pos = np.fromstring(' '.join(fromto.split(' ')[0:3]), sep=' ')
+    to_pos = np.fromstring(' '.join(fromto.split(' ')[3:6]), sep=' ')
+    from_pos, _ = _transform_do(parent_pos, parent_quat, from_pos, quat)
+    to_pos, _ = _transform_do(parent_pos, parent_quat, to_pos, quat)
+    fromto = ' '.join('%f' % i for i in np.concatenate([from_pos, to_pos]))
+    elem.attrib['fromto'] = fromto
+    return
+  pos, quat = _transform_do(parent_pos, parent_quat, pos, quat)
+  pos = ' '.join('%f' % i for i in pos)
+  quat = ' '.join('%f' % i for i in quat)
+  elem.attrib['pos'] = pos
+  elem.attrib['quat'] = quat
 
 
 def _fuse_bodies(elem: ElementTree.Element):
@@ -67,17 +92,9 @@ def _fuse_bodies(elem: ElementTree.Element):
     cquat = child.attrib.get('quat', '1 0 0 0')
     cquat = np.fromstring(cquat, sep=' ')
     for grandchild in child:
-      # TODO: might need to offset more than just body, geom
+      # TODO: might need to offset more than just (body, geom)
       if grandchild.tag in ('body', 'geom') and (cpos != 0).any():
-        gcpos = grandchild.attrib.get('pos', '0 0 0')
-        gcquat = grandchild.attrib.get('quat', '1 0 0 0')
-        gcpos = np.fromstring(gcpos, sep=' ')
-        gcquat = np.fromstring(gcquat, sep=' ')
-        gcpos, gcquat = _transform_do(cpos, cquat, gcpos, gcquat)
-        gcpos = ' '.join('%f' % i for i in gcpos)
-        gcquat = ' '.join('%f' % i for i in gcquat)
-        grandchild.attrib['pos'] = gcpos
-        grandchild.attrib['quat'] = gcquat
+        _offset(grandchild, cpos, cquat)
       elem.append(grandchild)
     elem.remove(child)
 
@@ -237,6 +254,8 @@ def load_model(mj: mujoco.MjModel) -> System:
   # do some validation up front
   if any(i not in [0, 1] for i in mj.actuator_biastype):
     raise NotImplementedError('Only actuator_biastype in [0, 1] are supported.')
+  if any(i != 0 for i in mj.actuator_gaintype):
+    raise NotImplementedError('Only actuator_gaintype in [0] is supported.')
   if mj.opt.integrator != 0:
     raise NotImplementedError('Only euler integration is supported.')
   if mj.opt.cone != 0:
@@ -406,17 +425,21 @@ def load_model(mj: mujoco.MjModel) -> System:
   # create actuators
   ctrl_range = mj.actuator_ctrlrange
   ctrl_range[~(mj.actuator_ctrllimited == 1), :] = np.array([-np.inf, np.inf])
+  force_range = mj.actuator_forcerange
+  force_range[~(mj.actuator_forcelimited == 1), :] = np.array([-np.inf, np.inf])
   q_id = np.array([mj.jnt_qposadr[i] for i in mj.actuator_trnid[:, 0]])
   qd_id = np.array([mj.jnt_dofadr[i] for i in mj.actuator_trnid[:, 0]])
-  bias_q = mj.actuator_biasprm[:, 1]
-  bias_qd = mj.actuator_biasprm[:, 2]
+  bias_q = mj.actuator_biasprm[:, 1] * (mj.actuator_biastype != 0)
+  bias_qd = mj.actuator_biasprm[:, 2] * (mj.actuator_biastype != 0)
 
   # TODO: might be nice to add actuator names for debugging
   actuator = Actuator(  # pytype: disable=wrong-arg-types
       q_id=q_id,
       qd_id=qd_id,
+      gain=mj.actuator_gainprm[:, 0],
       gear=mj.actuator_gear[:, 0],
       ctrl_range=ctrl_range,
+      force_range=force_range,
       bias_q=bias_q,
       bias_qd=bias_qd,
   )
@@ -465,6 +488,7 @@ def load_model(mj: mujoco.MjModel) -> System:
       joint_scale_ang=custom['joint_scale_ang'],
       joint_scale_pos=custom['joint_scale_pos'],
       collide_scale=custom['collide_scale'],
+      enable_fluid=(mj.opt.viscosity > 0) | (mj.opt.density > 0),
       geom_masks=geom_masks,
       link_names=link_names,
       link_types=link_types,

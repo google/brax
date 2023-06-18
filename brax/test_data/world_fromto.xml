@@ -1,0 +1,23 @@
+<mujoco model="humanoid">
+    <compiler angle="degree" inertiafromgeom="true" />
+    <default>
+        <joint limited="true" />
+        <geom rgba=".8 .6 .4 1" condim="4" />
+        <default class="damped_joint">
+            <joint damping="2" stiffness="2.0" armature="0.02" />
+        </default>
+    </default>
+    <option timestep="0.0008" iterations="10" solver="PGS" collision="all">
+        <flag energy="enable" />
+    </option>
+    <worldbody>
+      <body name="pelvis" pos="0.385 0.32 1.26918883">
+        <site name="pelvis" pos="0 0 0" />
+        <geom fromto="-0.081889035416171 0.009999999999999983 0.0 0.081889035416171 0.010000000000000018 0.0" name="pelvis_geom" size="0.07" mass="10.928" type="capsule"/>
+      </body>
+      <body name="body2" pos="0 0 0.25" quat="0.7 0.7 0 0">
+        <joint axis="1 0 0" name="free2" pos="0 0 0" type="free"/>
+        <geom name="cap1" fromto="-0.5 0.0 0 0.5 0.0 0" pos="0 0 0" size="0.25" type="capsule"/>
+      </body>
+    </worldbody>
+</mujoco>

@@ -101,6 +101,25 @@ class ActuatorTest(parameterized.TestCase):
     _, qd = _actuator_step(g_pipeline, sys, q, qd, act=act, dt=0.001, n=200)
     np.testing.assert_array_almost_equal(qd, jp.array([1]), 3)
 
+  def test_force_limitted(self):
+    """Tests that forcerange limits work on actuators."""
+    sys = test_utils.load_fixture('single_pendulum_position_frclimit.xml')
+    mj_model = test_utils.load_fixture_mujoco(
+        'single_pendulum_position_frclimit.xml'
+    )
+    mj_data = mujoco.MjData(mj_model)
+    q, qd = jp.array(mj_data.qpos), jp.array(mj_data.qvel)
+
+    for act, frclimit in [(1000, 3.1), (-1000, -2.5)]:
+      act = jp.array([act])
+      tau = actuator.to_tau(sys, act, q, qd)
+      # test that tau matches frclimit * 10, since gear=10
+      self.assertEqual(tau[0], frclimit * 10)
+      # test that tau matches MJ qfrc_actuator
+      mj_data.ctrl = act
+      mujoco.mj_step(mj_model, mj_data)
+      self.assertEqual(tau[0], mj_data.qfrc_actuator)
+
   @parameterized.parameters((g_pipeline,), (s_pipeline,), (p_pipeline,))
   def test_three_link_pendulum(self, pipeline):
     """Tests a three link pendulum with a motor actuator."""
@@ -148,14 +167,17 @@ class ActuatorTest(parameterized.TestCase):
     np.testing.assert_array_almost_equal(gq, mq, 3)
     np.testing.assert_array_almost_equal(gqd, mqd, 3)
 
-  # TODO: test spherical pendulum once it's implemented in positional
   @parameterized.parameters(
-      ('single_pendulum_position.xml',), 'single_pendulum_motor.xml'
+      'single_pendulum_position.xml',
+      'single_pendulum_motor.xml',
+      'single_spherical_pendulum_position.xml',
   )
   def test_single_pendulum_spring_positional(self, config):
     sys = test_utils.load_fixture(config)
     act = jp.array([0.05, 0.1, 0.15])[: sys.act_size()]
+
     q, qd = sys.init_q, jp.zeros(sys.qd_size())
+
     sq, sqd = _actuator_step(s_pipeline, sys, q, qd, act=act, dt=sys.dt, n=500)
     pq, pqd = _actuator_step(p_pipeline, sys, q, qd, act=act, dt=sys.dt, n=500)
     np.testing.assert_array_almost_equal(sq, pq, 2)
