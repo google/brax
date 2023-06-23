@@ -1,0 +1,14 @@
+<mujoco model="fluid-box">
+  <custom>
+    <numeric data="20" name="matrix_inv_iterations"/>
+    <numeric data="15" name="solver_maxls"/>
+  </custom>
+  <option timestep="0.001" density="1.2" viscosity="0.15" gravity="0 0 0"/>
+  <worldbody>
+    <!-- offset the body pos/rot for testing -->
+    <body name="body1" pos="0.0 0.0 2.0" euler="0 45 0">
+      <joint axis="1 0 0" name="free3" pos="0 0 0" type="free"/>
+      <geom name="box1" size="0.2 0.3 0.1" mass="1" type="box"/>
+    </body>
+  </worldbody>
+</mujoco>

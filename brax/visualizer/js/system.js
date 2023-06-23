@@ -51,6 +51,16 @@ function getMeshAxisSize(geom) {
   return size * 2;
 }
 
+function createCylinder(radius, height, mat) {
+  const geometry = new THREE.CylinderGeometry(radius, radius, height, 32);
+  mat.side = THREE.DoubleSide;
+  const cyl = new THREE.Mesh(geometry, mat);
+  cyl.baseMaterial = cyl.material;
+  cyl.castShadow = true;
+  cyl.layers.enable(1);
+  return cyl;
+}
+
 function createCapsule(capsule, mat) {
   const sphere_geom = new THREE.SphereGeometry(capsule.radius, 16, 16);
   const cylinder_geom = new THREE.CylinderGeometry(
@@ -80,7 +90,7 @@ function createCapsule(capsule, mat) {
 }
 
 function createBox(box, mat) {
-  const geom = new THREE.BoxBufferGeometry(
+  const geom = new THREE.BoxGeometry(
       2 * box.halfsize[0], 2 * box.halfsize[1], 2 * box.halfsize[2]);
   const mesh = new THREE.Mesh(geom, mat);
   mesh.castShadow = true;
@@ -141,6 +151,7 @@ function createScene(system) {
 
   // Add a world axis for debugging.
   const worldAxis = new THREE.AxesHelper(100);
+  const qRotx90 = new THREE.Quaternion(0.70710677, 0.0, 0.0, 0.7071067);
   worldAxis.visible = false;
   scene.add(worldAxis);
 
@@ -176,6 +187,9 @@ function createScene(system) {
       } else if (collider.name == 'Mesh') {
         child = createMesh(collider, mat);
         axisSize = getMeshAxisSize(collider);
+      } else if (collider.name == 'Cylinder') {
+        child = createCylinder(collider.radius, collider.length, mat);
+        axisSize = 2 * Math.max(collider.radius, collider.length);
       } else if ('clippedPlane' in collider) {
         console.log('clippedPlane not implemented');
         return;
@@ -184,9 +198,13 @@ function createScene(system) {
         return;
       }
       if (collider.transform.rot) {
-        child.quaternion.set(
-            collider.transform.rot[1], collider.transform.rot[2],
-            collider.transform.rot[3], collider.transform.rot[0]);
+        const quat = new THREE.Quaternion(
+          collider.transform.rot[1], collider.transform.rot[2],
+          collider.transform.rot[3], collider.transform.rot[0]);
+        if (collider.name == 'Cylinder') {
+          quat.multiply(qRotx90)
+        }
+        child.quaternion.fromArray(quat.toArray());
       }
       if (collider.transform.pos) {
         child.position.set(

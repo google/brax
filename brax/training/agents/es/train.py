@@ -200,7 +200,7 @@ def train(
     Returns:
 
     """
-    # NOTE - -> len(weights) * perturbation_std" is
+    # NOTE: The trick "len(weights) -> len(weights) * perturbation_std" is
     # equivalent to tuning the l2_coef.
     weights = jnp.reshape(weights, ([population_size] + [1] * (noise.ndim - 1)))
     delta = jnp.sum(noise * weights, axis=0) / population_size

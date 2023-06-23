@@ -20,6 +20,7 @@ from absl.testing import parameterized
 from brax import test_utils
 from brax.generalized import pipeline
 import jax
+from jax import numpy as jp
 import numpy as np
 
 
@@ -38,7 +39,7 @@ class PipelineTest(parameterized.TestCase):
     sys = sys.replace(solver_iterations=500)
     for mj_prev, mj_next in test_utils.sample_mujoco_states(xml_file):
       state = jax.jit(pipeline.init)(sys, mj_prev.qpos, mj_prev.qvel)
-      state = jax.jit(pipeline.step)(sys, state, mj_prev.qfrc_applied)
+      state = jax.jit(pipeline.step)(sys, state, jp.zeros(sys.act_size()))
 
       np.testing.assert_allclose(state.q, mj_next.qpos, atol=0.002)
       np.testing.assert_allclose(state.qd, mj_next.qvel, atol=0.5)

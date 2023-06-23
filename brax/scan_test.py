@@ -16,7 +16,6 @@
 """Tests for scan functions."""
 
 from absl.testing import absltest
-from absl.testing import parameterized
 from brax import scan
 from brax import test_utils
 import numpy as np
@@ -153,66 +152,6 @@ class ScanTest(absltest.TestCase):
     self.assertLen(qds, 2)
     np.testing.assert_array_equal(qds[0], np.arange(0, 6))
     np.testing.assert_array_equal(qds[1], np.arange(6, 14))
-
-
-class ParametrizedScanTest(parameterized.TestCase):
-
-  @parameterized.parameters(
-      (
-          'single_spherical_pendulum_position.xml',
-          ['p'],
-          [0, 1, 2],  # act_id
-          [0, 0, 0],  # act_link_id
-          [2, 0, 1],  # q_id
-          [2, 0, 1],  # qd_id
-      ),
-      (
-          'ant.xml',
-          ['m'],
-          list(range(8)),
-          [7, 8, 1, 2, 3, 4, 5, 6],
-          [13, 14, 7, 8, 9, 10, 11, 12],
-          [12, 13, 6, 7, 8, 9, 10, 11],
-      ),
-  )
-  def test_scan_actuator_types(
-      self, fname, act_typs, act_id, act_link_id, q_id, qd_id
-  ):
-    """Test scanning actuators."""
-    sys = test_utils.load_fixture(fname)
-
-    typs, links, qs, qds = [], [], [], []
-
-    def f(typ, act, link, q, qd):
-      typs.append(typ)
-      links.append(link)
-      qs.append(q)
-      qds.append(qd)
-      return act
-
-    out = scan.actuator_types(
-        sys,
-        f,
-        'alqd',
-        'a',
-        np.arange(sys.act_size()),
-        np.arange(sys.num_links()),
-        np.arange(sys.q_size()),
-        np.arange(sys.qd_size()),
-    )
-
-    self.assertSequenceEqual(typs, act_typs)
-    np.testing.assert_array_equal(out, np.array(act_id))
-
-    self.assertLen(links, 1)
-    self.assertSequenceEqual(sys.actuator_link_id, act_link_id)
-    np.testing.assert_array_equal(links[0], np.array(sys.actuator_link_id))
-
-    self.assertLen(qs, 1)
-    np.testing.assert_array_equal(qs[0], np.array(q_id))
-
-    self.assertLen(qds, 1)
-    np.testing.assert_array_equal(qds[0], np.array(qd_id))
 
 
 if __name__ == '__main__':

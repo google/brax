@@ -37,10 +37,26 @@ def load_fixture_mujoco(path: str) -> mujoco.MjModel:
   return model
 
 
+def _normalize_q(model: mujoco.MjModel, q: np.ndarray):
+  """Normalizes the quaternion part of q."""
+  q = np.array(q)
+  q_idx = 0
+  for typ in model.jnt_type:
+    q_dim = 7 if typ == 0 else 1
+    if typ == 0:
+      q[q_idx + 3:q_idx + 7] = (
+          q[q_idx + 3:q_idx + 7] / np.linalg.norm(q[q_idx + 3:q_idx + 7]))
+    q_idx += q_dim
+  return q
+
+
 def sample_mujoco_states(
-    path: str, count: int = 500, modulo: int = 20, force_pgs: bool = False
+    path: str, count: int = 500, modulo: int = 20, force_pgs: bool = False,
+    random_init: bool = False, random_q_scale: float = 1.0,
+    random_qd_scale: float = 0.1, vel_to_local: bool = True, seed: int = 42
 ) -> Iterable[Tuple[mujoco.MjData, mujoco.MjData]]:
   """Samples count / modulo states from mujoco for comparison."""
+  np.random.seed(seed)
   model = load_fixture_mujoco(path)
   model.opt.iterations = 50  # return to default for high-precision comparison
   if force_pgs:
@@ -48,6 +64,10 @@ def sample_mujoco_states(
   data = mujoco.MjData(model)
   # give a little kick to avoid symmetry
   data.qvel = np.random.uniform(low=-0.01, high=0.01, size=(model.nv,))
+  if random_init:
+    data.qpos = np.random.uniform(model.nq) * random_q_scale
+    data.qpos = _normalize_q(model, data.qpos)
+    data.qvel = np.random.uniform(size=(model.nv,)) * random_qd_scale
   for i in range(count):
     before = copy.deepcopy(data)
     mujoco.mj_step(model, data)
@@ -55,7 +75,8 @@ def sample_mujoco_states(
       # hijack subtree_angmom, subtree_linvel (unused) to store xang, xvel
       for i in range(model.nbody):
         vel = np.zeros((6,))
-        mujoco.mj_objectVelocity(model, data, 2, i, vel, 1)
+        mujoco.mj_objectVelocity(
+            model, data, mujoco.mjtObj.mjOBJ_XBODY.value, i, vel, vel_to_local)
         data.subtree_angmom[i] = vel[:3]
         data.subtree_linvel[i] = vel[3:]
       yield before, data

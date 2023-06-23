@@ -21,7 +21,6 @@ from brax import envs
 from brax.training.acme import running_statistics
 from brax.training.agents.ars import networks as ars_networks
 from brax.training.agents.ars import train as ars
-from brax.v1 import envs as envs_v1
 import jax
 
 

@@ -1,0 +1,22 @@
+<mujoco model="fluid-box">
+  <custom>
+    <numeric data="20" name="matrix_inv_iterations"/>
+    <numeric data="15" name="solver_maxls"/>
+  </custom>
+  <option timestep="0.001" density="1.2" viscosity="0.15" gravity="0 0 0"/>
+  <worldbody>
+    <!-- offset the body pos/rot for testing -->
+    <body name="body1" pos="0.0 0.0 2.0" euler="0 45 0">
+      <inertial pos="0 0.0 0" mass="1" diaginertia="1.1 0.9 1."/>
+      <joint axis="1 0 0" name="free3" pos="0 0 0" type="free"/>
+
+      <geom name="sphere" pos="1.00 0.0 0.0" euler="45 0 0" size="0.2" type="sphere"/>
+
+      <body name="body2" pos="0 1 0">
+        <inertial pos="0 0.0 0" mass="1" diaginertia="1.1 0.9 1."/>
+        <joint axis="1 0 0" name="hinge1" pos="0 0 0" type="hinge"/>
+        <geom name="sphere3" pos="0 1 0" size="0.15" type="sphere"/>
+      </body>
+    </body>
+  </worldbody>
+</mujoco>

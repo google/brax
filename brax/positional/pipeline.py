@@ -16,6 +16,7 @@
 # pylint:disable=g-multiple-import
 from brax import actuator
 from brax import com
+from brax import fluid
 from brax import geometry
 from brax import kinematics
 from brax.base import Motion, System
@@ -23,6 +24,7 @@ from brax.positional import collisions
 from brax.positional import integrator
 from brax.positional import joints
 from brax.positional.base import State
+import jax
 from jax import numpy as jp
 
 
@@ -45,8 +47,8 @@ def init(
   j, jd, a_p, a_c = kinematics.world_to_joint(sys, x, xd)
   x_i, xd_i = com.from_world(sys, x, xd)
   contact = geometry.contact(sys, x) if debug else None
-
-  return State(q, qd, x, xd, contact, x_i, xd_i, j, jd, a_p, a_c)
+  mass = sys.link.inertia.mass ** (1 - sys.spring_mass_scale)
+  return State(q, qd, x, xd, contact, x_i, xd_i, j, jd, a_p, a_c, mass)
 
 
 def step(
@@ -70,9 +72,17 @@ def step(
   x_i_prev = state.x_i
 
   # calculate acceleration level updates
-  tau = actuator.to_tau(sys, act, state.q)
+  tau = actuator.to_tau(sys, act, state.q, state.qd)
   xdd_i = Motion.create(vel=sys.gravity)
-  xdd_i += joints.acceleration_update(sys, state, tau)
+  # get joint constraint forces
+  xf_i = joints.acceleration_update(sys, state, tau)
+  if sys.enable_fluid:
+    inertia = sys.link.inertia.i ** (1 - sys.spring_inertia_scale)
+    xf_i += fluid.force(sys, state.x, state.xd, state.mass, inertia)
+  xdd_i += Motion(
+      ang=jax.vmap(lambda x, y: x @ y)(com.inv_inertia(sys, state.x), xf_i.ang),
+      vel=jax.vmap(lambda x, y: x * y)(1 / state.mass, xf_i.vel),
+  )
 
   # semi-implicit euler: apply acceleration update before resolving collisions
   x_i, xd_i = integrator.integrate_xdd(sys, state.x_i, state.xd_i, xdd_i)
@@ -102,5 +112,4 @@ def step(
   q, qd = kinematics.inverse(sys, j, jd)
   contact = geometry.contact(sys, x) if debug else None
 
-  return State(q, qd, x, xd, contact, x_i, xd_i, j, jd, a_p, a_c)
-
+  return State(q, qd, x, xd, contact, x_i, xd_i, j, jd, a_p, a_c, state.mass)

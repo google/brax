@@ -20,6 +20,7 @@ from absl.testing import parameterized
 from brax import test_utils
 from brax.generalized import pipeline
 import jax
+from jax import numpy as jp
 import numpy as np
 
 
@@ -34,7 +35,9 @@ class DynamicsTest(parameterized.TestCase):
     for mj_prev, mj_next in test_utils.sample_mujoco_states(xml_file):
       state = jax.jit(pipeline.init)(sys, mj_prev.qpos, mj_prev.qvel)
 
-      np.testing.assert_almost_equal(state.com[0], mj_next.subtree_com[0], 5)
+      np.testing.assert_almost_equal(
+          state.root_com[0], mj_next.subtree_com[0], 5
+      )
       mj_cinr_i = np.zeros((state.cinr.i.shape[0], 3, 3))
       mj_cinr_i[:, [0, 1, 2], [0, 1, 2]] = mj_next.cinert[1:, 0:3]  # diagonal
       mj_cinr_i[:, [0, 0, 1], [1, 2, 2]] = mj_next.cinert[1:, 3:6]  # upper tri
@@ -55,8 +58,9 @@ class DynamicsTest(parameterized.TestCase):
     """Test dynamics forward."""
     sys = test_utils.load_fixture(xml_file)
     for mj_prev, mj_next in test_utils.sample_mujoco_states(xml_file):
+      act = jp.zeros(sys.act_size())
       state = jax.jit(pipeline.init)(sys, mj_prev.qpos, mj_prev.qvel)
-      state = jax.jit(pipeline.step)(sys, state, mj_prev.qfrc_applied)
+      state = jax.jit(pipeline.step)(sys, state, act)
 
       np.testing.assert_allclose(
           state.qf_smooth, mj_next.qfrc_smooth, rtol=1e-4, atol=1e-4

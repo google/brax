@@ -67,7 +67,7 @@ def step(
     state: physics state after step
   """
   # calculate acceleration terms
-  tau = actuator.to_tau(sys, act, state.q)
+  tau = actuator.to_tau(sys, act, state.q, state.qd)
   state = state.replace(qf_smooth=dynamics.forward(sys, state, tau))
   state = state.replace(qf_constraint=constraint.force(sys, state))
 

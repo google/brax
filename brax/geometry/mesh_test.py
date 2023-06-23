@@ -31,6 +31,7 @@ class BoxTest(absltest.TestCase):
         transform=None,
         friction=0.42,
         elasticity=1,
+        solver_params=None,
     )
     m = mesh.box_tri(b)
     self.assertIsInstance(m, Mesh)
@@ -64,6 +65,7 @@ class BoxTest(absltest.TestCase):
         transform=None,
         friction=0.42,
         elasticity=1,
+        solver_params=None,
     )
     h = mesh.convex_hull(b)
     self.assertIsInstance(h, Convex)
@@ -106,6 +108,7 @@ class ConvexTest(absltest.TestCase):
         face=face,
         friction=1,
         elasticity=0,
+        solver_params=None,
     )
     h = mesh.convex_hull(pyramid)
 

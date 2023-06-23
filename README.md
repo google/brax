@@ -44,9 +44,8 @@ and closing the gap between simulation and the real world.
 Explore Brax easily and quickly through a series of colab notebooks:
 
 * [Brax Basics](https://colab.research.google.com/github/google/brax/blob/main/notebooks/basics.ipynb) introduces the Brax API, and shows how to simulate basic physics primitives.
-* [Brax Training](https://colab.research.google.com/github/google/brax/blob/main/notebooks/training.ipynb)
-introduces the Brax v2 API, and shows how to train a policy with the
-generalized backend.
+* [Brax Training](https://colab.research.google.com/github/google/brax/blob/main/notebooks/training.ipynb) introduces Brax's training algorithms, and lets you train your own policies directly within the colab. It also demonstrates loading and saving policies.
+* [Brax Training with PyTorch on GPU](https://colab.research.google.com/github/google/brax/blob/main/notebooks/training_torch.ipynb) demonstrates how Brax can be used in other ML frameworks for fast training, in this case PyTorch.
 
 ## Using Brax Locally
 
@@ -98,7 +97,7 @@ If you would like to reference Brax in a publication, please use:
   author = {C. Daniel Freeman and Erik Frey and Anton Raichuk and Sertan Girgin and Igor Mordatch and Olivier Bachem},
   title = {Brax - A Differentiable Physics Engine for Large Scale Rigid Body Simulation},
   url = {http://github.com/google/brax},
-  version = {0.9.0},
+  version = {0.9.1},
   year = {2021},
 }
 ```

@@ -20,6 +20,7 @@ from absl.testing import parameterized
 from brax import test_utils
 from brax.generalized import pipeline
 import jax
+from jax import numpy as jp
 import numpy as np
 
 
@@ -30,6 +31,7 @@ class ConstraintTest(parameterized.TestCase):
       ('triple_pendulum.xml',),
       ('humanoid.xml',),
       ('half_cheetah.xml',),
+      ('solver_params_v2.xml',)
   )
   def test_jacobian(self, xml_file):
     """Test constraint jacobian."""
@@ -56,6 +58,7 @@ class ConstraintTest(parameterized.TestCase):
       ('triple_pendulum.xml',),
       ('humanoid.xml',),
       ('half_cheetah.xml',),
+      ('solver_params_v2.xml',)
   )
   def test_force(self, xml_file):
     """Test constraint force."""
@@ -68,8 +71,9 @@ class ConstraintTest(parameterized.TestCase):
     # force PGS so we can reference efc_AR:
     samples = test_utils.sample_mujoco_states(xml_file, force_pgs=True)
     for mj_prev, mj_next in samples:
+      act = jp.zeros(sys.act_size())
       state = jax.jit(pipeline.init)(sys, mj_prev.qpos, mj_prev.qvel)
-      state = jax.jit(pipeline.step)(sys, state, mj_prev.qfrc_applied)
+      state = jax.jit(pipeline.step)(sys, state, act)
       efc_jt = np.reshape(mj_next.efc_J, (-1, sys.qd_size())).T
       # recover con_frc by backing it out from qf_constraint
       con_frc = np.linalg.lstsq(efc_jt, state.qf_constraint, None)[0]

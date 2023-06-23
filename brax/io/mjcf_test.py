@@ -171,6 +171,38 @@ class MjcfTest(absltest.TestCase):
         sys.init_q, np.array([1.245, 0.0, 0.0, 0.5, 0.5, 0.5, -0.5])
     )
 
+  def test_load_flat_cylinder(self):
+    sys = test_utils.load_fixture('flat_cylinder.xml')
+    self.assertEqual(sys.geoms[1].radius, 0.25)
+    self.assertEqual(sys.geoms[1].length, 0.002)
+
+  def test_load_fat_cylinder(self):
+    with self.assertRaisesRegex(
+        NotImplementedError, 'Cylinders of half-length'
+    ):
+      test_utils.load_fixture('fat_cylinder.xml')
+
+  def test_load_fluid_box(self):
+    sys = test_utils.load_fixture('fluid_box.xml')
+    assert_almost_equal(sys.density, 1.2)
+    assert_almost_equal(sys.viscosity, 0.15)
+
+  def test_load_fluid_ellipsoid(self):
+    with self.assertRaisesRegex(
+        NotImplementedError, 'Ellipsoid fluid model not implemented'
+    ):
+      test_utils.load_fixture('fluid_ellipsoid.xml')
+
+  def test_load_wind(self):
+    with self.assertRaisesRegex(
+        NotImplementedError, 'option.wind is not implemented'
+    ):
+      test_utils.load_fixture('fluid_wind.xml')
+
+  def test_world_fromto(self):
+    """Tests that a world element with fromto does not break mjcf.load."""
+    test_utils.load_fixture('world_fromto.xml')
+
 
 if __name__ == '__main__':
   absltest.main()

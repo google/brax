@@ -141,8 +141,9 @@ def train(
     noise = jax.tree_util.tree_map(
         lambda g, k: jax.random.normal(k, shape=g.shape, dtype=g.dtype), params,
         jax.tree_util.tree_unflatten(treedef, all_keys))
-    params_with_noise = jax.tree_util.tree_map(lambda g, n: g + n * exploration_noise_std,
-                                     params, noise)
+    params_with_noise = jax.tree_util.tree_map(
+        lambda g, n: g + n * exploration_noise_std, params, noise
+    )
     params_with_anti_noise = jax.tree_util.tree_map(
         lambda g, n: g - n * exploration_noise_std, params, noise)
     return params_with_noise, params_with_anti_noise, noise
@@ -154,15 +155,20 @@ def train(
                      key: PRNGKey) -> Tuple[TrainingState, Metrics]:
     params = jax.tree_util.tree_map(
         lambda x: jnp.repeat(
-            jnp.expand_dims(x, axis=0), number_of_directions, axis=0),
-        training_state.policy_params)
+            jnp.expand_dims(x, axis=0), number_of_directions, axis=0
+        ),
+        training_state.policy_params,
+    )
     key, key_noise, key_es_eval = jax.random.split(key, 3)
     # generate perturbations
     params_with_noise, params_with_anti_noise, noise = add_noise(
         params, key_noise)
 
-    pparams = jax.tree_util.tree_map(lambda a, b: jnp.concatenate([a, b], axis=0),
-                           params_with_noise, params_with_anti_noise)
+    pparams = jax.tree_util.tree_map(
+        lambda a, b: jnp.concatenate([a, b], axis=0),
+        params_with_noise,
+        params_with_anti_noise,
+    )
 
     pparams = jax.tree_util.tree_map(
         lambda x: jnp.reshape(x, (local_devices_to_use, -1) + x.shape[1:]),
@@ -187,13 +193,17 @@ def train(
     reward_weight_double = jnp.concatenate([reward_weight, reward_weight],
                                            axis=0)
     reward_std = jnp.std(eval_scores, where=reward_weight_double)
+    reward_std += (reward_std == 0.0) * 1e-6
 
     noise = jax.tree_util.tree_map(
         lambda x: jnp.sum(
             jnp.transpose(
-                jnp.transpose(x) * reward_weight *
-                (reward_plus - reward_minus)),
-            axis=0), noise)
+                jnp.transpose(x) * reward_weight * (reward_plus - reward_minus)
+            ),
+            axis=0,
+        ),
+        noise,
+    )
 
     policy_params = jax.tree_util.tree_map(
         lambda x, y: x + step_size * y / (top_directions * reward_std),

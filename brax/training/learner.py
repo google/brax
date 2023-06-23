@@ -118,8 +118,7 @@ flags.DEFINE_float('exploration_noise_std', 0.1,
                    'Std of a random noise added by ARS.')
 flags.DEFINE_float('reward_shift', 0.,
                    'A reward shift to get rid of "stay alive" bonus.')
-flags.DEFINE_enum('head_type', '', ['', 'clip', 'tanh'],
-                  'Which policy head to use.')
+
 # ARS hps.
 flags.DEFINE_integer('truncation_length', None,
                      'Truncation for gradient propagation in APG.')

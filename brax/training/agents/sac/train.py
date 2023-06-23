@@ -314,8 +314,7 @@ def train(environment: Union[envs_v1.Env, envs.Env],
                                                 (training_state, training_key),
                                                 transitions)
 
-    metrics['buffer_current_size'] = buffer_state.current_size
-    metrics['buffer_current_position'] = buffer_state.current_position
+    metrics['buffer_current_size'] = replay_buffer.size(buffer_state)
     return training_state, env_state, buffer_state, metrics
 
   def prefill_replay_buffer(
@@ -425,6 +424,7 @@ def train(environment: Union[envs_v1.Env, envs.Env],
       key=eval_key)
 
   # Run initial eval
+  metrics = {}
   if process_id == 0 and num_evals > 1:
     metrics = evaluator.run_evaluation(
         _unpmap(

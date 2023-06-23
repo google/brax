@@ -34,7 +34,7 @@ class PerfTest(absltest.TestCase):
       return pipeline.init(sys, q, qd)
 
     def step_fn(state):
-      return pipeline.step(sys, state, jp.zeros(sys.qd_size()))
+      return pipeline.step(sys, state, jp.zeros(sys.act_size()))
 
     test_utils.benchmark('pbd pipeline ant', init_fn, step_fn)
 

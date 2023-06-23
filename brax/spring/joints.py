@@ -309,7 +309,7 @@ def _three_dof(
   return Force(ang=ang, vel=vel)
 
 
-def resolve(sys: System, state: State, tau: jp.ndarray) -> Motion:
+def resolve(sys: System, state: State, tau: jp.ndarray) -> Force:
   """Calculates forces to apply to links resulting from joint constraints.
 
   Args:
@@ -318,7 +318,7 @@ def resolve(sys: System, state: State, tau: jp.ndarray) -> Motion:
     tau: joint force vector
 
   Returns:
-    xdd_i: acceleration to apply to link center of mass in world frame
+    xf_i: force to apply to link center of mass in world frame
   """
 
   def j_fn(typ, link, j, jd, dof, tau):
@@ -346,11 +346,4 @@ def resolve(sys: System, state: State, tau: jp.ndarray) -> Motion:
   fp = Transform.create(pos=state.a_p.pos - x_i_parent.pos).vmap().do(xf)
   fp = jax.tree_map(lambda x: segment_sum(x, parent_idx, sys.num_links()), fp)
   xf_i = fc - fp
-
-  # convert to acceleration
-  xdd_i = Motion(
-      ang=jax.vmap(lambda x, y: x @ y)(state.i_inv, xf_i.ang),
-      vel=jax.vmap(lambda x, y: x / y)(xf_i.vel, state.mass),
-  )
-
-  return xdd_i
+  return xf_i

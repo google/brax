@@ -16,8 +16,10 @@
 """Tests for spring physics pipeline."""
 
 from absl.testing import absltest
+from brax import com
 from brax import kinematics
 from brax import test_utils
+from brax.base import Transform
 from brax.generalized import pipeline as g_pipeline
 from brax.positional import pipeline
 import jax
@@ -36,7 +38,7 @@ class PipelineTest(absltest.TestCase):
     state = pipeline.init(sys, sys.init_q, jp.zeros(sys.qd_size()))
     j_pos_step = jax.jit(pipeline.step)
     for _ in range(2_000):
-      state = j_pos_step(sys, state, jp.zeros(sys.qd_size()))
+      state = j_pos_step(sys, state, jp.zeros(sys.act_size()))
     x = state.x
 
     # compare against generalized step
@@ -45,7 +47,7 @@ class PipelineTest(absltest.TestCase):
     j_g_step = jax.jit(g_pipeline.step)
     j_forward = jax.jit(kinematics.forward)
     for _ in range(2_000):
-      state = j_g_step(sys, state, jp.zeros(sys.qd_size()))
+      state = j_g_step(sys, state, jp.zeros(sys.act_size()))
     x_g, _ = j_forward(sys, state.q, state.qd)
 
     # trajectories should be close after .1 second of simulation
@@ -66,18 +68,25 @@ class PipelineTest(absltest.TestCase):
     sys = sys.replace(solver_iterations=500)
 
     state = pipeline.init(sys, init_q, init_qd)
+    # the qd calculation for pbd/spring doesn't match generalized, so we get xd
+    # from generalized and plug it back into pbd
+    # TODO: remove this xd override once kinematics.forward is fixed
+    state_g = g_pipeline.init(sys, init_q, init_qd)
+    off = state_g.x.pos - state_g.root_com
+    xd = Transform.create(pos=off).vmap().do(state_g.cd)
+    state = state.replace(xd=xd, xd_i=com.from_world(sys, state.x, xd)[1])
+
     j_pos_step = jax.jit(pipeline.step)
     for _ in range(1000):
-      state = j_pos_step(sys, state, jp.zeros(sys.qd_size()))
+      state = j_pos_step(sys, state, jp.zeros(sys.act_size()))
     x = state.x
 
     # compare against generalized step
-    q, qd = init_q, init_qd
-    state = g_pipeline.init(sys, q, qd)
     j_g_step = jax.jit(g_pipeline.step)
     j_forward = jax.jit(kinematics.forward)
+    state = state_g
     for _ in range(1000):
-      state = j_g_step(sys, state, jp.zeros(sys.qd_size()))
+      state = j_g_step(sys, state, jp.zeros(sys.act_size()))
     x_g, _ = j_forward(sys, state.q, state.qd)
 
     # trajectories should be close after 1 second of simulation
@@ -97,7 +106,7 @@ class PipelineTest(absltest.TestCase):
     j_pos_step = jax.jit(pipeline.step)
     states = []
     for _ in range(1000):
-      state = j_pos_step(sys, state, jp.zeros(sys.qd_size()))
+      state = j_pos_step(sys, state, jp.zeros(sys.act_size()))
       states.append(state)
     x, xd = state.x, state.xd
 
@@ -124,7 +133,7 @@ class PipelineTest(absltest.TestCase):
     j_pos_step = jax.jit(pipeline.step)
     states = []
     for _ in range(1000):
-      state = j_pos_step(sys, state, jp.zeros(sys.qd_size()))
+      state = j_pos_step(sys, state, jp.zeros(sys.act_size()))
       states.append(state)
 
     # reflects off limits and is still traveling close to 2.5 m/s
@@ -148,7 +157,7 @@ class PipelineTest(absltest.TestCase):
     state = pipeline.init(sys, sys.init_q, qd)
     j_pos_step = jax.jit(pipeline.step)
     for _ in range(1000):
-      state = j_pos_step(sys, state, jp.zeros(sys.qd_size()))
+      state = j_pos_step(sys, state, jp.zeros(sys.act_size()))
     x, xd = state.x, state.xd
 
     # capsule slides to a stop
