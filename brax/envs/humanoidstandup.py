@@ -15,7 +15,7 @@
 # pylint:disable=g-multiple-import
 """Trains a humanoid to stand up."""
 
-from brax import actuator
+from brax import actuator, System
 from brax import base
 from brax.envs.base import PipelineEnv, State
 from brax.io import mjcf
@@ -196,50 +196,50 @@ class HumanoidStandup(PipelineEnv):
 
     super().__init__(sys=sys, backend=backend, **kwargs)
 
-  def reset(self, rng: jp.ndarray) -> State:
+  def reset(self, sys: System, rng: jp.ndarray) -> State:
     """Resets the environment to an initial state."""
     rng, rng1, rng2 = jax.random.split(rng, 3)
 
     low, hi = -0.01, 0.01
-    qpos = self.sys.init_q + jax.random.uniform(
-        rng1, (self.sys.q_size(),), minval=-0.01, maxval=0.01
+    qpos = sys.init_q + jax.random.uniform(
+        rng1, (sys.q_size(),), minval=-0.01, maxval=0.01
     )
     qvel = jax.random.uniform(
-        rng2, (self.sys.qd_size(),), minval=low, maxval=hi
+        rng2, (sys.qd_size(),), minval=low, maxval=hi
     )
 
-    pipeline_state = self.pipeline_init(qpos, qvel)
-    obs = self._get_obs(pipeline_state, jp.zeros(self.sys.act_size()))
+    pipeline_state = self.pipeline_init(sys, qpos, qvel)
+    obs = self._get_obs(sys, pipeline_state, jp.zeros(sys.act_size()))
     reward, done, zero = jp.zeros(3)
     metrics = {
         'reward_linup': zero,
         'reward_quadctrl': zero,
     }
-    return State(pipeline_state, obs, reward, done, metrics)
+    return State(pipeline_state, obs, reward, done, sys, metrics)
 
   def step(self, state: State, action: jp.ndarray) -> State:
     """Runs one timestep of the environment's dynamics."""
-    pipeline_state = self.pipeline_step(state.pipeline_state, action)
+    pipeline_state = self.pipeline_step(state.sys, state.pipeline_state, action)
 
     pos_after = pipeline_state.x.pos[0, 2]  # z coordinate of torso
     uph_cost = (pos_after - 0) / self.dt
     quad_ctrl_cost = 0.01 * jp.sum(jp.square(action))
     # quad_impact_cost is not computed here
 
-    obs = self._get_obs(pipeline_state, action)
+    obs = self._get_obs(state.sys, pipeline_state, action)
     reward = uph_cost + 1 - quad_ctrl_cost
     state.metrics.update(reward_linup=uph_cost, reward_quadctrl=-quad_ctrl_cost)
 
     return state.replace(pipeline_state=pipeline_state, obs=obs, reward=reward)
 
   def _get_obs(
-      self, pipeline_state: base.State, action: jp.ndarray
+      self, sys: System, pipeline_state: base.State, action: jp.ndarray
   ) -> jp.ndarray:
     """Observes humanoid body position, velocities, and angles."""
     position = pipeline_state.q[2:]
     velocity = pipeline_state.qd
 
-    com, inertia, mass_sum, x_i = self._com(pipeline_state)
+    com, inertia, mass_sum, x_i = self._com(sys, pipeline_state)
     cinr = x_i.replace(pos=x_i.pos - com).vmap().do(inertia)
     com_inertia = jp.hstack(
         [cinr.i.reshape((cinr.i.shape[0], -1)), inertia.mass[:, None]]
@@ -255,7 +255,7 @@ class HumanoidStandup(PipelineEnv):
     com_velocity = jp.hstack([com_vel, com_ang])
 
     qfrc_actuator = actuator.to_tau(
-        self.sys, action, pipeline_state.q, pipeline_state.qd)
+        sys, action, pipeline_state.q, pipeline_state.qd)
 
     # external_contact_forces are excluded
     return jp.concatenate([
@@ -266,15 +266,15 @@ class HumanoidStandup(PipelineEnv):
         qfrc_actuator,
     ])
 
-  def _com(self, pipeline_state: base.State) -> jp.ndarray:
-    inertia = self.sys.link.inertia
+  def _com(self, sys: System, pipeline_state: base.State) -> jp.ndarray:
+    inertia = sys.link.inertia
     if self.backend in ['spring', 'positional']:
       inertia = inertia.replace(
           i=jax.vmap(jp.diag)(
               jax.vmap(jp.diagonal)(inertia.i)
-              ** (1 - self.sys.spring_inertia_scale)
+              ** (1 - sys.spring_inertia_scale)
           ),
-          mass=inertia.mass ** (1 - self.sys.spring_mass_scale),
+          mass=inertia.mass ** (1 - sys.spring_mass_scale),
       )
     mass_sum = jp.sum(inertia.mass)
     x_i = pipeline_state.x.vmap().do(inertia.transform)

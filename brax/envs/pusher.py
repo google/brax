@@ -15,7 +15,7 @@
 # pylint:disable=g-multiple-import
 """Trains a robot arm to push a ball to a target."""
 
-from brax import base
+from brax import base, System
 from brax import math
 from brax.envs.base import PipelineEnv, State
 from brax.io import mjcf
@@ -163,8 +163,8 @@ class Pusher(PipelineEnv):
     self._object_idx = self.sys.link_names.index('object')
     self._goal_idx = self.sys.link_names.index('goal')
 
-  def reset(self, rng: jp.ndarray) -> State:
-    qpos = self.sys.init_q
+  def reset(self, sys: System, rng: jp.ndarray) -> State:
+    qpos = sys.init_q
 
     rng, rng1, rng2 = jax.random.split(rng, 3)
 
@@ -181,20 +181,20 @@ class Pusher(PipelineEnv):
     qpos = qpos.at[-4:].set(jp.concatenate([cylinder_pos, goal_pos]))
 
     qvel = jax.random.uniform(
-        rng2, (self.sys.qd_size(),), minval=-0.005, maxval=0.005
+        rng2, (sys.qd_size(),), minval=-0.005, maxval=0.005
     )
     qvel = qvel.at[-4:].set(0.0)
 
-    pipeline_state = self.pipeline_init(qpos, qvel)
+    pipeline_state = self.pipeline_init(sys, qpos, qvel)
 
     obs = self._get_obs(pipeline_state)
     reward, done, zero = jp.zeros(3)
     metrics = {'reward_dist': zero, 'reward_ctrl': zero, 'reward_near': zero}
-    return State(pipeline_state, obs, reward, done, metrics)
+    return State(pipeline_state, obs, reward, done, sys, metrics)
 
   def step(self, state: State, action: jp.ndarray) -> State:
     x_i = state.pipeline_state.x.vmap().do(
-        base.Transform.create(pos=self.sys.link.inertia.transform.pos)
+        base.Transform.create(pos=state.sys.link.inertia.transform.pos)
     )
     vec_1 = x_i.pos[self._object_idx] - x_i.pos[self._tips_arm_idx]
     vec_2 = x_i.pos[self._object_idx] - x_i.pos[self._goal_idx]
@@ -204,9 +204,9 @@ class Pusher(PipelineEnv):
     reward_ctrl = -jp.square(action).sum()
     reward = reward_dist + 0.1 * reward_ctrl + 0.5 * reward_near
 
-    pipeline_state = self.pipeline_step(state.pipeline_state, action)
+    pipeline_state = self.pipeline_step(state.sys, state.pipeline_state, action)
 
-    obs = self._get_obs(pipeline_state)
+    obs = self._get_obs(state.sys, pipeline_state)
     state.metrics.update(
         reward_near=reward_near,
         reward_dist=reward_dist,
@@ -214,10 +214,10 @@ class Pusher(PipelineEnv):
     )
     return state.replace(pipeline_state=pipeline_state, obs=obs, reward=reward)
 
-  def _get_obs(self, pipeline_state: base.State) -> jp.ndarray:
+  def _get_obs(self, sys, pipeline_state: base.State) -> jp.ndarray:
     """Observes pusher body position and velocities."""
     x_i = pipeline_state.x.vmap().do(
-        base.Transform.create(pos=self.sys.link.inertia.transform.pos)
+        base.Transform.create(pos=sys.link.inertia.transform.pos)
     )
     return jp.concatenate([
         pipeline_state.q[:7],

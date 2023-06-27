@@ -20,7 +20,7 @@ Based on the OpenAI Gym MuJoCo Reacher environment.
 
 from typing import Tuple
 
-from brax import base
+from brax import base, System
 from brax import math
 from brax.envs.base import PipelineEnv, State
 from brax.io import mjcf
@@ -171,14 +171,14 @@ class Reacher(PipelineEnv):
 
     super().__init__(sys=sys, backend=backend, **kwargs)
 
-  def reset(self, rng: jp.ndarray) -> State:
+  def reset(self, sys: System, rng: jp.ndarray) -> State:
     rng, rng1, rng2 = jax.random.split(rng, 3)
 
-    q = self.sys.init_q + jax.random.uniform(
-        rng1, (self.sys.q_size(),), minval=-0.1, maxval=0.1
+    q = sys.init_q + jax.random.uniform(
+        rng1, (sys.q_size(),), minval=-0.1, maxval=0.1
     )
     qd = jax.random.uniform(
-        rng2, (self.sys.qd_size(),), minval=-0.005, maxval=0.005
+        rng2, (sys.qd_size(),), minval=-0.005, maxval=0.005
     )
 
     # set the target q, qd
@@ -186,7 +186,7 @@ class Reacher(PipelineEnv):
     q = q.at[2:].set(target)
     qd = qd.at[2:].set(0)
 
-    pipeline_state = self.pipeline_init(q, qd)
+    pipeline_state = self.pipeline_init(sys, q, qd)
 
     obs = self._get_obs(pipeline_state)
     reward, done, zero = jp.zeros(3)
@@ -194,10 +194,10 @@ class Reacher(PipelineEnv):
         'reward_dist': zero,
         'reward_ctrl': zero,
     }
-    return State(pipeline_state, obs, reward, done, metrics)
+    return State(pipeline_state, obs, reward, done, sys, metrics)
 
   def step(self, state: State, action: jp.ndarray) -> State:
-    pipeline_state = self.pipeline_step(state.pipeline_state, action)
+    pipeline_state = self.pipeline_step(state.sys, state.pipeline_state, action)
     obs = self._get_obs(pipeline_state)
 
     # vector from tip to target is last 3 entries of obs vector

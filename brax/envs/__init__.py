@@ -31,6 +31,7 @@ from brax.envs import reacher
 from brax.envs import walker2d
 from brax.envs.base import Env, PipelineEnv, State, Wrapper
 from brax.envs.wrappers import training
+from brax.envs.wrappers.vsys import IdentityVSysWrapper
 
 _envs = {
     'ant': ant.Ant,
@@ -77,6 +78,7 @@ def create(
     action_repeat: int = 1,
     auto_reset: bool = True,
     batch_size: Optional[int] = None,
+    no_vsys: bool = True,
     **kwargs,
 ) -> Env:
   """Creates an environment from the registry.
@@ -100,5 +102,7 @@ def create(
     env = training.VmapWrapper(env, batch_size)
   if auto_reset:
     env = training.AutoResetWrapper(env)
+  if no_vsys:
+      env = IdentityVSysWrapper(env)
 
   return env

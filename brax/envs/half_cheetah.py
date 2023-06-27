@@ -15,7 +15,7 @@
 # pylint:disable=g-multiple-import
 """Trains a halfcheetah to run in the +x direction."""
 
-from brax import base
+from brax import base, System
 from brax.envs.base import PipelineEnv, State
 from brax.io import mjcf
 from etils import epath
@@ -153,17 +153,17 @@ class Halfcheetah(PipelineEnv):
         exclude_current_positions_from_observation
     )
 
-  def reset(self, rng: jp.ndarray) -> State:
+  def reset(self, sys: System, rng: jp.ndarray) -> State:
     """Resets the environment to an initial state."""
     rng, rng1, rng2 = jax.random.split(rng, 3)
 
     low, hi = -self._reset_noise_scale, self._reset_noise_scale
-    qpos = self.sys.init_q + jax.random.uniform(
-        rng1, (self.sys.q_size(),), minval=low, maxval=hi
+    qpos = sys.init_q + jax.random.uniform(
+        rng1, (sys.q_size(),), minval=low, maxval=hi
     )
-    qvel = hi * jax.random.normal(rng2, (self.sys.qd_size(),))
+    qvel = hi * jax.random.normal(rng2, (sys.qd_size(),))
 
-    pipeline_state = self.pipeline_init(qpos, qvel)
+    pipeline_state = self.pipeline_init(sys, qpos, qvel)
 
     obs = self._get_obs(pipeline_state)
     reward, done, zero = jp.zeros(3)
@@ -173,12 +173,12 @@ class Halfcheetah(PipelineEnv):
         'reward_ctrl': zero,
         'reward_run': zero,
     }
-    return State(pipeline_state, obs, reward, done, metrics)
+    return State(pipeline_state, obs, reward, done,sys,  metrics)
 
   def step(self, state: State, action: jp.ndarray) -> State:
     """Runs one timestep of the environment's dynamics."""
     pipeline_state0 = state.pipeline_state
-    pipeline_state = self.pipeline_step(pipeline_state0, action)
+    pipeline_state = self.pipeline_step(state.sys, pipeline_state0, action)
 
     x_velocity = (
         pipeline_state.x.pos[0, 0] - pipeline_state0.x.pos[0, 0]

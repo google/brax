@@ -15,7 +15,7 @@
 # pylint:disable=g-multiple-import
 """An inverted pendulum environment."""
 
-from brax import base
+from brax import base, System
 from brax.envs.base import PipelineEnv, State
 from brax.io import mjcf
 from etils import epath
@@ -110,26 +110,26 @@ class InvertedPendulum(PipelineEnv):
 
     super().__init__(sys=sys, backend=backend, **kwargs)
 
-  def reset(self, rng: jp.ndarray) -> State:
+  def reset(self, sys: System, rng: jp.ndarray) -> State:
     """Resets the environment to an initial state."""
     rng, rng1, rng2 = jax.random.split(rng, 3)
 
-    q = self.sys.init_q + jax.random.uniform(
-        rng1, (self.sys.q_size(),), minval=-0.01, maxval=0.01
+    q = sys.init_q + jax.random.uniform(
+        rng1, (sys.q_size(),), minval=-0.01, maxval=0.01
     )
     qd = jax.random.uniform(
-        rng2, (self.sys.qd_size(),), minval=-0.01, maxval=0.01
+        rng2, (sys.qd_size(),), minval=-0.01, maxval=0.01
     )
-    pipeline_state = self.pipeline_init(q, qd)
+    pipeline_state = self.pipeline_init(sys, q, qd)
     obs = self._get_obs(pipeline_state)
     reward, done = jp.zeros(2)
     metrics = {}
 
-    return State(pipeline_state, obs, reward, done, metrics)
+    return State(pipeline_state, obs, reward, done, sys, metrics)
 
   def step(self, state: State, action: jp.ndarray) -> State:
     """Run one timestep of the environment's dynamics."""
-    pipeline_state = self.pipeline_step(state.pipeline_state, action)
+    pipeline_state = self.pipeline_step(state.sys, state.pipeline_state, action)
     obs = self._get_obs(pipeline_state)
     reward = 1.0
     done = jp.where(jp.abs(obs[1]) > 0.2, 1.0, 0.0)

@@ -15,7 +15,7 @@
 # pylint:disable=g-multiple-import
 """Trains an ant to run in the +x direction."""
 
-from brax import base
+from brax import base, System
 from brax import math
 from brax.envs.base import PipelineEnv, State
 from brax.io import mjcf
@@ -193,17 +193,17 @@ class Ant(PipelineEnv):
     if self._use_contact_forces:
       raise NotImplementedError('use_contact_forces not implemented.')
 
-  def reset(self, rng: jp.ndarray) -> State:
+  def reset(self, sys: System, rng: jp.ndarray) -> State:
     """Resets the environment to an initial state."""
     rng, rng1, rng2 = jax.random.split(rng, 3)
 
     low, hi = -self._reset_noise_scale, self._reset_noise_scale
-    q = self.sys.init_q + jax.random.uniform(
-        rng1, (self.sys.q_size(),), minval=low, maxval=hi
+    q = sys.init_q + jax.random.uniform(
+        rng1, (sys.q_size(),), minval=low, maxval=hi
     )
-    qd = hi * jax.random.normal(rng2, (self.sys.qd_size(),))
+    qd = hi * jax.random.normal(rng2, (sys.qd_size(),))
 
-    pipeline_state = self.pipeline_init(q, qd)
+    pipeline_state = self.pipeline_init(sys, q, qd)
     obs = self._get_obs(pipeline_state)
 
     reward, done, zero = jp.zeros(3)
@@ -219,12 +219,12 @@ class Ant(PipelineEnv):
         'y_velocity': zero,
         'forward_reward': zero,
     }
-    return State(pipeline_state, obs, reward, done, metrics)
+    return State(pipeline_state, obs, reward , done, sys, metrics)
 
   def step(self, state: State, action: jp.ndarray) -> State:
     """Run one timestep of the environment's dynamics."""
     pipeline_state0 = state.pipeline_state
-    pipeline_state = self.pipeline_step(pipeline_state0, action)
+    pipeline_state = self.pipeline_step(state.sys, pipeline_state0, action)
 
     velocity = (pipeline_state.x.pos[0] - pipeline_state0.x.pos[0]) / self.dt
     forward_reward = velocity[0]
