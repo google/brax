@@ -425,7 +425,10 @@ class DomainRandVSysWrapper(_ConcreteVSysWrapper):
         state = self.env.step(state, action)
         step_count = step_count * (1-state.done)
 
-        step_count_tripped = -jp.mod(step_count, self.randomize_every_nsteps) + 1
+        if self.randomize_every_nsteps:
+            step_count_tripped = -jp.mod(step_count, self.randomize_every_nsteps) + 1
+        else:
+            step_count_tripped = jp.zeros_like(step_count)
         # step_count_tripped: 1 if need to resample, <0 value otherwise
         resample_mask = state.done + step_count_tripped
         state_rng, resampled_sys = self.set_vsys(rng=state.vsys_rng, current_sys=state.sys, mask=resample_mask)
@@ -433,7 +436,7 @@ class DomainRandVSysWrapper(_ConcreteVSysWrapper):
 
         return state
 
-class DomainExplicitVSysWrapper(_ConcreteVSysWrapper):
+class DomainCartesianVSysWrapper(_ConcreteVSysWrapper):
     """Maintains episode step count and sets done at episode end."""
 
     @classmethod
@@ -455,7 +458,7 @@ class DomainExplicitVSysWrapper(_ConcreteVSysWrapper):
         self.num_frames = self.batch_size / self.discretization_level ** self.num_params
         assert int(self.num_frames) == self.num_frames
         self.num_frames = int(self.num_frames)
-        assert DomainExplicitVSysWrapper.find_batch_size_for_discretization_level(
+        assert DomainCartesianVSysWrapper.find_batch_size_for_discretization_level(
             self.discretization_level,
             self.num_frames,
             self.num_params) == self.batch_size
@@ -510,7 +513,7 @@ if __name__ == "__main__":
 
     SINGLE_ENV = False
     DISCRETIZATION_LEVEL = 16
-    BATCH_SIZE = DomainExplicitVSysWrapper.find_batch_size_for_discretization_level(
+    BATCH_SIZE = DomainCartesianVSysWrapper.find_batch_size_for_discretization_level(
         discretization_level=DISCRETIZATION_LEVEL,
         frame_batch_size=8,
         num_params=2
@@ -530,12 +533,12 @@ if __name__ == "__main__":
 
     x = make_skrs(env, "./inertia.yaml")
 
-    #env = DomainRandVSysWrapper(env, x, 5)
+    env = DomainRandVSysWrapper(env, x, None)
     #env = IdentityVSysWrapper(env)
-    env = DomainExplicitVSysWrapper(env, x, DISCRETIZATION_LEVEL)
+    #env = DomainCartesianVSysWrapper(env, x, DISCRETIZATION_LEVEL)
     key = jax.random.PRNGKey(0)
 
-    USE_JIT = True
+    USE_JIT = False
     if USE_JIT:
         reset_func = jax.jit(env.reset)
         step_func = jax.jit(env.step)
