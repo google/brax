@@ -405,6 +405,7 @@ class DomainRandVSysWrapper(_ConcreteVSysWrapper):
         """
         state_rng, vals = self._sample_batch_skrs(rng)
         current_sys = self._sysset(current_sys, mask, vals)
+        self.current_skrs_vals = vals
         return state_rng, current_sys
 
     def reset(self, rng: jp.ndarray) -> State:
