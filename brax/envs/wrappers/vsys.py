@@ -433,8 +433,10 @@ class DomainRandVSysWrapper(_ConcreteVSysWrapper):
         # step_count_tripped: 1 if need to resample, <0 value otherwise
         resample_mask = state.done + step_count_tripped
         state_rng, resampled_sys = self.set_vsys(rng=state.vsys_rng, current_sys=state.sys, mask=resample_mask)
-        state = state.replace(sys=resampled_sys, vsys_rng=state_rng, vsys_stepcount=step_count)
 
+        state_info = state.info
+        state_info["skrs_vals"] = self.current_skrs_vals
+        state = state.replace(sys=resampled_sys, vsys_rng=state_rng, vsys_stepcount=step_count, info=state_info)
         return state
 
 class DomainCartesianVSysWrapper(_ConcreteVSysWrapper):
