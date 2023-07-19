@@ -371,7 +371,7 @@ class DomainRandVSysWrapper(_ConcreteVSysWrapper):
     def __init__(self, env: Env, skrs: List[SysKeyRange], randomize_every_nsteps: Union[int, None]):
         super().__init__(env, skrs)
 
-        def _sample_for_one_key(skrs, rng):
+        def _sample_for_one_key(rng):
             vals = []
             for skr in skrs:
                 rng, key = jax.random.split(rng)
@@ -381,7 +381,7 @@ class DomainRandVSysWrapper(_ConcreteVSysWrapper):
                 vals.append(val)
 
             return rng, vals
-        _sample_for_one_key = jax.jit(Partial(_sample_for_one_key, skrs))
+        _sample_for_one_key = jax.jit(_sample_for_one_key)
 
         if self.single_env:
             @jax.jit
