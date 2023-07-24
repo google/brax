@@ -264,7 +264,11 @@ def make_skrs(sys: Union[Env, System], randomization_config_path: Union[str, Pat
 
         return skr.replace(base=new_base, max=new_max, min=new_min)
 
-    return list(map(read_sys_onto_skr, yaml_to_basic_skrs()))
+    ret = list(map(read_sys_onto_skr, yaml_to_basic_skrs()))
+    # they arrive in reverse order, so we're gonna swap em
+
+    ret = list(reversed(ret))
+    return ret
 
 
 
@@ -416,8 +420,19 @@ class DomainRandVSysWrapper(_ConcreteVSysWrapper):
 
         state_rng, sys = self.set_vsys(rng=set_rng, current_sys=self.baseline_vsys, mask=jp.ones(self.batch_size, ))
 
+        reset_rng, stepcount_rng = jax.random.split(reset_rng)
         state = self.env.reset(sys=sys, rng=reset_rng)
-        state = state.replace(vsys_stepcount=jp.zeros(self.batch_size), vsys_rng=state_rng)
+
+        if self.randomize_every_nsteps:
+            vsys_stepcount = jax.random.randint(stepcount_rng,
+                                                (self.batch_size,),
+                                                minval=0,
+                                                maxval=self.randomize_every_nsteps
+                                                )
+        else:
+            vsys_stepcount = jp.zeros(self.batch_size)
+
+        state = state.replace(vsys_stepcount=vsys_stepcount, vsys_rng=state_rng)
         return state
 
     def step(self, state, action):
@@ -436,6 +451,8 @@ class DomainRandVSysWrapper(_ConcreteVSysWrapper):
 
         state_info = state.info
         state_info["skrs_vals"] = self.current_skrs_vals
+        state_info["skrs_resampled"] = step_count_tripped
+
         state = state.replace(sys=resampled_sys, vsys_rng=state_rng, vsys_stepcount=step_count, info=state_info)
         return state
 
