@@ -372,7 +372,7 @@ class _ConcreteVSysWrapper(_VSysWrapper):
 class DomainRandVSysWrapper(_ConcreteVSysWrapper):
     """Maintains episode step count and sets done at episode end."""
 
-    def __init__(self, env: Env, skrs: List[SysKeyRange], randomize_every_nsteps: Union[int, None]):
+    def __init__(self, env: Env, skrs: List[SysKeyRange], randomize_every_nsteps: Union[int, None], randomize_init_stepcount: bool):
         super().__init__(env, skrs)
 
         def _sample_for_one_key(rng):
@@ -397,6 +397,7 @@ class DomainRandVSysWrapper(_ConcreteVSysWrapper):
             self._sample_batch_skrs = jax.vmap(_sample_for_one_key)
 
         self.randomize_every_nsteps = randomize_every_nsteps
+        self.randomize_init_stepcount = randomize_init_stepcount
 
     def set_vsys(self, rng: jp.ndarray, current_sys: System, mask: jp.ndarray):
         """
@@ -423,7 +424,7 @@ class DomainRandVSysWrapper(_ConcreteVSysWrapper):
         reset_rng, stepcount_rng = jax.random.split(reset_rng)
         state = self.env.reset(sys=sys, rng=reset_rng)
 
-        if self.randomize_every_nsteps:
+        if self.randomize_every_nsteps and self.randomize_init_stepcount:
             vsys_stepcount = jax.random.randint(stepcount_rng,
                                                 (self.batch_size,),
                                                 minval=0,
