@@ -325,26 +325,26 @@ class _ConcreteVSysWrapper(_VSysWrapper):
         def make_sysset(skrs: List[SysKeyRange], is_single_env: bool):
             keys = [skr.key.split(KEY_SEP) for skr in skrs]
 
-            def identity(sys: System, vals: List[jp.ndarray]) -> System:
-                return sys
-
-            def resamply(sys: System, vals: List[jp.ndarray]) -> System:
-                """Sets params in the System."""
-                for key, val in zip(keys, vals):
-                    sys = _write_sys(sys, key, val)
-                return sys
-
-            def apply_mask(sys: System, mask: jp.ndarray, vals: List[jp.ndarray]):
-                sys = jax.lax.cond(
-                    mask,
-                    resamply,  # true
-                    identity,  # false
-                    sys, vals  # operands
-                )
-                return sys
-
             def receive_sys(sys: System, mask: jp.ndarray, vals: List[jp.ndarray]):
                 mask = mask > 0
+
+                def apply_mask(sys: System, mask: jp.ndarray, vals: List[jp.ndarray]):
+                    def identity(sys: System, vals: List[jp.ndarray]) -> System:
+                        return sys
+
+                    def resamply(sys: System, vals: List[jp.ndarray]) -> System:
+                        """Sets params in the System."""
+                        for key, val in zip(keys, vals):
+                            sys = _write_sys(sys, key, val)
+                        return sys
+
+                    sys = jax.lax.cond(
+                        mask,
+                        resamply,  # true
+                        identity,  # false
+                        sys, vals  # operands
+                    )
+                    return sys
 
                 if is_single_env:
                     return apply_mask(sys, mask[0], vals)
@@ -353,7 +353,26 @@ class _ConcreteVSysWrapper(_VSysWrapper):
 
             return receive_sys
 
+        def make_readsys(skrs: List[SysKeyRange], is_single_env: bool):
+            keys = [skr.key.split(KEY_SEP) for skr in skrs]
+
+            def get_current_skrs_vals(sys: System):
+                """Sets params in the System."""
+                ret = []
+                for key in keys:
+                    read = _traverse_sys(sys, key, None)
+                    ret.append(read)
+                return ret
+
+            def readsys(sys: System):
+                if is_single_env:
+                    return get_current_skrs_vals
+                else:
+                    return jax.vmap(get_current_skrs_vals)(sys)
+            return readsys
+
         self._sysset = make_sysset(skrs, self.single_env)
+        self._sysread = make_readsys(skrs, self.single_env)
 
         self.skrs = skrs
 
@@ -410,7 +429,7 @@ class DomainRandVSysWrapper(_ConcreteVSysWrapper):
         """
         state_rng, vals = self._sample_batch_skrs(rng)
         current_sys = self._sysset(current_sys, mask, vals)
-        self.current_skrs_vals = vals
+        self.current_skrs_vals = self._sysread(current_sys)
         return state_rng, current_sys
 
     def reset(self, rng: jp.ndarray) -> State:
@@ -554,12 +573,12 @@ if __name__ == "__main__":
 
     x = make_skrs(env, "./inertia.yaml")
 
-    env = DomainRandVSysWrapper(env, x, None)
+    env = DomainRandVSysWrapper(env, x, 2, False)
     #env = IdentityVSysWrapper(env)
     #env = DomainCartesianVSysWrapper(env, x, DISCRETIZATION_LEVEL)
     key = jax.random.PRNGKey(0)
 
-    USE_JIT = False
+    USE_JIT = True
     if USE_JIT:
         reset_func = jax.jit(env.reset)
         step_func = jax.jit(env.step)
@@ -576,9 +595,16 @@ if __name__ == "__main__":
 
     state = step_func(state, randact())
     start = time.time()
-    for i in range(20):
+    for i in range(4):
+        print(env.current_skrs_vals)
         print(i)
         state = step_func(state, randact())
+    before = env.current_skrs_vals
+    for i in range(4):
+        print(i)
+        state = step_func(state, randact())
+    print(state.info["skrs_vals"])
     end = time.time()
+    after = env.current_skrs_vals
     print(end - start)
     i = 9
