@@ -471,7 +471,7 @@ class DomainRandVSysWrapper(_ConcreteVSysWrapper):
 
         state_info = state.info
         state_info["skrs_vals"] = self.current_skrs_vals
-        state_info["skrs_resampled"] = step_count_tripped
+        state_info["skrs_resampled"] = step_count_tripped > 0
 
         state = state.replace(sys=resampled_sys, vsys_rng=state_rng, vsys_stepcount=step_count, info=state_info)
         return state
@@ -578,7 +578,7 @@ if __name__ == "__main__":
     #env = DomainCartesianVSysWrapper(env, x, DISCRETIZATION_LEVEL)
     key = jax.random.PRNGKey(0)
 
-    USE_JIT = True
+    USE_JIT = False
     if USE_JIT:
         reset_func = jax.jit(env.reset)
         step_func = jax.jit(env.step)
