@@ -24,6 +24,7 @@ from brax.base import Actuator, Convex, Mesh, Plane, Transform
 from brax.generalized import pipeline as generalized
 from brax.io import html
 from brax.io import mjcf
+from brax.io.mjcf import load_mjmodel
 from brax.positional import pipeline as positional
 from brax.spring import pipeline as spring
 from etils import epath
@@ -34,6 +35,7 @@ from flask import send_from_directory
 import flask_cors
 import jax
 from jax import numpy as jp
+import mujoco
 
 
 PORT = flags.DEFINE_integer(
@@ -45,6 +47,18 @@ DEBUG = flags.DEFINE_boolean(
 
 flask_app = flask.Flask(__name__)
 flask_cors.CORS(flask_app)
+
+
+class _MujocoPipeline:
+  """Mujoco reference pipeline for debugging."""
+
+  @staticmethod
+  def init(*args, **kwargs):
+    return generalized.init(*args, **kwargs)
+
+  @staticmethod
+  def step(*args, **kwargs):
+    return generalized.init(*args, **kwargs)
 
 
 @flask_app.route('/', methods=['GET'])
@@ -81,11 +95,13 @@ def play_trajectory(path):
 def simulate(path):
   """Simulates a brax system from a local file path."""
   sys = mjcf.load(path)
+  pipeline_type = request.args.get('pipeline', 'generalized')
   pipeline = {
       'generalized': generalized,
       'positional': positional,
       'spring': spring,
-  }[request.args.get('pipeline', 'generalized')]
+      'mujoco': _MujocoPipeline,
+  }[pipeline_type]
   steps = int(request.args.get('steps', 1000))
   act_fn = request.args.get('act', 'sin')
   solver_iterations = int(request.args.get('solver_iterations', 100))
@@ -135,17 +151,30 @@ def simulate(path):
         actuator_qdid=actuator_qdid,
     )
 
-  jit_init, jit_step = jax.jit(pipeline.init), jax.jit(pipeline.step)
-  states = [jit_init(sys, sys.init_q, jp.zeros(sys.qd_size()))]
+  if pipeline_type == 'mujoco':
+    mj_model = load_mjmodel(path)
+    mj_data = mujoco.MjData(mj_model)
+    init_fn = jax.jit(pipeline.init)
+    def step_fn(sys, _, act):
+      mj_data.ctrl = act
+      mujoco.mj_step(mj_model, mj_data)
+      state = init_fn(sys, mj_data.qpos, jp.zeros(sys.qd_size()))
+      return state
+  else:
+    init_fn, step_fn = jax.jit(pipeline.init), jax.jit(pipeline.step)
+  state = init_fn(sys, sys.init_q, jp.zeros(sys.qd_size()))
+  states = [state]
+
   for i in range(steps):
     if act_fn == 'sin':
       act = 0.5 * jp.sin(jp.ones(sys.act_size()) * 5 * i * sys.dt)
     elif act_fn == 'zero':
-      act = jp.zeros(sys.qd_size())
+      act = jp.zeros(sys.act_size())
     elif act_fn == 'zero_p':
       q = states[-1].q[sys.q_idx('123')]
       act = -q
-    states.append(jit_step(sys, states[-1], act))
+    state = step_fn(sys, states[-1], act)
+    states.append(state)
   return html.render(
       sys, states, height='100vh', colab=False, base_url='/js/viewer.js'
   )

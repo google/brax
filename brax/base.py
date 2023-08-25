@@ -12,21 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# pylint:disable=g-multiple-import, g-importing-member
 """Base brax primitives and simple manipulations of them."""
+
+import copy
 import functools
-from typing import Any, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Type, Union
 
 from brax import math
 from flax import struct
+import jax
 from jax import numpy as jp
 from jax import vmap
 from jax.tree_util import tree_map
+
 
 # f: free, 1: 1-dof, 2: 2-dof, 3: 3-dof
 Q_WIDTHS = {'f': 7, '1': 1, '2': 2, '3': 3}
 QD_WIDTHS = {'f': 6, '1': 1, '2': 2, '3': 3}
 
 
+@struct.dataclass
 class Base:
   """Base functionality extending all brax types.
 
@@ -103,9 +109,64 @@ class Base:
 
     return VmapField(in_axes, out_axes)
 
+  def tree_replace(
+      self, params: Dict[str, Optional[jax.typing.ArrayLike]]
+  ) -> 'Base':
+    """Creates a new object with parameters set.
+
+    Args:
+      params: a dictionary of key value pairs to replace
+
+    Returns:
+      data clas with new values
+
+    Example:
+      If a system has 3 links, the following code replaces the mass
+      of each link in the System:
+      >>> sys = sys.tree_replace(
+      >>>     {'link.inertia.mass', jp.array([1.0, 1.2, 1.3])})
+    """
+    new = self
+    for k, v in params.items():
+      new = _tree_replace(new, k.split('.'), v)
+    return new
+
   @property
   def T(self):  # pylint:disable=invalid-name
     return tree_map(lambda x: x.T, self)
+
+
+def _tree_replace(
+    base: Base,
+    attr: Sequence[str],
+    val: Optional[jax.typing.ArrayLike],
+) -> Base:
+  """Sets attributes in a struct.dataclass with values."""
+  if not attr:
+    return base
+
+  # special case for List attribute
+  if len(attr) > 1 and isinstance(getattr(base, attr[0]), list):
+    lst = copy.deepcopy(getattr(base, attr[0]))
+    if not hasattr(val, '__iter__'):
+      # setting a value that is not an iterable, typically to get in_axes
+      for i, g in enumerate(lst):
+        if not hasattr(g, attr[1]):
+          continue
+        lst[i] = _tree_replace(g, attr[1:], val)
+      return base.replace(**{attr[0]: lst})
+    # setting an iterable
+    for i, g in enumerate(lst):
+      if not hasattr(g, attr[1]):
+        continue
+      lst[i] = _tree_replace(g, attr[1:], val[i])
+    return base.replace(**{attr[0]: lst})
+
+  if len(attr) == 1:
+    return base.replace(**{attr[0]: val})
+  return base.replace(
+      **{attr[0]: _tree_replace(getattr(base, attr[0]), attr[1:], val)}
+  )
 
 
 @struct.dataclass
@@ -490,7 +551,7 @@ class State:
 
 
 @struct.dataclass
-class System:
+class System(Base):
   r"""Describes a physical environment: its links, joints and geometries.
 
   Attributes:

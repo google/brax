@@ -31,7 +31,8 @@ class ConstraintTest(parameterized.TestCase):
       ('triple_pendulum.xml',),
       ('humanoid.xml',),
       ('half_cheetah.xml',),
-      ('solver_params_v2.xml',)
+      ('solver_params_v2.xml',),
+      ('swimmer.xml',),
   )
   def test_jacobian(self, xml_file):
     """Test constraint jacobian."""
@@ -58,7 +59,8 @@ class ConstraintTest(parameterized.TestCase):
       ('triple_pendulum.xml',),
       ('humanoid.xml',),
       ('half_cheetah.xml',),
-      ('solver_params_v2.xml',)
+      ('solver_params_v2.xml',),
+      ('swimmer.xml',),
   )
   def test_force(self, xml_file):
     """Test constraint force."""

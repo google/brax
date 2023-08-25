@@ -31,6 +31,7 @@ class PipelineTest(parameterized.TestCase):
       ('triple_pendulum.xml',),
       ('humanoid.xml',),
       ('half_cheetah.xml',),
+      ('swimmer.xml',),
   )
   def test_forward(self, xml_file):
     """Test pipeline step."""

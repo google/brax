@@ -97,6 +97,40 @@ class PPOTest(parameterized.TestCase):
     self.assertSequenceEqual(original_action, action)
     env.step(state, action)
 
+  def testTrainDomainRandomize(self):
+    """Test PPO with domain randomization."""
+
+    def rand_fn(sys, rng):
+      @jax.vmap
+      def get_offset(rng):
+        offset = jax.random.uniform(rng, shape=(3,), minval=-0.1, maxval=0.1)
+        pos = sys.link.transform.pos.at[0].set(offset)
+        return pos
+
+      sys_v = sys.tree_replace({'link.inertia.transform.pos': get_offset(rng)})
+      in_axes = jax.tree_map(lambda x: None, sys)
+      in_axes = in_axes.tree_replace({'link.inertia.transform.pos': 0})
+      return sys_v, in_axes
+
+    _, _, _ = ppo.train(
+        envs.get_environment('inverted_pendulum', backend='spring'),
+        num_timesteps=2**15,
+        episode_length=1000,
+        num_envs=64,
+        learning_rate=3e-4,
+        entropy_cost=1e-2,
+        discounting=0.95,
+        unroll_length=5,
+        batch_size=64,
+        num_minibatches=8,
+        num_updates_per_batch=4,
+        normalize_observations=True,
+        seed=2,
+        reward_scaling=10,
+        normalize_advantage=False,
+        randomization_fn=rand_fn,
+    )
+
 
 if __name__ == '__main__':
   absltest.main()

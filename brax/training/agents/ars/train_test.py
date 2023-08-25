@@ -50,6 +50,29 @@ class ARSTest(parameterized.TestCase):
     action = inference(decoded_params)(state.obs, jax.random.PRNGKey(0))[0]
     env.step(state, action)
 
+  def testTrainDomainRandomize(self):
+    """Test with domain randomization."""
+
+    def rand_fn(sys, rng):
+      @jax.vmap
+      def get_offset(rng):
+        offset = jax.random.uniform(rng, shape=(3,), minval=-0.1, maxval=0.1)
+        pos = sys.link.transform.pos.at[0].set(offset)
+        return pos
+
+      sys_v = sys.tree_replace({'link.inertia.transform.pos': get_offset(rng)})
+      in_axes = jax.tree_map(lambda x: None, sys)
+      in_axes = in_axes.tree_replace({'link.inertia.transform.pos': 0})
+      return sys_v, in_axes
+
+    _, _, _ = ars.train(
+        envs.get_environment('inverted_pendulum', backend='spring'),
+        num_timesteps=128,
+        episode_length=128,
+        normalize_observations=True,
+        randomization_fn=rand_fn,
+    )
+
 
 if __name__ == '__main__':
   absltest.main()

@@ -525,13 +525,18 @@ def loads(xml: str, asset_path: Union[str, epath.Path, None] = None) -> System:
   return load_model(mj)
 
 
-def load(path: Union[str, epath.Path]):
-  """Loads a brax system from a MuJoCo mjcf file path."""
+def load_mjmodel(path: Union[str, epath.Path]):
+  """Loads an mj model from a MuJoCo mjcf file path."""
   elem = ElementTree.fromstring(epath.Path(path).read_text())
   _fuse_bodies(elem)
   meshdir = _get_meshdir(elem)
   assets = _find_assets(elem, epath.Path(path), meshdir)
   xml = ElementTree.tostring(elem, encoding='unicode')
   mj = mujoco.MjModel.from_xml_string(xml, assets=assets)
+  return mj
 
+
+def load(path: Union[str, epath.Path]):
+  """Loads a brax system from a MuJoCo mjcf file path."""
+  mj = load_mjmodel(path)
   return load_model(mj)

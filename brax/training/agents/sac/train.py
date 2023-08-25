@@ -19,9 +19,10 @@ See: https://arxiv.org/pdf/1812.05905.pdf
 
 import functools
 import time
-from typing import Any, Callable, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Optional, Tuple, Union
 
 from absl import logging
+from brax import base
 from brax import envs
 from brax.io import model
 from brax.training import acting
@@ -103,30 +104,36 @@ def _init_training_state(
                                    jax.local_devices()[:local_devices_to_use])
 
 
-def train(environment: Union[envs_v1.Env, envs.Env],
-          num_timesteps,
-          episode_length: int,
-          action_repeat: int = 1,
-          num_envs: int = 1,
-          num_eval_envs: int = 128,
-          learning_rate: float = 1e-4,
-          discounting: float = 0.9,
-          seed: int = 0,
-          batch_size: int = 256,
-          num_evals: int = 1,
-          normalize_observations: bool = False,
-          max_devices_per_host: Optional[int] = None,
-          reward_scaling: float = 1.,
-          tau: float = 0.005,
-          min_replay_size: int = 0,
-          max_replay_size: Optional[int] = None,
-          grad_updates_per_step: int = 1,
-          deterministic_eval: bool = False,
-          network_factory: types.NetworkFactory[
-              sac_networks.SACNetworks] = sac_networks.make_sac_networks,
-          progress_fn: Callable[[int, Metrics], None] = lambda *args: None,
-          checkpoint_logdir: Optional[str] = None,
-          eval_env: Optional[envs.Env] = None):
+def train(
+    environment: Union[envs_v1.Env, envs.Env],
+    num_timesteps,
+    episode_length: int,
+    action_repeat: int = 1,
+    num_envs: int = 1,
+    num_eval_envs: int = 128,
+    learning_rate: float = 1e-4,
+    discounting: float = 0.9,
+    seed: int = 0,
+    batch_size: int = 256,
+    num_evals: int = 1,
+    normalize_observations: bool = False,
+    max_devices_per_host: Optional[int] = None,
+    reward_scaling: float = 1.0,
+    tau: float = 0.005,
+    min_replay_size: int = 0,
+    max_replay_size: Optional[int] = None,
+    grad_updates_per_step: int = 1,
+    deterministic_eval: bool = False,
+    network_factory: types.NetworkFactory[
+        sac_networks.SACNetworks
+    ] = sac_networks.make_sac_networks,
+    progress_fn: Callable[[int, Metrics], None] = lambda *args: None,
+    checkpoint_logdir: Optional[str] = None,
+    eval_env: Optional[envs.Env] = None,
+    randomization_fn: Optional[
+        Callable[[base.System, jnp.ndarray], Tuple[base.System, base.System]]
+    ] = None,
+):
   """SAC training."""
   process_id = jax.process_index()
   local_devices_to_use = jax.local_device_count()
@@ -165,8 +172,21 @@ def train(environment: Union[envs_v1.Env, envs.Env],
   else:
     wrap_for_training = envs_v1.wrappers.wrap_for_training
 
+  rng = jax.random.PRNGKey(seed)
+  rng, key = jax.random.split(rng)
+  v_randomization_fn = None
+  if randomization_fn is not None:
+    v_randomization_fn = functools.partial(
+        randomization_fn,
+        rng=jax.random.split(
+            key, num_envs // jax.process_count() // local_devices_to_use),
+    )
   env = wrap_for_training(
-      env, episode_length=episode_length, action_repeat=action_repeat)
+      env,
+      episode_length=episode_length,
+      action_repeat=action_repeat,
+      randomization_fn=v_randomization_fn,
+  )
 
   obs_size = env.observation_size
   action_size = env.action_size
@@ -383,7 +403,7 @@ def train(environment: Union[envs_v1.Env, envs.Env],
     }
     return training_state, env_state, buffer_state, metrics
 
-  global_key, local_key = jax.random.split(jax.random.PRNGKey(seed))
+  global_key, local_key = jax.random.split(rng)
   local_key = jax.random.fold_in(local_key, process_id)
 
   # Training state init
@@ -410,10 +430,17 @@ def train(environment: Union[envs_v1.Env, envs.Env],
       jax.random.split(rb_key, local_devices_to_use))
 
   if not eval_env:
-    eval_env = env
-  else:
-    eval_env = wrap_for_training(
-        eval_env, episode_length=episode_length, action_repeat=action_repeat)
+    eval_env = environment
+  if randomization_fn is not None:
+    v_randomization_fn = functools.partial(
+        randomization_fn, rng=jax.random.split(eval_key, num_eval_envs)
+    )
+  eval_env = wrap_for_training(
+      eval_env,
+      episode_length=episode_length,
+      action_repeat=action_repeat,
+      randomization_fn=v_randomization_fn,
+  )
 
   evaluator = acting.Evaluator(
       eval_env,

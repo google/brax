@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# pylint:disable=g-multiple-import
+# pylint:disable=g-multiple-import, g-importing-member
 """Wrappers to support Brax training."""
 
-from typing import Dict, Optional
+from typing import Callable, Dict, Optional, Tuple
 
+from brax.base import System
 from brax.envs.base import Env, State, Wrapper
 from flax import struct
 import jax
@@ -24,7 +25,12 @@ from jax import numpy as jp
 
 
 def wrap(
-    env: Env, episode_length: int = 1000, action_repeat: int = 1
+    env: Env,
+    episode_length: int = 1000,
+    action_repeat: int = 1,
+    randomization_fn: Optional[
+        Callable[[System], Tuple[System, System]]
+    ] = None,
 ) -> Wrapper:
   """Common wrapper pattern for all training agents.
 
@@ -32,6 +38,8 @@ def wrap(
     env: environment to be wrapped
     episode_length: length of episode
     action_repeat: how many repeated actions to take per step
+    randomization_fn: randomization function that produces a vectorized system
+      and in_axes to vmap over
 
   Returns:
     An environment that is wrapped with Episode and AutoReset wrappers.  If the
@@ -39,7 +47,10 @@ def wrap(
     wrapped.
   """
   env = EpisodeWrapper(env, episode_length, action_repeat)
-  env = VmapWrapper(env)
+  if randomization_fn is None:
+    env = VmapWrapper(env)
+  else:
+    env = DomainRandomizationVmapWrapper(env, randomization_fn)
   env = AutoResetWrapper(env)
   return env
 
@@ -183,3 +194,38 @@ class EvalWrapper(Wrapper):
     )
     nstate.info['eval_metrics'] = eval_metrics
     return nstate
+
+
+class DomainRandomizationVmapWrapper(Wrapper):
+  """Wrapper for domain randomization."""
+
+  def __init__(
+      self,
+      env: Env,
+      randomization_fn: Callable[[System], Tuple[System, System]],
+  ):
+    super().__init__(env)
+    self._sys_v, self._in_axes = randomization_fn(self.sys)
+
+  def _env_fn(self, sys: System) -> Env:
+    env = self.env
+    env.unwrapped.sys = sys
+    return env
+
+  def reset(self, rng: jp.ndarray) -> State:
+    def reset(sys, rng):
+      env = self._env_fn(sys=sys)
+      return env.reset(rng)
+
+    state = jax.vmap(reset, in_axes=[self._in_axes, 0])(self._sys_v, rng)
+    return state
+
+  def step(self, state: State, action: jp.ndarray) -> State:
+    def step(sys, s, a):
+      env = self._env_fn(sys=sys)
+      return env.step(s, a)
+
+    res = jax.vmap(step, in_axes=[self._in_axes, 0, 0])(
+        self._sys_v, state, action
+    )
+    return res

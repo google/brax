@@ -118,7 +118,7 @@ class QueueBase(ReplayBuffer[ReplayBufferState, Sample], Generic[Sample]):
   def check_can_insert(self, buffer_state, samples, shards):
     """Checks whether insert operation can be performed."""
     assert isinstance(shards, int), 'This method should not be JITed.'
-    insert_size = jax.tree_flatten(samples)[0][0].shape[0] // shards
+    insert_size = jax.tree_util.tree_flatten(samples)[0][0].shape[0] // shards
     if self._data_shape[0] < insert_size:
       raise ValueError(
           'Trying to insert a batch of samples larger than the maximum replay'

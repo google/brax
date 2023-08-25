@@ -20,9 +20,10 @@ See: https://arxiv.org/pdf/1703.03864.pdf
 import enum
 import functools
 import time
-from typing import Callable, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Optional, Tuple, Union
 
 from absl import logging
+from brax import base
 from brax import envs
 from brax.training import acting
 from brax.training import types
@@ -80,7 +81,7 @@ def train(
     l2coeff: float = 0,
     max_devices_per_host: Optional[int] = None,
     population_size: int = 128,
-    learning_rate: float = 1E-3,
+    learning_rate: float = 1e-3,
     fitness_shaping: FitnessShaping = FitnessShaping.ORIGINAL,
     num_eval_envs: int = 128,
     perturbation_std: float = 0.1,
@@ -90,9 +91,13 @@ def train(
     center_fitness: bool = False,
     deterministic_eval: bool = False,
     network_factory: types.NetworkFactory[
-        es_networks.ESNetworks] = es_networks.make_es_networks,
+        es_networks.ESNetworks
+    ] = es_networks.make_es_networks,
     progress_fn: Callable[[int, Metrics], None] = lambda *args: None,
     eval_env: Optional[envs.Env] = None,
+    randomization_fn: Optional[
+        Callable[[base.System, jnp.ndarray], Tuple[base.System, base.System]]
+    ] = None,
 ):
   """ES training (from https://arxiv.org/pdf/1703.03864.pdf)."""
   num_envs = population_size * 2  # noise + anti noise
@@ -115,6 +120,9 @@ def train(
   next_eval_step = num_timesteps - (num_evals_after_init -
                                     1) * num_env_steps_between_evals
 
+  key = jax.random.PRNGKey(seed)
+  key, network_key, eval_key, rng_key = jax.random.split(key, 4)
+
   assert num_envs % local_devices_to_use == 0
   env = environment
   if isinstance(env, envs.Env):
@@ -122,8 +130,18 @@ def train(
   else:
     wrap_for_training = envs_v1.wrappers.wrap_for_training
 
+  v_randomization_fn = None
+  if randomization_fn is not None:
+    v_randomization_fn = functools.partial(
+        randomization_fn,
+        rng=jax.random.split(rng_key, num_envs // local_devices_to_use),
+    )
   env = wrap_for_training(
-      env, episode_length=episode_length, action_repeat=action_repeat)
+      env,
+      episode_length=episode_length,
+      action_repeat=action_repeat,
+      randomization_fn=v_randomization_fn,
+  )
 
   obs_size = env.observation_size
 
@@ -295,9 +313,6 @@ def train(
     }
     return training_state, metrics
 
-  key = jax.random.PRNGKey(seed)
-  key, network_key, eval_key = jax.random.split(key, 3)
-
   normalizer_params = running_statistics.init_state(
       specs.Array((obs_size,), jnp.float32))
   policy_params = es_network.policy_network.init(network_key)
@@ -309,10 +324,17 @@ def train(
       num_env_steps=0)
 
   if not eval_env:
-    eval_env = env
-  else:
-    eval_env = wrap_for_training(
-        eval_env, episode_length=episode_length, action_repeat=action_repeat)
+    eval_env = environment
+  if randomization_fn is not None:
+    v_randomization_fn = functools.partial(
+        randomization_fn, rng=jax.random.split(eval_key, num_eval_envs)
+    )
+  eval_env = wrap_for_training(
+      eval_env,
+      episode_length=episode_length,
+      action_repeat=action_repeat,
+      randomization_fn=v_randomization_fn,
+  )
 
   # Evaluator function
   evaluator = acting.Evaluator(

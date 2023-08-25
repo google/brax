@@ -28,7 +28,7 @@ from jax import numpy as jp
 
 
 @struct.dataclass
-class State:
+class State(base.Base):
   """Environment state for training and inference."""
 
   pipeline_state: Optional[base.State]

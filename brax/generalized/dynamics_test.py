@@ -27,7 +27,8 @@ import numpy as np
 class DynamicsTest(parameterized.TestCase):
 
   @parameterized.parameters(
-      'ant.xml', 'triple_pendulum.xml', ('humanoid.xml',), ('half_cheetah.xml',)
+      'ant.xml', 'triple_pendulum.xml', ('humanoid.xml',),
+      ('half_cheetah.xml',), ('swimmer.xml',),
   )
   def test_transform_com(self, xml_file):
     """Test dynamics transform com."""
@@ -52,7 +53,8 @@ class DynamicsTest(parameterized.TestCase):
       np.testing.assert_almost_equal(state.cdofd.matrix(), mj_next.cdof_dot, 5)
 
   @parameterized.parameters(
-      'ant.xml', 'triple_pendulum.xml', ('humanoid.xml',), ('half_cheetah.xml',)
+      'ant.xml', 'triple_pendulum.xml', ('humanoid.xml',),
+      ('half_cheetah.xml',), ('swimmer.xml',),
   )
   def test_forward(self, xml_file):
     """Test dynamics forward."""

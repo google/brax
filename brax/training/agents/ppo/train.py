@@ -19,9 +19,10 @@ See: https://arxiv.org/pdf/1707.06347.pdf
 
 import functools
 import time
-from typing import Callable, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Optional, Tuple, Union
 
 from absl import logging
+from brax import base
 from brax import envs
 from brax.training import acting
 from brax.training import gradients
@@ -37,7 +38,9 @@ from brax.v1 import envs as envs_v1
 import flax
 import jax
 import jax.numpy as jnp
+import numpy as np
 import optax
+
 
 InferenceParams = Tuple[running_statistics.NestedMeanStd, Params]
 Metrics = types.Metrics
@@ -67,33 +70,40 @@ def _strip_weak_type(tree):
   return jax.tree_util.tree_map(f, tree)
 
 
-def train(environment: Union[envs_v1.Env, envs.Env],
-          num_timesteps: int,
-          episode_length: int,
-          action_repeat: int = 1,
-          num_envs: int = 1,
-          max_devices_per_host: Optional[int] = None,
-          num_eval_envs: int = 128,
-          learning_rate: float = 1e-4,
-          entropy_cost: float = 1e-4,
-          discounting: float = 0.9,
-          seed: int = 0,
-          unroll_length: int = 10,
-          batch_size: int = 32,
-          num_minibatches: int = 16,
-          num_updates_per_batch: int = 2,
-          num_evals: int = 1,
-          normalize_observations: bool = False,
-          reward_scaling: float = 1.,
-          clipping_epsilon: float = .3,
-          gae_lambda: float = .95,
-          deterministic_eval: bool = False,
-          network_factory: types.NetworkFactory[
-              ppo_networks.PPONetworks] = ppo_networks.make_ppo_networks,
-          progress_fn: Callable[[int, Metrics], None] = lambda *args: None,
-          normalize_advantage: bool = True,
-          eval_env: Optional[envs.Env] = None,
-          policy_params_fn: Callable[..., None] = lambda *args: None):
+def train(
+    environment: Union[envs_v1.Env, envs.Env],
+    num_timesteps: int,
+    episode_length: int,
+    action_repeat: int = 1,
+    num_envs: int = 1,
+    max_devices_per_host: Optional[int] = None,
+    num_eval_envs: int = 128,
+    learning_rate: float = 1e-4,
+    entropy_cost: float = 1e-4,
+    discounting: float = 0.9,
+    seed: int = 0,
+    unroll_length: int = 10,
+    batch_size: int = 32,
+    num_minibatches: int = 16,
+    num_updates_per_batch: int = 2,
+    num_evals: int = 1,
+    num_resets_per_eval: int = 0,
+    normalize_observations: bool = False,
+    reward_scaling: float = 1.0,
+    clipping_epsilon: float = 0.3,
+    gae_lambda: float = 0.95,
+    deterministic_eval: bool = False,
+    network_factory: types.NetworkFactory[
+        ppo_networks.PPONetworks
+    ] = ppo_networks.make_ppo_networks,
+    progress_fn: Callable[[int, Metrics], None] = lambda *args: None,
+    normalize_advantage: bool = True,
+    eval_env: Optional[envs.Env] = None,
+    policy_params_fn: Callable[..., None] = lambda *args: None,
+    randomization_fn: Optional[
+        Callable[[base.System, jnp.ndarray], Tuple[base.System, base.System]]
+    ] = None,
+):
   """PPO training."""
   assert batch_size * num_minibatches % num_envs == 0
   xt = time.time()
@@ -115,9 +125,16 @@ def train(environment: Union[envs_v1.Env, envs.Env],
       batch_size * unroll_length * num_minibatches * action_repeat)
   num_evals_after_init = max(num_evals - 1, 1)
   # The number of training_step calls per training_epoch call.
-  # equals to ceil(num_timesteps / (num_evals * env_step_per_training_step))
-  num_training_steps_per_epoch = -(
-      -num_timesteps // (num_evals_after_init * env_step_per_training_step))
+  # equals to ceil(num_timesteps / (num_evals * env_step_per_training_step *
+  #                                 num_resets_per_eval))
+  num_training_steps_per_epoch = np.ceil(
+      num_timesteps
+      / (
+          num_evals_after_init
+          * env_step_per_training_step
+          * max(num_resets_per_eval, 1)
+      )
+  ).astype(int)
 
   key = jax.random.PRNGKey(seed)
   global_key, local_key = jax.random.split(key)
@@ -130,14 +147,27 @@ def train(environment: Union[envs_v1.Env, envs.Env],
   del global_key
 
   assert num_envs % device_count == 0
-  env = environment
-  if isinstance(env, envs.Env):
+
+  v_randomization_fn = None
+  if randomization_fn is not None:
+    randomization_batch_size = num_envs // local_device_count
+    # all devices gets the same randomization rng
+    randomization_rng = jax.random.split(key_env, randomization_batch_size)
+    v_randomization_fn = functools.partial(
+        randomization_fn, rng=randomization_rng
+    )
+
+  if isinstance(environment, envs.Env):
     wrap_for_training = envs.training.wrap
   else:
     wrap_for_training = envs_v1.wrappers.wrap_for_training
 
   env = wrap_for_training(
-      env, episode_length=episode_length, action_repeat=action_repeat)
+      environment,
+      episode_length=episode_length,
+      action_repeat=action_repeat,
+      randomization_fn=v_randomization_fn,
+  )
 
   reset_fn = jax.jit(jax.vmap(env.reset))
   key_envs = jax.random.split(key_env, num_envs // process_count)
@@ -276,7 +306,8 @@ def train(environment: Union[envs_v1.Env, envs.Env],
     epoch_training_time = time.time() - t
     training_walltime += epoch_training_time
     sps = (num_training_steps_per_epoch *
-           env_step_per_training_step) / epoch_training_time
+           env_step_per_training_step *
+           max(num_resets_per_eval, 1)) / epoch_training_time
     metrics = {
         'training/sps': sps,
         'training/walltime': training_walltime,
@@ -298,10 +329,17 @@ def train(environment: Union[envs_v1.Env, envs.Env],
       jax.local_devices()[:local_devices_to_use])
 
   if not eval_env:
-    eval_env = env
-  else:
-    eval_env = wrap_for_training(
-        eval_env, episode_length=episode_length, action_repeat=action_repeat)
+    eval_env = environment
+  if randomization_fn is not None:
+    v_randomization_fn = functools.partial(
+        randomization_fn, rng=jax.random.split(eval_key, num_eval_envs)
+    )
+  eval_env = wrap_for_training(
+      eval_env,
+      episode_length=episode_length,
+      action_repeat=action_repeat,
+      randomization_fn=v_randomization_fn,
+  )
 
   evaluator = acting.Evaluator(
       eval_env,
@@ -321,18 +359,26 @@ def train(environment: Union[envs_v1.Env, envs.Env],
     logging.info(metrics)
     progress_fn(0, metrics)
 
+  training_metrics = {}
   training_walltime = 0
   current_step = 0
   for it in range(num_evals_after_init):
     logging.info('starting iteration %s %s', it, time.time() - xt)
 
-    # optimization
-    epoch_key, local_key = jax.random.split(local_key)
-    epoch_keys = jax.random.split(epoch_key, local_devices_to_use)
-    (training_state, env_state,
-     training_metrics) = training_epoch_with_timing(training_state, env_state,
-                                                    epoch_keys)
-    current_step = int(_unpmap(training_state.env_steps))
+    for _ in range(max(num_resets_per_eval, 1)):
+      # optimization
+      epoch_key, local_key = jax.random.split(local_key)
+      epoch_keys = jax.random.split(epoch_key, local_devices_to_use)
+      (training_state, env_state, training_metrics) = (
+          training_epoch_with_timing(training_state, env_state, epoch_keys)
+      )
+      current_step = int(_unpmap(training_state.env_steps))
+
+      key_envs = jax.vmap(
+          lambda x, s: jax.random.split(x[0], s),
+          in_axes=(0, None))(key_envs, key_envs.shape[1])
+      # TODO: move extra reset logic to the AutoResetWrapper.
+      env_state = reset_fn(key_envs) if num_resets_per_eval > 0 else env_state
 
     if process_id == 0:
       # Run evals.
