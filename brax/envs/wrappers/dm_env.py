@@ -112,4 +112,4 @@ class DmEnvWrapper(dm_env.Environment):
     sys, state = self._env.sys, self._state
     if state is None:
       raise RuntimeError('must call reset or step before rendering')
-    return image.render_array(sys, state.state, 256, 256)
+    return image.render_array(sys, state.pipeline_state, 256, 256)

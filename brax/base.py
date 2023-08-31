@@ -148,22 +148,18 @@ def _tree_replace(
   # special case for List attribute
   if len(attr) > 1 and isinstance(getattr(base, attr[0]), list):
     lst = copy.deepcopy(getattr(base, attr[0]))
-    if not hasattr(val, '__iter__'):
-      # setting a value that is not an iterable, typically to get in_axes
-      for i, g in enumerate(lst):
-        if not hasattr(g, attr[1]):
-          continue
-        lst[i] = _tree_replace(g, attr[1:], val)
-      return base.replace(**{attr[0]: lst})
-    # setting an iterable
+
     for i, g in enumerate(lst):
       if not hasattr(g, attr[1]):
         continue
-      lst[i] = _tree_replace(g, attr[1:], val[i])
+      v = val if not hasattr(val, '__iter__') else val[i]
+      lst[i] = _tree_replace(g, attr[1:], v)
+
     return base.replace(**{attr[0]: lst})
 
   if len(attr) == 1:
     return base.replace(**{attr[0]: val})
+
   return base.replace(
       **{attr[0]: _tree_replace(getattr(base, attr[0]), attr[1:], val)}
   )

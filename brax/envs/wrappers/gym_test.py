@@ -32,6 +32,12 @@ class GymTest(absltest.TestCase):
     np.testing.assert_array_equal(
         env.action_space.high, base_env.sys.actuator.ctrl_range[:, 1])
 
+  def test_render(self):
+    base_env = envs.create('pusher')
+    env = gym.GymWrapper(base_env)
+    env.reset()
+    env.render(mode='rgb_array')
+
   def test_vector_action_space(self):
     """Tests the action space of the VectorGymWrapper."""
     base_env = envs.create('pusher')

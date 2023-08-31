@@ -114,28 +114,33 @@ class ConvexTest(absltest.TestCase):
 
     self.assertIsInstance(h, Convex)
 
+    # get index of h.vert for vertices in vert
+    dist = np.repeat(vert, vert.shape[0], axis=0) - np.tile(
+        h.vert, (vert.shape[0], 1)
+    )
+    dist = (dist**2).sum(axis=1).reshape((vert.shape[0], -1))
+    vidx = np.argmin(dist, axis=0)
+
     # check verts
-    vidx = [0, 3, 2, 1, 4]  # verts get mixed up by trimesh
     np.testing.assert_array_equal(h.vert, vert[vidx])
 
-    # check faces
+    # check face vertices
     map_ = {v: k for k, v in enumerate(vidx)}
     h_face = np.vectorize(map_.get)(h.face)
-    np.testing.assert_array_equal(
-        h_face,
-        np.array([
-            [2, 4, 0, 0],
-            [0, 4, 3, 3],
-            [4, 2, 1, 1],
-            [1, 3, 4, 4],
-            [3, 1, 2, 0],
-        ]),
+    face_verts = sorted([tuple(sorted(set(s))) for s in h_face.tolist()])
+    expected_face_verts = sorted([
+        (0, 3, 4), (1, 3, 4), (0, 2, 4), (0, 1, 2, 3), (1, 2, 4)])
+    self.assertSequenceEqual(
+        face_verts,
+        expected_face_verts,
     )
 
     # check edges
+    unique_edge = np.vectorize(map_.get)(h.unique_edge)
+    unique_edge = np.array(sorted(unique_edge.tolist()))
     np.testing.assert_array_equal(
-        np.vectorize(map_.get)(h.unique_edge),
-        np.array([[0, 3], [0, 2], [0, 4], [3, 4], [2, 4], [1, 4]]),
+        unique_edge,
+        np.array([[0, 2], [0, 3], [0, 4], [1, 4], [2, 4], [3, 4]]),
     )
     self.assertEqual(h.friction, 1)
 

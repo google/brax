@@ -31,6 +31,12 @@ class DmEnvTest(absltest.TestCase):
     np.testing.assert_array_equal(
         env.action_spec().maximum, base_env.sys.actuator.ctrl_range[:, 1])
 
+  def test_render(self):
+    base_env = envs.create('pusher')
+    env = dm_env.DmEnvWrapper(base_env)
+    env.reset()
+    env.render()
+
 
 if __name__ == '__main__':
   absltest.main()
