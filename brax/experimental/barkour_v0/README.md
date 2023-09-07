@@ -41,7 +41,7 @@ for i in range(500):
 
 ## MJCF Instructions
 
-The MuJoCo config in `assets/barkour_v0_brax.xml` was copied from https://github.com/google-deepmind/mujoco_menagerie/google_barkour_v0. The following edits were made to the MJCF specifically for brax:
+The MuJoCo config in `assets/barkour_v0_brax.xml` was copied from [MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie/tree/main/google_barkour_v0). The following edits were made to the MJCF specifically for brax:
 
 * `meshdir` was changed from `assets` to `.`.
 * `frictionloss` was removed. `damping` was changed to 0.5239.
