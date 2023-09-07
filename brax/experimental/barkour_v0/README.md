@@ -4,7 +4,7 @@
 
 This folder contains a training script for a flat-terrain joystick policy for the [Barkour v0 Quadruped](https://ai.googleblog.com/2023/05/barkour-benchmarking-animal-level.html) which demonstrates sim2real transfer.
 
-`barkour_joystick.py` contains the environment definition, while the [colab](https://colab.research.google.com/github/google/brax/blob/main/experimental/barkour_v0/barkour_v0_joystick.ipynb) shows how to train the policy.
+`barkour_joystick.py` contains the environment definition, while the [colab](https://colab.research.google.com/github/google/brax/blob/main/brax/experimental/barkour_v0/barkour_v0_joystick.ipynb) shows how to train the policy.
 
 <p float="left">
   <img src="assets/joystick.gif" width="400">
@@ -12,7 +12,7 @@ This folder contains a training script for a flat-terrain joystick policy for th
 
 ## Running the environment
 
-We encourage the usage of the [colab](https://colab.research.google.com/github/google/brax/blob/main/experimental/barkour_v0/barkour_v0_joystick.ipynb) for viewing and training policies. However, the environment can be loaded as follows:
+We encourage the usage of the [colab](https://colab.research.google.com/github/google/brax/blob/main/brax/experimental/barkour_v0/barkour_v0_joystick.ipynb) for viewing and training policies. However, the environment can be loaded as follows:
 
 ```python
 import jax
