@@ -286,7 +286,7 @@ def train(
         'eval_scores_std': jnp.std(eval_scores),
         'weights': jnp.mean(weights),
     }
-    return (TrainingState(  # pytype: disable=bad-return-type  # numpy-scalars
+    return (TrainingState(  # type: ignore  # jnp-type
         normalizer_params=normalizer_params,
         optimizer_state=optimizer_state,
         policy_params=policy_params,
@@ -314,7 +314,7 @@ def train(
     return training_state, metrics
 
   normalizer_params = running_statistics.init_state(
-      specs.Array((obs_size,), jnp.float32))
+      specs.Array((obs_size,), jnp.dtype('float32')))
   policy_params = es_network.policy_network.init(network_key)
   optimizer_state = optimizer.init(policy_params)
   training_state = TrainingState(

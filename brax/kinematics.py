@@ -258,7 +258,7 @@ def link_to_joint_frame(motion: Motion) -> Tuple[Motion, float]:
   )
   parity = jp.where(is_both, 1, parity)
 
-  return Motion(ang=ang_frame, vel=vel_frame), parity
+  return Motion(ang=ang_frame, vel=vel_frame), parity  # pytype: disable=bad-return-type  # jnp-type
 
 
 def axis_angle_ang(

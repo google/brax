@@ -126,4 +126,4 @@ def benchmark(
       f'{jax.devices()[0].device_kind}'
   )
 
-  return batch_sps
+  return batch_sps  # pytype: disable=bad-return-type  # jnp-type

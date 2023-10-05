@@ -590,23 +590,23 @@ class System(Base):
 
   dt: jp.ndarray
   gravity: jp.ndarray
-  viscosity: jp.float32
-  density: jp.float32
+  viscosity: float | jp.ndarray
+  density: float | jp.ndarray
   link: Link
   dof: DoF
   geoms: List[Geometry]
   actuator: Actuator
   init_q: jp.ndarray
   # only used in `brax.physics.spring` and `brax.physics.positional`:
-  vel_damping: jp.float32
-  ang_damping: jp.float32
-  baumgarte_erp: jp.float32
-  spring_mass_scale: jp.float32
-  spring_inertia_scale: jp.float32
+  vel_damping: float | jp.ndarray
+  ang_damping: float | jp.ndarray
+  baumgarte_erp: float | jp.ndarray
+  spring_mass_scale: float | jp.ndarray
+  spring_inertia_scale: float | jp.ndarray
   # only used in `brax.physics.positional`:
-  joint_scale_ang: jp.float32
-  joint_scale_pos: jp.float32
-  collide_scale: jp.float32
+  joint_scale_ang: float | jp.ndarray
+  joint_scale_pos: float | jp.ndarray
+  collide_scale: float | jp.ndarray
   # non-pytree nodes
   enable_fluid: bool = struct.field(pytree_node=False)
   geom_masks: List[int] = struct.field(pytree_node=False)

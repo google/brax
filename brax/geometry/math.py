@@ -435,7 +435,7 @@ def _create_contact_manifold(
   penetration = penetration_dir.dot(-clipping_norm)
   penetration = jp.where(mask_pts, penetration, -jp.ones_like(penetration))
 
-  contact = Contact(
+  contact = Contact(  # pytype: disable=wrong-arg-types  # jnp-type
       pos=contact_pts,
       normal=jp.stack([sep_axis] * 4, 0),
       penetration=penetration,

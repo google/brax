@@ -322,7 +322,7 @@ def train(
       optimizer_state=optimizer.init(init_params),  # pytype: disable=wrong-arg-types  # numpy-scalars
       params=init_params,
       normalizer_params=running_statistics.init_state(
-          specs.Array(env_state.obs.shape[-1:], jnp.float32)),
+          specs.Array(env_state.obs.shape[-1:], jnp.dtype('float32'))),
       env_steps=0)
   training_state = jax.device_put_replicated(
       training_state,

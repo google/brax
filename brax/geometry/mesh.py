@@ -115,7 +115,7 @@ def _box(b: Box, triangulated=True) -> Tuple[np.ndarray, np.ndarray]:
   box_faces = _TRIANGULATED_BOX_FACES if triangulated else _BOX_FACES
   face_dim = 3 if triangulated else 4
   face = jp.array([box_faces]).reshape(-1, face_dim)
-  return vert, face
+  return vert, face  # pytype: disable=bad-return-type  # jnp-type
 
 
 def box_tri(b: Box) -> Mesh:

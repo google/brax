@@ -87,7 +87,7 @@ def _init_training_state(
   q_optimizer_state = q_optimizer.init(q_params)
 
   normalizer_params = running_statistics.init_state(
-      specs.Array((obs_size,), jnp.float32))
+      specs.Array((obs_size,), jnp.dtype('float32')))
 
   training_state = TrainingState(
       policy_optimizer_state=policy_optimizer_state,

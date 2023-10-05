@@ -56,7 +56,7 @@ class DmEnvWrapper(dm_env.Environment):
                                              dtype='float32',
                                              name='action')
 
-    self._reward_spec = specs.Array(shape=(), dtype='float32', name='reward')
+    self._reward_spec = specs.Array(shape=(), dtype=jp.dtype('float32'), name='reward')
     self._discount_spec = specs.BoundedArray(
         shape=(), dtype='float32', minimum=0., maximum=1., name='discount')
     if hasattr(self._env, 'discount_spec'):

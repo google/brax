@@ -7,7 +7,7 @@
             <joint damping="2" stiffness="2.0" armature="0.02" />
         </default>
     </default>
-    <option timestep="0.0008" iterations="10" solver="PGS" collision="all">
+    <option timestep="0.0008" iterations="10" solver="PGS">
         <flag energy="enable" />
     </option>
     <worldbody>

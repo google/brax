@@ -223,7 +223,7 @@ def train(
       optimizer_state=optimizer.init(policy_params),
       policy_params=policy_params,
       normalizer_params=running_statistics.init_state(
-          specs.Array((env.observation_size,), jnp.float32)))
+          specs.Array((env.observation_size,), jnp.dtype('float32'))))
   training_state = jax.device_put_replicated(
       training_state,
       jax.local_devices()[:local_devices_to_use])

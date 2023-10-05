@@ -106,7 +106,7 @@ def _sphere_circle(sphere: Sphere, circle: Cylinder) -> Contact:
 
   # get closest point on circle edge
   perp_dir = jp.cross(n, sphere.transform.pos - plane_pt)
-  perp_dir = math.rotate(perp_dir, math.quat_rot_axis(n, -jp.pi / 2.0))
+  perp_dir = math.rotate(perp_dir, math.quat_rot_axis(n, -jp.pi / 2.0))  # pytype: disable=wrong-arg-types  # jnp-type
   perp_dir, _ = math.normalize(perp_dir)
   edge_pt = plane_pt + perp_dir * circle.radius
   edge_contact = (sphere.transform.pos - edge_pt).dot(
@@ -132,24 +132,16 @@ def _sphere_circle(sphere: Sphere, circle: Cylinder) -> Contact:
 
 def _sphere_convex(sphere: Sphere, convex: Convex) -> Contact:
   """Calculates contacts between a sphere and a convex object."""
-  # Get convex transformed normals, faces, and vertices.
   normals = geom_mesh.get_face_norm(convex.vert, convex.face)
   faces = jp.take(convex.vert, convex.face, axis=0)
 
-  @jax.vmap
-  def transform_faces(face, normal):
-    face = convex.transform.pos + jax.vmap(math.rotate, in_axes=[0, None])(
-        face, convex.transform.rot
-    )
-    normal = math.rotate(normal, convex.transform.rot)
-    return face, normal
-
-  faces, normals = transform_faces(faces, normals)
+  # Transform the sphere into the convex frame.
+  sphere_transform = sphere.transform.to_local(convex.transform)
 
   # Get support from face normals.
   @jax.vmap
   def get_support(faces, normal):
-    sphere_pos = sphere.transform.pos - normal * sphere.radius
+    sphere_pos = sphere_transform.pos - normal * sphere.radius
     return jp.dot(sphere_pos - faces[0], normal)
 
   support = get_support(faces, normals)
@@ -163,10 +155,10 @@ def _sphere_convex(sphere: Sphere, convex: Convex) -> Contact:
   # Get closest point between the polygon face and the sphere center point.
   # Project the sphere center point onto poly plane. If it's inside polygon
   # edge normals, then we're done.
-  pt = geom_math.project_pt_onto_plane(sphere.transform.pos, face[0], normal)
+  pt = geom_math.project_pt_onto_plane(sphere_transform.pos, face[0], normal)
   edge_p0 = jp.roll(face, 1, axis=0)
   edge_p1 = face
-  edge_normals = jax.vmap(jp.cross, in_axes=[0, None])(
+  edge_normals = jax.vmap(jp.cross, in_axes=(0, None))(
       edge_p1 - edge_p0,
       normal,
   )
@@ -186,10 +178,14 @@ def _sphere_convex(sphere: Sphere, convex: Convex) -> Contact:
   pt = jp.where(inside, pt, edge_pt)
 
   # Get the normal, penetration, and contact position.
-  n, d = math.normalize(sphere.transform.pos - pt)
-  spt = sphere.transform.pos - n * sphere.radius
+  n, d = math.normalize(sphere_transform.pos - pt)
+  spt = sphere_transform.pos - n * sphere.radius
   penetration = sphere.radius - d
   pos = (pt + spt) * 0.5
+
+  # Go back to world frame.
+  n = math.rotate(n, convex.transform.rot)
+  pos = convex.transform.pos + math.rotate(pos, convex.transform.rot)
 
   c = Contact(pos, n, penetration, *_combine(sphere, convex))
   return jax.tree_map(lambda x: jp.expand_dims(x, axis=0), c)
@@ -200,7 +196,7 @@ def _sphere_mesh(sphere: Sphere, mesh: Mesh) -> Contact:
 
   @jax.vmap
   def sphere_face(face):
-    pt = mesh.transform.pos + jax.vmap(math.rotate, in_axes=[0, None])(
+    pt = mesh.transform.pos + jax.vmap(math.rotate, in_axes=(0, None))(
         face, mesh.transform.rot
     )
     p0, p1, p2 = pt[0, :], pt[1, :], pt[2, :]
@@ -262,25 +258,17 @@ def _capsule_capsule(cap_a: Capsule, cap_b: Capsule) -> Contact:
 
 def _capsule_convex(capsule: Capsule, convex: Convex) -> Contact:
   """Calculates contacts between a capsule and a convex object."""
-  # Get convex transformed normals, faces, and vertices.
   normals = geom_mesh.get_face_norm(convex.vert, convex.face)
   faces = jp.take(convex.vert, convex.face, axis=0)
 
-  @jax.vmap
-  def transform_faces(faces, normals):
-    faces = convex.transform.pos + jax.vmap(math.rotate, in_axes=[0, None])(
-        faces, convex.transform.rot
-    )
-    normals = math.rotate(normals, convex.transform.rot)
-    return faces, normals
-
-  faces, normals = transform_faces(faces, normals)
+  # Transform the capsule into the convex frame.
+  cap_transform = capsule.transform.to_local(convex.transform)
 
   seg = jp.array([0.0, 0.0, capsule.length * 0.5])
-  seg = math.rotate(seg, capsule.transform.rot)
+  seg = math.rotate(seg, cap_transform.rot)
   cap_pts = jp.array([
-      capsule.transform.pos - seg,
-      capsule.transform.pos + seg,
+      cap_transform.pos - seg,
+      cap_transform.pos + seg,
   ])
 
   # Get support from face normals.
@@ -303,7 +291,7 @@ def _capsule_convex(capsule: Capsule, convex: Convex) -> Contact:
   # face.
   edge_p0 = jp.roll(face, 1, axis=0)
   edge_p1 = face
-  edge_normals = jax.vmap(jp.cross, in_axes=[0, None])(
+  edge_normals = jax.vmap(jp.cross, in_axes=(0, None))(
       edge_p1 - edge_p0,
       normal,
   )
@@ -311,7 +299,7 @@ def _capsule_convex(capsule: Capsule, convex: Convex) -> Contact:
       cap_pts[0], cap_pts[1], edge_p0, edge_normals
   )
   cap_pts_clipped = cap_pts_clipped - normal * capsule.radius
-  face_pts = jax.vmap(geom_math.project_pt_onto_plane, in_axes=[0, None, None])(
+  face_pts = jax.vmap(geom_math.project_pt_onto_plane, in_axes=(0, None, None))(
       cap_pts_clipped, face[0], normal
   )
   # Create variables for the face contact.
@@ -325,7 +313,7 @@ def _capsule_convex(capsule: Capsule, convex: Convex) -> Contact:
   # TODO handle deep edge penetration more gracefully, since edge_axis
   # can point in the wrong direction for deep penetration.
   edge_closest, cap_closest = jax.vmap(
-      geom_math.closest_segment_to_segment_points, in_axes=[0, 0, None, None]
+      geom_math.closest_segment_to_segment_points, in_axes=(0, 0, None, None)
   )(edge_p0, edge_p1, cap_pts[0], cap_pts[1])
   e_idx = ((edge_closest - cap_closest) ** 2).sum(axis=1).argmin()
   cap_closest_pt, edge_closest_pt = cap_closest[e_idx], edge_closest[e_idx]
@@ -341,6 +329,13 @@ def _capsule_convex(capsule: Capsule, convex: Convex) -> Contact:
   # Create the contact.
   pos = jp.where(has_edge_contact, pos.at[0].set(edge_pos), pos)
   norm = jp.where(has_edge_contact, norm.at[0].set(edge_norm), norm)
+
+  # Go back to world frame.
+  pos = convex.transform.pos + jax.vmap(math.rotate, in_axes=(0, None))(
+      pos, convex.transform.rot
+  )
+  norm = jax.vmap(math.rotate, in_axes=(0, None))(norm, convex.transform.rot)
+
   penetration = jp.where(
       has_edge_contact, penetration.at[0].set(edge_penetration), penetration
   )
@@ -359,7 +354,7 @@ def _capsule_mesh(capsule: Capsule, mesh: Mesh) -> Contact:
     end_a, end_b = capsule.transform.pos - seg, capsule.transform.pos + seg
 
     tri_norm = math.rotate(face_norm, mesh.transform.rot)
-    pt = mesh.transform.pos + jax.vmap(math.rotate, in_axes=[0, None])(
+    pt = mesh.transform.pos + jax.vmap(math.rotate, in_axes=(0, None))(
         face, mesh.transform.rot
     )
     p0, p1, p2 = pt[..., 0, :], pt[..., 1, :], pt[..., 2, :]
@@ -381,19 +376,23 @@ def _capsule_mesh(capsule: Capsule, mesh: Mesh) -> Contact:
 
 def _convex_plane(convex: Convex, plane: Plane) -> Contact:
   """Calculates contacts between a convex object and a plane."""
+  # Transform the plane into convex frame.
+  plane_transform = plane.transform.to_local(convex.transform)
 
-  @jax.vmap
-  def transform_verts(vertices):
-    return convex.transform.pos + math.rotate(vertices, convex.transform.rot)
-
-  vertices = transform_verts(convex.vert)
-  n = math.rotate(jp.array([0.0, 0.0, 1.0]), plane.transform.rot)
-  support = jax.vmap(jp.dot, in_axes=[None, 0])(
-      n, plane.transform.pos - vertices
+  vertices = convex.vert
+  n = math.rotate(jp.array([0.0, 0.0, 1.0]), plane_transform.rot)
+  support = jax.vmap(jp.dot, in_axes=(None, 0))(
+      n, plane_transform.pos - vertices
   )
   idx = geom_math.manifold_points(vertices, support > 0, n)
-
   pos = vertices[idx]
+
+  # Go back to world frame.
+  pos = convex.transform.pos + jax.vmap(math.rotate, in_axes=(0, None))(
+      pos, convex.transform.rot
+  )
+  n = math.rotate(jp.array([0.0, 0.0, 1.0]), plane.transform.rot)
+
   normal = jp.stack([n] * 4, axis=0)
   unique = jp.tril(idx == idx[:, None]).sum(axis=1) == 1
   penetration = jp.where(unique, support[idx], -1)
@@ -413,31 +412,31 @@ def _convex_convex(convex_a: Convex, convex_b: Convex) -> Contact:
     face = jp.pad(convex_b.face, ((0, sa - sb)), 'edge')
     convex_b = convex_b.replace(face=face)
 
+  # ensure that the first object has less verts
+  if convex_a.vert.shape[0] > convex_b.vert.shape[0]:
+    convex_a, convex_b = convex_b, convex_a
+
   normals_a = geom_mesh.get_face_norm(convex_a.vert, convex_a.face)
   normals_b = geom_mesh.get_face_norm(convex_b.vert, convex_b.face)
   faces_a = jp.take(convex_a.vert, convex_a.face, axis=0)
   faces_b = jp.take(convex_b.vert, convex_b.face, axis=0)
 
-  def transform_faces(convex, faces, normals):
-    faces = convex.transform.pos + jax.vmap(math.rotate, in_axes=[0, None])(
-        faces, convex.transform.rot
+  to_b_frame = convex_a.transform.to_local(convex_b.transform)
+
+  def transform_faces(faces, normals):
+    faces = to_b_frame.pos + jax.vmap(math.rotate, in_axes=(0, None))(
+        faces, to_b_frame.rot
     )
-    normals = math.rotate(normals, convex.transform.rot)
+    normals = math.rotate(normals, to_b_frame.rot)
     return faces, normals
 
-  v_transform_faces = jax.vmap(transform_faces, in_axes=[None, 0, 0])
-  faces_a, normals_a = v_transform_faces(convex_a, faces_a, normals_a)
-  faces_b, normals_b = v_transform_faces(convex_b, faces_b, normals_b)
+  faces_a, normals_a = jax.vmap(transform_faces)(faces_a, normals_a)
 
-  def transform_verts(convex, vertices):
-    vertices = convex.transform.pos + math.rotate(
-        vertices, convex.transform.rot
-    )
-    return vertices
+  def transform_verts(vertices):
+    return to_b_frame.pos + math.rotate(vertices, to_b_frame.rot)
 
-  v_transform_verts = jax.vmap(transform_verts, in_axes=[None, 0])
-  vertices_a = v_transform_verts(convex_a, convex_a.vert)
-  vertices_b = v_transform_verts(convex_b, convex_b.vert)
+  vertices_a = jax.vmap(transform_verts)(convex_a.vert)
+  vertices_b = convex_b.vert
 
   unique_edges_a = jp.take(vertices_a, convex_a.unique_edge, axis=0)
   unique_edges_b = jp.take(vertices_b, convex_b.unique_edge, axis=0)
@@ -452,10 +451,20 @@ def _convex_convex(convex_a: Convex, convex_b: Convex) -> Contact:
       unique_edges_a,
       unique_edges_b,
   )
+
+  # Go back to world frame.
+  pos = convex_b.transform.pos + jax.vmap(math.rotate, in_axes=(0, None))(
+      c.pos, convex_b.transform.rot
+  )
+  normal = jax.vmap(math.rotate, in_axes=(0, None))(
+      c.normal, convex_b.transform.rot
+  )
+  penetration = c.penetration
+
   tile_fn = lambda x: jp.tile(x, (4,) + tuple([1 for _ in x.shape]))
   params = jax.tree_map(tile_fn, _combine(convex_a, convex_b))
 
-  return Contact(c.pos, c.normal, c.penetration, *params)
+  return Contact(pos, normal, penetration, *params)
 
 
 def _mesh_plane(mesh: Mesh, plane: Plane) -> Contact:
