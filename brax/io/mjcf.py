@@ -268,8 +268,6 @@ def load_model(mj: mujoco.MjModel) -> System:
     raise NotImplementedError('geom_solmix parameter not supported.')
   if (mj.geom_priority[0] != mj.geom_priority).any():
     raise NotImplementedError('geom_priority parameter not supported.')
-  if mj.opt.collision == 1:
-    raise NotImplementedError('Predefined collisions not supported.')
   q_width = {0: 7, 1: 4, 2: 1, 3: 1}
   non_free = np.concatenate([[j != 0] * q_width[j] for j in mj.jnt_type])
   if mj.qpos0[non_free].any():
