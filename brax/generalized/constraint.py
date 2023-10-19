@@ -27,8 +27,8 @@ import jaxopt
 
 
 def _imp_aref(
-    params: jp.ndarray, pos: jp.ndarray, vel: jp.ndarray
-) -> Tuple[jp.ndarray, jp.ndarray]:
+    params: jax.Array, pos: jax.Array, vel: jax.Array
+) -> Tuple[jax.Array, jax.Array]:
   """Calculates impedance and offset acceleration in constraint frame.
 
   Args:
@@ -67,10 +67,10 @@ def _imp_aref(
 
 def point_jacobian(
     sys: System,
-    com: jp.ndarray,
+    com: jax.Array,
     cdof: Motion,
-    pos: jp.ndarray,
-    link_idx: jp.ndarray,
+    pos: jax.Array,
+    link_idx: jax.Array,
 ) -> Motion:
   """Calculates the jacobian of a point on a link.
 
@@ -99,7 +99,7 @@ def point_jacobian(
 
 def jac_limit(
     sys: System, state: State
-) -> Tuple[jp.ndarray, jp.ndarray, jp.ndarray]:
+) -> Tuple[jax.Array, jax.Array, jax.Array]:
   """Calculates the jacobian for angle limits in dof frame.
 
   Args:
@@ -133,7 +133,7 @@ def jac_limit(
 
 def jac_contact(
     sys: System, state: State
-) -> Tuple[jp.ndarray, jp.ndarray, jp.ndarray]:
+) -> Tuple[jax.Array, jax.Array, jax.Array]:
   """Calculates the jacobian for contact constraints.
 
   Args:
@@ -191,7 +191,7 @@ def jacobian(sys: System, state: State) -> State:
   return state.replace(con_jac=jac, con_diag=diag, con_aref=aref)
 
 
-def force(sys: System, state: State) -> jp.ndarray:
+def force(sys: System, state: State) -> jax.Array:
   """Calculates forces that satisfy joint, collision constraints.
 
   Args:

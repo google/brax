@@ -311,7 +311,7 @@ def train(
         'training/walltime': training_walltime,
         **{f'training/{name}': value for name, value in metrics.items()}
     }
-    return training_state, metrics
+    return training_state, metrics  # pytype: disable=bad-return-type  # py311-upgrade
 
   normalizer_params = running_statistics.init_state(
       specs.Array((obs_size,), jnp.dtype('float32')))

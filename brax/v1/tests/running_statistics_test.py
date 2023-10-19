@@ -25,7 +25,7 @@ import math
 from absl.testing import absltest
 from brax.training.acme import running_statistics
 from brax.training.acme import specs
-from jax.config import config as jax_config
+from jax import config as jax_config
 import jax.numpy as jnp
 import numpy as np
 

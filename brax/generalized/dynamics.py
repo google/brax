@@ -136,7 +136,7 @@ def transform_com(sys: System, state: State) -> State:
   )
 
 
-def inverse(sys: System, state: State) -> jp.ndarray:
+def inverse(sys: System, state: State) -> jax.Array:
   """Calculates the system's forces given input motions.
 
   This function computes inverse dynamics using the Newton-Euler algorithm:
@@ -185,7 +185,7 @@ def inverse(sys: System, state: State) -> jp.ndarray:
   return tau
 
 
-def _passive(sys: System, state: State) -> jp.ndarray:
+def _passive(sys: System, state: State) -> jax.Array:
   """Calculates the system's passive forces given input motion and position."""
   def stiffness_fn(typ, q, dof):
     if typ in 'fb':
@@ -213,7 +213,7 @@ def _passive(sys: System, state: State) -> jp.ndarray:
   return frc
 
 
-def forward(sys: System, state: State, tau: jp.ndarray) -> jp.ndarray:
+def forward(sys: System, state: State, tau: jax.Array) -> jax.Array:
   """Calculates resulting joint forces given input forces.
 
   This method builds and solves the linear system: M @ qdd = -C + tau

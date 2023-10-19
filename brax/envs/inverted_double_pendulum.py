@@ -133,7 +133,7 @@ class InvertedDoublePendulum(PipelineEnv):
 
     super().__init__(sys=sys, backend=backend, **kwargs)
 
-  def reset(self, rng: jp.ndarray) -> State:
+  def reset(self, rng: jax.Array) -> State:
     """Resets the environment to an initial state."""
     rng, rng1, rng2 = jax.random.split(rng, 3)
 
@@ -149,7 +149,7 @@ class InvertedDoublePendulum(PipelineEnv):
 
     return State(pipeline_state, obs, reward, done, metrics)
 
-  def step(self, state: State, action: jp.ndarray) -> State:
+  def step(self, state: State, action: jax.Array) -> State:
     """Run one timestep of the environment's dynamics."""
     pipeline_state = self.pipeline_step(state.pipeline_state, action)
 
@@ -174,7 +174,7 @@ class InvertedDoublePendulum(PipelineEnv):
   def action_size(self):
     return 1
 
-  def _get_obs(self, pipeline_sate: base.State) -> jp.ndarray:
+  def _get_obs(self, pipeline_sate: base.State) -> jax.Array:
     """Observe cartpole body position and velocities."""
     return jp.concatenate(
         [

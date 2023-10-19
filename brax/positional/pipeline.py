@@ -29,7 +29,7 @@ from jax import numpy as jp
 
 
 def init(
-    sys: System, q: jp.ndarray, qd: jp.ndarray, debug: bool = False
+    sys: System, q: jax.Array, qd: jax.Array, debug: bool = False
 ) -> State:
   """Initializes physics state.
 
@@ -52,7 +52,7 @@ def init(
 
 
 def step(
-    sys: System, state: State, act: jp.ndarray, debug: bool = False
+    sys: System, state: State, act: jax.Array, debug: bool = False
 ) -> State:
   """Performs a single physics step using position-based dynamics.
 

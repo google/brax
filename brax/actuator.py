@@ -16,12 +16,13 @@
 """Functions for applying actuators to a physics pipeline."""
 
 from brax.base import System
+import jax
 from jax import numpy as jp
 
 
 def to_tau(
-    sys: System, act: jp.ndarray, q: jp.ndarray, qd: jp.ndarray
-) -> jp.ndarray:
+    sys: System, act: jax.Array, q: jax.Array, qd: jax.Array
+) -> jax.Array:
   """Convert actuator to a joint force tau.
 
   Args:

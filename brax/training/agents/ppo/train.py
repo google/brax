@@ -313,7 +313,7 @@ def train(
         'training/walltime': training_walltime,
         **{f'training/{name}': value for name, value in metrics.items()}
     }
-    return training_state, env_state, metrics
+    return training_state, env_state, metrics  # pytype: disable=bad-return-type  # py311-upgrade
 
   init_params = ppo_losses.PPONetworkParams(
       policy=ppo_network.policy_network.init(key_policy),

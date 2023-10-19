@@ -215,7 +215,7 @@ class Humanoid(PipelineEnv):
         exclude_current_positions_from_observation
     )
 
-  def reset(self, rng: jp.ndarray) -> State:
+  def reset(self, rng: jax.Array) -> State:
     """Resets the environment to an initial state."""
     rng, rng1, rng2 = jax.random.split(rng, 3)
 
@@ -244,7 +244,7 @@ class Humanoid(PipelineEnv):
     }
     return State(pipeline_state, obs, reward, done, metrics)
 
-  def step(self, state: State, action: jp.ndarray) -> State:
+  def step(self, state: State, action: jax.Array) -> State:
     """Runs one timestep of the environment's dynamics."""
     pipeline_state0 = state.pipeline_state
     pipeline_state = self.pipeline_step(pipeline_state0, action)
@@ -286,8 +286,8 @@ class Humanoid(PipelineEnv):
     )
 
   def _get_obs(
-      self, pipeline_state: base.State, action: jp.ndarray
-  ) -> jp.ndarray:
+      self, pipeline_state: base.State, action: jax.Array
+  ) -> jax.Array:
     """Observes humanoid body position, velocities, and angles."""
     position = pipeline_state.q
     velocity = pipeline_state.qd
@@ -322,7 +322,7 @@ class Humanoid(PipelineEnv):
         qfrc_actuator,
     ])
 
-  def _com(self, pipeline_state: base.State) -> jp.ndarray:
+  def _com(self, pipeline_state: base.State) -> jax.Array:
     inertia = self.sys.link.inertia
     if self.backend in ['spring', 'positional']:
       inertia = inertia.replace(

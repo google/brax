@@ -40,7 +40,7 @@ def to_world(
   return x, xd
 
 
-def inv_inertia(sys, x) -> jp.ndarray:
+def inv_inertia(sys, x) -> jax.Array:
   """Gets the inverse inertia at the center of mass in world frame."""
 
   @jax.vmap

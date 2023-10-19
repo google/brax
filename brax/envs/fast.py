@@ -17,6 +17,7 @@
 
 from brax import base
 from brax.envs.base import PipelineEnv, State
+import jax
 from jax import numpy as jp
 
 
@@ -28,7 +29,7 @@ class Fast(PipelineEnv):
     self._reset_count = 0
     self._step_count = 0
 
-  def reset(self, rng: jp.ndarray) -> State:
+  def reset(self, rng: jax.Array) -> State:
     self._reset_count += 1
     pipeline_state = base.State(
         q=jp.zeros(1),
@@ -41,7 +42,7 @@ class Fast(PipelineEnv):
     reward, done = jp.array(0.0), jp.array(0.0)
     return State(pipeline_state, obs, reward, done)
 
-  def step(self, state: State, action: jp.ndarray) -> State:
+  def step(self, state: State, action: jax.Array) -> State:
     self._step_count += 1
     vel = state.pipeline_state.xd.vel + (action > 0) * self._dt
     pos = state.pipeline_state.x.pos + vel * self._dt

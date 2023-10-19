@@ -171,7 +171,7 @@ class Reacher(PipelineEnv):
 
     super().__init__(sys=sys, backend=backend, **kwargs)
 
-  def reset(self, rng: jp.ndarray) -> State:
+  def reset(self, rng: jax.Array) -> State:
     rng, rng1, rng2 = jax.random.split(rng, 3)
 
     q = self.sys.init_q + jax.random.uniform(
@@ -196,7 +196,7 @@ class Reacher(PipelineEnv):
     }
     return State(pipeline_state, obs, reward, done, metrics)
 
-  def step(self, state: State, action: jp.ndarray) -> State:
+  def step(self, state: State, action: jax.Array) -> State:
     pipeline_state = self.pipeline_step(state.pipeline_state, action)
     obs = self._get_obs(pipeline_state)
 
@@ -212,7 +212,7 @@ class Reacher(PipelineEnv):
 
     return state.replace(pipeline_state=pipeline_state, obs=obs, reward=reward)
 
-  def _get_obs(self, pipeline_state: base.State) -> jp.ndarray:
+  def _get_obs(self, pipeline_state: base.State) -> jax.Array:
     """Returns egocentric observation of target and arm body."""
     theta = pipeline_state.q[:2]
     target_pos = pipeline_state.x.pos[2]
@@ -238,7 +238,7 @@ class Reacher(PipelineEnv):
         tip_to_target,
     ])
 
-  def _random_target(self, rng: jp.ndarray) -> Tuple[jp.ndarray, jp.ndarray]:
+  def _random_target(self, rng: jax.Array) -> Tuple[jax.Array, jax.Array]:
     """Returns a target location in a random circle slightly above xy plane."""
     rng, rng1, rng2 = jax.random.split(rng, 3)
     dist = 0.2 * jax.random.uniform(rng1)

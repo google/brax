@@ -23,8 +23,8 @@ from jax import numpy as jp
 
 
 def closest_segment_point(
-    a: jp.ndarray, b: jp.ndarray, pt: jp.ndarray
-) -> jp.ndarray:
+    a: jax.Array, b: jax.Array, pt: jax.Array
+) -> jax.Array:
   """Returns the closest point on the a-b line segment to a point pt."""
   ab = b - a
   t = jp.dot(pt - a, ab) / (jp.dot(ab, ab) + 1e-6)
@@ -32,17 +32,15 @@ def closest_segment_point(
 
 
 def closest_segment_point_and_dist(
-    a: jp.ndarray, b: jp.ndarray, pt: jp.ndarray
-) -> Tuple[jp.ndarray, jp.ndarray]:
+    a: jax.Array, b: jax.Array, pt: jax.Array
+) -> Tuple[jax.Array, jax.Array]:
   """Returns closest point on the line segment and the distance squared."""
   closest = closest_segment_point(a, b, pt)
   dist = (pt - closest).dot(pt - closest)
   return closest, dist
 
 
-def closest_line_point(
-    a: jp.ndarray, b: jp.ndarray, pt: jp.ndarray
-) -> jp.ndarray:
+def closest_line_point(a: jax.Array, b: jax.Array, pt: jax.Array) -> jax.Array:
   """Returns the closest point on the a-b line to a point pt."""
   ab = b - a
   t = jp.dot(pt - a, ab) / (jp.dot(ab, ab) + 1e-6)
@@ -50,8 +48,8 @@ def closest_line_point(
 
 
 def closest_segment_to_segment_points(
-    a0: jp.ndarray, a1: jp.ndarray, b0: jp.ndarray, b1: jp.ndarray
-) -> Tuple[jp.ndarray, jp.ndarray]:
+    a0: jax.Array, a1: jax.Array, b0: jax.Array, b1: jax.Array
+) -> Tuple[jax.Array, jax.Array]:
   """Returns closest points on two line segments."""
   # Gets the closest segment points by first finding the closest points
   # between two lines. Points are then clipped to be on the line segments
@@ -99,8 +97,8 @@ def closest_segment_to_segment_points(
 
 
 def closest_segment_point_plane(
-    a: jp.ndarray, b: jp.ndarray, p0: jp.ndarray, plane_normal: jp.ndarray
-) -> jp.ndarray:
+    a: jax.Array, b: jax.Array, p0: jax.Array, plane_normal: jax.Array
+) -> jax.Array:
   """Gets the closest point between a line segment and a plane."""
   # If a line segment is parametrized as S(t) = a + t * (b - a), we can
   # plug it into the plane equation dot(n, S(t)) - d = 0, then solve for t to
@@ -117,8 +115,8 @@ def closest_segment_point_plane(
 
 
 def closest_triangle_point(
-    p0: jp.ndarray, p1: jp.ndarray, p2: jp.ndarray, pt: jp.ndarray
-) -> jp.ndarray:
+    p0: jax.Array, p1: jax.Array, p2: jax.Array, pt: jax.Array
+) -> jax.Array:
   """Gets the closest point on a triangle to another point in space."""
   # Parametrize the triangle s.t. a point inside the triangle is
   # Q = p0 + u * e0 + v * e1, when 0 <= u <= 1, 0 <= v <= 1, and
@@ -156,13 +154,13 @@ def closest_triangle_point(
 
 
 def closest_segment_triangle_points(
-    a: jp.ndarray,
-    b: jp.ndarray,
-    p0: jp.ndarray,
-    p1: jp.ndarray,
-    p2: jp.ndarray,
-    triangle_normal: jp.ndarray,
-) -> Tuple[jp.ndarray, jp.ndarray]:
+    a: jax.Array,
+    b: jax.Array,
+    p0: jax.Array,
+    p1: jax.Array,
+    p2: jax.Array,
+    triangle_normal: jax.Array,
+) -> Tuple[jax.Array, jax.Array]:
   """Gets the closest points between a line segment and triangle."""
   # The closest triangle point is either on the edge or within the triangle.
   # First check triangle edges for the closest point.
@@ -196,16 +194,16 @@ def closest_segment_triangle_points(
 
 
 def project_pt_onto_plane(
-    pt: jp.ndarray, plane_pt: jp.ndarray, plane_normal: jp.ndarray
-) -> jp.ndarray:
+    pt: jax.Array, plane_pt: jax.Array, plane_normal: jax.Array
+) -> jax.Array:
   """Projects a point onto a plane along the plane normal."""
   dist = (pt - plane_pt).dot(plane_normal)
   return pt - dist * plane_normal
 
 
 def _project_poly_onto_plane(
-    poly: jp.ndarray, plane_pt: jp.ndarray, plane_normal: jp.ndarray
-) -> jp.ndarray:
+    poly: jax.Array, plane_pt: jax.Array, plane_normal: jax.Array
+) -> jax.Array:
   """Projects a polygon onto a plane using the plane normal."""
   return jax.vmap(project_pt_onto_plane, in_axes=[0, None, None])(
       poly, plane_pt, math.normalize(plane_normal)[0]
@@ -213,8 +211,8 @@ def _project_poly_onto_plane(
 
 
 def _project_poly_onto_poly_plane(
-    poly1: jp.ndarray, norm1: jp.ndarray, poly2: jp.ndarray, norm2: jp.ndarray
-) -> jp.ndarray:
+    poly1: jax.Array, norm1: jax.Array, poly2: jax.Array, norm2: jax.Array
+) -> jax.Array:
   """Projects poly1 onto the poly2 plane along poly1's normal."""
   d = poly2[0].dot(norm2)
   denom = norm1.dot(norm2)
@@ -224,18 +222,18 @@ def _project_poly_onto_poly_plane(
 
 
 def point_in_front_of_plane(
-    plane_pt: jp.ndarray, plane_normal: jp.ndarray, pt: jp.ndarray
+    plane_pt: jax.Array, plane_normal: jax.Array, pt: jax.Array
 ) -> bool:
   """Checks if a point is strictly in front of a plane."""
   return (pt - plane_pt).dot(plane_normal) > 1e-6  # pytype: disable=bad-return-type  # jax-ndarray
 
 
 def clip_edge_to_planes(
-    edge_p0: jp.ndarray,
-    edge_p1: jp.ndarray,
-    plane_pts: jp.ndarray,
-    plane_normals: jp.ndarray,
-) -> Tuple[jp.ndarray, jp.ndarray]:
+    edge_p0: jax.Array,
+    edge_p1: jax.Array,
+    plane_pts: jax.Array,
+    plane_normals: jax.Array,
+) -> Tuple[jax.Array, jax.Array]:
   """Clips an edge against side planes.
 
   We return two clipped points, and a mask to include the new edge or not.
@@ -295,11 +293,11 @@ def clip_edge_to_planes(
 
 
 def clip(
-    clipping_poly: jp.ndarray,
-    subject_poly: jp.ndarray,
-    clipping_normal: jp.ndarray,
-    subject_normal: jp.ndarray,
-) -> Tuple[jp.ndarray, jp.ndarray]:
+    clipping_poly: jax.Array,
+    subject_poly: jax.Array,
+    clipping_normal: jax.Array,
+    subject_normal: jax.Array,
+) -> Tuple[jax.Array, jax.Array]:
   """Clips a subject polygon against a clipping polygon.
 
   A parallelized clipping algorithm for convex polygons. The result is a set of
@@ -367,8 +365,8 @@ def clip(
 
 
 def manifold_points(
-    poly: jp.ndarray, poly_mask: jp.ndarray, poly_norm: jp.ndarray
-) -> jp.ndarray:
+    poly: jax.Array, poly_mask: jax.Array, poly_norm: jax.Array
+) -> jax.Array:
   """Chooses four points on the polygon with approximately maximal area."""
   dist_mask = jp.where(poly_mask, 0.0, -1e6)
   a_idx = jp.argmax(dist_mask)
@@ -392,11 +390,11 @@ def manifold_points(
 
 
 def _create_contact_manifold(
-    clipping_poly: jp.ndarray,
-    subject_poly: jp.ndarray,
-    clipping_norm: jp.ndarray,
-    subject_norm: jp.ndarray,
-    sep_axis: jp.ndarray,
+    clipping_poly: jax.Array,
+    subject_poly: jax.Array,
+    clipping_norm: jax.Array,
+    subject_norm: jax.Array,
+    sep_axis: jax.Array,
 ) -> Contact:
   """Creates a contact manifold between two convex polygons.
 
@@ -449,14 +447,14 @@ def _create_contact_manifold(
 
 
 def sat_hull_hull(
-    faces_a: jp.ndarray,
-    faces_b: jp.ndarray,
-    vertices_a: jp.ndarray,
-    vertices_b: jp.ndarray,
-    normals_a: jp.ndarray,
-    normals_b: jp.ndarray,
-    unique_edges_a: jp.ndarray,
-    unique_edges_b: jp.ndarray,
+    faces_a: jax.Array,
+    faces_b: jax.Array,
+    vertices_a: jax.Array,
+    vertices_b: jax.Array,
+    normals_a: jax.Array,
+    normals_b: jax.Array,
+    unique_edges_a: jax.Array,
+    unique_edges_b: jax.Array,
 ) -> Contact:
   """Runs the Separating Axis Test for a pair of hulls.
 

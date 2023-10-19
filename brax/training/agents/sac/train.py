@@ -401,7 +401,7 @@ def train(
         'training/walltime': training_walltime,
         **{f'training/{name}': value for name, value in metrics.items()}
     }
-    return training_state, env_state, buffer_state, metrics
+    return training_state, env_state, buffer_state, metrics  # pytype: disable=bad-return-type  # py311-upgrade
 
   global_key, local_key = jax.random.split(rng)
   local_key = jax.random.fold_in(local_key, process_id)

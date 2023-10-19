@@ -127,7 +127,7 @@ class Barkourv0(env.PipelineEnv):
     self.lowers = self._default_ap_pose - jp.array([0.2, 0.8, 0.8] * 4)
     self.uppers = self._default_ap_pose + jp.array([0.2, 0.8, 0.8] * 4)
 
-  def sample_command(self, rng: jp.ndarray) -> jp.ndarray:
+  def sample_command(self, rng: jax.Array) -> jax.Array:
     lin_vel_x = [-0.6, 1.5]  # min max [m/s]
     lin_vel_y = [-0.8, 0.8]  # min max [m/s]
     ang_vel_yaw = [-0.7, 0.7]  # min max [rad/s]
@@ -146,7 +146,7 @@ class Barkourv0(env.PipelineEnv):
 
     return new_cmd
 
-  def reset(self, rng: jp.ndarray) -> env.State:
+  def reset(self, rng: jax.Array) -> env.State:
     rng, key = jax.random.split(rng)
 
     q = self.sys.init_q
@@ -187,7 +187,7 @@ class Barkourv0(env.PipelineEnv):
     state = env.State(pipeline_state, obs, reward, done, metrics, state_info)  # pytype: disable=wrong-arg-types
     return state
 
-  def step(self, state: env.State, action: jp.ndarray) -> env.State:
+  def step(self, state: env.State, action: jax.Array) -> env.State:
     rng, rng_noise, cmd_rng, kick_noise_2 = jax.random.split(
         state.info['rng'], 4
     )
@@ -351,7 +351,7 @@ class Barkourv0(env.PipelineEnv):
         done=done)
     return state
 
-  def _get_obs(self, pipeline_state, state_info) -> jp.ndarray:
+  def _get_obs(self, pipeline_state, state_info) -> jax.Array:
     # Get observations:
     # yaw_rate,  projected_gravity, command,  motor_angles, last_action
     x, xd = pipeline_state.x, pipeline_state.xd

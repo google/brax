@@ -30,7 +30,7 @@ def resolve_position(
     state: State,
     x_i_prev: Transform,
     contact: Optional[Contact],
-) -> Tuple[Transform, jp.ndarray]:
+) -> Tuple[Transform, jax.Array]:
   """Resolves positional collision constraint.
 
   The update equations follow section 3.5 of Müller et al.'s Extended Position
@@ -135,7 +135,7 @@ def resolve_velocity(
     state: State,
     xd_i_prev: Motion,
     contact: Contact,
-    dlambda: jp.ndarray,
+    dlambda: jax.Array,
 ) -> Motion:
   """Velocity-level collision update for position based dynamics.
 

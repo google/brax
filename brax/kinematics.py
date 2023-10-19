@@ -29,7 +29,7 @@ from jax import numpy as jp
 
 
 def forward(
-    sys: System, q: jp.ndarray, qd: jp.ndarray
+    sys: System, q: jax.Array, qd: jax.Array
 ) -> Tuple[Transform, Motion]:
   """Converts joint position/velocity to transform/motion in world frame.
 
@@ -310,7 +310,7 @@ def axis_angle_ang(
 
 def axis_slide_vel(
     x: Transform, xd: Motion, motion: Motion
-) -> Tuple[jp.ndarray, jp.ndarray, jp.ndarray]:
+) -> Tuple[jax.Array, jax.Array, jax.Array]:
   """Returns axes and slide dofs for a joint.
 
   Args:
@@ -330,7 +330,7 @@ def axis_slide_vel(
 
 def inverse(
     sys: System, j: Transform, jd: Motion
-) -> Tuple[jp.ndarray, jp.ndarray]:
+) -> Tuple[jax.Array, jax.Array]:
   """Translates maximal coordinates into reduced coordinates."""
 
   def free(x, xd, *_):

@@ -482,7 +482,7 @@ def _mesh_plane(mesh: Mesh, plane: Plane) -> Contact:
 
 def _combine(
     geom_a: Geometry, geom_b: Geometry
-) -> Tuple[jp.ndarray, jp.ndarray, jp.ndarray, Tuple[jp.ndarray, jp.ndarray]]:
+) -> Tuple[jax.Array, jax.Array, jax.Array, Tuple[jax.Array, jax.Array]]:
   # default is to take maximum, but can override
   friction = jp.maximum(geom_a.friction, geom_b.friction)
   elasticity = (geom_a.elasticity + geom_b.elasticity) * 0.5

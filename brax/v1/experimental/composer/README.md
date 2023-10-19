@@ -74,7 +74,7 @@ Tips:
 * `env_desc` and `config_json` are full descriptions of the environment and the system, and are accessible through `env.env_desc` and `env.metadata.config_json`.
 * for debugging NaNs, use:
 ```python
-from jax.config import config
+from jax import config
 config.update("jax_debug_nans", True)
 ```
 

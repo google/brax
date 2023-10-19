@@ -24,7 +24,7 @@ import jax
 from jax import numpy as jp
 
 
-def matrix(sys: System, state: State) -> jp.ndarray:
+def matrix(sys: System, state: State) -> jax.Array:
   """Calculates the mass matrix for the system given joint position.
 
   This function uses the Composite-Rigid-Body Algorithm as described here:

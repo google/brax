@@ -163,7 +163,7 @@ class Pusher(PipelineEnv):
     self._object_idx = self.sys.link_names.index('object')
     self._goal_idx = self.sys.link_names.index('goal')
 
-  def reset(self, rng: jp.ndarray) -> State:
+  def reset(self, rng: jax.Array) -> State:
     qpos = self.sys.init_q
 
     rng, rng1, rng2 = jax.random.split(rng, 3)
@@ -192,7 +192,7 @@ class Pusher(PipelineEnv):
     metrics = {'reward_dist': zero, 'reward_ctrl': zero, 'reward_near': zero}
     return State(pipeline_state, obs, reward, done, metrics)
 
-  def step(self, state: State, action: jp.ndarray) -> State:
+  def step(self, state: State, action: jax.Array) -> State:
     x_i = state.pipeline_state.x.vmap().do(
         base.Transform.create(pos=self.sys.link.inertia.transform.pos)
     )
@@ -214,7 +214,7 @@ class Pusher(PipelineEnv):
     )
     return state.replace(pipeline_state=pipeline_state, obs=obs, reward=reward)
 
-  def _get_obs(self, pipeline_state: base.State) -> jp.ndarray:
+  def _get_obs(self, pipeline_state: base.State) -> jax.Array:
     """Observes pusher body position and velocities."""
     x_i = pipeline_state.x.vmap().do(
         base.Transform.create(pos=self.sys.link.inertia.transform.pos)

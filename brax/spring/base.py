@@ -18,6 +18,7 @@
 from brax import base
 from brax.base import Motion, Transform
 from flax import struct
+import jax
 from jax import numpy as jp
 
 
@@ -41,5 +42,5 @@ class State(base.State):
   jd: Motion
   a_p: Transform
   a_c: Transform
-  i_inv: jp.ndarray
-  mass: jp.ndarray
+  i_inv: jax.Array
+  mass: jax.Array

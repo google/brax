@@ -193,7 +193,7 @@ class Ant(PipelineEnv):
     if self._use_contact_forces:
       raise NotImplementedError('use_contact_forces not implemented.')
 
-  def reset(self, rng: jp.ndarray) -> State:
+  def reset(self, rng: jax.Array) -> State:
     """Resets the environment to an initial state."""
     rng, rng1, rng2 = jax.random.split(rng, 3)
 
@@ -221,7 +221,7 @@ class Ant(PipelineEnv):
     }
     return State(pipeline_state, obs, reward, done, metrics)
 
-  def step(self, state: State, action: jp.ndarray) -> State:
+  def step(self, state: State, action: jax.Array) -> State:
     """Run one timestep of the environment's dynamics."""
     pipeline_state0 = state.pipeline_state
     pipeline_state = self.pipeline_step(pipeline_state0, action)
@@ -260,7 +260,7 @@ class Ant(PipelineEnv):
         pipeline_state=pipeline_state, obs=obs, reward=reward, done=done
     )
 
-  def _get_obs(self, pipeline_state: base.State) -> jp.ndarray:
+  def _get_obs(self, pipeline_state: base.State) -> jax.Array:
     """Observe ant body position and velocities."""
     qpos = pipeline_state.q
     qvel = pipeline_state.qd

@@ -212,7 +212,7 @@ def train(
         'training/walltime': training_walltime,
         **{f'training/{name}': value for name, value in metrics.items()}
     }
-    return training_state, metrics
+    return training_state, metrics  # pytype: disable=bad-return-type  # py311-upgrade
 
   # The network key should be global, so that networks are initialized the same
   # way for different processes.
