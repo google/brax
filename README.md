@@ -28,6 +28,9 @@ Brax offers three distinct physics pipelines that are easy to swap:
 * [Generalized](https://github.com/google/brax/blob/main/brax/v2/generalized/)
 calculates motion in [generalized coordinates](https://en.wikipedia.org/wiki/Generalized_coordinates) using the same accurate robot
 dynamics algorithms as [MuJoCo](https://mujoco.org/) and [TDS](https://github.com/erwincoumans/tiny-differentiable-simulator).
+
+  NOTE: We plan to import [MuJoCo XLA - MJX](https://mujoco.readthedocs.io/en/stable/mjx.html) as another physics backend, eventually replacing `generalized`. Check out our recent [announcement](https://github.com/google/brax/discussions/409).
+
 * [Positional](https://github.com/google/brax/blob/main/brax/v2/positional/)
 uses [Position Based Dynamics](https://matthias-research.github.io/pages/publications/posBasedDyn.pdf),
 a fast but stable method of resolving joint and collision constraints.
@@ -45,6 +48,7 @@ Explore Brax easily and quickly through a series of colab notebooks:
 
 * [Brax Basics](https://colab.research.google.com/github/google/brax/blob/main/notebooks/basics.ipynb) introduces the Brax API, and shows how to simulate basic physics primitives.
 * [Brax Training](https://colab.research.google.com/github/google/brax/blob/main/notebooks/training.ipynb) introduces Brax's training algorithms, and lets you train your own policies directly within the colab. It also demonstrates loading and saving policies.
+* [Brax Training with MuJoCo XLA - MJX](https://colab.sandbox.google.com/github/google-deepmind/mujoco/blob/main/mjx/tutorial.ipynb) demonstrates training in Brax using the `MJX` physics simulator.
 * [Brax Training with PyTorch on GPU](https://colab.research.google.com/github/google/brax/blob/main/notebooks/training_torch.ipynb) demonstrates how Brax can be used in other ML frameworks for fast training, in this case PyTorch.
 
 ## Using Brax Locally
