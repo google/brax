@@ -303,13 +303,13 @@ def inv_approximate(
     a_inv, r, err = carry
     a_inv_next = a_inv @ (np.eye(a.shape[0]) + r)
     r_next = np.eye(a.shape[0]) - a @ a_inv_next
-    err_next = jp.linalg.norm(r_next)
+    err_next = safe_norm(r_next)
     a_inv_next = jp.where(err_next < err, a_inv_next, a_inv)
     return (a_inv_next, r_next, err_next), None
 
   # ensure ||I - X0 @ A|| < 1, in order to guarantee convergence
   r0 = jp.eye(a.shape[0]) - a @ a_inv
-  a_inv = jp.where(jp.linalg.norm(r0) > 1, 0.5 * a.T / jp.trace(a @ a.T), a_inv)
+  a_inv = jp.where(safe_norm(r0) > 1, 0.5 * a.T / jp.trace(a @ a.T), a_inv)
   (a_inv, _, _), _ = jax.lax.scan(body_fn, (a_inv, r0, 1.0), None, num_iter)
 
   return a_inv
@@ -332,9 +332,9 @@ def safe_norm(
 
   is_zero = jp.allclose(x, 0.0)
   # temporarily swap x with ones if is_zero, then swap back
-  x = jp.where(is_zero, jp.ones_like(x), x)
-  n = jp.linalg.norm(x, axis=axis)
-  n = jp.where(is_zero, 0.0, n)
+  x = x + is_zero * 1.0
+  n = jp.linalg.norm(x) * (1.0 - is_zero)
+
   return n
 
 
