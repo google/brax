@@ -53,6 +53,7 @@ setup(
         "jinja2",
         "ml_collections",
         "mujoco",
+        "mujoco-mjx",
         "numpy",
         "optax",
         "Pillow",
