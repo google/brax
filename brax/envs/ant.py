@@ -22,6 +22,7 @@ from brax.io import mjcf
 from etils import epath
 import jax
 from jax import numpy as jp
+import mujoco
 
 
 class Ant(PipelineEnv):
@@ -166,6 +167,12 @@ class Ant(PipelineEnv):
       sys = sys.replace(dt=0.005)
       n_frames = 10
 
+    if backend == 'mjx':
+      sys._model.opt.solver = mujoco.mjtSolver.mjSOL_NEWTON
+      sys._model.opt.disableflags = mujoco.mjtDisableBit.mjDSBL_EULERDAMP
+      sys._model.opt.iterations = 1
+      sys._model.opt.ls_iterations = 4
+
     if backend == 'positional':
       # TODO: does the same actuator strength work as in spring
       sys = sys.replace(
@@ -230,10 +237,8 @@ class Ant(PipelineEnv):
     forward_reward = velocity[0]
 
     min_z, max_z = self._healthy_z_range
-    is_healthy = jp.where(pipeline_state.x.pos[0, 2] < min_z, x=0.0, y=1.0)
-    is_healthy = jp.where(
-        pipeline_state.x.pos[0, 2] > max_z, x=0.0, y=is_healthy
-    )
+    is_healthy = jp.where(pipeline_state.x.pos[0, 2] < min_z, 0.0, 1.0)
+    is_healthy = jp.where(pipeline_state.x.pos[0, 2] > max_z, 0.0, is_healthy)
     if self._terminate_when_unhealthy:
       healthy_reward = self._healthy_reward
     else:

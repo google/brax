@@ -497,6 +497,7 @@ def load_model(mj: mujoco.MjModel) -> System:
   )
 
   sys = jax.tree_map(jp.array, sys)
+  sys.set_model(mj)
 
   return sys
 

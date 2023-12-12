@@ -20,11 +20,11 @@ from typing import Any, Dict, Optional
 
 from brax import base
 from brax.generalized import pipeline as g_pipeline
+from brax.mjx import pipeline as m_pipeline
 from brax.positional import pipeline as p_pipeline
 from brax.spring import pipeline as s_pipeline
 from flax import struct
 import jax
-from jax import numpy as jp
 
 
 @struct.dataclass
@@ -98,6 +98,7 @@ class PipelineEnv(Env):
 
     pipeline = {
         'generalized': g_pipeline,
+        'mjx': m_pipeline,
         'spring': s_pipeline,
         'positional': p_pipeline,
     }

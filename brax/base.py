@@ -17,7 +17,7 @@
 
 import copy
 import functools
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Type, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 from brax import math
 from flax import struct
@@ -25,7 +25,8 @@ import jax
 from jax import numpy as jp
 from jax import vmap
 from jax.tree_util import tree_map
-
+import mujoco
+from mujoco import mjx
 
 # f: free, 1: 1-dof, 2: 2-dof, 3: 3-dof
 Q_WIDTHS = {'f': 7, '1': 1, '2': 2, '3': 3}
@@ -617,6 +618,7 @@ class System(Base):
   matrix_inv_iterations: int = struct.field(pytree_node=False)
   solver_iterations: int = struct.field(pytree_node=False)
   solver_maxls: int = struct.field(pytree_node=False)
+  _model: mujoco.MjModel = struct.field(pytree_node=False, default=None)
 
   def num_links(self) -> int:
     """Returns the number of links in the system."""
@@ -677,6 +679,18 @@ class System(Base):
   def act_size(self) -> int:
     """Returns the act dimension for the system."""
     return self.actuator.q_id.shape[0]
+
+  def set_model(self, model: mujoco.MjModel):
+    """Sets the source MuJoCo model of this System."""
+    object.__setattr__(self, '_model', model)
+
+  def get_model(self) -> mujoco.MjModel:
+    """Returns the source MuJoCo model of this System."""
+    return self._model
+
+  def get_mjx_model(self) -> mjx.Model:
+    """Returns an MJX model of this System."""
+    return mjx.put_model(getattr(self, '_model'))
 
 
 # below are some operation dispatch derivations

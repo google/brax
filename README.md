@@ -21,16 +21,15 @@ to minutes:
     [evolutionary strategies](https://github.com/google/brax/blob/main/brax/training/agents/es).
 *   Learning algorithms that leverage the differentiability of the simulator, such as [analytic policy gradients](https://github.com/google/brax/blob/main/brax/training/agents/apg).
 
-## One API, Three Pipelines
+## One API, Four Pipelines
 
-Brax offers three distinct physics pipelines that are easy to swap:
+Brax offers four distinct physics pipelines that are easy to swap:
 
+* [MuJoCo XLA - MJX](https://mujoco.readthedocs.io/en/stable/mjx.html) - a JAX
+reimplementation of the MuJoCo physics engine.
 * [Generalized](https://github.com/google/brax/blob/main/brax/v2/generalized/)
-calculates motion in [generalized coordinates](https://en.wikipedia.org/wiki/Generalized_coordinates) using the same accurate robot
-dynamics algorithms as [MuJoCo](https://mujoco.org/) and [TDS](https://github.com/erwincoumans/tiny-differentiable-simulator).
-
-  NOTE: We plan to import [MuJoCo XLA - MJX](https://mujoco.readthedocs.io/en/stable/mjx.html) as another physics backend, eventually replacing `generalized`. Check out our recent [announcement](https://github.com/google/brax/discussions/409).
-
+calculates motion in [generalized coordinates](https://en.wikipedia.org/wiki/Generalized_coordinates)
+using dynamics algorithms similar to [MuJoCo](https://mujoco.org/) and [TDS](https://github.com/erwincoumans/tiny-differentiable-simulator).
 * [Positional](https://github.com/google/brax/blob/main/brax/v2/positional/)
 uses [Position Based Dynamics](https://matthias-research.github.io/pages/publications/posBasedDyn.pdf),
 a fast but stable method of resolving joint and collision constraints.

@@ -27,13 +27,15 @@ import numpy as np
 # State attributes needed for the visualizer.
 _STATE_ATTR = ['x', 'contact']
 
+_IGNORE_FIELDS = ['_model', '_mjx_model']
+
 
 def _to_dict(obj):
   """Converts python object to a json encodeable object."""
   if isinstance(obj, list) or isinstance(obj, tuple):
     return [_to_dict(s) for s in obj]
   if isinstance(obj, dict):
-    return {k: _to_dict(v) for k, v in obj.items()}
+    return {k: _to_dict(v) for k, v in obj.items() if k not in _IGNORE_FIELDS}
   if isinstance(obj, jax.Array):
     return _to_dict(obj.tolist())
   if hasattr(obj, '__dict__'):

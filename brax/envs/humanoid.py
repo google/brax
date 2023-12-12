@@ -22,6 +22,7 @@ from brax.io import mjcf
 from etils import epath
 import jax
 from jax import numpy as jp
+import mujoco
 
 
 class Humanoid(PipelineEnv):
@@ -201,6 +202,12 @@ class Humanoid(PipelineEnv):
           350.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0])  # pyformat: disable
       sys = sys.replace(actuator=sys.actuator.replace(gear=gear))
 
+    if backend == 'mjx':
+      sys._model.opt.solver = mujoco.mjtSolver.mjSOL_NEWTON
+      sys._model.opt.disableflags = mujoco.mjtDisableBit.mjDSBL_EULERDAMP
+      sys._model.opt.iterations = 1
+      sys._model.opt.ls_iterations = 4
+
     kwargs['n_frames'] = kwargs.get('n_frames', n_frames)
 
     super().__init__(sys=sys, backend=backend, **kwargs)
@@ -255,10 +262,8 @@ class Humanoid(PipelineEnv):
     forward_reward = self._forward_reward_weight * velocity[0]
 
     min_z, max_z = self._healthy_z_range
-    is_healthy = jp.where(pipeline_state.x.pos[0, 2] < min_z, x=0.0, y=1.0)
-    is_healthy = jp.where(
-        pipeline_state.x.pos[0, 2] > max_z, x=0.0, y=is_healthy
-    )
+    is_healthy = jp.where(pipeline_state.x.pos[0, 2] < min_z, 0.0, 1.0)
+    is_healthy = jp.where(pipeline_state.x.pos[0, 2] > max_z, 0.0, is_healthy)
     if self._terminate_when_unhealthy:
       healthy_reward = self._healthy_reward
     else:
