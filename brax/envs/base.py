@@ -16,7 +16,7 @@
 """A brax environment for training and inference."""
 
 import abc
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Union
 
 from brax import base
 from brax.generalized import pipeline as g_pipeline
@@ -202,7 +202,7 @@ class MjxEnv(Env):
     return 'mjx'
 
   def render(
-      self, trajectory: List[base.State], camera: str | None = None
+      self, trajectory: List[base.State], camera: Union[str, None] = None
   ) -> Sequence[np.ndarray]:
     """Renders a trajectory using the MuJoCo renderer."""
     renderer = mujoco.Renderer(self._model)
