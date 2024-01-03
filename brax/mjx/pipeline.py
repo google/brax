@@ -15,20 +15,19 @@
 """Physics pipeline for fully articulated dynamics and collisiion."""
 # pylint:disable=g-multiple-import
 # pylint:disable=g-importing-member
-from brax.base import Motion, System, Transform
+from brax.base import Motion, Transform
 from brax.mjx.base import State
 import jax
-from jax import numpy as jp
 from mujoco import mjx
 
 
 def init(
-    sys: System, q: jax.Array, qd: jax.Array, debug: bool = False
+    model: mjx.Model, q: jax.Array, qd: jax.Array, debug: bool = False
 ) -> State:
   """Initializes physics state.
 
   Args:
-    sys: a brax system
+    model: an mjx.Model
     q: (q_size,) joint angle vector
     qd: (qd_size,) joint velocity vector
     debug: if True, adds contact to the state for debugging
@@ -38,7 +37,6 @@ def init(
   """
   del debug  # ignored in mjx pipeline
 
-  model = sys.get_mjx_model()
   data = mjx.make_data(model)
   data = data.replace(qpos=q, qvel=qd)
   data = mjx.forward(model, data)
@@ -55,7 +53,7 @@ def init(
 
 
 def step(
-    sys: System, state: State, act: jax.Array, debug: bool = False
+    model: mjx.Model, state: State, act: jax.Array, debug: bool = False
 ) -> State:
   """Performs a single physics step using position-based dynamics.
 
@@ -63,7 +61,7 @@ def step(
   resolves collisions at velocity level with baumgarte stabilization.
 
   Args:
-    sys: system defining the kinematic tree and other properties
+    model: an mjx.Model
     state: physics state prior to step
     act: (act_size,) actuator input vector
     debug: if True, adds contact to the state for debugging
@@ -74,7 +72,6 @@ def step(
   """
   del debug  # ignored in mjx pipeline
 
-  model = sys.get_mjx_model()
   data = state.data.replace(ctrl=act)
   data = mjx.step(model, data)
 

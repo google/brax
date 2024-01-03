@@ -28,11 +28,12 @@ class PipelineTest(absltest.TestCase):
 
   def test_pendulum(self):
     sys = test_utils.load_fixture('double_pendulum.xml')
+    model = sys.get_mjx_model()
 
-    state = pipeline.init(sys, sys.init_q, jp.zeros(sys.qd_size()))
+    state = pipeline.init(model, sys.init_q, jp.zeros(sys.qd_size()))
     step_fn = jax.jit(pipeline.step)
     for _ in range(20):
-      state = step_fn(sys, state, jp.zeros(sys.act_size()))
+      state = step_fn(model, state, jp.zeros(sys.act_size()))
 
     # compare against mujoco
     model = test_utils.load_fixture_mujoco('double_pendulum.xml')

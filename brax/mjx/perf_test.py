@@ -25,16 +25,16 @@ from jax import numpy as jp
 class PerfTest(absltest.TestCase):
 
   def test_pipeline_ant(self):
-    sys = test_utils.load_fixture('ant.xml')
+    model = test_utils.load_fixture('ant.xml').get_mjx_model()
 
     def init_fn(rng):
       rng1, rng2 = jax.random.split(rng, 2)
-      q = jax.random.uniform(rng1, (sys.q_size(),), minval=-0.1, maxval=0.1)
-      qd = 0.1 * jax.random.normal(rng2, (sys.qd_size(),))
-      return pipeline.init(sys, q, qd)
+      q = jax.random.uniform(rng1, (model.nq,), minval=-0.1, maxval=0.1)
+      qd = 0.1 * jax.random.normal(rng2, (model.nv,))
+      return pipeline.init(model, q, qd)
 
     def step_fn(state):
-      return pipeline.step(sys, state, jp.zeros(sys.act_size()))
+      return pipeline.step(model, state, jp.zeros(model.nu))
 
     test_utils.benchmark('mjx pipeline ant', init_fn, step_fn)
 
