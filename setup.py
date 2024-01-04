@@ -50,6 +50,7 @@ setup(
         "jax>=0.4.6",
         "jaxlib>=0.4.6",
         "jaxopt",
+        "jaxrenderer>=0.2.0",
         "jinja2",
         "ml_collections",
         "mujoco",
