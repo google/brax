@@ -15,6 +15,10 @@ jobs:
         python-version: ['3.9', '3.10']
     steps:
       - uses: actions/checkout@v2
+      - name: Prepare Linux
+        run: >
+          sudo apt-get update && sudo apt-get install
+          libgl1-mesa-dev
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v1
         with:
