@@ -19,6 +19,11 @@ jobs:
         run: >
           sudo apt-get update && sudo apt-get install
           libgl1-mesa-dev
+          libxinerama-dev
+          libxcursor-dev
+          libxrandr-dev
+          libxi-dev
+          ninja-build
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v1
         with:
