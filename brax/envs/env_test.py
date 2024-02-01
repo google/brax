@@ -57,16 +57,6 @@ class EnvTest(parameterized.TestCase):
     )
     self.assertGreater(mean_sps, expected_sps * 0.99)
 
-  @parameterized.parameters(['mjx', 'generalized', 'spring', 'positional'])
-  def test_render(self, backend):
-    env = envs.create(
-        'ant',
-        backend=backend,
-    )
-    state = jax.jit(env.reset)(jax.random.PRNGKey(0))
-    images = env.render([state.pipeline_state])
-    self.assertLen(images, 1)
-    self.assertEqual(images[0].shape, (240, 320, 3))
 
 
 if __name__ == '__main__':

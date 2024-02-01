@@ -35,7 +35,8 @@ def get(sys: System, x: Transform) -> Optional[Contact]:
   Returns:
     Contact pytree
   """
-  ncon = mjx.ncon(sys)
+  # TODO: use mjx.ncon.
+  ncon = mjx._src.collision_driver.ncon(sys)
   if not ncon:
     return None
 
