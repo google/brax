@@ -1,4 +1,4 @@
-# Copyright 2023 DeepMind Technologies Limited.
+# Copyright 2024 DeepMind Technologies Limited.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -486,11 +486,9 @@ def domain_randomize(
   def rand(rng):
     """Generates random values."""
     # friction
-    shape = [g.friction.shape[0] for g in sys.geoms]
-    friction = []
-    for s in shape:
-      rng, key = jax.random.split(rng)
-      friction.append(jax.random.uniform(key, (s,), minval=0.8, maxval=1.4))
+    _, key = jax.random.split(rng, 2)
+    friction = jax.random.uniform(key, (1,), minval=0.8, maxval=1.2)
+    friction = sys.geom_friction.at[:, 0].set(friction)
     # actuator
     rng, key1 = jax.random.split(rng, 2)
     gain_range = (gain_min, gain_max)
@@ -512,13 +510,13 @@ def domain_randomize(
   in_axes = in_axes.tree_replace({
       'actuator.gain': 0,
       'link.inertia.transform.pos': 0,
-      'geoms.friction': 0,
+      'geom_friction': 0,
   })
 
   sys = sys.tree_replace({
       'actuator.gain': gain,
       'link.inertia.transform.pos': link_inertia_transform_pos,
-      'geoms.friction': friction,
+      'geom_friction': friction,
   })
 
   return sys, in_axes

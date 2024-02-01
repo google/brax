@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -36,24 +36,13 @@ class BaseTest(absltest.TestCase):
     sys_w = sys.tree_replace({'link.inertia.mass': 1.0})
     self.assertEqual(sys_w.link.inertia.mass, 1.0)
 
-  def test_write_friction_value(self):
+  def test_write_array(self):
     sys = test_utils.load_fixture('ant.xml')
-    sys_w = sys.tree_replace({'geoms.friction': None})
-    self.assertTrue(np.all([g.friction is None for g in sys_w.geoms]))
+    np.random.seed(0)
 
-  def test_write_friction_array(self):
-    sys = test_utils.load_fixture('ant.xml')
-    rng = jax.random.PRNGKey(0)
-    shape = [g.friction.shape[0] for g in sys.geoms]
-    expected_friction = []
-    for s in shape:
-      rng, key = jax.random.split(rng)
-      expected_friction.append(jax.random.uniform(key, (s,)))
-
-    sys_w = sys.tree_replace({'geoms.friction': expected_friction})
-    friction = np.concatenate([g.friction for g in sys_w.geoms])
-    expected_friction = np.concatenate(expected_friction)
-    np.testing.assert_array_equal(friction, expected_friction)
+    expected = np.random.uniform(sys.elasticity.shape)
+    sys_w = sys.tree_replace({'elasticity': expected})
+    np.testing.assert_array_equal(sys_w.elasticity, expected)
 
 
 if __name__ == '__main__':

@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@ from jax import vmap
 from jax.tree_util import tree_map
 import mujoco
 from mujoco import mjx
+import numpy as np
 
 # f: free, 1: 1-dof, 2: 2-dof, 3: 3-dof
 Q_WIDTHS = {'f': 7, '1': 1, '2': 2, '3': 3}
@@ -355,152 +356,16 @@ class DoF(Base):
   solver_params: jax.Array
 
 
-@struct.dataclass
-class Geometry(Base):
-  """A surface or spatial volume with a shape and material properties.
-
-  Attributes:
-    link_idx: Link index to which this Geometry is attached
-    transform: transform for the geometry frame relative to the link frame, or
-      relative to the world frame in the case of unparented geometry
-    friction: resistance encountered when sliding against another geometry
-    elasticity: bounce/restitution encountered when hitting another geometry
-    solver_params: (7,) solver parameters (reference, impedance)
-  """
-
-  link_idx: Optional[jax.Array]
-  transform: Transform
-  friction: jax.Array
-  elasticity: jax.Array
-  solver_params: jax.Array
-
-
-@struct.dataclass
-class Sphere(Geometry):
-  """A sphere.
-
-  Attributes:
-    radius: radius of the sphere
-    rgba: (4,) the rgba to display in the renderer
-  """
-
-  radius: jax.Array
-  rgba: Optional[jax.Array] = None
-
-
-@struct.dataclass
-class Capsule(Geometry):
-  """A capsule.
-
-  Attributes:
-    radius: radius of the capsule end
-    length: distance between the two capsule end centroids
-    rgba: (4,) the rgba to display in the renderer
-  """
-
-  radius: jax.Array
-  length: jax.Array
-  rgba: Optional[jax.Array] = None
-
-
-@struct.dataclass
-class Box(Geometry):
-  """A box.
-
-  Attributes:
-    halfsize: (3,) half sizes for each box side
-    rgba: (4,) the rgba to display in the renderer
-  """
-
-  halfsize: jax.Array
-  rgba: Optional[jax.Array] = None
-
-
-@struct.dataclass
-class Cylinder(Geometry):
-  """A cylinder.
-
-  Attributes:
-    radius: (1,) radius of the top and bottom of the cylinder
-    length: (1,) length of the cylinder
-    rgba: (4,) the rgba to display in the renderer
-  """
-
-  radius: jax.Array
-  length: jax.Array
-  rgba: Optional[jax.Array] = None
-
-
-@struct.dataclass
-class Plane(Geometry):
-  """An infinite plane whose normal points at +z in its coordinate space.
-
-  Attributes:
-    rgba: (4,) the rgba to display in the renderer, currently unused
-  """
-
-  rgba: Optional[jax.Array] = None
-
-
-@struct.dataclass
-class Mesh(Geometry):
-  """A mesh loaded from an OBJ or STL file.
-
-  The mesh is expected to be in the counter-clockwise winding order.
-
-  Attributes:
-    vert: (num_verts, 3) spatial coordinates associated with each vertex
-    face: (num_faces, num_face_vertices) vertices associated with each face
-    rgba: (4,) the rgba to display in the renderer, currently unused
-  """
-
-  vert: jax.Array
-  face: jax.Array
-  rgba: Optional[jax.Array] = None
-
-
-@struct.dataclass
-class Convex(Geometry):
-  """A convex mesh geometry.
-
-  Attributes:
-    vert: (num_verts, 3) spatial coordinates associated with each vertex
-    face: (num_faces, num_face_vertices) vertices associated with each face
-    unique_edge: (num_unique, 2) vert index associated with each unique edge
-    rgba: (4,) the rgba to display in the renderer, currently unused
-  """
-
-  vert: jax.Array
-  face: jax.Array
-  unique_edge: jax.Array
-  rgba: Optional[jax.Array] = None
-
-
-@struct.dataclass
-class Contact(Base):
+class Contact(mjx.Contact, Base):
   """Contact between two geometries.
 
   Attributes:
-    pos: contact position, or average of the two closest points, in world frame
-    normal: contact normal on the surface of geometry b
-    penetration: penetration distance between two geometries. positive means the
-      two geometries are interpenetrating, negative means they are not
-    friction: resistance encountered when sliding against another geometry
+    link_idx: Tuple of link indices participating in contact.
     elasticity: bounce/restitution encountered when hitting another geometry
-    solver_params: (7,) collision constraint solver parameters
-    link_idx: Tuple of link indices participating in contact.  The second part
-      of the tuple can be None if the second geometry is static.
   """
 
-  pos: jax.Array
-  normal: jax.Array
-  penetration: jax.Array
-  friction: jax.Array
-  # only used by `brax.physics.spring` and `brax.physics.positional`:
+  link_idx: jax.Array
   elasticity: jax.Array
-  solver_params: jax.Array
-
-  link_idx: Tuple[jax.Array, Optional[jax.Array]]
 
 
 @struct.dataclass
@@ -547,8 +412,7 @@ class State:
   contact: Optional[Contact]
 
 
-@struct.dataclass
-class System(Base):
+class System(mjx.Model):
   r"""Describes a physical environment: its links, joints and geometries.
 
   Attributes:
@@ -558,9 +422,9 @@ class System(Base):
     density: (1,) density of the medium applied to all links
     link: (num_link,) the links in the system
     dof: (qd_size,) every degree of freedom for the system
-    geoms: list of batched geoms grouped by type
     actuator: actuators that can be applied to links
     init_q: (q_size,) initial q position for the system
+    elasticity: bounce/restitution encountered when hitting another geometry
     vel_damping: (1,) linear vel damping applied to each body.
     ang_damping: (1,) angular vel damping applied to each body.
     baumgarte_erp: how aggressively interpenetrating bodies should push away\
@@ -572,9 +436,6 @@ class System(Base):
     collide_scale: fraction of position based collide update to apply
     enable_fluid: (1,) enables or disables fluid forces based on the
       default viscosity and density parameters provided in the XML
-    geom_masks: 64-bit mask determines whether two geoms will be contact tested.
-                lower 32 bits are type, upper 32 bits are affinity.  two geoms
-                a, b will be contact tested if a.type & b.affinity != 0
     link_names: (num_link,) link names
     link_types: (num_link,) string specifying the joint type of each link
                 valid types are:
@@ -587,6 +448,7 @@ class System(Base):
     matrix_inv_iterations: maximum number of iterations of the matrix inverse
     solver_iterations: maximum number of iterations of the constraint solver
     solver_maxls: maximum number of line searches of the constraint solver
+    mj_model: mujoco.MjModel that was used to build this brax System
   """
 
   dt: jax.Array
@@ -595,10 +457,10 @@ class System(Base):
   density: Union[float, jax.Array]
   link: Link
   dof: DoF
-  geoms: List[Geometry]
   actuator: Actuator
   init_q: jax.Array
   # only used in `brax.physics.spring` and `brax.physics.positional`:
+  elasticity: jax.Array
   vel_damping: Union[float, jax.Array]
   ang_damping: Union[float, jax.Array]
   baumgarte_erp: Union[float, jax.Array]
@@ -610,7 +472,6 @@ class System(Base):
   collide_scale: Union[float, jax.Array]
   # non-pytree nodes
   enable_fluid: bool = struct.field(pytree_node=False)
-  geom_masks: List[int] = struct.field(pytree_node=False)
   link_names: List[str] = struct.field(pytree_node=False)
   link_types: str = struct.field(pytree_node=False)
   link_parents: Tuple[int, ...] = struct.field(pytree_node=False)
@@ -618,7 +479,7 @@ class System(Base):
   matrix_inv_iterations: int = struct.field(pytree_node=False)
   solver_iterations: int = struct.field(pytree_node=False)
   solver_maxls: int = struct.field(pytree_node=False)
-  _model: mujoco.MjModel = struct.field(pytree_node=False, default=None)
+  mj_model: mujoco.MjModel = struct.field(pytree_node=False, default=None)
 
   def num_links(self) -> int:
     """Returns the number of links in the system."""
@@ -679,18 +540,6 @@ class System(Base):
   def act_size(self) -> int:
     """Returns the act dimension for the system."""
     return self.actuator.q_id.shape[0]
-
-  def set_model(self, model: mujoco.MjModel):
-    """Sets the source MuJoCo model of this System."""
-    object.__setattr__(self, '_model', model)
-
-  def get_model(self) -> mujoco.MjModel:
-    """Returns the source MuJoCo model of this System."""
-    return self._model
-
-  def get_mjx_model(self) -> mjx.Model:
-    """Returns an MJX model of this System."""
-    return mjx.put_model(getattr(self, '_model'))
 
 
 # below are some operation dispatch derivations

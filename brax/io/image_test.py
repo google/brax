@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -29,8 +29,8 @@ class ImageTest(parameterized.TestCase):
   def test_render_array(self, xml):
     sys = test_utils.load_fixture(xml)
     state = jax.jit(pipeline.init)(sys, sys.init_q, jp.zeros(sys.qd_size()))
-    im = image.render_array(sys, state, 32, 32)
-    self.assertEqual(im.shape, (32, 32, 3))
+    im = image.render_array(sys, [state], 32, 32)
+    self.assertEqual(im[0].shape, (32, 32, 3))
 
 if __name__ == '__main__':
   absltest.main()

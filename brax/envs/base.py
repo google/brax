@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional, Sequence, Union
 
 from brax import base
 from brax.generalized import pipeline as g_pipeline
+from brax.io import image
 from brax.mjx import pipeline as m_pipeline
 from brax.positional import pipeline as p_pipeline
 from brax.spring import pipeline as s_pipeline
@@ -103,6 +104,7 @@ class PipelineEnv(Env):
         'generalized': g_pipeline,
         'spring': s_pipeline,
         'positional': p_pipeline,
+        'mjx': m_pipeline,
     }
     if backend not in pipeline:
       raise ValueError(f'backend should be in {pipeline.keys()}.')
@@ -146,75 +148,15 @@ class PipelineEnv(Env):
   def backend(self) -> str:
     return self._backend
 
-
-class MjxEnv(Env):
-  """API for driving a MuJoCo model for training and inference."""
-
-  def __init__(
-      self,
-      model: mujoco.MjModel,
-      n_frames: int = 1,
-      debug: bool = False,
-  ):
-    """Initializes PipelineEnv.
-
-    Args:
-      model: an mjx.Model
-      n_frames: the number of times to step the physics pipeline for each
-        environment step
-      debug: whether to get debug info from the pipeline init/step (ignored)
-    """
-    # HACK: sys here is improperly typed, some code expects sys to be a System
-    self._model = model
-    self.sys = mjx.put_model(model)
-    self._n_frames = n_frames
-    self._debug = debug
-
-  def pipeline_init(self, q: jax.Array, qd: jax.Array) -> base.State:
-    """Initializes the pipeline state."""
-    return m_pipeline.init(self.sys, q, qd, self._debug)
-
-  def pipeline_step(self, pipeline_state: Any, action: jax.Array) -> base.State:
-    """Takes a physics step using the physics pipeline."""
-
-    def f(state, _):
-      return m_pipeline.step(self.sys, state, action, self._debug), None
-
-    return jax.lax.scan(f, pipeline_state, (), self._n_frames)[0]
-
-  @property
-  def dt(self) -> jax.Array:
-    """The timestep used for each env step."""
-    return self.sys.opt.timestep * self._n_frames
-
-  @property
-  def observation_size(self) -> int:
-    rng = jax.random.PRNGKey(0)
-    reset_state = self.unwrapped.reset(rng)
-    return reset_state.obs.shape[-1]
-
-  @property
-  def action_size(self) -> int:
-    return self.sys.nu
-
-  @property
-  def backend(self) -> str:
-    return 'mjx'
-
   def render(
-      self, trajectory: List[base.State], camera: Union[str, None] = None
+      self,
+      trajectory: List[base.State],
+      height: int = 240,
+      width: int = 320,
+      camera: Optional[str] = None,
   ) -> Sequence[np.ndarray]:
     """Renders a trajectory using the MuJoCo renderer."""
-    renderer = mujoco.Renderer(self._model)
-    camera = camera or -1
-
-    def get_image(state: mjx.Data):
-      d = mjx.get_data(self._model, state)
-      mujoco.mj_forward(self._model, d)
-      renderer.update_scene(d, camera=camera)
-      return renderer.render()
-
-    return [get_image(s.data) for s in trajectory]  # pytype: disable=attribute-error
+    return image.render_array(self.sys, trajectory, height, width, camera)
 
 
 class Wrapper(Env):

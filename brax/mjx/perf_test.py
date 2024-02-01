@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ from jax import numpy as jp
 class PerfTest(absltest.TestCase):
 
   def test_pipeline_ant(self):
-    model = test_utils.load_fixture('ant.xml').get_mjx_model()
+    model = test_utils.load_fixture('ant.xml')
 
     def init_fn(rng):
       rng1, rng2 = jax.random.split(rng, 2)
@@ -33,8 +33,8 @@ class PerfTest(absltest.TestCase):
       qd = 0.1 * jax.random.normal(rng2, (model.nv,))
       return pipeline.init(model, q, qd)
 
-    def step_fn(state):
-      return pipeline.step(model, state, jp.zeros(model.nu))
+    def step_fn(data):
+      return pipeline.step(model, data, jp.zeros(model.nu))
 
     test_utils.benchmark('mjx pipeline ant', init_fn, step_fn)
 

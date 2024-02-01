@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,34 +13,27 @@
 # limitations under the License.
 
 # pylint:disable=g-multiple-import
-"""Function to load MuJoCo mjcf format to Brax system."""
+"""Function to load MuJoCo mjcf format to Brax model."""
 
 import itertools
 from typing import Dict, Optional, Tuple, Union
-import warnings
 from xml.etree import ElementTree
 
 from brax import math
 from brax.base import (
     Actuator,
-    Box,
-    Capsule,
-    Cylinder,
     DoF,
     Inertia,
     Link,
-    Mesh,
     Motion,
-    Plane,
-    Sphere,
     System,
     Transform,
 )
-from brax.geometry import mesh as geom_mesh
 from etils import epath
 import jax
 from jax import numpy as jp
 import mujoco
+from mujoco import mjx
 import numpy as np
 
 
@@ -133,20 +126,6 @@ def _find_assets(
   return assets
 
 
-def _get_mesh(mj: mujoco.MjModel, i: int) -> Tuple[np.ndarray, np.ndarray]:
-  """Gets mesh from mj at index i."""
-  last = (i + 1) >= mj.nmesh
-  face_start = mj.mesh_faceadr[i]
-  face_end = mj.mesh_faceadr[i + 1] if not last else mj.mesh_face.shape[0]
-  face = mj.mesh_face[face_start:face_end]
-
-  vert_start = mj.mesh_vertadr[i]
-  vert_end = mj.mesh_vertadr[i + 1] if not last else mj.mesh_vert.shape[0]
-  vert = mj.mesh_vert[vert_start:vert_end]
-
-  return vert, face
-
-
 def _get_name(mj: mujoco.MjModel, i: int) -> str:
   names = mj.names[i:].decode('utf-8')
   return names[: names.find('\x00')]
@@ -180,7 +159,6 @@ def _get_custom(mj: mujoco.MjModel) -> Dict[str, np.ndarray]:
       'matrix_inv_iterations': (10, None),
       'solver_maxls': (20, None),
       'elasticity': (0.0, 'geom'),
-      'convex': (True, 'geom'),
       'constraint_stiffness': (2000.0, 'body'),
       'constraint_limit_stiffness': (1000.0, 'body'),
       'constraint_ang_damping': (0.0, 'body'),
@@ -249,34 +227,88 @@ def _get_custom(mj: mujoco.MjModel) -> Dict[str, np.ndarray]:
   return custom
 
 
-def load_model(mj: mujoco.MjModel) -> System:
-  """Creates a brax system from a MuJoCo model."""
-  # do some validation up front
-  if any(i not in [0, 1] for i in mj.actuator_biastype):
-    raise NotImplementedError('Only actuator_biastype in [0, 1] are supported.')
-  if any(i != 0 for i in mj.actuator_gaintype):
-    raise NotImplementedError('Only actuator_gaintype in [0] is supported.')
+def validate_model(mj: mujoco.MjModel) -> None:
+  """Checks if a MuJoCo model is compatible with brax physics pipelines."""
   if mj.opt.integrator != 0:
     raise NotImplementedError('Only euler integration is supported.')
   if mj.opt.cone != 0:
     raise NotImplementedError('Only pyramidal cone friction is supported.')
+  if (mj.geom_fluid != 0).any():
+    raise NotImplementedError('Ellipsoid fluid model not implemented.')
+  if mj.opt.wind.any():
+    raise NotImplementedError('option.wind is not implemented.')
+
+  # actuators
+  if any(i not in [0, 1] for i in mj.actuator_biastype):
+    raise NotImplementedError('Only actuator_biastype in [0, 1] are supported.')
+  if any(i != 0 for i in mj.actuator_gaintype):
+    raise NotImplementedError('Only actuator_gaintype in [0] is supported.')
   if not (mj.actuator_trntype == 0).all():
     raise NotImplementedError(
         'Only joint transmission types are supported for actuators.'
     )
+
+  # solver parameters
   if (mj.geom_solmix[0] != mj.geom_solmix).any():
     raise NotImplementedError('geom_solmix parameter not supported.')
   if (mj.geom_priority[0] != mj.geom_priority).any():
     raise NotImplementedError('geom_priority parameter not supported.')
+
+  # check joints
   q_width = {0: 7, 1: 4, 2: 1, 3: 1}
   non_free = np.concatenate([[j != 0] * q_width[j] for j in mj.jnt_type])
   if mj.qpos0[non_free].any():
     raise NotImplementedError(
         'The `ref` attribute on joint types is not supported.')
-  if (mj.geom_fluid != 0).any():
-    raise NotImplementedError('Ellipsoid fluid model not implemented.')
-  if mj.opt.wind.any():
-    raise NotImplementedError('option.wind is not implemented.')
+
+  for _, group in itertools.groupby(
+      zip(mj.jnt_bodyid, mj.jnt_pos), key=lambda x: x[0]
+  ):
+    position = np.array([p for _, p in group])
+    if not (position == position[0]).all():
+      raise RuntimeError('invalid joint stack: only one joint position allowed')
+
+  # check dofs
+  jnt_range = mj.jnt_range.copy()
+  jnt_range[~(mj.jnt_limited == 1), :] = np.array([-np.inf, np.inf])
+  for typ, limit, stiffness in zip(
+      mj.jnt_type, jnt_range, mj.jnt_stiffness
+  ):
+    if typ == 0:
+      if stiffness > 0:
+        raise RuntimeError('brax does not support stiffness for free joints')
+    elif typ == 1:
+      if np.any(~np.isinf(limit)):
+        raise RuntimeError('brax does not support joint ranges for ball joints')
+    elif typ in (2, 3):
+      continue
+    else:
+      raise RuntimeError(f'invalid joint type: {typ}')
+
+  for _, group in itertools.groupby(
+      zip(mj.jnt_bodyid, mj.jnt_type), key=lambda x: x[0]
+  ):
+    typs = [t for _, t in group]
+    if len(typs) == 1 and typs[0] == 0:
+      continue  # free
+    elif 0 in typs:
+      raise RuntimeError('invalid joint stack: cannot stack free joints')
+    elif 1 in typs:
+      raise NotImplementedError('ball joints not supported')
+
+  # check collision geometries
+  for i, typ in enumerate(mj.geom_type):
+    mask = mj.geom_contype[i] | mj.geom_conaffinity[i] << 32
+    if typ == 5:  # Cylinder
+      _, halflength = mj.geom_size[i, 0:2]
+      if halflength > 0.001 and mask > 0:
+        raise NotImplementedError(
+            'Cylinders of half-length>0.001 are not supported for collision.'
+        )
+
+
+def load_model(mj: mujoco.MjModel) -> System:
+  """Creates a brax system from a MuJoCo model."""
   custom = _get_custom(mj)
 
   # create links
@@ -285,8 +317,6 @@ def load_model(mj: mujoco.MjModel) -> System:
       zip(mj.jnt_bodyid, mj.jnt_pos), key=lambda x: x[0]
   ):
     position = np.array([p for _, p in group])
-    if not (position == position[0]).all():
-      raise RuntimeError('invalid joint stack: only one joint position allowed')
     joint_positions.append(position[0])
   joint_position = np.array(joint_positions)
   identity = np.tile(np.array([1.0, 0.0, 0.0, 0.0]), (mj.nbody, 1))
@@ -316,13 +346,9 @@ def load_model(mj: mujoco.MjModel) -> System:
     if typ == 0:
       motion = Motion(ang=np.eye(6, 3, -3), vel=np.eye(6, 3))
       limit = np.array([-np.inf] * 6), np.array([np.inf] * 6)
-      if stiffness > 0:
-        raise RuntimeError('brax does not support stiffness for free joints')
       stiffness = np.zeros(6)
     elif typ == 1:
       motion = Motion(ang=np.eye(3), vel=np.zeros((3, 3)))
-      if np.any(~np.isinf(limit)):
-        raise RuntimeError('brax does not support joint ranges for ball joints')
       limit = np.array([-np.inf] * 3), np.array([np.inf] * 3)
       stiffness = np.zeros(3)
     elif typ == 2:
@@ -334,7 +360,8 @@ def load_model(mj: mujoco.MjModel) -> System:
       limit = limit[0:1], limit[1:2]
       stiffness = np.array([stiffness])
     else:
-      raise RuntimeError(f'invalid joint type: {typ}')
+      # invalid joint type
+      continue
     motions.append(motion)
     limits.append(limit)
     stiffnesses.append(stiffness)
@@ -357,69 +384,6 @@ def load_model(mj: mujoco.MjModel) -> System:
       solver_params=solver_params_dof,
   )
 
-  solver_params_geom = np.concatenate((mj.geom_solref, mj.geom_solimp), axis=1)
-  # group geoms so that they can be stacked.  two geoms can be stacked if:
-  # - they have the same type
-  # - their fields have the same shape (e.g. Mesh verts might vary)
-  # - they have the same mask
-  key_fn = lambda g, m: (jax.tree_map(np.shape, g), m)
-  geom_groups = {}
-  for i, typ in enumerate(mj.geom_type):
-    rgba = mj.geom_rgba[i]
-    if (mj.geom_rgba[i] == [0.5, 0.5, 0.5, 1.0]).all():
-      # convert the default mjcf color to brax default color
-      rgba = np.array([0.4, 0.33, 0.26, 1.0])
-    kwargs = {
-        'link_idx': mj.geom_bodyid[i] - 1 if mj.geom_bodyid[i] > 0 else None,
-        'transform': Transform(pos=mj.geom_pos[i], rot=mj.geom_quat[i]),
-        'friction': mj.geom_friction[i, 0],
-        'elasticity': custom['elasticity'][i],
-        'solver_params': solver_params_geom[i],
-        'rgba': rgba,
-    }
-    mask = mj.geom_contype[i] | mj.geom_conaffinity[i] << 32
-    if typ == 0:  # Plane
-      geom = Plane(**kwargs)
-      geom_groups.setdefault(key_fn(geom, mask), []).append(geom)
-    elif typ == 5:  # Cylinder
-      radius, halflength = mj.geom_size[i, 0:2]
-      if halflength > 0.001 and mask > 0:
-        # TODO: support cylinders with depth.
-        raise NotImplementedError(
-            'Cylinders of half-length>0.001 are not supported for collision.')
-      geom = Cylinder(radius=radius, length=halflength * 2, **kwargs)
-      geom_groups.setdefault(key_fn(geom, mask), []).append(geom)
-    elif typ == 2:  # Sphere
-      geom = Sphere(radius=mj.geom_size[i, 0], **kwargs)
-      geom_groups.setdefault(key_fn(geom, mask), []).append(geom)
-    elif typ == 3:  # Capsule
-      radius, halflength = mj.geom_size[i, 0:2]
-      geom = Capsule(radius=radius, length=halflength * 2, **kwargs)
-      geom_groups.setdefault(key_fn(geom, mask), []).append(geom)
-    elif typ == 6:  # Box
-      geom = Box(halfsize=mj.geom_size[i, :], **kwargs)
-      geom_groups.setdefault(key_fn(geom, 0), []).append(geom)  # visual only
-      if custom['convex'][i]:
-        geom = geom_mesh.convex_hull(geom)
-      else:
-        geom = geom_mesh.box_tri(geom)
-      geom_groups.setdefault(key_fn(geom, mask), []).append(geom)
-    elif typ == 7:  # Mesh
-      vert, face = _get_mesh(mj, mj.geom_dataid[i])
-      geom = Mesh(vert=vert, face=face, **kwargs)  # pytype: disable=wrong-arg-types
-      if custom['convex'][i]:
-        geom_groups.setdefault(key_fn(geom, 0), []).append(geom)  # visual only
-        geom = geom_mesh.convex_hull(geom)
-      geom_groups.setdefault(key_fn(geom, mask), []).append(geom)
-    else:
-      warnings.warn(f'unrecognized collider, geom_type: {typ}')
-      continue
-
-  geoms = [
-      jax.tree_map(lambda *x: np.stack(x), *g) for g in geom_groups.values()
-  ]
-  geom_masks = [m for _, m in geom_groups.keys()]
-
   # create actuators
   ctrl_range = mj.actuator_ctrlrange
   ctrl_range[~(mj.actuator_ctrllimited == 1), :] = np.array([-np.inf, np.inf])
@@ -430,7 +394,7 @@ def load_model(mj: mujoco.MjModel) -> System:
   bias_q = mj.actuator_biasprm[:, 1] * (mj.actuator_biastype != 0)
   bias_qd = mj.actuator_biasprm[:, 2] * (mj.actuator_biastype != 0)
 
-  # TODO: might be nice to add actuator names for debugging
+  # TODO: remove brax actuators
   actuator = Actuator(  # pytype: disable=wrong-arg-types
       q_id=q_id,
       qd_id=qd_id,
@@ -453,10 +417,9 @@ def load_model(mj: mujoco.MjModel) -> System:
     typs = [t for _, t in group]
     if len(typs) == 1 and typs[0] == 0:  # free
       typ = 'f'
-    elif 0 in typs:
-      raise RuntimeError('invalid joint stack: cannot stack free joints')
-    elif 1 in typs:
-      raise NotImplementedError('ball joints not supported')
+    elif 0 in typs or 1 in typs:
+      # invalid joint stack
+      continue
     else:
       typ = str(len(typs))
     link_types += typ
@@ -468,14 +431,16 @@ def load_model(mj: mujoco.MjModel) -> System:
     link.transform.pos[free_idx] = np.zeros(3)
     link.transform.rot[free_idx] = np.array([1.0, 0.0, 0.0, 0.0])
 
+  mjx_model = mjx.put_model(mj)
+
   sys = System(  # pytype: disable=wrong-arg-types  # jax-ndarray
       dt=mj.opt.timestep,
       gravity=mj.opt.gravity,
       viscosity=mj.opt.viscosity,
       density=mj.opt.density,
+      elasticity=custom['elasticity'],
       link=link,
       dof=dof,
-      geoms=geoms,
       actuator=actuator,
       init_q=custom['init_qpos'] if 'init_qpos' in custom else mj.qpos0,
       vel_damping=custom['vel_damping'],
@@ -487,17 +452,17 @@ def load_model(mj: mujoco.MjModel) -> System:
       joint_scale_pos=custom['joint_scale_pos'],
       collide_scale=custom['collide_scale'],
       enable_fluid=(mj.opt.viscosity > 0) | (mj.opt.density > 0),
-      geom_masks=geom_masks,
       link_names=link_names,
       link_types=link_types,
       link_parents=link_parents,
       matrix_inv_iterations=int(custom['matrix_inv_iterations']),
       solver_iterations=mj.opt.iterations,
       solver_maxls=int(custom['solver_maxls']),
+      mj_model=mj,
+      **mjx_model.__dict__,
   )
 
   sys = jax.tree_map(jp.array, sys)
-  sys.set_model(mj)
 
   return sys
 
@@ -524,7 +489,7 @@ def loads(xml: str, asset_path: Union[str, epath.Path, None] = None) -> System:
   return load_model(mj)
 
 
-def load_mjmodel(path: Union[str, epath.Path]):
+def load_mjmodel(path: Union[str, epath.Path]) -> mujoco.MjModel:
   """Loads an mj model from a MuJoCo mjcf file path."""
   elem = ElementTree.fromstring(epath.Path(path).read_text())
   _fuse_bodies(elem)

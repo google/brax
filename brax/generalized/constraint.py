@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 """Functions for constraint satisfaction."""
 from typing import Tuple
 
-from brax import geometry
+from brax import contact
 from brax import math
 from brax import scan
 from brax.base import Motion, System, Transform
@@ -145,35 +145,34 @@ def jac_contact(
     pos: contact position in constraint frame
     diag: approximate diagonal of A matrix
   """
-  contact = geometry.contact(sys, state.x)
+  c = contact.get(sys, state.x)
 
-  if contact is None:
+  if c is None:
     return jp.zeros((0, sys.qd_size())), jp.zeros((0,)), jp.zeros((0,))
 
-  def row_fn(contact):
-    link_a, link_b = contact.link_idx
-    a = point_jacobian(sys, state.root_com, state.cdof, contact.pos, link_a)
-    b = point_jacobian(sys, state.root_com, state.cdof, contact.pos, link_b)
+  def row_fn(c):
+    link_a, link_b = c.link_idx
+    a = point_jacobian(sys, state.root_com, state.cdof, c.pos, link_a)
+    b = point_jacobian(sys, state.root_com, state.cdof, c.pos, link_b)
     diff = b.vel - a.vel
 
     # 4 pyramidal friction directions
     jac = []
-    for d in math.orthogonals(contact.normal):
-      for f in [-contact.friction, contact.friction]:
-        jac.append(diff @ (d * f - contact.normal))
+    for d in -c.frame[1:]:
+      for f in [-c.friction[0], c.friction[0]]:
+        jac.append(diff @ (d * f + c.frame[0]))
 
     jac = jp.stack(jac)
-    pos = -jp.tile(contact.penetration, 4)
-    imp, aref = _imp_aref(contact.solver_params, pos, jac @ state.qd)
-    t = sys.link.invweight[link_a] + sys.link.invweight[link_b] * (link_b > -1)
-    diag = jp.tile(t + contact.friction * contact.friction * t, 4)
-    diag *= 2 * contact.friction * contact.friction * (1 - imp) / (imp + 1e-8)
+    pos = jp.tile(c.dist, 4)
+    solver_params = jp.concatenate([c.solref, c.solimp])
+    imp, aref = _imp_aref(solver_params, pos, jac @ state.qd)
+    t = sys.link.invweight[link_a] * (link_a > -1) + sys.link.invweight[link_b]
+    diag = jp.tile(t + c.friction[0] * c.friction[0] * t, 4)
+    diag *= 2 * c.friction[0] * c.friction[0] * (1 - imp) / (imp + 1e-8)
 
-    return jax.tree_map(
-        lambda x: x * (contact.penetration > 0), (jac, diag, aref),
-    )
+    return jax.tree_map(lambda x: x * (c.dist < 0), (jac, diag, aref))
 
-  return jax.tree_map(jp.concatenate, jax.vmap(row_fn)(contact))
+  return jax.tree_map(jp.concatenate, jax.vmap(row_fn)(c))
 
 
 def jacobian(sys: System, state: State) -> State:

@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 """Physics pipeline for generalized coordinates engine."""
 
 from brax import actuator
-from brax import geometry
+from brax import contact
 from brax import kinematics
 from brax.base import System
 from brax.generalized import constraint
@@ -24,8 +24,8 @@ from brax.generalized import dynamics
 from brax.generalized import integrator
 from brax.generalized import mass
 from brax.generalized.base import State
+from brax.io import mjcf
 import jax
-from jax import numpy as jp
 
 
 def init(
@@ -42,13 +42,15 @@ def init(
   Returns:
     state: initial physics state
   """
+  if sys.mj_model is not None:
+    mjcf.validate_model(sys.mj_model)
   x, xd = kinematics.forward(sys, q, qd)
   state = State.init(q, qd, x, xd)  # pytype: disable=wrong-arg-types  # jax-ndarray
   state = dynamics.transform_com(sys, state)
   state = mass.matrix_inv(sys, state, 0)
   state = constraint.jacobian(sys, state)
   if debug:
-    state = state.replace(contact=geometry.contact(sys, state.x))
+    state = state.replace(contact=contact.get(sys, state.x))
 
   return state
 
@@ -81,6 +83,6 @@ def step(
   state = constraint.jacobian(sys, state)
 
   if debug:
-    state = state.replace(contact=geometry.contact(sys, state.x))
+    state = state.replace(contact=contact.get(sys, state.x))
 
   return state

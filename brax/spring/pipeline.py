@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,16 +17,16 @@
 
 from brax import actuator
 from brax import com
+from brax import contact
 from brax import fluid
-from brax import geometry
 from brax import kinematics
 from brax.base import Motion, System
+from brax.io import mjcf
 from brax.spring import collisions
 from brax.spring import integrator
 from brax.spring import joints
 from brax.spring.base import State
 import jax
-from jax import numpy as jp
 
 
 def init(
@@ -43,6 +43,8 @@ def init(
   Returns:
     state: initial physics state
   """
+  if sys.mj_model is not None:
+    mjcf.validate_model(sys.mj_model)
   # position/velocity level terms
   x, xd = kinematics.forward(sys, q, qd)
   j, jd, a_p, a_c = kinematics.world_to_joint(sys, x, xd)
@@ -55,7 +57,7 @@ def init(
       qd=qd,
       x=x,
       xd=xd,
-      contact=geometry.contact(sys, x) if debug else None,
+      contact=contact.get(sys, x) if debug else None,
       x_i=x_i,
       xd_i=xd_i,
       j=j,
@@ -117,7 +119,7 @@ def step(
       a_c=a_c,
       j=j,
       jd=jd,
-      contact=geometry.contact(sys, x) if debug else None,
+      contact=contact.get(sys, x) if debug else None,
   )
 
   return state

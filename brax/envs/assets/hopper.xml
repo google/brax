@@ -2,7 +2,7 @@
   <compiler angle="radian" autolimits="true"/>
   <default class="main">
     <joint limited="true" armature="1" damping="1"/>
-    <geom contype="0" conaffinity="0" condim="1" solimp="0.8 0.8 0.01" margin="0.001" material="geom"/>
+    <geom contype="0" conaffinity="0" condim="3" solimp="0.8 0.8 0.01" margin="0.001" material="geom"/>
     <motor ctrlrange="-.4 .4"/>
   </default>
   <!-- Removed RK4 integrator for brax. -->

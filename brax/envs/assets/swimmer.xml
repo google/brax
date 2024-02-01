@@ -2,7 +2,7 @@
   <compiler angle="degree" coordinate="local" inertiafromgeom="true"/>
   <option density="4000" timestep="0.01" iterations="8" viscosity="0.1"/>
   <default>
-    <geom conaffinity="0" condim="1" contype="0" material="geom" rgba="0.8 0.6 .4 1"/>
+    <geom conaffinity="0" condim="3" contype="0" material="geom" rgba="0.8 0.6 .4 1"/>
     <joint armature='0.1'  />
   </default>
   <asset>

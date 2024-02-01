@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -105,34 +105,10 @@ def simulate(path):
   steps = int(request.args.get('steps', 1000))
   act_fn = request.args.get('act', 'sin')
   solver_iterations = int(request.args.get('solver_iterations', 100))
-  force_floor = request.args.get('force_floor', 'false').lower() == 'true'
-  add_floor = request.args.get('add_floor', 'false').lower() == 'true'
   add_act = request.args.get('add_act', 'false').lower() == 'true'
 
-  is_mesh = lambda g: isinstance(g, Mesh) and not isinstance(g, Convex)
-
-  if force_floor:
-    floors = [g for g in sys.geoms if isinstance(g, Plane)]
-    if floors:
-      floor = floors[0]
-      masks = [
-          0 if is_mesh(g) else 1 if g is floor else 1 << 32 for g in sys.geoms
-      ]
-      sys = sys.replace(geom_masks=masks)
   if solver_iterations > 0:
     sys = sys.replace(solver_iterations=solver_iterations)
-  if add_floor and not [g for g in sys.geoms if isinstance(g, Plane)]:
-    geoms = sys.geoms + [
-        Plane(
-            link_idx=None,
-            transform=Transform.zero((1,)),
-            friction=jp.ones((1,)),
-            elasticity=jp.ones((1,)),
-        )
-    ]
-    geom_masks = [0 if is_mesh(g) else 1 for g in sys.geoms]
-    geom_masks.append(1 << 32 | 1)
-    sys = sys.replace(geoms=geoms, geom_masks=geom_masks)
   if add_act and not sys.actuator_types:
     # some configs (like urdfs) have no actuators
     actuator_types = ''.join(['m' for t in sys.link_types if t in '123'])
@@ -173,6 +149,8 @@ def simulate(path):
     elif act_fn == 'zero_p':
       q = states[-1].q[sys.q_idx('123')]
       act = -q
+    else:
+      raise ValueError(f'Unknown act function: {act_fn}')
     state = step_fn(sys, states[-1], act)
     states.append(state)
   return html.render(

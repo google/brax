@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,15 +16,8 @@
 """Brax adapter for MJX physics engine."""
 
 from brax import base
-from flax import struct
 from mujoco import mjx
 
 
-@struct.dataclass
-class State(base.State):
-  """Dynamic state that changes after every step.
-
-  Attributes:
-    data: mjx.Data
-  """
-  data: mjx.Data
+class State(base.State, mjx.Data):
+  """Dynamic state that changes after every pipeline step."""

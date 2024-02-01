@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,13 +27,12 @@ import numpy as np
 class PipelineTest(absltest.TestCase):
 
   def test_pendulum(self):
-    sys = test_utils.load_fixture('double_pendulum.xml')
-    model = sys.get_mjx_model()
+    model = test_utils.load_fixture('double_pendulum.xml')
 
-    state = pipeline.init(model, sys.init_q, jp.zeros(sys.qd_size()))
+    state = pipeline.init(model, model.init_q, jp.zeros(model.qd_size()))
     step_fn = jax.jit(pipeline.step)
     for _ in range(20):
-      state = step_fn(model, state, jp.zeros(sys.act_size()))
+      state = step_fn(model, state, jp.zeros(model.act_size()))
 
     # compare against mujoco
     model = test_utils.load_fixture_mujoco('double_pendulum.xml')

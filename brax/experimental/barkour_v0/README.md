@@ -2,6 +2,8 @@
 
 ## Overview
 
+NOTE: For an up-to-date version of Brax training for a quadruped robot with best results, please look at the [MJX colab tutorial](https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/mjx/tutorial.ipynb). The environment in this folder uses an older version of the joystick policy training, which exhibited policies with high variance across seeds.
+
 This folder contains a training script for a flat-terrain joystick policy for the [Barkour v0 Quadruped](https://ai.googleblog.com/2023/05/barkour-benchmarking-animal-level.html) which demonstrates sim2real transfer.
 
 `barkour_joystick.py` contains the environment definition, while the [colab](https://colab.research.google.com/github/google/brax/blob/main/brax/experimental/barkour_v0/barkour_v0_joystick.ipynb) shows how to train the policy.

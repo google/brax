@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -203,10 +203,12 @@ class Humanoid(PipelineEnv):
       sys = sys.replace(actuator=sys.actuator.replace(gear=gear))
 
     if backend == 'mjx':
-      sys._model.opt.solver = mujoco.mjtSolver.mjSOL_NEWTON
-      sys._model.opt.disableflags = mujoco.mjtDisableBit.mjDSBL_EULERDAMP
-      sys._model.opt.iterations = 1
-      sys._model.opt.ls_iterations = 4
+      sys = sys.tree_replace({
+          'opt.solver': mujoco.mjtSolver.mjSOL_NEWTON,
+          'opt.disableflags': mujoco.mjtDisableBit.mjDSBL_EULERDAMP,
+          'opt.iterations': 1,
+          'opt.ls_iterations': 4,
+      })
 
     kwargs['n_frames'] = kwargs.get('n_frames', n_frames)
 
