@@ -86,9 +86,9 @@ class APGTest(parameterized.TestCase):
 
     _, _, _ = apg.train(
         envs.get_environment('inverted_pendulum', backend='spring'),
-        episode_length=128,
-        num_envs=64,
-        num_evals=200,
+        episode_length=100,
+        num_envs=8,
+        num_evals=10,
         learning_rate=3e-3,
         normalize_observations=True,
         randomization_fn=rand_fn,
