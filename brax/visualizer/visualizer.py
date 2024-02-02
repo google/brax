@@ -20,7 +20,7 @@ from wsgiref import validate
 
 from absl import app
 from absl import flags
-from brax.base import Actuator, Convex, Mesh, Plane, Transform
+from brax.base import Actuator
 from brax.generalized import pipeline as generalized
 from brax.io import html
 from brax.io import mjcf

@@ -171,7 +171,8 @@ def dumps(sys: System, states: List[State]) -> Text:
     }
 
     if geom['name'] in ('Mesh', 'Box'):
-      vert, face = _get_mesh(sys.mj_model, sys.geom_dataid[id_])
+      # TODO: use sys.geom_dataid.
+      vert, face = _get_mesh(sys.mj_model, sys.mj_model.geom_dataid[id_])
       geom['vert'] = vert
       geom['face'] = face
 
