@@ -25,4 +25,4 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .[develop]
       - name: Run tests
-        run: pytest -v -n auto --dist worksteal -k 'not brax.v1'
+        run: pytest -k 'not brax.v1'
