@@ -156,7 +156,7 @@ def dumps(sys: System, states: List[State]) -> Text:
   for id_ in range(sys.ngeom):
     link_idx = sys.geom_bodyid[id_] - 1
 
-    rgba = sys.mj_model.geom_rgba[id_]
+    rgba = sys.geom_rgba[id_]
     if (rgba == [0.5, 0.5, 0.5, 1.0]).all():
       # convert the default mjcf color to brax default color
       rgba = np.array([0.4, 0.33, 0.26, 1.0])
@@ -171,8 +171,7 @@ def dumps(sys: System, states: List[State]) -> Text:
     }
 
     if geom['name'] in ('Mesh', 'Box'):
-      # TODO: use sys.geom_dataid.
-      vert, face = _get_mesh(sys.mj_model, sys.mj_model.geom_dataid[id_])
+      vert, face = _get_mesh(sys.mj_model, sys.geom_dataid[id_])
       geom['vert'] = vert
       geom['face'] = face
 

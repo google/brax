@@ -18,6 +18,7 @@
 from absl.testing import absltest
 from brax import test_utils
 from brax.io import mjcf
+import mujoco
 import numpy as np
 
 assert_almost_equal = np.testing.assert_array_almost_equal
@@ -131,6 +132,14 @@ class MjcfTest(absltest.TestCase):
     sys = test_utils.load_fixture('world_fromto.xml')
     mjcf.validate_model(sys.mj_model)
 
+  def test_loads_different_transmission(self):
+    """Tests that the brax model loads with different transmission types."""
+    mj = test_utils.load_fixture_mujoco('ant.xml')
+    mj.actuator_trntype[0] = mujoco.mjtTrn.mjTRN_SITE
+    mjcf.load_model(mj)  # loads without raising an error
+
+    with self.assertRaisesRegex(NotImplementedError, 'transmission types'):
+      mjcf.validate_model(mj)  # raises an error
 
 if __name__ == '__main__':
   absltest.main()

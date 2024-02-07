@@ -385,25 +385,32 @@ def load_model(mj: mujoco.MjModel) -> System:
   )
 
   # create actuators
+  # TODO: swap brax actuation for mjx actuation model.
   ctrl_range = mj.actuator_ctrlrange
   ctrl_range[~(mj.actuator_ctrllimited == 1), :] = np.array([-np.inf, np.inf])
   force_range = mj.actuator_forcerange
   force_range[~(mj.actuator_forcelimited == 1), :] = np.array([-np.inf, np.inf])
-  q_id = np.array([mj.jnt_qposadr[i] for i in mj.actuator_trnid[:, 0]])
-  qd_id = np.array([mj.jnt_dofadr[i] for i in mj.actuator_trnid[:, 0]])
   bias_q = mj.actuator_biasprm[:, 1] * (mj.actuator_biastype != 0)
   bias_qd = mj.actuator_biasprm[:, 2] * (mj.actuator_biastype != 0)
+  # mask actuators since brax only supports joint transmission types
+  act_mask = mj.actuator_trntype == mujoco.mjtTrn.mjTRN_JOINT
+  trnid = mj.actuator_trnid[act_mask, 0].astype(np.uint32)
+  q_id = mj.jnt_qposadr[trnid]
+  qd_id = mj.jnt_dofadr[trnid]
+  act_kwargs = {
+      'gain': mj.actuator_gainprm[:, 0],
+      'gear': mj.actuator_gear[:, 0],
+      'ctrl_range': ctrl_range,
+      'force_range': force_range,
+      'bias_q': bias_q,
+      'bias_qd': bias_qd,
+  }
+  act_kwargs = jax.tree_map(lambda x: x[act_mask], act_kwargs)
 
-  # TODO: remove brax actuators
   actuator = Actuator(  # pytype: disable=wrong-arg-types
       q_id=q_id,
       qd_id=qd_id,
-      gain=mj.actuator_gainprm[:, 0],
-      gear=mj.actuator_gear[:, 0],
-      ctrl_range=ctrl_range,
-      force_range=force_range,
-      bias_q=bias_q,
-      bias_qd=bias_qd,
+      **act_kwargs
   )
 
   # create non-pytree params.  these do not live on device directly, and they
