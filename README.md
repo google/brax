@@ -27,13 +27,13 @@ Brax offers four distinct physics pipelines that are easy to swap:
 
 * [MuJoCo XLA - MJX](https://mujoco.readthedocs.io/en/stable/mjx.html) - a JAX
 reimplementation of the MuJoCo physics engine.
-* [Generalized](https://github.com/google/brax/blob/main/brax/v2/generalized/)
+* [Generalized](https://github.com/google/brax/blob/main/brax/generalized/)
 calculates motion in [generalized coordinates](https://en.wikipedia.org/wiki/Generalized_coordinates)
 using dynamics algorithms similar to [MuJoCo](https://mujoco.org/) and [TDS](https://github.com/erwincoumans/tiny-differentiable-simulator).
-* [Positional](https://github.com/google/brax/blob/main/brax/v2/positional/)
+* [Positional](https://github.com/google/brax/blob/main/brax/positional/)
 uses [Position Based Dynamics](https://matthias-research.github.io/pages/publications/posBasedDyn.pdf),
 a fast but stable method of resolving joint and collision constraints.
-* [Spring](https://github.com/google/brax/blob/main/brax/v2/spring/) provides
+* [Spring](https://github.com/google/brax/blob/main/brax/spring/) provides
 fast and cheap simulation for rapid experimentation, using simple impulse-based
 methods often found in video games.
 
