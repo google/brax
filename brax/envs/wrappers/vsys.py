@@ -3,9 +3,6 @@ import os
 import time
 from pathlib import Path
 
-from jax._src.tree_util import Partial
-from jax.random import KeyArray
-
 from brax.envs.wrappers.training import VmapWrapper
 
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.20"
@@ -558,14 +555,6 @@ if __name__ == "__main__":
     rng, key = jax.random.split(rng, 2)
     ret = jax.random.normal(key)
 
-    SINGLE_ENV = False
-    DISCRETIZATION_LEVEL = 16
-    BATCH_SIZE = DomainCartesianVSysWrapper.find_batch_size_for_discretization_level(
-        discretization_level=DISCRETIZATION_LEVEL,
-        frame_batch_size=8,
-        num_params=2
-    )
-    print(f"BATCH SIZE {BATCH_SIZE}")
 
     # num_train_envs * num_frames * num_params ^ discr_level = num_desired_envs
 
@@ -574,7 +563,7 @@ if __name__ == "__main__":
         backend="spring",
         episode_length=1000,
         auto_reset=True,
-        batch_size=None if SINGLE_ENV else BATCH_SIZE,
+        batch_size=32,
         no_vsys=False
     )
 
@@ -596,8 +585,6 @@ if __name__ == "__main__":
 
     def randact():
         act = jax.random.uniform(jax.random.PRNGKey(0), (env.batch_size, env.action_size,))
-        if SINGLE_ENV:
-            return act[0]
         return act
 
     state = step_func(state, randact())
