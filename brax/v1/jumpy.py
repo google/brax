@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -602,5 +602,5 @@ def meshgrid(*xi,
              indexing: str = 'xy') -> ndarray:
   """Create N-D coordinate matrices from 1D coordinate vectors."""
   if _which_np(xi[0]) is jnp:
-    return jnp.meshgrid(*xi, copy=copy, sparse=sparse, indexing=indexing)
+    return jnp.meshgrid(*xi, copy=copy, sparse=sparse, indexing=indexing)  # pytype: disable=bad-return-type  # jnp-type
   return onp.meshgrid(*xi, copy=copy, sparse=sparse, indexing=indexing)

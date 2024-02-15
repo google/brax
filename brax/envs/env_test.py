@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ from absl.testing import absltest
 from absl.testing import parameterized
 from brax import envs
 from brax import test_utils
+import jax
 from jax import numpy as jp
 
 _EXPECTED_SPS = {'spring': {'ant': 1000, 'humanoid': 1000}}
@@ -55,6 +56,7 @@ class EnvTest(parameterized.TestCase):
         length=episode_length,
     )
     self.assertGreater(mean_sps, expected_sps * 0.99)
+
 
 
 if __name__ == '__main__':

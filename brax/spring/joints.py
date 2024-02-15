@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,7 +31,7 @@ def _free(*_) -> Force:
 
 
 def _one_dof(
-    link: Link, j: Transform, jd: Motion, dof: DoF, tau: jp.ndarray
+    link: Link, j: Transform, jd: Motion, dof: DoF, tau: jax.Array
 ) -> Force:
   """Returns force resulting from a 1-dof constraint in joint frame.
 
@@ -119,7 +119,7 @@ def _one_dof(
 
 
 def _two_dof(
-    link: Link, j: Transform, jd: Motion, dof: DoF, tau: jp.ndarray
+    link: Link, j: Transform, jd: Motion, dof: DoF, tau: jax.Array
 ) -> Force:
   """Returns force resulting from universal constraint in joint frame.
 
@@ -223,7 +223,7 @@ def _two_dof(
 
 
 def _three_dof(
-    link: Link, j: Transform, jd: Motion, dof: DoF, tau: jp.ndarray
+    link: Link, j: Transform, jd: Motion, dof: DoF, tau: jax.Array
 ) -> Force:
   """Returns force resulting from spherical constraint in joint frame.
 
@@ -309,7 +309,7 @@ def _three_dof(
   return Force(ang=ang, vel=vel)
 
 
-def resolve(sys: System, state: State, tau: jp.ndarray) -> Force:
+def resolve(sys: System, state: State, tau: jax.Array) -> Force:
   """Calculates forces to apply to links resulting from joint constraints.
 
   Args:

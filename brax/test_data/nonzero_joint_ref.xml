@@ -5,7 +5,7 @@
   </visual>
   <default class="main">
     <joint limited="true" armature="1" damping="1"/>
-    <geom condim="1" solimp="0.8 0.8 0.01 0.5 2" margin="0.001" material="geom" rgba="0.8 0.6 0.4 1"/>
+    <geom condim="3" solimp="0.8 0.8 0.01 0.5 2" margin="0.001" material="geom" rgba="0.8 0.6 0.4 1"/>
     <general ctrllimited="true" ctrlrange="-0.4 0.4"/>
   </default>
   <asset>

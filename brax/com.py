@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -40,7 +40,7 @@ def to_world(
   return x, xd
 
 
-def inv_inertia(sys, x) -> jp.ndarray:
+def inv_inertia(sys, x) -> jax.Array:
   """Gets the inverse inertia at the center of mass in world frame."""
 
   @jax.vmap

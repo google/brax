@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,12 +23,12 @@ import jax
 from jax import numpy as jp
 
 
-def _integrate_q_axis(sys: System, q: jp.ndarray, qd: jp.ndarray) -> jp.ndarray:
+def _integrate_q_axis(sys: System, q: jax.Array, qd: jax.Array) -> jax.Array:
   """Integrates next q for revolute/prismatic joints."""
   return q + qd * sys.dt
 
 
-def _integrate_q_free(sys: System, q: jp.ndarray, qd: jp.ndarray) -> jp.ndarray:
+def _integrate_q_free(sys: System, q: jax.Array, qd: jax.Array) -> jax.Array:
   """Integrates next q for free joints."""
   rot, ang = q[3:7], qd[3:6]
   ang_norm = jp.linalg.norm(ang) + 1e-8

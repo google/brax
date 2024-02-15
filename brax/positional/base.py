@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@
 from brax import base
 from brax.base import Motion, Transform
 from flax import struct
+import jax
 import jax.numpy as jp
 
 
@@ -41,4 +42,4 @@ class State(base.State):
   jd: Motion
   a_p: Transform
   a_c: Transform
-  mass: jp.ndarray
+  mass: jax.Array

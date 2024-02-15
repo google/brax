@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -126,10 +126,17 @@ class Evaluator:
     eval_metrics = eval_state.info['eval_metrics']
     eval_metrics.active_episodes.block_until_ready()
     epoch_eval_time = time.time() - t
-    metrics = {
-        f'eval/episode_{name}': np.mean(value) if aggregate_episodes else value
-        for name, value in eval_metrics.episode_metrics.items()
-    }
+    metrics = {}
+    for fn in [np.mean, np.std]:
+      suffix = '_std' if fn == np.std else ''
+      metrics.update(
+          {
+              f'eval/episode_{name}{suffix}': (
+                  fn(value) if aggregate_episodes else value
+              )
+              for name, value in eval_metrics.episode_metrics.items()
+          }
+      )
     metrics['eval/avg_episode_length'] = np.mean(eval_metrics.episode_steps)
     metrics['eval/epoch_eval_time'] = epoch_eval_time
     metrics['eval/sps'] = self._steps_per_unroll / epoch_eval_time

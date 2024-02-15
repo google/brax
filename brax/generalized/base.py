@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@
 from brax import base
 from brax.base import Inertia, Motion, Transform
 from flax import struct
+import jax
 from jax import numpy as jp
 
 
@@ -43,24 +44,24 @@ class State(base.State):
   """
 
   # position/velocity based terms are updated at the end of each step:
-  root_com: jp.ndarray
+  root_com: jax.Array
   cinr: Inertia
   cd: Motion
   cdof: Motion
   cdofd: Motion
-  mass_mx: jp.ndarray
-  mass_mx_inv: jp.ndarray
-  con_jac: jp.ndarray
-  con_diag: jp.ndarray
-  con_aref: jp.ndarray
+  mass_mx: jax.Array
+  mass_mx_inv: jax.Array
+  con_jac: jax.Array
+  con_diag: jax.Array
+  con_aref: jax.Array
   # acceleration based terms are calculated using terms from the previous step:
-  qf_smooth: jp.ndarray
-  qf_constraint: jp.ndarray
-  qdd: jp.ndarray
+  qf_smooth: jax.Array
+  qf_constraint: jax.Array
+  qdd: jax.Array
 
   @classmethod
   def init(
-      cls, q: jp.ndarray, qd: jp.ndarray, x: Transform, xd: Motion
+      cls, q: jax.Array, qd: jax.Array, x: Transform, xd: Motion
   ) -> 'State':
     """Returns an initial State given a brax system."""
     num_links = x.pos.shape[0]

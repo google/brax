@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@ from brax.envs import inverted_double_pendulum
 from brax.envs import inverted_pendulum
 from brax.envs import pusher
 from brax.envs import reacher
+from brax.envs import swimmer
 from brax.envs import walker2d
 from brax.envs.base import Env, PipelineEnv, State, Wrapper
 from brax.envs.wrappers import training
@@ -44,6 +45,7 @@ _envs = {
     'inverted_double_pendulum': inverted_double_pendulum.InvertedDoublePendulum,
     'pusher': pusher.Pusher,
     'reacher': reacher.Reacher,
+    'swimmer': swimmer.Swimmer,
     'walker2d': walker2d.Walker2d,
 }
 

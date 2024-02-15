@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -61,8 +61,8 @@ def wrapper(reward_fn,
       score = reward
     reward = (reward + offset) * scale
     score *= jnp.sign(scale)
-    reward = jnp.where(done, x=reward + done_bonus, y=reward)
-    score = jnp.where(done, x=score + done_bonus, y=score)
+    reward = jnp.where(done, reward + done_bonus, reward)
+    score = jnp.where(done, score + done_bonus, score)
     return reward, score, done
 
   return fn
@@ -168,8 +168,8 @@ def distance_reward(action: jnp.ndarray,
   # instead of clipping, terminate
   # dist = jnp.clip(dist, a_min=min_dist, a_max=max_dist)
   done = jnp.zeros_like(dist)
-  done = jnp.where(dist < min_dist, x=jnp.ones_like(done), y=done)
-  done = jnp.where(dist > max_dist, x=jnp.ones_like(done), y=done)
+  done = jnp.where(dist < min_dist, jnp.ones_like(done), done)
+  done = jnp.where(dist > max_dist, jnp.ones_like(done), done)
   return -dist, done
 
 

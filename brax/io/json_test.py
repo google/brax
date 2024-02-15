@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -38,6 +38,9 @@ class JsonTest(absltest.TestCase):
         ['box', 'dodecahedron', 'pyramid', 'tetrahedron', 'world'],
     )
     self.assertLen(res['geoms']['world'], 1)
+
+    for f in ['size', 'rgba', 'name', 'link_idx', 'pos', 'rot', 'face', 'vert']:
+      self.assertIn(f, res['geoms']['box'][0])
 
   def test_dumps_invalidstate_raises(self):
     sys = test_utils.load_fixture('convex_convex.xml')

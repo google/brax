@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -29,7 +29,7 @@ from jax import numpy as jp
 
 
 def forward(
-    sys: System, q: jp.ndarray, qd: jp.ndarray
+    sys: System, q: jax.Array, qd: jax.Array
 ) -> Tuple[Transform, Motion]:
   """Converts joint position/velocity to transform/motion in world frame.
 
@@ -258,7 +258,7 @@ def link_to_joint_frame(motion: Motion) -> Tuple[Motion, float]:
   )
   parity = jp.where(is_both, 1, parity)
 
-  return Motion(ang=ang_frame, vel=vel_frame), parity
+  return Motion(ang=ang_frame, vel=vel_frame), parity  # pytype: disable=bad-return-type  # jnp-type
 
 
 def axis_angle_ang(
@@ -310,7 +310,7 @@ def axis_angle_ang(
 
 def axis_slide_vel(
     x: Transform, xd: Motion, motion: Motion
-) -> Tuple[jp.ndarray, jp.ndarray, jp.ndarray]:
+) -> Tuple[jax.Array, jax.Array, jax.Array]:
   """Returns axes and slide dofs for a joint.
 
   Args:
@@ -330,7 +330,7 @@ def axis_slide_vel(
 
 def inverse(
     sys: System, j: Transform, jd: Motion
-) -> Tuple[jp.ndarray, jp.ndarray]:
+) -> Tuple[jax.Array, jax.Array]:
   """Translates maximal coordinates into reduced coordinates."""
 
   def free(x, xd, *_):

@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -30,7 +30,11 @@ import numpy as np
 class KinematicsTest(parameterized.TestCase):
 
   @parameterized.parameters(
-      ('ant.xml',), ('humanoid.xml',), ('reacher.xml',), ('half_cheetah.xml',)
+      ('ant.xml',),
+      ('humanoid.xml',),
+      ('reacher.xml',),
+      ('half_cheetah.xml',),
+      ('swimmer.xml',),
   )
   def test_forward(self, xml_file):
     """Test dynamics forward q."""
@@ -68,7 +72,11 @@ class KinematicsTest(parameterized.TestCase):
     )
 
   @parameterized.parameters(
-      ('ant.xml',), ('humanoid.xml',), ('reacher.xml',), ('half_cheetah.xml',)
+      ('ant.xml',),
+      ('humanoid.xml',),
+      ('reacher.xml',),
+      ('half_cheetah.xml',),
+      ('swimmer.xml',),
   )
   def test_inverse(self, xml_file):
     np.random.seed(0)

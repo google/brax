@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,7 +17,8 @@
 
 from absl.testing import absltest
 from brax import test_utils
-from brax.base import Box, Convex, Plane, Sphere, Mesh
+from brax.io import mjcf
+import mujoco
 import numpy as np
 
 assert_almost_equal = np.testing.assert_array_almost_equal
@@ -65,23 +66,6 @@ class MjcfTest(absltest.TestCase):
     self.assertEqual(sys.link_types, 'f11111111')
     self.assertEqual(sys.link_parents, (-1, 0, 1, 0, 3, 0, 5, 0, 7))
 
-    # check contacts
-    plane, _, _, sphere = sys.geoms
-    self.assertIsInstance(sphere, Sphere)
-    self.assertIsInstance(plane, Plane)
-    assert_almost_equal(
-        sphere.transform.pos,
-        np.array(([
-            [0.4, 0.4, 0.0],
-            [-0.4, 0.4, 0.0],
-            [-0.4, -0.4, 0.0],
-            [0.4, -0.4, 0.0],
-        ])),
-    )
-    assert_almost_equal(plane.transform.pos, np.array([[0, 0, 0]]))
-    assert_almost_equal(sphere.link_idx, np.array([2, 4, 6, 8]))
-    self.assertIsNone(plane.link_idx)
-
   def test_load_humanoid(self):
     sys = test_utils.load_fixture('humanoid.xml')
 
@@ -104,83 +88,25 @@ class MjcfTest(absltest.TestCase):
     )
     self.assertEqual(sys.link_types, 'f2131312121')
 
-    # check contacts
-    plane, _, _, sphere = sys.geoms
-    self.assertIsInstance(sphere, Sphere)
-    self.assertIsInstance(plane, Plane)
-    assert_almost_equal(
-        sphere.transform.pos, np.array(([[0, 0, -0.35], [0, 0, -0.35]]))
-    )
-    assert_almost_equal(plane.transform.pos, np.array([[0, 0, 0]]))
-    assert_almost_equal(sphere.link_idx, np.array([4, 6]))
-    self.assertIsNone(plane.link_idx)
-
-  def test_load_mesh_and_box(self):
-    sys = test_utils.load_fixture('convex_convex.xml')
-    n_box, n_convex, n_mesh = 0, 0, 0
-    for g in sys.geoms:
-      if isinstance(g, Box):
-        n_box += 1
-      elif isinstance(g, Convex):
-        n_convex += 1
-      elif isinstance(g, Mesh):
-        n_mesh += 1
-    self.assertEqual(n_box, 1)
-    self.assertEqual(n_convex, 4)
-    self.assertEqual(n_mesh, 3)
-
-  def test_load_urdf(self):
-    sys = test_utils.load_fixture('laikago/laikago_toes_zup.urdf')
-    n_meshes = sum(
-        g.friction.shape[0] if isinstance(g, Mesh) else 0 for g in sys.geoms
-    )
-    n_convex = sum(
-        g.friction.shape[0] if isinstance(g, Convex) else 0 for g in sys.geoms
-    )
-    self.assertEqual(n_meshes, 26)
-    self.assertEqual(n_convex, 26)
-
   def test_custom(self):
     sys = test_utils.load_fixture('capsule.xml')
-    self.assertSequenceEqual([g.elasticity for g in sys.geoms], [0.2, 0.1])
+    assert_almost_equal(sys.elasticity, [0.2, 0.1])
 
   def test_joint_ref_check(self):
     with self.assertRaisesRegex(NotImplementedError, '`ref` attribute'):
-      test_utils.load_fixture('nonzero_joint_ref.xml')
-
-  def test_rgba(self):
-    sys = test_utils.load_fixture('colour_objects.xml')
-    # non default colour in plane
-    assert_almost_equal(
-        sys.geoms[0].rgba.squeeze(), np.array([1, 0, 0.8, 1]), 6
-    )
-    # other geometris have default colour
-    for g in sys.geoms[1:]:
-      assert_almost_equal(g.rgba.squeeze(), np.array([0.8, 0.6, 0.4, 1.0]), 6)
+      sys = test_utils.load_fixture('nonzero_joint_ref.xml')
+      mjcf.validate_model(sys.mj_model)
 
   def test_world_body_transform(self):
     sys = test_utils.load_fixture('world_body_transform.xml')
     # world body is in the right position/orientation
     r = 0.70710677
-    assert_almost_equal(sys.geoms[1].transform.pos, np.array([[1.0, 0.0, 0.0]]))
-    assert_almost_equal(
-        sys.geoms[1].transform.rot, np.array([[r, 0.0, r, 0.0]]), 5
-    )
+    assert_almost_equal(sys.geom_pos[1], np.array([1.0, 0.0, 0.0]))
+    assert_almost_equal(sys.geom_quat[1], np.array([r, 0.0, r, 0.0]), 5)
     # child body is transformed wrt world body
     assert_almost_equal(
         sys.init_q, np.array([1.245, 0.0, 0.0, 0.5, 0.5, 0.5, -0.5])
     )
-
-  def test_load_flat_cylinder(self):
-    sys = test_utils.load_fixture('flat_cylinder.xml')
-    self.assertEqual(sys.geoms[1].radius, 0.25)
-    self.assertEqual(sys.geoms[1].length, 0.002)
-
-  def test_load_fat_cylinder(self):
-    with self.assertRaisesRegex(
-        NotImplementedError, 'Cylinders of half-length'
-    ):
-      test_utils.load_fixture('fat_cylinder.xml')
 
   def test_load_fluid_box(self):
     sys = test_utils.load_fixture('fluid_box.xml')
@@ -191,18 +117,29 @@ class MjcfTest(absltest.TestCase):
     with self.assertRaisesRegex(
         NotImplementedError, 'Ellipsoid fluid model not implemented'
     ):
-      test_utils.load_fixture('fluid_ellipsoid.xml')
+      sys = test_utils.load_fixture('fluid_ellipsoid.xml')
+      mjcf.validate_model(sys.mj_model)
 
   def test_load_wind(self):
     with self.assertRaisesRegex(
         NotImplementedError, 'option.wind is not implemented'
     ):
-      test_utils.load_fixture('fluid_wind.xml')
+      sys = test_utils.load_fixture('fluid_wind.xml')
+      mjcf.validate_model(sys.mj_model)
 
   def test_world_fromto(self):
     """Tests that a world element with fromto does not break mjcf.load."""
-    test_utils.load_fixture('world_fromto.xml')
+    sys = test_utils.load_fixture('world_fromto.xml')
+    mjcf.validate_model(sys.mj_model)
 
+  def test_loads_different_transmission(self):
+    """Tests that the brax model loads with different transmission types."""
+    mj = test_utils.load_fixture_mujoco('ant.xml')
+    mj.actuator_trntype[0] = mujoco.mjtTrn.mjTRN_SITE
+    mjcf.load_model(mj)  # loads without raising an error
+
+    with self.assertRaisesRegex(NotImplementedError, 'transmission types'):
+      mjcf.validate_model(mj)  # raises an error
 
 if __name__ == '__main__':
   absltest.main()

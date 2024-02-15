@@ -21,17 +21,19 @@ to minutes:
     [evolutionary strategies](https://github.com/google/brax/blob/main/brax/training/agents/es).
 *   Learning algorithms that leverage the differentiability of the simulator, such as [analytic policy gradients](https://github.com/google/brax/blob/main/brax/training/agents/apg).
 
-## One API, Three Pipelines
+## One API, Four Pipelines
 
-Brax offers three distinct physics pipelines that are easy to swap:
+Brax offers four distinct physics pipelines that are easy to swap:
 
-* [Generalized](https://github.com/google/brax/blob/main/brax/v2/generalized/)
-calculates motion in [generalized coordinates](https://en.wikipedia.org/wiki/Generalized_coordinates) using the same accurate robot
-dynamics algorithms as [MuJoCo](https://mujoco.org/) and [TDS](https://github.com/erwincoumans/tiny-differentiable-simulator).
-* [Positional](https://github.com/google/brax/blob/main/brax/v2/positional/)
+* [MuJoCo XLA - MJX](https://mujoco.readthedocs.io/en/stable/mjx.html) - a JAX
+reimplementation of the MuJoCo physics engine.
+* [Generalized](https://github.com/google/brax/blob/main/brax/generalized/)
+calculates motion in [generalized coordinates](https://en.wikipedia.org/wiki/Generalized_coordinates)
+using dynamics algorithms similar to [MuJoCo](https://mujoco.org/) and [TDS](https://github.com/erwincoumans/tiny-differentiable-simulator).
+* [Positional](https://github.com/google/brax/blob/main/brax/positional/)
 uses [Position Based Dynamics](https://matthias-research.github.io/pages/publications/posBasedDyn.pdf),
 a fast but stable method of resolving joint and collision constraints.
-* [Spring](https://github.com/google/brax/blob/main/brax/v2/spring/) provides
+* [Spring](https://github.com/google/brax/blob/main/brax/spring/) provides
 fast and cheap simulation for rapid experimentation, using simple impulse-based
 methods often found in video games.
 
@@ -45,6 +47,7 @@ Explore Brax easily and quickly through a series of colab notebooks:
 
 * [Brax Basics](https://colab.research.google.com/github/google/brax/blob/main/notebooks/basics.ipynb) introduces the Brax API, and shows how to simulate basic physics primitives.
 * [Brax Training](https://colab.research.google.com/github/google/brax/blob/main/notebooks/training.ipynb) introduces Brax's training algorithms, and lets you train your own policies directly within the colab. It also demonstrates loading and saving policies.
+* [Brax Training with MuJoCo XLA - MJX](https://colab.sandbox.google.com/github/google-deepmind/mujoco/blob/main/mjx/tutorial.ipynb) demonstrates training in Brax using the `MJX` physics simulator.
 * [Brax Training with PyTorch on GPU](https://colab.research.google.com/github/google/brax/blob/main/notebooks/training_torch.ipynb) demonstrates how Brax can be used in other ML frameworks for fast training, in this case PyTorch.
 
 ## Using Brax Locally
@@ -97,7 +100,7 @@ If you would like to reference Brax in a publication, please use:
   author = {C. Daniel Freeman and Erik Frey and Anton Raichuk and Sertan Girgin and Igor Mordatch and Olivier Bachem},
   title = {Brax - A Differentiable Physics Engine for Large Scale Rigid Body Simulation},
   url = {http://github.com/google/brax},
-  version = {0.9.1},
+  version = {0.10.0},
   year = {2021},
 }
 ```

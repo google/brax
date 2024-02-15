@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,7 +27,8 @@ import numpy as np
 class DynamicsTest(parameterized.TestCase):
 
   @parameterized.parameters(
-      'ant.xml', 'triple_pendulum.xml', ('humanoid.xml',), ('half_cheetah.xml',)
+      'ant.xml', 'triple_pendulum.xml', ('humanoid.xml',),
+      ('half_cheetah.xml',), ('swimmer.xml',),
   )
   def test_transform_com(self, xml_file):
     """Test dynamics transform com."""
@@ -52,7 +53,8 @@ class DynamicsTest(parameterized.TestCase):
       np.testing.assert_almost_equal(state.cdofd.matrix(), mj_next.cdof_dot, 5)
 
   @parameterized.parameters(
-      'ant.xml', 'triple_pendulum.xml', ('humanoid.xml',), ('half_cheetah.xml',)
+      'ant.xml', 'triple_pendulum.xml', ('humanoid.xml',),
+      ('half_cheetah.xml',), ('swimmer.xml',),
   )
   def test_forward(self, xml_file):
     """Test dynamics forward."""

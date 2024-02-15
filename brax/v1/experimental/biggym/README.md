@@ -38,7 +38,7 @@ Explore BIG-Gym easily and quickly through:
 Tips:
 * for debugging NaNs, use:
 ```python
-from jax.config import config
+from jax import config
 config.update("jax_debug_nans", True)
 ```
 

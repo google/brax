@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,9 +16,10 @@
 
 import functools
 import time
-from typing import Callable, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Optional, Tuple, Union
 
 from absl import logging
+from brax import base
 from brax import envs
 from brax.training import acting
 from brax.training import pmap
@@ -52,23 +53,29 @@ def _unpmap(v):
   return jax.tree_util.tree_map(lambda x: x[0], v)
 
 
-def train(environment: Union[envs_v1.Env, envs.Env],
-          episode_length: int,
-          action_repeat: int = 1,
-          num_envs: int = 1,
-          max_devices_per_host: Optional[int] = None,
-          num_eval_envs: int = 128,
-          learning_rate: float = 1e-4,
-          seed: int = 0,
-          truncation_length: Optional[int] = None,
-          max_gradient_norm: float = 1e9,
-          num_evals: int = 1,
-          normalize_observations: bool = False,
-          deterministic_eval: bool = False,
-          network_factory: types.NetworkFactory[
-              apg_networks.APGNetworks] = apg_networks.make_apg_networks,
-          progress_fn: Callable[[int, Metrics], None] = lambda *args: None,
-          eval_env: Optional[envs.Env] = None):
+def train(
+    environment: Union[envs_v1.Env, envs.Env],
+    episode_length: int,
+    action_repeat: int = 1,
+    num_envs: int = 1,
+    max_devices_per_host: Optional[int] = None,
+    num_eval_envs: int = 128,
+    learning_rate: float = 1e-4,
+    seed: int = 0,
+    truncation_length: Optional[int] = None,
+    max_gradient_norm: float = 1e9,
+    num_evals: int = 1,
+    normalize_observations: bool = False,
+    deterministic_eval: bool = False,
+    network_factory: types.NetworkFactory[
+        apg_networks.APGNetworks
+    ] = apg_networks.make_apg_networks,
+    progress_fn: Callable[[int, Metrics], None] = lambda *args: None,
+    eval_env: Optional[envs.Env] = None,
+    randomization_fn: Optional[
+        Callable[[base.System, jnp.ndarray], Tuple[base.System, base.System]]
+    ] = None,
+):
   """Direct trajectory optimization training."""
   xt = time.time()
 
@@ -96,8 +103,23 @@ def train(environment: Union[envs_v1.Env, envs.Env],
   else:
     wrap_for_training = envs_v1.wrappers.wrap_for_training
 
+  key = jax.random.PRNGKey(seed)
+  global_key, local_key = jax.random.split(key)
+  rng, global_key = jax.random.split(global_key, 2)
+  local_key = jax.random.fold_in(local_key, process_id)
+  local_key, eval_key = jax.random.split(local_key)
+
+  v_randomiation_fn = None
+  if randomization_fn is not None:
+    v_randomiation_fn = functools.partial(
+        randomization_fn, rng=jax.random.split(rng, num_envs // process_count)
+    )
   env = wrap_for_training(
-      env, episode_length=episode_length, action_repeat=action_repeat)
+      env,
+      episode_length=episode_length,
+      action_repeat=action_repeat,
+      randomization_fn=v_randomiation_fn,
+  )
 
   normalize = lambda x, y: x
   if normalize_observations:
@@ -110,8 +132,11 @@ def train(environment: Union[envs_v1.Env, envs.Env],
 
   optimizer = optax.adam(learning_rate=learning_rate)
 
-  def env_step(carry: Tuple[Union[envs.State, envs_v1.State], PRNGKey], step_index: int,
-               policy: types.Policy):
+  def env_step(
+      carry: Tuple[Union[envs.State, envs_v1.State], PRNGKey],
+      step_index: int,
+      policy: types.Policy,
+  ):
     env_state, key = carry
     key, key_sample = jax.random.split(key)
     actions = policy(env_state.obs, key_sample)[0]
@@ -187,13 +212,7 @@ def train(environment: Union[envs_v1.Env, envs.Env],
         'training/walltime': training_walltime,
         **{f'training/{name}': value for name, value in metrics.items()}
     }
-    return training_state, metrics
-
-  key = jax.random.PRNGKey(seed)
-  global_key, local_key = jax.random.split(key)
-  del key
-  local_key = jax.random.fold_in(local_key, process_id)
-  local_key, eval_key = jax.random.split(local_key)
+    return training_state, metrics  # pytype: disable=bad-return-type  # py311-upgrade
 
   # The network key should be global, so that networks are initialized the same
   # way for different processes.
@@ -204,16 +223,23 @@ def train(environment: Union[envs_v1.Env, envs.Env],
       optimizer_state=optimizer.init(policy_params),
       policy_params=policy_params,
       normalizer_params=running_statistics.init_state(
-          specs.Array((env.observation_size,), jnp.float32)))
+          specs.Array((env.observation_size,), jnp.dtype('float32'))))
   training_state = jax.device_put_replicated(
       training_state,
       jax.local_devices()[:local_devices_to_use])
 
   if not eval_env:
-    eval_env = env
-  else:
-    eval_env = wrap_for_training(
-        eval_env, episode_length=episode_length, action_repeat=action_repeat)
+    eval_env = environment
+  if randomization_fn is not None:
+    v_randomiation_fn = functools.partial(
+        randomization_fn, rng=jax.random.split(eval_key, num_eval_envs)
+    )
+  eval_env = wrap_for_training(
+      eval_env,
+      episode_length=episode_length,
+      action_repeat=action_repeat,
+      randomization_fn=v_randomiation_fn,
+  )
 
   evaluator = acting.Evaluator(
       eval_env,

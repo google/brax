@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ def upright_term_fn(done, sys, qp: brax.QP, info: brax.Info, component):
   up = jnp.array([0., 0., 1.])
   torso_up = math.rotate(up, rot)
   torso_is_up = jnp.dot(torso_up, up)
-  done = jnp.where(torso_is_up < 0.0, x=1.0, y=done)
+  done = jnp.where(torso_is_up < 0.0, 1.0, done)
   return done
 
 
@@ -45,6 +45,6 @@ def height_term_fn(done,
   z_offset = component.get('term_params', {}).get('z_offset', 0.0)
   index = sim_utils.names2indices(sys.config, component['root'], 'body')[0][0]
   z = qp.pos[index][2]
-  done = jnp.where(z < min_height + z_offset, x=1.0, y=done)
-  done = jnp.where(z > max_height + z_offset, x=1.0, y=done)
+  done = jnp.where(z < min_height + z_offset, 1.0, done)
+  done = jnp.where(z > max_height + z_offset, 1.0, done)
   return done

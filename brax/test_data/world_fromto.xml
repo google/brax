@@ -1,15 +1,12 @@
 <mujoco model="humanoid">
     <compiler angle="degree" inertiafromgeom="true" />
     <default>
-        <joint limited="true" />
-        <geom rgba=".8 .6 .4 1" condim="4" />
+        <geom rgba=".8 .6 .4 1" condim="3" />
         <default class="damped_joint">
             <joint damping="2" stiffness="2.0" armature="0.02" />
         </default>
     </default>
-    <option timestep="0.0008" iterations="10" solver="PGS" collision="all">
-        <flag energy="enable" />
-    </option>
+    <option timestep="0.0008" iterations="10"/>
     <worldbody>
       <body name="pelvis" pos="0.385 0.32 1.26918883">
         <site name="pelvis" pos="0 0 0" />

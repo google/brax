@@ -2,7 +2,7 @@
     <compiler angle="degree" inertiafromgeom="true"/>
     <default>
         <joint armature="1" damping="1" limited="true"/>
-        <geom conaffinity="0" condim="1" contype="0" material="geom"/>
+        <geom conaffinity="0" condim="3" contype="0" material="geom"/>
         <motor ctrllimited="true" ctrlrange="-.4 .4"/>
     </default>
     <!-- Removed RK4 integrator for brax. -->

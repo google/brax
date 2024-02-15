@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ from jax import numpy as jp
 import numpy as np
 
 
-def rotate(vec: jp.ndarray, quat: jp.ndarray):
+def rotate(vec: jax.Array, quat: jax.Array):
   """Rotates a vector vec by a unit quaternion quat.
 
   Args:
@@ -40,7 +40,7 @@ def rotate(vec: jp.ndarray, quat: jp.ndarray):
   return r
 
 
-def inv_rotate(vec: jp.ndarray, quat: jp.ndarray):
+def inv_rotate(vec: jax.Array, quat: jax.Array):
   """Rotates a vector vec by an inverted unit quaternion quat.
 
   Args:
@@ -71,7 +71,7 @@ def rotate_np(vec: np.ndarray, quat: np.ndarray):
   return r
 
 
-def ang_to_quat(ang: jp.ndarray):
+def ang_to_quat(ang: jax.Array):
   """Converts angular velocity to a quaternion.
 
   Args:
@@ -83,7 +83,7 @@ def ang_to_quat(ang: jp.ndarray):
   return jp.array([0, ang[0], ang[1], ang[2]])
 
 
-def quat_mul(u: jp.ndarray, v: jp.ndarray) -> jp.ndarray:
+def quat_mul(u: jax.Array, v: jax.Array) -> jax.Array:
   """Multiplies two quaternions.
 
   Args:
@@ -119,7 +119,7 @@ def quat_mul_np(u: np.ndarray, v: np.ndarray) -> np.ndarray:
   ])
 
 
-def quat_inv(q: jp.ndarray) -> jp.ndarray:
+def quat_inv(q: jax.Array) -> jax.Array:
   """Calculates the inverse of quaternion q.
 
   Args:
@@ -131,7 +131,7 @@ def quat_inv(q: jp.ndarray) -> jp.ndarray:
   return q * jp.array([1, -1, -1, -1])
 
 
-def quat_rot_axis(axis: jp.ndarray, angle: jp.ndarray) -> jp.ndarray:
+def quat_rot_axis(axis: jax.Array, angle: jax.Array) -> jax.Array:
   """Provides a quaternion that describes rotating around axis v by angle.
 
   Args:
@@ -148,7 +148,7 @@ def quat_rot_axis(axis: jp.ndarray, angle: jp.ndarray) -> jp.ndarray:
   return jp.array([qw, qx, qy, qz])
 
 
-def quat_to_3x3(q: jp.ndarray) -> jp.ndarray:
+def quat_to_3x3(q: jax.Array) -> jax.Array:
   """Converts quaternion to 3x3 rotation matrix."""
   d = jp.dot(q, q)
   w, x, y, z = q
@@ -165,7 +165,7 @@ def quat_to_3x3(q: jp.ndarray) -> jp.ndarray:
   ])
 
 
-def quat_from_3x3(m: jp.ndarray) -> jp.ndarray:
+def quat_from_3x3(m: jax.Array) -> jax.Array:
   """Converts 3x3 rotation matrix to quaternion."""
   w = jp.sqrt(1 + m[0, 0] + m[1, 1] + m[2, 2]) / 2.0
   x = (m[2][1] - m[1][2]) / (w * 4)
@@ -174,7 +174,7 @@ def quat_from_3x3(m: jp.ndarray) -> jp.ndarray:
   return jp.array([w, x, y, z])
 
 
-def quat_mul_ang(q: jp.ndarray, ang: jp.ndarray) -> jp.ndarray:
+def quat_mul_ang(q: jax.Array, ang: jax.Array) -> jax.Array:
   """Multiplies a quat by an angular velocity."""
   mat = jp.array([
       [-q[2], q[1], -q[0], q[3]],
@@ -185,8 +185,8 @@ def quat_mul_ang(q: jp.ndarray, ang: jp.ndarray) -> jp.ndarray:
 
 
 def signed_angle(
-    axis: jp.ndarray, ref_p: jp.ndarray, ref_c: jp.ndarray
-) -> jp.ndarray:
+    axis: jax.Array, ref_p: jax.Array, ref_c: jax.Array
+) -> jax.Array:
   """Calculates the signed angle between two vectors along an axis.
 
   Args:
@@ -201,7 +201,7 @@ def signed_angle(
 
 
 @custom_jvp
-def safe_arccos(x: jp.ndarray) -> jp.ndarray:
+def safe_arccos(x: jax.Array) -> jax.Array:
   """Trigonometric inverse cosine, element-wise with safety clipping in grad."""
   return jp.arccos(x)
 
@@ -216,7 +216,7 @@ def _safe_arccos_jvp(primal, tangent):
 
 
 @custom_jvp
-def safe_arcsin(x: jp.ndarray) -> jp.ndarray:
+def safe_arcsin(x: jax.Array) -> jax.Array:
   """Trigonometric inverse sine, element-wise with safety clipping in grad."""
   return jp.arcsin(x)
 
@@ -230,7 +230,7 @@ def _safe_arcsin_jvp(primal, tangent):
   return primal_out, tangent_out
 
 
-def inv_3x3(m) -> jp.ndarray:
+def inv_3x3(m) -> jax.Array:
   """Inverse specialized for 3x3 matrices."""
   det = jp.linalg.det(m)
   adjugate = jp.array([
@@ -253,7 +253,7 @@ def inv_3x3(m) -> jp.ndarray:
   return adjugate / (det + 1e-10)
 
 
-def orthogonals(a: jp.ndarray) -> Tuple[jp.ndarray, jp.ndarray]:
+def orthogonals(a: jax.Array) -> Tuple[jax.Array, jax.Array]:
   """Returns orthogonal vectors `b` and `c`, given a normal vector `a`."""
   y, z = jp.array([0, 1, 0]), jp.array([0, 0, 1])
   b = jp.where((-0.5 < a[1]) & (a[1] < 0.5), y, z)
@@ -263,7 +263,7 @@ def orthogonals(a: jp.ndarray) -> Tuple[jp.ndarray, jp.ndarray]:
   return b, jp.cross(a, b)
 
 
-def solve_pgs(a: jp.ndarray, b: jp.ndarray, num_iters: int) -> jp.ndarray:
+def solve_pgs(a: jax.Array, b: jax.Array, num_iters: int) -> jax.Array:
   """Projected Gauss-Seidel solver for a MLCP defined by matrix A and vector b.
   """
   num_rows = b.shape[0]
@@ -286,8 +286,8 @@ def solve_pgs(a: jp.ndarray, b: jp.ndarray, num_iters: int) -> jp.ndarray:
 
 
 def inv_approximate(
-    a: jp.ndarray, a_inv: jp.ndarray, num_iter: int = 10
-) -> jp.ndarray:
+    a: jax.Array, a_inv: jax.Array, num_iter: int = 10
+) -> jax.Array:
   """Use Newton-Schulz iteration to solve ``A^-1``.
 
   Args:
@@ -303,21 +303,21 @@ def inv_approximate(
     a_inv, r, err = carry
     a_inv_next = a_inv @ (np.eye(a.shape[0]) + r)
     r_next = np.eye(a.shape[0]) - a @ a_inv_next
-    err_next = jp.linalg.norm(r_next)
+    err_next = safe_norm(r_next)
     a_inv_next = jp.where(err_next < err, a_inv_next, a_inv)
     return (a_inv_next, r_next, err_next), None
 
   # ensure ||I - X0 @ A|| < 1, in order to guarantee convergence
   r0 = jp.eye(a.shape[0]) - a @ a_inv
-  a_inv = jp.where(jp.linalg.norm(r0) > 1, 0.5 * a.T / jp.trace(a @ a.T), a_inv)
+  a_inv = jp.where(safe_norm(r0) > 1, 0.5 * a.T / jp.trace(a @ a.T), a_inv)
   (a_inv, _, _), _ = jax.lax.scan(body_fn, (a_inv, r0, 1.0), None, num_iter)
 
   return a_inv
 
 
 def safe_norm(
-    x: jp.ndarray, axis: Optional[Union[Tuple[int, ...], int]] = None
-) -> jp.ndarray:
+    x: jax.Array, axis: Optional[Union[Tuple[int, ...], int]] = None
+) -> jax.Array:
   """Calculates a linalg.norm(x) that's safe for gradients at x=0.
 
   Avoids a poorly defined gradient for jnp.linal.norm(0) see
@@ -332,15 +332,15 @@ def safe_norm(
 
   is_zero = jp.allclose(x, 0.0)
   # temporarily swap x with ones if is_zero, then swap back
-  x = jp.where(is_zero, jp.ones_like(x), x)
-  n = jp.linalg.norm(x, axis=axis)
-  n = jp.where(is_zero, 0.0, n)
+  x = x + is_zero * 1.0
+  n = jp.linalg.norm(x) * (1.0 - is_zero)
+
   return n
 
 
 def normalize(
-    x: jp.ndarray, axis: Optional[Union[Tuple[int, ...], int]] = None
-) -> Tuple[jp.ndarray, jp.ndarray]:
+    x: jax.Array, axis: Optional[Union[Tuple[int, ...], int]] = None
+) -> Tuple[jax.Array, jax.Array]:
   """Normalizes an array.
 
   Args:
@@ -355,7 +355,7 @@ def normalize(
   return n, norm
 
 
-def from_to(v1: jp.ndarray, v2: jp.ndarray) -> jp.ndarray:
+def from_to(v1: jax.Array, v2: jax.Array) -> jax.Array:
   """Calculates the quaternion that rotates unit vector v1 to unit vector v2."""
   xyz = jp.cross(v1, v2)
   w = 1.0 + jp.dot(v1, v2)
@@ -366,7 +366,7 @@ def from_to(v1: jp.ndarray, v2: jp.ndarray) -> jp.ndarray:
   return rot / jp.linalg.norm(rot)
 
 
-def euler_to_quat(v: jp.ndarray) -> jp.ndarray:
+def euler_to_quat(v: jax.Array) -> jax.Array:
   """Converts euler rotations in degrees to quaternion."""
   # this follows the Tait-Bryan intrinsic rotation formalism: x-y'-z''
   c1, c2, c3 = jp.cos(v * jp.pi / 360)
@@ -378,7 +378,7 @@ def euler_to_quat(v: jp.ndarray) -> jp.ndarray:
   return jp.array([w, x, y, z])
 
 
-def quat_to_euler(q: jp.ndarray) -> jp.ndarray:
+def quat_to_euler(q: jax.Array) -> jax.Array:
   """Converts quaternions to euler rotations in radians."""
   # this follows the Tait-Bryan intrinsic rotation formalism: x-y'-z''
 
@@ -396,7 +396,7 @@ def quat_to_euler(q: jp.ndarray) -> jp.ndarray:
   return jp.array([x, y, z])
 
 
-def vec_quat_mul(u: jp.ndarray, v: jp.ndarray) -> jp.ndarray:
+def vec_quat_mul(u: jax.Array, v: jax.Array) -> jax.Array:
   """Multiplies a vector u and a quaternion v.
 
   This is a convenience method for multiplying two quaternions when
@@ -421,6 +421,6 @@ def vec_quat_mul(u: jp.ndarray, v: jp.ndarray) -> jp.ndarray:
   ])
 
 
-def relative_quat(q1: jp.ndarray, q2: jp.ndarray) -> jp.ndarray:
+def relative_quat(q1: jax.Array, q2: jax.Array) -> jax.Array:
   """Returns the relative quaternion from q1 to q2."""
   return quat_mul(q2, quat_inv(q1))

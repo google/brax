@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,21 +12,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# pylint:disable=g-multiple-import, g-importing-member
 """Base brax primitives and simple manipulations of them."""
+
+import copy
 import functools
-from typing import Any, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 from brax import math
 from flax import struct
+import jax
 from jax import numpy as jp
 from jax import vmap
 from jax.tree_util import tree_map
+import mujoco
+from mujoco import mjx
+import numpy as np
 
 # f: free, 1: 1-dof, 2: 2-dof, 3: 3-dof
 Q_WIDTHS = {'f': 7, '1': 1, '2': 2, '3': 3}
 QD_WIDTHS = {'f': 6, '1': 1, '2': 2, '3': 3}
 
 
+@struct.dataclass
 class Base:
   """Base functionality extending all brax types.
 
@@ -51,7 +59,7 @@ class Base:
   def reshape(self, shape: Sequence[int]) -> Any:
     return tree_map(lambda x: x.reshape(shape), self)
 
-  def select(self, o: Any, cond: jp.ndarray) -> Any:
+  def select(self, o: Any, cond: jax.Array) -> Any:
     return tree_map(lambda x, y: (x.T * cond + y.T * (1 - cond)).T, self, o)
 
   def slice(self, beg: int, end: int) -> Any:
@@ -64,12 +72,12 @@ class Base:
     return tree_map(lambda *x: jp.concatenate(x, axis=axis), self, *others)
 
   def index_set(
-      self, idx: Union[jp.ndarray, Sequence[jp.ndarray]], o: Any
+      self, idx: Union[jax.Array, Sequence[jax.Array]], o: Any
   ) -> Any:
     return tree_map(lambda x, y: x.at[idx].set(y), self, o)
 
   def index_sum(
-      self, idx: Union[jp.ndarray, Sequence[jp.ndarray]], o: Any
+      self, idx: Union[jax.Array, Sequence[jax.Array]], o: Any
   ) -> Any:
     return tree_map(lambda x, y: x.at[idx].add(y), self, o)
 
@@ -103,9 +111,60 @@ class Base:
 
     return VmapField(in_axes, out_axes)
 
+  def tree_replace(
+      self, params: Dict[str, Optional[jax.typing.ArrayLike]]
+  ) -> 'Base':
+    """Creates a new object with parameters set.
+
+    Args:
+      params: a dictionary of key value pairs to replace
+
+    Returns:
+      data clas with new values
+
+    Example:
+      If a system has 3 links, the following code replaces the mass
+      of each link in the System:
+      >>> sys = sys.tree_replace(
+      >>>     {'link.inertia.mass', jp.array([1.0, 1.2, 1.3])})
+    """
+    new = self
+    for k, v in params.items():
+      new = _tree_replace(new, k.split('.'), v)
+    return new
+
   @property
   def T(self):  # pylint:disable=invalid-name
     return tree_map(lambda x: x.T, self)
+
+
+def _tree_replace(
+    base: Base,
+    attr: Sequence[str],
+    val: Optional[jax.typing.ArrayLike],
+) -> Base:
+  """Sets attributes in a struct.dataclass with values."""
+  if not attr:
+    return base
+
+  # special case for List attribute
+  if len(attr) > 1 and isinstance(getattr(base, attr[0]), list):
+    lst = copy.deepcopy(getattr(base, attr[0]))
+
+    for i, g in enumerate(lst):
+      if not hasattr(g, attr[1]):
+        continue
+      v = val if not hasattr(val, '__iter__') else val[i]
+      lst[i] = _tree_replace(g, attr[1:], v)
+
+    return base.replace(**{attr[0]: lst})
+
+  if len(attr) == 1:
+    return base.replace(**{attr[0]: val})
+
+  return base.replace(
+      **{attr[0]: _tree_replace(getattr(base, attr[0]), attr[1:], val)}
+  )
 
 
 @struct.dataclass
@@ -117,8 +176,8 @@ class Transform(Base):
     rot: (4,) quaternion rotation the coordinate frame
   """
 
-  pos: jp.ndarray
-  rot: jp.ndarray
+  pos: jax.Array
+  rot: jax.Array
 
   def do(self, o):
     """Apply the transform."""
@@ -136,7 +195,7 @@ class Transform(Base):
 
   @classmethod
   def create(
-      cls, pos: Optional[jp.ndarray] = None, rot: Optional[jp.ndarray] = None
+      cls, pos: Optional[jax.Array] = None, rot: Optional[jax.Array] = None
   ) -> 'Transform':
     """Creates a transform with either pos, rot, or both."""
     if pos is None and rot is None:
@@ -166,21 +225,21 @@ class Motion(Base):
     vel: (3,) linear velocity in the direction of the normal
   """
 
-  ang: jp.ndarray
-  vel: jp.ndarray
+  ang: jax.Array
+  vel: jax.Array
 
   def cross(self, other):
     return _motion_cross(other, self)
 
-  def dot(self, m: Union['Motion', 'Force']) -> jp.ndarray:
+  def dot(self, m: Union['Motion', 'Force']) -> jax.Array:
     return jp.dot(self.vel, m.vel) + jp.dot(self.ang, m.ang)
 
-  def matrix(self) -> jp.ndarray:
+  def matrix(self) -> jax.Array:
     return jp.concatenate([self.ang, self.vel], axis=-1)
 
   @classmethod
   def create(
-      cls, ang: Optional[jp.ndarray] = None, vel: Optional[jp.ndarray] = None
+      cls, ang: Optional[jax.Array] = None, vel: Optional[jax.Array] = None
   ) -> 'Motion':
     if ang is None and vel is None:
       raise ValueError('must specify either ang or vel')
@@ -205,12 +264,12 @@ class Force(Base):
     vel: (3,) linear velocity in the direction of the normal
   """
 
-  ang: jp.ndarray
-  vel: jp.ndarray
+  ang: jax.Array
+  vel: jax.Array
 
   @classmethod
   def create(
-      cls, ang: Optional[jp.ndarray] = None, vel: Optional[jp.ndarray] = None
+      cls, ang: Optional[jax.Array] = None, vel: Optional[jax.Array] = None
   ) -> 'Force':
     if ang is None and vel is None:
       raise ValueError('must specify either ang or vel')
@@ -232,8 +291,8 @@ class Inertia(Base):
   """
 
   transform: Transform
-  i: jp.ndarray
-  mass: jp.ndarray
+  i: jax.Array
+  mass: jax.Array
 
   def mul(self, m: Motion) -> 'Force':
     """Multiplies inertia with motion yielding a force."""
@@ -264,13 +323,13 @@ class Link(Base):
   transform: Transform
   joint: Transform
   inertia: Inertia
-  invweight: jp.ndarray
+  invweight: jax.Array
   # only used by `brax.physics.spring`:
-  constraint_stiffness: jp.ndarray
-  constraint_vel_damping: jp.ndarray
-  constraint_limit_stiffness: jp.ndarray
+  constraint_stiffness: jax.Array
+  constraint_vel_damping: jax.Array
+  constraint_limit_stiffness: jax.Array
   # only used by `brax.physics.spring` and `brax.physics.positional`:
-  constraint_ang_damping: jp.ndarray
+  constraint_ang_damping: jax.Array
 
 
 @struct.dataclass
@@ -288,161 +347,25 @@ class DoF(Base):
   """
 
   motion: Motion
-  armature: jp.ndarray
-  stiffness: jp.ndarray
-  damping: jp.ndarray
-  limit: Tuple[jp.ndarray, jp.ndarray]
+  armature: jax.Array
+  stiffness: jax.Array
+  damping: jax.Array
+  limit: Tuple[jax.Array, jax.Array]
   # only used by `brax.physics.generalized`:
-  invweight: jp.ndarray
-  solver_params: jp.ndarray
+  invweight: jax.Array
+  solver_params: jax.Array
 
 
-@struct.dataclass
-class Geometry(Base):
-  """A surface or spatial volume with a shape and material properties.
-
-  Attributes:
-    link_idx: Link index to which this Geometry is attached
-    transform: transform for the geometry frame relative to the link frame, or
-      relative to the world frame in the case of unparented geometry
-    friction: resistance encountered when sliding against another geometry
-    elasticity: bounce/restitution encountered when hitting another geometry
-    solver_params: (7,) solver parameters (reference, impedance)
-  """
-
-  link_idx: Optional[jp.ndarray]
-  transform: Transform
-  friction: jp.ndarray
-  elasticity: jp.ndarray
-  solver_params: jp.ndarray
-
-
-@struct.dataclass
-class Sphere(Geometry):
-  """A sphere.
-
-  Attributes:
-    radius: radius of the sphere
-    rgba: (4,) the rgba to display in the renderer
-  """
-
-  radius: jp.ndarray
-  rgba: Optional[jp.ndarray] = None
-
-
-@struct.dataclass
-class Capsule(Geometry):
-  """A capsule.
-
-  Attributes:
-    radius: radius of the capsule end
-    length: distance between the two capsule end centroids
-    rgba: (4,) the rgba to display in the renderer
-  """
-
-  radius: jp.ndarray
-  length: jp.ndarray
-  rgba: Optional[jp.ndarray] = None
-
-
-@struct.dataclass
-class Box(Geometry):
-  """A box.
-
-  Attributes:
-    halfsize: (3,) half sizes for each box side
-    rgba: (4,) the rgba to display in the renderer
-  """
-
-  halfsize: jp.ndarray
-  rgba: Optional[jp.ndarray] = None
-
-
-@struct.dataclass
-class Cylinder(Geometry):
-  """A cylinder.
-
-  Attributes:
-    radius: (1,) radius of the top and bottom of the cylinder
-    length: (1,) length of the cylinder
-    rgba: (4,) the rgba to display in the renderer
-  """
-
-  radius: jp.ndarray
-  length: jp.ndarray
-  rgba: Optional[jp.ndarray] = None
-
-
-@struct.dataclass
-class Plane(Geometry):
-  """An infinite plane whose normal points at +z in its coordinate space.
-
-  Attributes:
-    rgba: (4,) the rgba to display in the renderer, currently unused
-  """
-
-  rgba: Optional[jp.ndarray] = None
-
-
-@struct.dataclass
-class Mesh(Geometry):
-  """A mesh loaded from an OBJ or STL file.
-
-  The mesh is expected to be in the counter-clockwise winding order.
-
-  Attributes:
-    vert: (num_verts, 3) spatial coordinates associated with each vertex
-    face: (num_faces, num_face_vertices) vertices associated with each face
-    rgba: (4,) the rgba to display in the renderer, currently unused
-  """
-
-  vert: jp.ndarray
-  face: jp.ndarray
-  rgba: Optional[jp.ndarray] = None
-
-
-@struct.dataclass
-class Convex(Geometry):
-  """A convex mesh geometry.
-
-  Attributes:
-    vert: (num_verts, 3) spatial coordinates associated with each vertex
-    face: (num_faces, num_face_vertices) vertices associated with each face
-    unique_edge: (num_unique, 2) vert index associated with each unique edge
-    rgba: (4,) the rgba to display in the renderer, currently unused
-  """
-
-  vert: jp.ndarray
-  face: jp.ndarray
-  unique_edge: jp.ndarray
-  rgba: Optional[jp.ndarray] = None
-
-
-@struct.dataclass
-class Contact(Base):
+class Contact(mjx.Contact, Base):
   """Contact between two geometries.
 
   Attributes:
-    pos: contact position, or average of the two closest points, in world frame
-    normal: contact normal on the surface of geometry b
-    penetration: penetration distance between two geometries. positive means the
-      two geometries are interpenetrating, negative means they are not
-    friction: resistance encountered when sliding against another geometry
+    link_idx: Tuple of link indices participating in contact.
     elasticity: bounce/restitution encountered when hitting another geometry
-    solver_params: (7,) collision constraint solver parameters
-    link_idx: Tuple of link indices participating in contact.  The second part
-      of the tuple can be None if the second geometry is static.
   """
 
-  pos: jp.ndarray
-  normal: jp.ndarray
-  penetration: jp.ndarray
-  friction: jp.ndarray
-  # only used by `brax.physics.spring` and `brax.physics.positional`:
-  elasticity: jp.ndarray
-  solver_params: jp.ndarray
-
-  link_idx: Tuple[jp.ndarray, Optional[jp.ndarray]]
+  link_idx: jax.Array
+  elasticity: jax.Array
 
 
 @struct.dataclass
@@ -460,14 +383,14 @@ class Actuator(Base):
     bias_qd: (num_actuators,) bias applied by qd (e.g. velocity actuators)
   """
 
-  q_id: jp.ndarray
-  qd_id: jp.ndarray
-  ctrl_range: jp.ndarray
-  force_range: jp.ndarray
-  gain: jp.ndarray
-  gear: jp.ndarray
-  bias_q: jp.ndarray
-  bias_qd: jp.ndarray
+  q_id: jax.Array
+  qd_id: jax.Array
+  ctrl_range: jax.Array
+  force_range: jax.Array
+  gain: jax.Array
+  gear: jax.Array
+  bias_q: jax.Array
+  bias_qd: jax.Array
 
 
 @struct.dataclass
@@ -482,15 +405,14 @@ class State:
     contact: calculated contacts
   """
 
-  q: jp.ndarray
-  qd: jp.ndarray
+  q: jax.Array
+  qd: jax.Array
   x: Transform
   xd: Motion
   contact: Optional[Contact]
 
 
-@struct.dataclass
-class System:
+class System(mjx.Model):
   r"""Describes a physical environment: its links, joints and geometries.
 
   Attributes:
@@ -500,9 +422,9 @@ class System:
     density: (1,) density of the medium applied to all links
     link: (num_link,) the links in the system
     dof: (qd_size,) every degree of freedom for the system
-    geoms: list of batched geoms grouped by type
     actuator: actuators that can be applied to links
     init_q: (q_size,) initial q position for the system
+    elasticity: bounce/restitution encountered when hitting another geometry
     vel_damping: (1,) linear vel damping applied to each body.
     ang_damping: (1,) angular vel damping applied to each body.
     baumgarte_erp: how aggressively interpenetrating bodies should push away\
@@ -514,9 +436,6 @@ class System:
     collide_scale: fraction of position based collide update to apply
     enable_fluid: (1,) enables or disables fluid forces based on the
       default viscosity and density parameters provided in the XML
-    geom_masks: 64-bit mask determines whether two geoms will be contact tested.
-                lower 32 bits are type, upper 32 bits are affinity.  two geoms
-                a, b will be contact tested if a.type & b.affinity != 0
     link_names: (num_link,) link names
     link_types: (num_link,) string specifying the joint type of each link
                 valid types are:
@@ -529,30 +448,30 @@ class System:
     matrix_inv_iterations: maximum number of iterations of the matrix inverse
     solver_iterations: maximum number of iterations of the constraint solver
     solver_maxls: maximum number of line searches of the constraint solver
+    mj_model: mujoco.MjModel that was used to build this brax System
   """
 
-  dt: jp.ndarray
-  gravity: jp.ndarray
-  viscosity: jp.float32
-  density: jp.float32
+  dt: jax.Array
+  gravity: jax.Array
+  viscosity: Union[float, jax.Array]
+  density: Union[float, jax.Array]
   link: Link
   dof: DoF
-  geoms: List[Geometry]
   actuator: Actuator
-  init_q: jp.ndarray
+  init_q: jax.Array
   # only used in `brax.physics.spring` and `brax.physics.positional`:
-  vel_damping: jp.float32
-  ang_damping: jp.float32
-  baumgarte_erp: jp.float32
-  spring_mass_scale: jp.float32
-  spring_inertia_scale: jp.float32
+  elasticity: jax.Array
+  vel_damping: Union[float, jax.Array]
+  ang_damping: Union[float, jax.Array]
+  baumgarte_erp: Union[float, jax.Array]
+  spring_mass_scale: Union[float, jax.Array]
+  spring_inertia_scale: Union[float, jax.Array]
   # only used in `brax.physics.positional`:
-  joint_scale_ang: jp.float32
-  joint_scale_pos: jp.float32
-  collide_scale: jp.float32
+  joint_scale_ang: Union[float, jax.Array]
+  joint_scale_pos: Union[float, jax.Array]
+  collide_scale: Union[float, jax.Array]
   # non-pytree nodes
   enable_fluid: bool = struct.field(pytree_node=False)
-  geom_masks: List[int] = struct.field(pytree_node=False)
   link_names: List[str] = struct.field(pytree_node=False)
   link_types: str = struct.field(pytree_node=False)
   link_parents: Tuple[int, ...] = struct.field(pytree_node=False)
@@ -560,12 +479,13 @@ class System:
   matrix_inv_iterations: int = struct.field(pytree_node=False)
   solver_iterations: int = struct.field(pytree_node=False)
   solver_maxls: int = struct.field(pytree_node=False)
+  mj_model: mujoco.MjModel = struct.field(pytree_node=False, default=None)
 
   def num_links(self) -> int:
     """Returns the number of links in the system."""
     return len(self.link_types)
 
-  def dof_link(self, depth=False) -> jp.ndarray:
+  def dof_link(self, depth=False) -> jax.Array:
     """Returns the link index corresponding to each system dof."""
     link_idxs = []
     for i, link_type in enumerate(self.link_types):
@@ -591,7 +511,7 @@ class System:
       beg += QD_WIDTHS[t]
     return ranges
 
-  def q_idx(self, link_type: str) -> jp.ndarray:
+  def q_idx(self, link_type: str) -> jax.Array:
     """Returns the q indices corresponding to a link type."""
     idx, idxs = 0, []
     for typ in self.link_types:
@@ -600,7 +520,7 @@ class System:
       idx += Q_WIDTHS[typ]
     return jp.array(idxs)
 
-  def qd_idx(self, link_type: str) -> jp.ndarray:
+  def qd_idx(self, link_type: str) -> jax.Array:
     """Returns the qd indices corresponding to a link type."""
     idx, idxs = 0, []
     for typ in self.link_types:

@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,9 +21,7 @@ import jax
 import jax.numpy as jp
 
 
-def _box_viscosity(
-    box: jp.ndarray, xd_i: Motion, viscosity: jp.ndarray
-) -> Force:
+def _box_viscosity(box: jax.Array, xd_i: Motion, viscosity: jax.Array) -> Force:
   """Gets force due to motion through a viscous fluid."""
   diam = jp.mean(box, axis=-1)
   ang_scale = -jp.pi * diam**3 * viscosity
@@ -34,11 +32,11 @@ def _box_viscosity(
   return frc
 
 
-def _box_density(box: jp.ndarray, xd_i: Motion, density: jp.ndarray) -> Force:
+def _box_density(box: jax.Array, xd_i: Motion, density: jax.Array) -> Force:
   """Gets force due to motion through dense fluid."""
 
   @jax.vmap
-  def apply(b: jp.ndarray, xd: Motion) -> Force:
+  def apply(b: jax.Array, xd: Motion) -> Force:
     box_mult_vel = jp.array([b[1] * b[2], b[0] * b[2], b[0] * b[1]])
     vel = -0.5 * density * box_mult_vel * jp.abs(xd.vel) * xd.vel
     box_mult_ang = jp.array([
@@ -56,9 +54,9 @@ def force(
     sys: System,
     x: Transform,
     xd: Motion,
-    mass: jp.ndarray,
-    inertia: jp.ndarray,
-    root_com: Union[jp.ndarray, None] = None,
+    mass: jax.Array,
+    inertia: jax.Array,
+    root_com: Union[jax.Array, None] = None,
 ) -> Force:
   """Returns force due to motion through a fluid."""
   # get the velocity at the com position/orientation

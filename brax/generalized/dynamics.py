@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -136,7 +136,7 @@ def transform_com(sys: System, state: State) -> State:
   )
 
 
-def inverse(sys: System, state: State) -> jp.ndarray:
+def inverse(sys: System, state: State) -> jax.Array:
   """Calculates the system's forces given input motions.
 
   This function computes inverse dynamics using the Newton-Euler algorithm:
@@ -185,7 +185,7 @@ def inverse(sys: System, state: State) -> jp.ndarray:
   return tau
 
 
-def _passive(sys: System, state: State) -> jp.ndarray:
+def _passive(sys: System, state: State) -> jax.Array:
   """Calculates the system's passive forces given input motion and position."""
   def stiffness_fn(typ, q, dof):
     if typ in 'fb':
@@ -213,7 +213,7 @@ def _passive(sys: System, state: State) -> jp.ndarray:
   return frc
 
 
-def forward(sys: System, state: State, tau: jp.ndarray) -> jp.ndarray:
+def forward(sys: System, state: State, tau: jax.Array) -> jax.Array:
   """Calculates resulting joint forces given input forces.
 
   This method builds and solves the linear system: M @ qdd = -C + tau

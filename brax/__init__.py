@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 
 """Import top-level classes and functions here for encapsulation/clarity."""
 
-__version__ = '0.9.1'
+__version__ = '0.10.0'
 
 from brax.base import Motion
 from brax.base import State

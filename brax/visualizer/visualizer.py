@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,10 +20,11 @@ from wsgiref import validate
 
 from absl import app
 from absl import flags
-from brax.base import Actuator, Convex, Mesh, Plane, Transform
+from brax.base import Actuator
 from brax.generalized import pipeline as generalized
 from brax.io import html
 from brax.io import mjcf
+from brax.io.mjcf import load_mjmodel
 from brax.positional import pipeline as positional
 from brax.spring import pipeline as spring
 from etils import epath
@@ -34,6 +35,7 @@ from flask import send_from_directory
 import flask_cors
 import jax
 from jax import numpy as jp
+import mujoco
 
 
 PORT = flags.DEFINE_integer(
@@ -45,6 +47,18 @@ DEBUG = flags.DEFINE_boolean(
 
 flask_app = flask.Flask(__name__)
 flask_cors.CORS(flask_app)
+
+
+class _MujocoPipeline:
+  """Mujoco reference pipeline for debugging."""
+
+  @staticmethod
+  def init(*args, **kwargs):
+    return generalized.init(*args, **kwargs)
+
+  @staticmethod
+  def step(*args, **kwargs):
+    return generalized.init(*args, **kwargs)
 
 
 @flask_app.route('/', methods=['GET'])
@@ -81,42 +95,20 @@ def play_trajectory(path):
 def simulate(path):
   """Simulates a brax system from a local file path."""
   sys = mjcf.load(path)
+  pipeline_type = request.args.get('pipeline', 'generalized')
   pipeline = {
       'generalized': generalized,
       'positional': positional,
       'spring': spring,
-  }[request.args.get('pipeline', 'generalized')]
+      'mujoco': _MujocoPipeline,
+  }[pipeline_type]
   steps = int(request.args.get('steps', 1000))
   act_fn = request.args.get('act', 'sin')
   solver_iterations = int(request.args.get('solver_iterations', 100))
-  force_floor = request.args.get('force_floor', 'false').lower() == 'true'
-  add_floor = request.args.get('add_floor', 'false').lower() == 'true'
   add_act = request.args.get('add_act', 'false').lower() == 'true'
 
-  is_mesh = lambda g: isinstance(g, Mesh) and not isinstance(g, Convex)
-
-  if force_floor:
-    floors = [g for g in sys.geoms if isinstance(g, Plane)]
-    if floors:
-      floor = floors[0]
-      masks = [
-          0 if is_mesh(g) else 1 if g is floor else 1 << 32 for g in sys.geoms
-      ]
-      sys = sys.replace(geom_masks=masks)
   if solver_iterations > 0:
     sys = sys.replace(solver_iterations=solver_iterations)
-  if add_floor and not [g for g in sys.geoms if isinstance(g, Plane)]:
-    geoms = sys.geoms + [
-        Plane(
-            link_idx=None,
-            transform=Transform.zero((1,)),
-            friction=jp.ones((1,)),
-            elasticity=jp.ones((1,)),
-        )
-    ]
-    geom_masks = [0 if is_mesh(g) else 1 for g in sys.geoms]
-    geom_masks.append(1 << 32 | 1)
-    sys = sys.replace(geoms=geoms, geom_masks=geom_masks)
   if add_act and not sys.actuator_types:
     # some configs (like urdfs) have no actuators
     actuator_types = ''.join(['m' for t in sys.link_types if t in '123'])
@@ -135,17 +127,32 @@ def simulate(path):
         actuator_qdid=actuator_qdid,
     )
 
-  jit_init, jit_step = jax.jit(pipeline.init), jax.jit(pipeline.step)
-  states = [jit_init(sys, sys.init_q, jp.zeros(sys.qd_size()))]
+  if pipeline_type == 'mujoco':
+    mj_model = load_mjmodel(path)
+    mj_data = mujoco.MjData(mj_model)
+    init_fn = jax.jit(pipeline.init)
+    def step_fn(sys, _, act):
+      mj_data.ctrl = act
+      mujoco.mj_step(mj_model, mj_data)
+      state = init_fn(sys, mj_data.qpos, jp.zeros(sys.qd_size()))
+      return state
+  else:
+    init_fn, step_fn = jax.jit(pipeline.init), jax.jit(pipeline.step)
+  state = init_fn(sys, sys.init_q, jp.zeros(sys.qd_size()))
+  states = [state]
+
   for i in range(steps):
     if act_fn == 'sin':
       act = 0.5 * jp.sin(jp.ones(sys.act_size()) * 5 * i * sys.dt)
     elif act_fn == 'zero':
-      act = jp.zeros(sys.qd_size())
+      act = jp.zeros(sys.act_size())
     elif act_fn == 'zero_p':
       q = states[-1].q[sys.q_idx('123')]
       act = -q
-    states.append(jit_step(sys, states[-1], act))
+    else:
+      raise ValueError(f'Unknown act function: {act_fn}')
+    state = step_fn(sys, states[-1], act)
+    states.append(state)
   return html.render(
       sys, states, height='100vh', colab=False, base_url='/js/viewer.js'
   )

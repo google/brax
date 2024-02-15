@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# pylint:disable=g-multiple-import
+# pylint:disable=g-multiple-import, g-importing-member
 """Wrappers to support Brax training."""
 
-from typing import Dict, Optional
+from typing import Callable, Dict, Optional, Tuple
 
-from brax import System
+from brax.base import System
 from brax.envs.base import Env, State, Wrapper
 from flax import struct
 import jax
@@ -25,7 +25,12 @@ from jax import numpy as jp
 
 
 def wrap(
-    env: Env, episode_length: int = 1000, action_repeat: int = 1
+    env: Env,
+    episode_length: int = 1000,
+    action_repeat: int = 1,
+    randomization_fn: Optional[
+        Callable[[System], Tuple[System, System]]
+    ] = None,
 ) -> Wrapper:
   """Common wrapper pattern for all training agents.
 
@@ -33,6 +38,8 @@ def wrap(
     env: environment to be wrapped
     episode_length: length of episode
     action_repeat: how many repeated actions to take per step
+    randomization_fn: randomization function that produces a vectorized system
+      and in_axes to vmap over
 
   Returns:
     An environment that is wrapped with Episode and AutoReset wrappers.  If the
@@ -40,7 +47,10 @@ def wrap(
     wrapped.
   """
   env = EpisodeWrapper(env, episode_length, action_repeat)
-  env = VmapWrapper(env)
+  if randomization_fn is None:
+    env = VmapWrapper(env)
+  else:
+    env = DomainRandomizationVmapWrapper(env, randomization_fn)
   env = AutoResetWrapper(env)
   return env
 
@@ -52,12 +62,12 @@ class VmapWrapper(Wrapper):
     super().__init__(env)
     self.batch_size = batch_size
 
-  def reset(self, sys: System, rng: jp.ndarray) -> State:
+  def reset(self, sys: System, rng: jax.Array) -> State:
     if self.batch_size is not None:
       rng = jax.random.split(rng, self.batch_size)
     return jax.vmap(self.env.reset)(sys, rng)
 
-  def step(self, state: State, action: jp.ndarray) -> State:
+  def step(self, state: State, action: jax.Array) -> State:
     return jax.vmap(self.env.step)(state, action)
 
 
@@ -69,13 +79,13 @@ class EpisodeWrapper(Wrapper):
     self.episode_length = episode_length
     self.action_repeat = action_repeat
 
-  def reset(self, sys: System, rng: jp.ndarray) -> State:
+  def reset(self, sys: System, rng: jax.Array) -> State:
     state = self.env.reset(sys, rng)
     state.info['steps'] = jp.zeros(rng.shape[:-1])
     state.info['truncation'] = jp.zeros(rng.shape[:-1])
     return state
 
-  def step(self, state: State, action: jp.ndarray) -> State:
+  def step(self, state: State, action: jax.Array) -> State:
     def f(state, _):
       nstate = self.env.step(state, action)
       return nstate, nstate.reward
@@ -97,13 +107,13 @@ class EpisodeWrapper(Wrapper):
 class AutoResetWrapper(Wrapper):
   """Automatically resets Brax envs that are done."""
 
-  def reset(self, sys: System, rng: jp.ndarray) -> State:
+  def reset(self, sys: System, rng: jax.Array) -> State:
     state = self.env.reset(sys, rng)
     state.info['first_pipeline_state'] = state.pipeline_state
     state.info['first_obs'] = state.obs
     return state
 
-  def step(self, state: State, action: jp.ndarray) -> State:
+  def step(self, state: State, action: jax.Array) -> State:
     if 'steps' in state.info:
       steps = state.info['steps']
       steps = jp.where(state.done, jp.zeros_like(steps), steps)
@@ -135,15 +145,15 @@ class EvalMetrics:
       episode_steps: Integer vector tracking the number of steps in the episode.
   """
 
-  episode_metrics: Dict[str, jp.ndarray]
-  active_episodes: jp.ndarray
-  episode_steps: jp.ndarray
+  episode_metrics: Dict[str, jax.Array]
+  active_episodes: jax.Array
+  episode_steps: jax.Array
 
 
 class EvalWrapper(Wrapper):
   """Brax env with eval metrics."""
 
-  def reset(self, sys: System, rng: jp.ndarray) -> State:
+  def reset(self, sys: System, rng: jax.Array) -> State:
     reset_state = self.env.reset(sys, rng)
     reset_state.metrics['reward'] = reset_state.reward
     eval_metrics = EvalMetrics(
@@ -156,7 +166,7 @@ class EvalWrapper(Wrapper):
     reset_state.info['eval_metrics'] = eval_metrics
     return reset_state
 
-  def step(self, state: State, action: jp.ndarray) -> State:
+  def step(self, state: State, action: jax.Array) -> State:
     state_metrics = state.info['eval_metrics']
     if not isinstance(state_metrics, EvalMetrics):
       raise ValueError(
@@ -184,3 +194,38 @@ class EvalWrapper(Wrapper):
     )
     nstate.info['eval_metrics'] = eval_metrics
     return nstate
+
+
+class DomainRandomizationVmapWrapper(Wrapper):
+  """Wrapper for domain randomization."""
+
+  def __init__(
+      self,
+      env: Env,
+      randomization_fn: Callable[[System], Tuple[System, System]],
+  ):
+    super().__init__(env)
+    self._sys_v, self._in_axes = randomization_fn(self.sys)
+
+  def _env_fn(self, sys: System) -> Env:
+    env = self.env
+    env.unwrapped.sys = sys
+    return env
+
+  def reset(self, rng: jax.Array) -> State:
+    def reset(sys, rng):
+      env = self._env_fn(sys=sys)
+      return env.reset(rng)
+
+    state = jax.vmap(reset, in_axes=[self._in_axes, 0])(self._sys_v, rng)
+    return state
+
+  def step(self, state: State, action: jax.Array) -> State:
+    def step(sys, s, a):
+      env = self._env_fn(sys=sys)
+      return env.step(s, a)
+
+    res = jax.vmap(step, in_axes=[self._in_axes, 0, 0])(
+        self._sys_v, state, action
+    )
+    return res

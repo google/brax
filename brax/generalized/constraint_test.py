@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,7 +31,8 @@ class ConstraintTest(parameterized.TestCase):
       ('triple_pendulum.xml',),
       ('humanoid.xml',),
       ('half_cheetah.xml',),
-      ('solver_params_v2.xml',)
+      ('solver_params_v2.xml',),
+      ('swimmer.xml',),
   )
   def test_jacobian(self, xml_file):
     """Test constraint jacobian."""
@@ -58,7 +59,8 @@ class ConstraintTest(parameterized.TestCase):
       ('triple_pendulum.xml',),
       ('humanoid.xml',),
       ('half_cheetah.xml',),
-      ('solver_params_v2.xml',)
+      ('solver_params_v2.xml',),
+      ('swimmer.xml',),
   )
   def test_force(self, xml_file):
     """Test constraint force."""

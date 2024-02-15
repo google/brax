@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,20 +16,20 @@
 # pylint:disable=g-multiple-import
 from brax import actuator
 from brax import com
+from brax import contact
 from brax import fluid
-from brax import geometry
 from brax import kinematics
 from brax.base import Motion, System
+from brax.io import mjcf
 from brax.positional import collisions
 from brax.positional import integrator
 from brax.positional import joints
 from brax.positional.base import State
 import jax
-from jax import numpy as jp
 
 
 def init(
-    sys: System, q: jp.ndarray, qd: jp.ndarray, debug: bool = False
+    sys: System, q: jax.Array, qd: jax.Array, debug: bool = False
 ) -> State:
   """Initializes physics state.
 
@@ -42,17 +42,19 @@ def init(
   Returns:
     state: initial physics state
   """
+  if sys.mj_model is not None:
+    mjcf.validate_model(sys.mj_model)
   # position/velocity level terms
   x, xd = kinematics.forward(sys, q, qd)
   j, jd, a_p, a_c = kinematics.world_to_joint(sys, x, xd)
   x_i, xd_i = com.from_world(sys, x, xd)
-  contact = geometry.contact(sys, x) if debug else None
+  c = contact.get(sys, x) if debug else None
   mass = sys.link.inertia.mass ** (1 - sys.spring_mass_scale)
-  return State(q, qd, x, xd, contact, x_i, xd_i, j, jd, a_p, a_c, mass)
+  return State(q, qd, x, xd, c, x_i, xd_i, j, jd, a_p, a_c, mass)
 
 
 def step(
-    sys: System, state: State, act: jp.ndarray, debug: bool = False
+    sys: System, state: State, act: jax.Array, debug: bool = False
 ) -> State:
   """Performs a single physics step using position-based dynamics.
 
@@ -95,8 +97,8 @@ def step(
   state = state.replace(x=x, x_i=x_i)
 
   # apply position level collision updates
-  contact = geometry.contact(sys, x)
-  x_i, dlambda = collisions.resolve_position(sys, state, x_i_prev, contact)
+  c = contact.get(sys, x)
+  x_i, dlambda = collisions.resolve_position(sys, state, x_i_prev, c)
   xd_i_prev = xd_i
 
   xd_i = integrator.project_xd(sys, x_i, x_i_prev)
@@ -104,12 +106,12 @@ def step(
   state = state.replace(x=x, xd=xd, x_i=x_i, xd_i=xd_i)
 
   # apply velocity level collision updates
-  xdv_i = collisions.resolve_velocity(sys, state, xd_i_prev, contact, dlambda)
+  xdv_i = collisions.resolve_velocity(sys, state, xd_i_prev, c, dlambda)
   xd_i = integrator.integrate_xdv(sys, xd_i, xdv_i)
 
   x, xd = com.to_world(sys, x_i, xd_i)
   j, jd, a_p, a_c = kinematics.world_to_joint(sys, x, xd)
   q, qd = kinematics.inverse(sys, j, jd)
-  contact = geometry.contact(sys, x) if debug else None
+  c = contact.get(sys, x) if debug else None
 
-  return State(q, qd, x, xd, contact, x_i, xd_i, j, jd, a_p, a_c, state.mass)
+  return State(q, qd, x, xd, c, x_i, xd_i, j, jd, a_p, a_c, state.mass)

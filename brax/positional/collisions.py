@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@ def resolve_position(
     state: State,
     x_i_prev: Transform,
     contact: Optional[Contact],
-) -> Tuple[Transform, jp.ndarray]:
+) -> Tuple[Transform, jax.Array]:
   """Resolves positional collision constraint.
 
   The update equations follow section 3.5 of Müller et al.'s Extended Position
@@ -61,8 +61,8 @@ def resolve_position(
     x_prev = x_i_prev.concatenate(Transform.zero((1,))).take(link_idx)
 
     # TODO: rewrite these updates to use pbd methods
-    n = contact.normal
-    c = -contact.penetration
+    n = -contact.frame[0]
+    c = contact.dist
     pos_p = contact.pos + n * c / 2.0 - x.pos[0]
     pos_c = contact.pos - n * c / 2.0 - x.pos[1]
 
@@ -73,7 +73,7 @@ def resolve_position(
     # only spherical inertia effects
     cr1, cr2 = jp.cross(pos_p, n), jp.cross(pos_c, n)
     w1 = mass_inv[0] + jp.dot(cr1, i_inv[0] @ cr1)
-    w2 = mass_inv[1] + jp.dot(cr1, i_inv[1] @ cr1)
+    w2 = mass_inv[1] + jp.dot(cr2, i_inv[1] @ cr2)
 
     dlambda = -c / (w1 + w2 + 1e-6)
     coll_mask = c < 0
@@ -135,7 +135,7 @@ def resolve_velocity(
     state: State,
     xd_i_prev: Motion,
     contact: Contact,
-    dlambda: jp.ndarray,
+    dlambda: jax.Array,
 ) -> Motion:
   """Velocity-level collision update for position based dynamics.
 
@@ -171,7 +171,7 @@ def resolve_velocity(
     i_inv *= (link_idx > -1).reshape(-1, 1, 1)
     mass_inv = inv_mass.take(link_idx) * (link_idx > -1)
 
-    n = contact.normal
+    n = -contact.frame[0]
     rel_vel = (
         xd.vel[0]
         + jp.cross(xd.ang[0], contact.pos - x.pos[0])
@@ -181,7 +181,7 @@ def resolve_velocity(
     v_t = rel_vel - n * v_n
     v_t_dir, v_t_norm = math.normalize(v_t)
     dvel = -v_t_dir * jp.minimum(
-        contact.friction * jp.abs(dlambda) / sys.dt, v_t_norm
+        contact.friction[0] * jp.abs(dlambda) / sys.dt, v_t_norm
     )
 
     angw_1 = jp.cross((contact.pos - x.pos[0]), v_t_dir)
@@ -199,7 +199,7 @@ def resolve_velocity(
     dv_rest = n * (-v_n - jp.minimum(contact.elasticity * v_n_prev, 0))
 
     pos_p = contact.pos
-    pos_c = contact.pos + contact.normal * contact.penetration
+    pos_c = contact.pos + contact.frame[0] * contact.dist
     dx = dv_rest
     pos_p, pos_c = pos_p - x.pos[0], pos_c - x.pos[1]
 
@@ -212,7 +212,7 @@ def resolve_velocity(
     w2 = mass_inv[1] + jp.dot(cr2, i_inv[1] @ cr2)
 
     dlambda_rest = c / (w1 + w2 + 1e-6)
-    penetrating = contact.penetration > 0
+    penetrating = contact.dist < 0
     sinking = v_n_prev <= 0.0
 
     p = Force.create(vel=(dlambda_rest * n * sinking + p_dyn) * penetrating)

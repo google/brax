@@ -391,7 +391,7 @@ class _ConcreteVSysWrapper(_VSysWrapper):
 class DomainRandVSysWrapper(_ConcreteVSysWrapper):
     """Maintains episode step count and sets done at episode end."""
 
-    def __init__(self, env: Env, skrs: List[SysKeyRange], randomize_every_nsteps: Union[int, None], randomize_init_stepcount: bool):
+    def __init__(self, env: Env, skrs: List[SysKeyRange], randomize_every_nsteps: Union[int, None, Tuple[int, int]]):
         super().__init__(env, skrs)
 
         def _sample_for_one_key(rng):
@@ -416,7 +416,14 @@ class DomainRandVSysWrapper(_ConcreteVSysWrapper):
             self._sample_batch_skrs = jax.vmap(_sample_for_one_key)
 
         self.randomize_every_nsteps = randomize_every_nsteps
-        self.randomize_init_stepcount = randomize_init_stepcount
+        self.random_range_nsteps = False
+        if isinstance(self.randomize_every_nsteps, tuple):
+            assert len(self.randomize_every_nsteps) == 2
+            lower, higher = self.randomize_every_nsteps
+            self.higher_init_nsteps = higher - lower
+            self.lower_init_nsteps = 0
+            self.randomize_every_nsteps = higher
+            self.random_range_nsteps = True
 
     def set_vsys(self, rng: jp.ndarray, current_sys: System, mask: jp.ndarray):
         """
@@ -443,11 +450,11 @@ class DomainRandVSysWrapper(_ConcreteVSysWrapper):
         reset_rng, stepcount_rng = jax.random.split(reset_rng)
         state = self.env.reset(sys=sys, rng=reset_rng)
 
-        if self.randomize_every_nsteps and self.randomize_init_stepcount:
+        if self.randomize_every_nsteps and self.random_range_nsteps:
             vsys_stepcount = jax.random.randint(stepcount_rng,
                                                 (self.batch_size,),
-                                                minval=0,
-                                                maxval=self.randomize_every_nsteps
+                                                minval=self.lower_init_nsteps,
+                                                maxval=self.higher_init_nsteps
                                                 )
         else:
             vsys_stepcount = jp.zeros(self.batch_size)
@@ -573,7 +580,7 @@ if __name__ == "__main__":
 
     x = make_skrs(env, "./inertia.yaml")
 
-    env = DomainRandVSysWrapper(env, x, 2, False)
+    env = DomainRandVSysWrapper(env, x, (4,8))
     #env = IdentityVSysWrapper(env)
     #env = DomainCartesianVSysWrapper(env, x, DISCRETIZATION_LEVEL)
     key = jax.random.PRNGKey(0)

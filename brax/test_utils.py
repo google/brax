@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -97,7 +97,7 @@ def benchmark(
   """Reports jit time and op time for a function."""
 
   @jax.jit
-  def run_batch(seed: jp.ndarray):
+  def run_batch(seed: jax.Array):
     rngs = jax.random.split(jax.random.PRNGKey(seed), batch_size)  # pytype: disable=wrong-arg-types  # jax-ndarray
     init_state = jax.vmap(init_fn)(rngs)
 
@@ -126,4 +126,4 @@ def benchmark(
       f'{jax.devices()[0].device_kind}'
   )
 
-  return batch_sps
+  return batch_sps  # pytype: disable=bad-return-type  # jnp-type

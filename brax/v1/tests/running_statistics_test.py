@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ import math
 from absl.testing import absltest
 from brax.training.acme import running_statistics
 from brax.training.acme import specs
-from jax.config import config as jax_config
+from jax import config as jax_config
 import jax.numpy as jnp
 import numpy as np
 
@@ -47,7 +47,7 @@ class RunningStatisticsTest(absltest.TestCase):
         actual, desired, atol=1e-5, rtol=1e-5, err_msg=err_msg)
 
   def test_normalize(self):
-    state = running_statistics.init_state(specs.Array((5,), jnp.float32))
+    state = running_statistics.init_state(specs.Array((5,), jnp.dtype('float32')))
 
     x = jnp.arange(200, dtype=jnp.float32).reshape(20, 2, 5)
     x1, x2, x3, x4 = jnp.split(x, 4, axis=0)
@@ -64,7 +64,7 @@ class RunningStatisticsTest(absltest.TestCase):
     self.assert_allclose(std, jnp.ones_like(std))
 
   def test_init_normalize(self):
-    state = running_statistics.init_state(specs.Array((5,), jnp.float32))
+    state = running_statistics.init_state(specs.Array((5,), jnp.dtype('float32')))
 
     x = jnp.arange(200, dtype=jnp.float32).reshape(20, 2, 5)
     normalized = running_statistics.normalize(x, state)
@@ -72,7 +72,7 @@ class RunningStatisticsTest(absltest.TestCase):
     self.assert_allclose(normalized, x)
 
   def test_one_batch_dim(self):
-    state = running_statistics.init_state(specs.Array((5,), jnp.float32))
+    state = running_statistics.init_state(specs.Array((5,), jnp.dtype('float32')))
 
     x = jnp.arange(10, dtype=jnp.float32).reshape(2, 5)
 
@@ -85,7 +85,7 @@ class RunningStatisticsTest(absltest.TestCase):
     self.assert_allclose(std, jnp.ones_like(std))
 
   def test_clip(self):
-    state = running_statistics.init_state(specs.Array((), jnp.float32))
+    state = running_statistics.init_state(specs.Array((), jnp.dtype('float32')))
 
     x = jnp.arange(5, dtype=jnp.float32)
 
@@ -98,7 +98,7 @@ class RunningStatisticsTest(absltest.TestCase):
     self.assert_allclose(std, jnp.ones_like(std) * math.sqrt(0.6))
 
   def test_validation(self):
-    state = running_statistics.init_state(specs.Array((1, 2, 3), jnp.float32))
+    state = running_statistics.init_state(specs.Array((1, 2, 3), jnp.dtype('float32')))
 
     x = jnp.arange(12, dtype=jnp.float32).reshape(2, 2, 3)
     with self.assertRaises(AssertionError):
@@ -109,7 +109,7 @@ class RunningStatisticsTest(absltest.TestCase):
       update_and_validate(state, x)
 
   def test_int_not_normalized(self):
-    state = running_statistics.init_state(specs.Array((), jnp.int32))
+    state = running_statistics.init_state(specs.Array((), jnp.dtype('int32')))
 
     x = jnp.arange(5, dtype=jnp.int32)
 
@@ -119,7 +119,7 @@ class RunningStatisticsTest(absltest.TestCase):
     np.testing.assert_array_equal(normalized, x)
 
   def test_weights(self):
-    state = running_statistics.init_state(specs.Array((), jnp.float32))
+    state = running_statistics.init_state(specs.Array((), jnp.dtype('float32')))
 
     x = jnp.arange(5, dtype=jnp.float32)
     x_weights = jnp.ones_like(x)
@@ -137,7 +137,7 @@ class RunningStatisticsTest(absltest.TestCase):
     self.assertAlmostEqual(jnp.std(normalized), 1., places=6)
 
   def test_denormalize(self):
-    state = running_statistics.init_state(specs.Array((5,), jnp.float32))
+    state = running_statistics.init_state(specs.Array((5,), jnp.dtype('float32')))
 
     x = jnp.arange(100, dtype=jnp.float32).reshape(10, 2, 5)
     x1, x2 = jnp.split(x, 2, axis=0)
@@ -156,7 +156,7 @@ class RunningStatisticsTest(absltest.TestCase):
 
   def test_nest(self):
     state = running_statistics.init_state(
-        dict(dummy=specs.Array((5,), jnp.float32)))
+        dict(dummy=specs.Array((5,), jnp.dtype('float32'))))
 
     x = dict(dummy=jnp.arange(10, dtype=jnp.float32).reshape(2, 5))
 

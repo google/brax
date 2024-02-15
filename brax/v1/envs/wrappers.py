@@ -1,4 +1,4 @@
-# Copyright 2023 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@ import gym
 from gym import spaces
 from gym.vector import utils
 import jax
+import jax.numpy as jnp
 
 
 def wrap_for_training(env: brax_env.Env,
@@ -369,7 +370,8 @@ class DmEnvWrapper(dm_env.Environment):
                                              dtype='float32',
                                              name='action')
 
-    self._reward_spec = specs.Array(shape=(), dtype='float32', name='reward')
+    self._reward_spec = specs.Array(
+        shape=(), dtype=jnp.dtype('float32'), name='reward')
     self._discount_spec = specs.BoundedArray(
         shape=(), dtype='float32', minimum=0., maximum=1., name='discount')
     if hasattr(self._env, 'discount_spec'):
