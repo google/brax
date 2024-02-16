@@ -18,7 +18,9 @@
 import abc
 from typing import Any, Dict, List, Optional, Sequence, Union
 
-from brax import base
+from jax.random import KeyArray
+
+from brax import base, System
 from brax.generalized import pipeline as g_pipeline
 from brax.io import image
 from brax.mjx import pipeline as m_pipeline
@@ -30,6 +32,8 @@ import mujoco
 from mujoco import mjx
 import numpy as np
 
+def none_factory():
+  return None
 
 @struct.dataclass
 class State(base.Base):
@@ -39,15 +43,18 @@ class State(base.Base):
   obs: jax.Array
   reward: jax.Array
   done: jax.Array
+  sys: System
   metrics: Dict[str, jax.Array] = struct.field(default_factory=dict)
   info: Dict[str, Any] = struct.field(default_factory=dict)
+  vsys_rng: Optional[KeyArray] = None #struct.field(pytree_node=False, default_factory=none_factory)
+  vsys_stepcount: Optional[int] = None #struct.field(pytree_node=True, default_factory=none_factory)
 
 
 class Env(abc.ABC):
   """Interface for driving training and inference."""
 
   @abc.abstractmethod
-  def reset(self, rng: jax.Array) -> State:
+  def reset(self, sys: System, rng: jax.Array) -> State:
     """Resets the environment to an initial state."""
 
   @abc.abstractmethod
@@ -114,16 +121,18 @@ class PipelineEnv(Env):
     self._n_frames = n_frames
     self._debug = debug
 
-  def pipeline_init(self, q: jax.Array, qd: jax.Array) -> base.State:
+  def pipeline_init(self, sys: System, q: jax.Array, qd: jax.Array) -> base.State:
     """Initializes the pipeline state."""
-    return self._pipeline.init(self.sys, q, qd, self._debug)
+    return self._pipeline.init(sys, q, qd, self._debug)
 
-  def pipeline_step(self, pipeline_state: Any, action: jax.Array) -> base.State:
+  def pipeline_step(
+      self, sys: System, pipeline_state: Any, action: jax.Array
+  ) -> base.State:
     """Takes a physics step using the physics pipeline."""
 
     def f(state, _):
       return (
-          self._pipeline.step(self.sys, state, action, self._debug),
+          self._pipeline.step(sys, state, action, self._debug),
           None,
       )
 
@@ -137,7 +146,7 @@ class PipelineEnv(Env):
   @property
   def observation_size(self) -> int:
     rng = jax.random.PRNGKey(0)
-    reset_state = self.unwrapped.reset(rng)
+    reset_state = self.unwrapped.reset(self.sys, rng)
     return reset_state.obs.shape[-1]
 
   @property
@@ -165,8 +174,8 @@ class Wrapper(Env):
   def __init__(self, env: Env):
     self.env = env
 
-  def reset(self, rng: jax.Array) -> State:
-    return self.env.reset(rng)
+  def reset(self, sys: System, rng: jax.Array) -> State:
+    return self.env.reset(sys, rng)
 
   def step(self, state: State, action: jax.Array) -> State:
     return self.env.step(state, action)

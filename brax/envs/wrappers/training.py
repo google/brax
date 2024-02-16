@@ -62,10 +62,10 @@ class VmapWrapper(Wrapper):
     super().__init__(env)
     self.batch_size = batch_size
 
-  def reset(self, rng: jax.Array) -> State:
+  def reset(self, sys: System, rng: jax.Array) -> State:
     if self.batch_size is not None:
       rng = jax.random.split(rng, self.batch_size)
-    return jax.vmap(self.env.reset)(rng)
+    return jax.vmap(self.env.reset)(sys, rng)
 
   def step(self, state: State, action: jax.Array) -> State:
     return jax.vmap(self.env.step)(state, action)
@@ -79,8 +79,8 @@ class EpisodeWrapper(Wrapper):
     self.episode_length = episode_length
     self.action_repeat = action_repeat
 
-  def reset(self, rng: jax.Array) -> State:
-    state = self.env.reset(rng)
+  def reset(self, sys: System, rng: jax.Array) -> State:
+    state = self.env.reset(sys, rng)
     state.info['steps'] = jp.zeros(rng.shape[:-1])
     state.info['truncation'] = jp.zeros(rng.shape[:-1])
     return state
@@ -107,8 +107,8 @@ class EpisodeWrapper(Wrapper):
 class AutoResetWrapper(Wrapper):
   """Automatically resets Brax envs that are done."""
 
-  def reset(self, rng: jax.Array) -> State:
-    state = self.env.reset(rng)
+  def reset(self, sys: System, rng: jax.Array) -> State:
+    state = self.env.reset(sys, rng)
     state.info['first_pipeline_state'] = state.pipeline_state
     state.info['first_obs'] = state.obs
     return state
@@ -153,8 +153,8 @@ class EvalMetrics:
 class EvalWrapper(Wrapper):
   """Brax env with eval metrics."""
 
-  def reset(self, rng: jax.Array) -> State:
-    reset_state = self.env.reset(rng)
+  def reset(self, sys: System, rng: jax.Array) -> State:
+    reset_state = self.env.reset(sys, rng)
     reset_state.metrics['reward'] = reset_state.reward
     eval_metrics = EvalMetrics(
         episode_metrics=jax.tree_util.tree_map(
