@@ -1,4 +1,4 @@
 include brax/envs/assets/*.xml
-recursive-include brax/experimental/barkour_vb *.csv *.stl *.xml
+recursive-include brax/experimental/barkour *.csv *.stl *.xml
 recursive-include brax/test_data *.xml *.stl *.obj *.urdf
 recursive-include brax/visualizer *
