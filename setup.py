@@ -56,8 +56,7 @@ setup(
         "mujoco-mjx",
         "numpy",
         "optax",
-        # TODO: remove Pillow and pytinyrenderer after dropping
-        # legacy v1 code
+        # TODO: remove pytinyrenderer after dropping legacy v1 code
         "Pillow",
         "pytinyrenderer",
         "scipy",

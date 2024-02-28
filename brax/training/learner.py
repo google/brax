@@ -21,7 +21,6 @@ from absl import app
 from absl import flags
 from absl import logging
 from brax import envs
-from brax.experimental.barkour_v0 import barkour_joystick
 from brax.io import html
 from brax.io import metrics
 from brax.io import model

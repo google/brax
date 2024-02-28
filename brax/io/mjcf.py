@@ -85,8 +85,11 @@ def _fuse_bodies(elem: ElementTree.Element):
     cquat = child.attrib.get('quat', '1 0 0 0')
     cquat = np.fromstring(cquat, sep=' ')
     for grandchild in child:
-      # TODO: might need to offset more than just (body, geom)
-      if grandchild.tag in ('body', 'geom') and (cpos != 0).any():
+      # TODO: might need to offset more than just these tags
+      if (
+          grandchild.tag in ('body', 'geom', 'site', 'camera')
+          and (cpos != 0).any()
+      ):
         _offset(grandchild, cpos, cquat)
       elem.append(grandchild)
     elem.remove(child)

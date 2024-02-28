@@ -39,7 +39,7 @@ class JsonTest(absltest.TestCase):
     )
     self.assertLen(res['geoms']['world'], 1)
 
-    for f in ['size', 'rgba', 'name', 'link_idx', 'pos', 'rot', 'face', 'vert']:
+    for f in ['size', 'rgba', 'name', 'link_idx', 'pos', 'rot']:
       self.assertIn(f, res['geoms']['box'][0])
 
   def test_dumps_invalidstate_raises(self):

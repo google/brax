@@ -531,15 +531,15 @@ class System(mjx.Model):
 
   def q_size(self) -> int:
     """Returns the size of the q vector (joint position) for this system."""
-    return sum([Q_WIDTHS[t] for t in self.link_types])
+    return self.nq
 
   def qd_size(self) -> int:
     """Returns the size of the qd vector (joint velocity) for this system."""
-    return sum([QD_WIDTHS[t] for t in self.link_types])
+    return self.nv
 
   def act_size(self) -> int:
     """Returns the act dimension for the system."""
-    return self.actuator.q_id.shape[0]
+    return self.nu
 
 
 # below are some operation dispatch derivations

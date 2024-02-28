@@ -193,6 +193,7 @@ class Pusher(PipelineEnv):
     return State(pipeline_state, obs, reward, done, metrics)
 
   def step(self, state: State, action: jax.Array) -> State:
+    assert state.pipeline_state is not None
     x_i = state.pipeline_state.x.vmap().do(
         base.Transform.create(pos=self.sys.link.inertia.transform.pos)
     )

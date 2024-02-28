@@ -18,12 +18,11 @@
 import json
 from typing import List, Text, Tuple
 
-from brax.base import Contact, State, System
+from brax.base import State, System
 from etils import epath
 import jax
 import jax.numpy as jp
 import mujoco
-from mujoco import mjx
 import numpy as np
 
 
@@ -170,7 +169,7 @@ def dumps(sys: System, states: List[State]) -> Text:
         'size': sys.geom_size[id_],
     }
 
-    if geom['name'] in ('Mesh', 'Box'):
+    if geom['name'] == 'Mesh':
       vert, face = _get_mesh(sys.mj_model, sys.geom_dataid[id_])
       geom['vert'] = vert
       geom['face'] = face

@@ -21,6 +21,7 @@ import brax
 from brax import base
 import mujoco
 import numpy as np
+from PIL import Image
 
 
 def render_array(
@@ -60,6 +61,7 @@ def render(
     raise RuntimeError('must have at least one state')
 
   frames = render_array(sys, trajectory, height, width, camera)
+  frames = [Image.fromarray(image) for image in frames]
 
   f = io.BytesIO()
   if len(frames) == 1:

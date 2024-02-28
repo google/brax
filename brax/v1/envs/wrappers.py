@@ -260,6 +260,7 @@ class GymWrapper(gym.Env):
     # pylint:disable=g-import-not-at-top
     from brax.v1.io import image
     if mode == 'rgb_array':
+      assert self._state is not None
       sys, qp = self._env.sys, self._state.qp
       return image.render_array(sys, qp, 256, 256)
     else:
@@ -426,5 +427,6 @@ class DmEnvWrapper(dm_env.Environment):
   def render(self):
     # pylint:disable=g-import-not-at-top
     from brax.v1.io import image
+    assert self._state is not None
     sys, qp = self._env.sys, self._state.qp
     return image.render_array(sys, qp, 256, 256)

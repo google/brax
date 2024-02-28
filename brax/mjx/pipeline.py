@@ -22,11 +22,8 @@ from jax import numpy as jp
 from mujoco import mjx
 
 
-def _reformat_contact(sys: System, data: State, debug: bool = False) -> State:
+def _reformat_contact(sys: System, data: State) -> State:
   """Reformats the mjx.Contact into a brax.base.Contact."""
-  if not debug:
-    return data.replace(contact=None)
-
   if data.contact is None:
     return data
 
@@ -43,7 +40,7 @@ def _reformat_contact(sys: System, data: State, debug: bool = False) -> State:
 
 
 def init(
-    sys: System, q: jax.Array, qd: jax.Array, debug: bool = False
+    sys: System, q: jax.Array, qd: jax.Array, unused_debug: bool = False
 ) -> State:
   """Initializes physics data.
 
@@ -51,7 +48,7 @@ def init(
     sys: a brax System
     q: (q_size,) joint angle vector
     qd: (qd_size,) joint velocity vector
-    debug: if True, adds contact to the data for debugging
+    unused_debug: ignored
 
   Returns:
     data: initial physics data
@@ -68,12 +65,12 @@ def init(
   offset = Transform.create(pos=offset)
   xd = offset.vmap().do(cvel)
 
-  data = _reformat_contact(sys, data, debug)
+  data = _reformat_contact(sys, data)
   return State(q=q, qd=qd, x=x, xd=xd, **data.__dict__)
 
 
 def step(
-    sys: System, state: State, act: jax.Array, debug: bool = False
+    sys: System, state: State, act: jax.Array, unused_debug: bool = False
 ) -> State:
   """Performs a single physics step using position-based dynamics.
 
@@ -84,7 +81,7 @@ def step(
     sys: a brax System
     state: physics data prior to step
     act: (act_size,) actuator input vector
-    debug: if True, adds contact to the data for debugging
+    unused_debug: ignored
 
   Returns:
     x: updated link transform in world frame
@@ -100,5 +97,5 @@ def step(
   offset = Transform.create(pos=offset)
   xd = offset.vmap().do(cvel)
 
-  data = _reformat_contact(sys, data, debug)
+  data = _reformat_contact(sys, data)
   return data.replace(q=q, qd=qd, x=x, xd=xd)

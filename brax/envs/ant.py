@@ -233,6 +233,7 @@ class Ant(PipelineEnv):
   def step(self, state: State, action: jax.Array) -> State:
     """Run one timestep of the environment's dynamics."""
     pipeline_state0 = state.pipeline_state
+    assert pipeline_state0 is not None
     pipeline_state = self.pipeline_step(pipeline_state0, action)
 
     velocity = (pipeline_state.x.pos[0] - pipeline_state0.x.pos[0]) / self.dt
