@@ -6,7 +6,14 @@ This repository contains a script to evaluate policies on the [Barkour](https://
 
 ## Training Joystick Policies
 
-For instructions on how to train a joystick policy on the [Barkour vB](https://github.com/google-deepmind/mujoco_menagerie/tree/main/google_barkour_vb) quadruped on GPU/TPU with Brax, see the [MJX tutorial notebook](https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/mjx/tutorial.ipynb). The environment is defined in `BarkourEnv`, and joystick policies train in 6 minutes on an A100 GPU. These joystick policies successfully transfer onto the quadruped robot.
+For instructions on how to train a joystick policy on the [Barkour v0](https://github.com/google-deepmind/mujoco_menagerie/tree/main/google_barkour_v0) quadruped on GPU/TPU with Brax, see the [tutorial notebook](https://colab.research.google.com/github/google/brax/blob/main/brax/experimental/barkour/tutorial.ipynb). The environment is defined in `BarkourEnv`, and joystick policies train in 6 minutes on an A100 GPU.
+
+<p float="left">
+  <img src="assets/joystick_v0.gif" width="400">
+</p>
+
+
+For [Barkour vB](https://github.com/google-deepmind/mujoco_menagerie/tree/main/google_barkour_vb) quadruped, see the [MJX tutorial notebook](https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/mjx/tutorial.ipynb). These joystick policies successfully transfer onto the quadruped robot.
 
 <p float="left">
   <img src="assets/joystick.gif" width="400">

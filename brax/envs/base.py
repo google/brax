@@ -85,7 +85,7 @@ class PipelineEnv(Env):
   def __init__(
       self,
       sys: base.System,
-      backend: str = 'generalized',
+      backend: str = 'mjx',
       n_frames: int = 1,
       debug: bool = False,
   ):
