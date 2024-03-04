@@ -1,4 +1,4 @@
-# Google Barkour vB
+# Google Barkour
 
 ## Overview
 
