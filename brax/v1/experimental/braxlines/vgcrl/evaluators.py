@@ -28,9 +28,8 @@ import jax
 from jax import numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
-import tensorflow_probability as tfp
+import tensorflow_probability.substrates.jax as tfp
 
-tfp = tfp.substrates.jax
 tfd = tfp.distributions
 
 

@@ -4,7 +4,7 @@
 
   <default>
     <joint armature='0.04' damping="1" limited="true"/>
-    <geom friction=".8 .1 .1" density="300" margin="0.002" condim="3" contype="0" conaffinity="0"/>
+    <geom friction=".8 .1 .1" density="300" margin="0.002" condim="3" contype="0" conaffinity="0" rgba="0.4 0.33 0.26 1.0"/>
   </default>
 
   <custom>
@@ -21,7 +21,7 @@
 
   <worldbody>
     <light diffuse=".5 .5 .5" pos="0 0 3" dir="0 0 -1"/>
-    <geom name="table" type="plane" pos="0 0.5 -0.325" size="1 1 0.1" contype="1" conaffinity="0"/>
+    <geom name="table" type="plane" pos="0 0.5 -0.325" size="1 1 0.1" contype="1" conaffinity="0" rgba="1 1 1 1"/>
 
     <body name="r_shoulder_pan_link" pos="0 -0.6 0">
       <geom name="e1" type="sphere" rgba="0.6 0.6 0.6 1" pos="-0.06 0.05 0.2" size="0.05" />

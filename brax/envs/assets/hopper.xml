@@ -2,7 +2,7 @@
   <compiler angle="radian" autolimits="true"/>
   <default class="main">
     <joint limited="true" armature="1" damping="1"/>
-    <geom contype="0" conaffinity="0" condim="3" solimp="0.8 0.8 0.01" margin="0.001" material="geom"/>
+    <geom contype="0" conaffinity="0" condim="3" solimp="0.8 0.8 0.01" margin="0.001" material="geom" rgba="0.4 0.33 0.26 1.0"/>
     <motor ctrlrange="-.4 .4"/>
   </default>
   <!-- Removed RK4 integrator for brax. -->
@@ -23,7 +23,7 @@
     <map znear="0.02"/>
   </visual>
   <worldbody>
-    <geom name="floor" size="20 20 0.125" type="plane" conaffinity="1" condim="3" material="MatPlane"/>
+    <geom name="floor" size="20 20 0.125" type="plane" conaffinity="1" condim="3" material="MatPlane" rgba="0.5 0.5 0.5 1.0"/>
     <light pos="0 0 1.3" dir="0 0 -1" directional="true" cutoff="100" exponent="1" diffuse="1 1 1" specular="0.1 0.1 0.1"/>
     <body name="torso" pos="0 0 1.25">
       <!-- Brax does not support stacked joints at different locations, so we move rootx and rootz

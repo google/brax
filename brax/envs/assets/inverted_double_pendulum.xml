@@ -22,17 +22,18 @@
     <numeric data="500 30 30" name="constraint_vel_damping"/>
     <numeric data="30000" name="constraint_limit_stiffness"/>
     <numeric data="0" name="spring_mass_scale"/>
-		<numeric data="1" name="spring_inertia_scale"/>
+    <numeric data="1" name="spring_inertia_scale"/>
     <numeric data="5" name="solver_maxls"/>
   </custom>
   <default>
     <joint damping="0.05"/>
-    <geom contype="0" friction="1 0.1 0.1" />
+    <geom contype="0" friction="1 0.1 0.1" rgba="0.4 0.33 0.26 1.0"/>
   </default>
   <option gravity="1e-5 0 -9.81" timestep="0.01" />
   <size nstack="3000"/>
   <worldbody>
-    <geom name="floor" pos="0 0 -3.0" size="40 40 40" type="plane"/>
+    <light diffuse=".5 .5 .5" pos="0 0 3" dir="0 0 -1"/>
+    <geom name="floor" pos="0 0 -3.0" size="40 40 40" type="plane" rgba="1 1 1 1"/>
     <geom name="rail" pos="0 0 0" quat="0.707 0 0.707 0" size="0.02 1" type="capsule"/>
     <body name="cart" pos="0 0 0">
       <joint axis="1 0 0" limited="true" margin="0.01" name="slider" pos="0 0 0" range="-1 1" type="slide"/>

@@ -1,53 +1,54 @@
 <mujoco model="reacher">
-	<compiler angle="radian" inertiafromgeom="true"/>
-	<default>
-		<joint armature="1" damping="1" limited="true"/>
-		<geom conaffinity="0" contype="0" friction="1 0.1 0.1"/>
-	</default>
-	<!-- Removed RK4 integrator for brax. -->
-	<option gravity="0 0 -9.81" timestep="0.01" />
+  <compiler angle="radian" inertiafromgeom="true"/>
+  <default>
+    <joint armature="1" damping="1" limited="true"/>
+    <geom conaffinity="0" contype="0" friction="1 0.1 0.1" rgba="0.4 0.33 0.26 1.0"/>
+  </default>
+  <!-- Removed RK4 integrator for brax. -->
+  <option gravity="0 0 -9.81" timestep="0.01" />
   <custom>
-	  <!-- brax custom params -->
-		<numeric data="0 0 0.1 -0.1" name="init_qpos"/>
+    <!-- brax custom params -->
+    <numeric data="0 0 0.1 -0.1" name="init_qpos"/>
     <numeric data="1000 1000 10" name="constraint_stiffness"/>
-		<numeric data="1000" name="constraint_limit_stiffness"/>
+    <numeric data="1000" name="constraint_limit_stiffness"/>
     <numeric data="3 3 0.1" name="constraint_vel_damping"/>
-		<numeric data="0.1" name="constraint_ang_damping"/>
+    <numeric data="0.1" name="constraint_ang_damping"/>
     <numeric data="0.0" name="ang_damping"/>
     <numeric data="0" name="spring_mass_scale"/>
-		<numeric data="1" name="spring_inertia_scale"/>
+    <numeric data="1" name="spring_inertia_scale"/>
     <numeric data="5" name="solver_maxls"/>
   </custom>
-	<worldbody>
-		<!-- Arena -->
-		<geom conaffinity="0" contype="0" name="ground" pos="0 0 0" size="1 1 10" type="plane"/>
-		<geom conaffinity="0" fromto="-.3 -.3 .01 .3 -.3 .01" name="sideS" size=".02" type="capsule"/>
-		<geom conaffinity="0" fromto=" .3 -.3 .01 .3  .3 .01" name="sideE" size=".02" type="capsule"/>
-		<geom conaffinity="0" fromto="-.3  .3 .01 .3  .3 .01" name="sideN" size=".02" type="capsule"/>
-		<geom conaffinity="0" fromto="-.3 -.3 .01 -.3 .3 .01" name="sideW" size=".02" type="capsule"/>
-		<!-- Arm -->
-		<geom conaffinity="0" contype="0" fromto="0 0 0 0 0 0.02" name="root" size=".011" type="capsule"/>
-		<body name="body0" pos="0 0 .01">
-			<geom fromto="0 0 0 0.1 0 0" name="link0" size=".01" type="capsule"/>
-			<joint axis="0 0 1" limited="false" name="joint0" pos="0 0 0" type="hinge"/>
-			<body name="body1" pos="0.1 0 0">
-				<joint axis="0 0 1" limited="true" name="joint1" pos="0 0 0" range="-3.0 3.0" type="hinge"/>
-				<geom fromto="0 0 0 0.1 0 0" name="link1" size=".01" type="capsule"/>
-				<body name="fingertip" pos="0.11 0 0">
-					<geom contype="0" name="fingertip" pos="0 0 0" size=".01" type="sphere"/>
-				</body>
-			</body>
-		</body>
-		<!-- Target -->
-		<body name="target" pos="0 0 0.01">
-			<!-- The joint `ref` attributes are removed for brax. -->
-			<joint armature="0" axis="1 0 0" damping="0" limited="true" name="target_x" pos="0 0 0" range="-.27 .27" stiffness="0" type="slide"/>
-			<joint armature="0" axis="0 1 0" damping="0" limited="true" name="target_y" pos="0 0 0" range="-.27 .27" stiffness="0" type="slide"/>
-			<geom conaffinity="0" contype="0" name="target" pos="0 0 0" size=".009" type="sphere"/>
-		</body>
-	</worldbody>
-	<actuator>
-		<motor ctrllimited="true" ctrlrange="-1.0 1.0" gear="200.0" joint="joint0"/>
-		<motor ctrllimited="true" ctrlrange="-1.0 1.0" gear="200.0" joint="joint1"/>
-	</actuator>
+  <worldbody>
+    <light diffuse=".5 .5 .5" pos="0 0 3" dir="0 0 -1"/>
+    <!-- Arena -->
+    <geom conaffinity="0" contype="0" name="ground" pos="0 0 0" size="1 1 10" type="plane" rgba="1 1 1 1"/>
+    <geom conaffinity="0" fromto="-.3 -.3 .01 .3 -.3 .01" name="sideS" size=".02" type="capsule"/>
+    <geom conaffinity="0" fromto=" .3 -.3 .01 .3  .3 .01" name="sideE" size=".02" type="capsule"/>
+    <geom conaffinity="0" fromto="-.3  .3 .01 .3  .3 .01" name="sideN" size=".02" type="capsule"/>
+    <geom conaffinity="0" fromto="-.3 -.3 .01 -.3 .3 .01" name="sideW" size=".02" type="capsule"/>
+    <!-- Arm -->
+    <geom conaffinity="0" contype="0" fromto="0 0 0 0 0 0.02" name="root" size=".011" type="capsule"/>
+    <body name="body0" pos="0 0 .01">
+      <geom fromto="0 0 0 0.1 0 0" name="link0" size=".01" type="capsule"/>
+      <joint axis="0 0 1" limited="false" name="joint0" pos="0 0 0" type="hinge"/>
+      <body name="body1" pos="0.1 0 0">
+        <joint axis="0 0 1" limited="true" name="joint1" pos="0 0 0" range="-3.0 3.0" type="hinge"/>
+        <geom fromto="0 0 0 0.1 0 0" name="link1" size=".01" type="capsule"/>
+        <body name="fingertip" pos="0.11 0 0">
+          <geom contype="0" name="fingertip" pos="0 0 0" size=".01" type="sphere"/>
+        </body>
+      </body>
+    </body>
+    <!-- Target -->
+    <body name="target" pos="0 0 0.01">
+      <!-- The joint `ref` attributes are removed for brax. -->
+      <joint armature="0" axis="1 0 0" damping="0" limited="true" name="target_x" pos="0 0 0" range="-.27 .27" stiffness="0" type="slide"/>
+      <joint armature="0" axis="0 1 0" damping="0" limited="true" name="target_y" pos="0 0 0" range="-.27 .27" stiffness="0" type="slide"/>
+      <geom conaffinity="0" contype="0" name="target" pos="0 0 0" size=".009" type="sphere"/>
+    </body>
+  </worldbody>
+  <actuator>
+    <motor ctrllimited="true" ctrlrange="-1.0 1.0" gear="200.0" joint="joint0"/>
+    <motor ctrllimited="true" ctrlrange="-1.0 1.0" gear="200.0" joint="joint1"/>
+  </actuator>
 </mujoco>

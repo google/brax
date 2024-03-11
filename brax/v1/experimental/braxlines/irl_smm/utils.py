@@ -32,9 +32,8 @@ from brax.training import networks
 from brax.training.ppo import StepData
 import jax
 import jax.numpy as jnp
-import tensorflow_probability as tfp
+import tensorflow_probability.substrates.jax as tfp
 
-tfp = tfp.substrates.jax
 tfd = tfp.distributions
 
 DISC_PARAM_NAME = "irl_disc_params"

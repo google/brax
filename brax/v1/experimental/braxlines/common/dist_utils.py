@@ -15,9 +15,8 @@
 """Distribution utilility functions."""
 
 from jax import numpy as jnp
-import tensorflow_probability as tfp
+import tensorflow_probability.substrates.jax as tfp
 
-tfp = tfp.substrates.jax
 tfd = tfp.distributions
 
 

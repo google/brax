@@ -240,6 +240,8 @@ def validate_model(mj: mujoco.MjModel) -> None:
     raise NotImplementedError('Ellipsoid fluid model not implemented.')
   if mj.opt.wind.any():
     raise NotImplementedError('option.wind is not implemented.')
+  if mj.opt.impratio != 1:
+    raise NotImplementedError('Only impratio=1 is supported.')
 
   # actuators
   if any(i not in [0, 1] for i in mj.actuator_biastype):

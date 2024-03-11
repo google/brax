@@ -25,9 +25,8 @@ from brax.v1.experimental.braxlines.vgcrl import evaluators as vgcrl_evaluators
 from brax.v1.experimental.braxlines.vgcrl import utils as vgcrl_utils
 from brax.v1.experimental.composer import composer
 import jax
-import tensorflow_probability as tfp
+import tensorflow_probability.substrates.jax as tfp
 
-tfp = tfp.substrates.jax
 tfd = tfp.distributions
 
 TASK_KEYS = (('env_name',), ('obs_indices',), ('obs_scale',))
