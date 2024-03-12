@@ -340,7 +340,8 @@ def load_model(mj: mujoco.MjModel) -> System:
       constraint_ang_damping=custom['constraint_ang_damping'],
   )
   # skip link 0 which is the world body in mujoco
-  link = jax.tree_map(lambda x: x[1:], link)
+  # copy to avoid writing to mj model
+  link = jax.tree_map(lambda x: x[1:].copy(), link)
 
   # create dofs
   mj.jnt_range[~(mj.jnt_limited == 1), :] = np.array([-np.inf, np.inf])
@@ -438,6 +439,7 @@ def load_model(mj: mujoco.MjModel) -> System:
   link_parents = tuple(mj.body_parentid - 1)[1:]
 
   # mujoco stores free q in world frame, so clear link transform for free links
+  # TODO: make this work for non-fused mj models
   if 'f' in link_types:
     free_idx = np.array([i for i, typ in enumerate(link_types) if typ == 'f'])
     link.transform.pos[free_idx] = np.zeros(3)

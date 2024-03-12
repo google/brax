@@ -54,7 +54,7 @@ _GEOM_TYPE_NAMES = {
     1: 'HeightMap',
     2: 'Sphere',
     3: 'Capsule',
-    4: 'Cylinder',
+    5: 'Cylinder',
     6: 'Box',
     7: 'Mesh',
 }

@@ -100,7 +100,13 @@ function createBox(box, mat) {
 }
 
 function createPlane(plane, mat) {
-  const geometry = new THREE.PlaneGeometry(2000, 2000);
+  let size;
+  if (plane.size[0] == 0 && plane.size[1] == 0) {
+    size = [2000, 2000];
+  } else {
+    size = plane.size;
+  }
+  const geometry = new THREE.PlaneGeometry(plane.size[0], plane.size[1]);
   const mesh = new THREE.Mesh(geometry, mat);
   mesh.receiveShadow = true;
   mesh.baseMaterial = mesh.material;
@@ -157,11 +163,14 @@ function createScene(system) {
     geom[1].forEach(function(collider) {
       const rgba = collider.rgba;
       const color = new THREE.Color(rgba[0], rgba[1], rgba[2]);
-      const mat = (collider.name == 'Plane') ?
-          createCheckerBoard() :
-          (collider.name == 'heightMap') ?
-          new THREE.MeshStandardMaterial({color: color, flatShading: true}) :
-          new THREE.MeshPhongMaterial({color: color});
+      let mat;
+      if (collider.name == 'Plane' && collider.size[0] == 0 && collider.size[1] == 0) {
+        mat = createCheckerBoard();
+      } else if (collider.name == 'heightMap') {
+        mat = new THREE.MeshStandardMaterial({color: color, flatShading: true});
+      } else {
+        mat = new THREE.MeshPhongMaterial({color: color});
+      }
       let child;
       let axisSize;
       if (collider.name == 'Box') {
@@ -171,7 +180,7 @@ function createScene(system) {
         child = createCapsule(collider, mat);
         axisSize = getCapsuleAxisSize(collider);
       } else if (collider.name == 'Plane') {
-        child = createPlane(collider.plane, mat);
+        child = createPlane(collider, mat);
       } else if (collider.name == 'Sphere') {
         child = createSphere(collider, mat);
         axisSize = getSphereAxisSize(collider);
