@@ -51,8 +51,9 @@ function getMeshAxisSize(geom) {
   return size * 2;
 }
 
-function createCylinder(radius, height, mat) {
-  const geometry = new THREE.CylinderGeometry(radius, radius, height, 32);
+function createCylinder(cylinder, mat) {
+  const geometry = new THREE.CylinderGeometry(
+      cylinder.size[0], cylinder.size[0], 2 * cylinder.size[1], 32);
   mat.side = THREE.DoubleSide;
   const cyl = new THREE.Mesh(geometry, mat);
   cyl.baseMaterial = cyl.material;
@@ -64,17 +65,17 @@ function createCylinder(radius, height, mat) {
 function createCapsule(capsule, mat) {
   const sphere_geom = new THREE.SphereGeometry(capsule.size[0], 16, 16);
   const cylinder_geom = new THREE.CylinderGeometry(
-      capsule.size[0], capsule.size[0], capsule.size[1] + 2 * capsule.size[0]);
+      capsule.size[0], capsule.size[0], 2 * capsule.size[1]);
 
   const sphere1 = new THREE.Mesh(sphere_geom, mat);
   sphere1.baseMaterial = sphere1.material;
-  sphere1.position.set(0, 0, capsule.size[1] / 2 + capsule.size[0]);
+  sphere1.position.set(0, 0, capsule.size[1]);
   sphere1.castShadow = true;
   sphere1.layers.enable(1);
 
   const sphere2 = new THREE.Mesh(sphere_geom, mat);
   sphere2.baseMaterial = sphere2.material;
-  sphere2.position.set(0, 0, -capsule.size[1] / 2 - capsule.size[0]);
+  sphere2.position.set(0, 0, -capsule.size[1]);
   sphere2.castShadow = true;
   sphere2.layers.enable(1);
 
@@ -106,7 +107,7 @@ function createPlane(plane, mat) {
   } else {
     size = plane.size;
   }
-  const geometry = new THREE.PlaneGeometry(plane.size[0], plane.size[1]);
+  const geometry = new THREE.PlaneGeometry(size[0], size[1]);
   const mesh = new THREE.Mesh(geometry, mat);
   mesh.receiveShadow = true;
   mesh.baseMaterial = mesh.material;
@@ -191,7 +192,7 @@ function createScene(system) {
         child = createMesh(collider, mat);
         axisSize = getMeshAxisSize(collider);
       } else if (collider.name == 'Cylinder') {
-        child = createCylinder(collider.size[0], collider.size[1], mat);
+        child = createCylinder(collider, mat);
         axisSize = 2 * Math.max(collider.size[0], collider.size[1]);
       }
       if (collider.rot) {
