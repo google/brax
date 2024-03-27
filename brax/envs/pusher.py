@@ -42,7 +42,10 @@ class Pusher(PipelineEnv):
   ### Action Space
 
   The action space is a `Box(-2, 2, (7,), float32)`. An action `(a, b)`
-  represents the torques applied at the hinge joints.
+  represents the torques applied at the hinge joints. 
+  
+  Actions are assumed to be within `[-1, 1]` and are (linearly) scaled 
+  to `[-2, 2]` within the environment's `step()` call.
 
   | Num | Action                                        | Control Min | Control Max | Name (in corresponding config) | Joint | Unit         |
   |-----|-----------------------------------------------|-------------|-------------|--------------------------------|-------|--------------|
@@ -193,6 +196,9 @@ class Pusher(PipelineEnv):
     return State(pipeline_state, obs, reward, done, metrics)
 
   def step(self, state: State, action: jax.Array) -> State:
+    action = self.scale_and_clip_actions(action)
+    pipeline_state = self.pipeline_step(state.pipeline_state, action)
+    
     assert state.pipeline_state is not None
     x_i = state.pipeline_state.x.vmap().do(
         base.Transform.create(pos=self.sys.link.inertia.transform.pos)
@@ -204,8 +210,6 @@ class Pusher(PipelineEnv):
     reward_dist = -math.safe_norm(vec_2)
     reward_ctrl = -jp.square(action).sum()
     reward = reward_dist + 0.1 * reward_ctrl + 0.5 * reward_near
-
-    pipeline_state = self.pipeline_step(state.pipeline_state, action)
 
     obs = self._get_obs(pipeline_state)
     state.metrics.update(

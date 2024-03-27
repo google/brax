@@ -219,6 +219,7 @@ class HumanoidStandup(PipelineEnv):
 
   def step(self, state: State, action: jax.Array) -> State:
     """Runs one timestep of the environment's dynamics."""
+    action = self.scale_and_clip_actions(action)
     pipeline_state = self.pipeline_step(state.pipeline_state, action)
 
     pos_after = pipeline_state.x.pos[0, 2]  # z coordinate of torso
