@@ -46,6 +46,9 @@ class InvertedPendulum(PipelineEnv):
   continuous `(action)` in `[-3, 3]`, where `action` represents the numerical
   force applied to the cart (with magnitude representing the amount of force and
   sign representing the direction)
+  
+  Actions are assumed to be within `[-1, 1]` and are (linearly) scaled 
+  to `[-3, 3]` within the environment's `step()` call.
 
   | Num | Action                    | Control Min | Control Max | Name (in
   corresponding config) | Joint | Unit      |

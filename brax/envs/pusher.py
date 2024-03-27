@@ -42,7 +42,10 @@ class Pusher(PipelineEnv):
   ### Action Space
 
   The action space is a `Box(-2, 2, (7,), float32)`. An action `(a, b)`
-  represents the torques applied at the hinge joints.
+  represents the torques applied at the hinge joints. 
+  
+  Actions are assumed to be within `[-1, 1]` and are (linearly) scaled 
+  to `[-2, 2]` within the environment's `step()` call.
 
   | Num | Action                                        | Control Min | Control Max | Name (in corresponding config) | Joint | Unit         |
   |-----|-----------------------------------------------|-------------|-------------|--------------------------------|-------|--------------|
