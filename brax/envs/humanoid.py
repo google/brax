@@ -255,8 +255,13 @@ class Humanoid(PipelineEnv):
 
   def step(self, state: State, action: jax.Array) -> State:
     """Runs one timestep of the environment's dynamics."""
+    
+    # Scale action from [-1,1] to actuator limits
+    action_min = self.sys.actuator.ctrl_range[:, 0]
+    action_max = self.sys.actuator.ctrl_range[:, 1]
+    action = (action + 1) * (action_max - action_min) * 0.5 + action_min
+    
     pipeline_state0 = state.pipeline_state
-    action = self.scale_and_clip_actions(action)
     pipeline_state = self.pipeline_step(pipeline_state0, action)
 
     com_before, *_ = self._com(pipeline_state0)

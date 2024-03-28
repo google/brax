@@ -26,7 +26,6 @@ from brax.positional import pipeline as p_pipeline
 from brax.spring import pipeline as s_pipeline
 from flax import struct
 import jax
-import jax.numpy as jnp
 import mujoco
 from mujoco import mjx
 import numpy as np
@@ -129,22 +128,6 @@ class PipelineEnv(Env):
       )
 
     return jax.lax.scan(f, pipeline_state, (), self._n_frames)[0]
-  
-  def scale_and_clip_actions(self, action: jax.Array) -> jax.Array:
-    """
-    Scale an input action from `[-1, 1]` up/down to the control limits
-    of each actuator in an the model.
-    
-    We assume the action is in `[-1, 1]` and apply a linear transform
-    to scale the control to `[a, b]` with `u = (u + 1)(b-a)/2 + a`
-    """
-    action_min = self.sys.actuator.ctrl_range[:, 0]
-    action_max = self.sys.actuator.ctrl_range[:, 1]
-    
-    def rescale(x):
-      return (x + 1) * (action_max - action_min) / 2 + action_min
-    
-    return jnp.clip(rescale(action), a_min=action_max, a_max=action_max)
 
   @property
   def dt(self) -> jax.Array:
