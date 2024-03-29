@@ -46,7 +46,7 @@ setup(
         "flax",
         # TODO: remove grpcio and gym after dropping legacy v1 code
         "grpcio",
-        "gym",
+        "gymnasium",
         "jax>=0.4.6",
         "jaxlib>=0.4.6",
         "jaxopt",

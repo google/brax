@@ -39,7 +39,7 @@ from brax.v1.envs import ur5e
 from brax.v1.envs import walker2d
 from brax.v1.envs import wrappers
 from brax.v1.envs.env import Env, State, Wrapper
-import gym
+import gymnasium as gym
 
 _envs = {
     'acrobot': acrobot.Acrobot,
