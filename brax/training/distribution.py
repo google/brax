@@ -131,7 +131,7 @@ class TanhBijector:
 class NormalTanhDistribution(ParametricDistribution):
   """Normal distribution followed by tanh."""
 
-  def __init__(self, event_size, min_std=0.001):
+  def __init__(self, event_size, min_std=0.001, var_scale=1):
     """Initialize the distribution.
 
     Args:
@@ -151,8 +151,9 @@ class NormalTanhDistribution(ParametricDistribution):
         event_ndims=1,
         reparametrizable=True)
     self._min_std = min_std
+    self._var_scale = var_scale
 
   def create_dist(self, parameters):
     loc, scale = jnp.split(parameters, 2, axis=-1)
-    scale = jax.nn.softplus(scale) + self._min_std
+    scale = (jax.nn.softplus(scale) + self._min_std) * self._var_scale
     return NormalDistribution(loc=loc, scale=scale)

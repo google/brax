@@ -58,7 +58,7 @@ def make_apg_networks(
     activation: networks.ActivationFn = linen.swish) -> APGNetworks:
   """Make APG networks."""
   parametric_action_distribution = distribution.NormalTanhDistribution(
-      event_size=action_size)
+      event_size=action_size, var_scale=0.1)
   policy_network = networks.make_policy_network(
       parametric_action_distribution.param_size,
       observation_size,

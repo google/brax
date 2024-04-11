@@ -55,16 +55,17 @@ def _unpmap(v):
 
 def train(
     environment: Union[envs_v1.Env, envs.Env],
+    timesteps: int,
     episode_length: int,
-    action_repeat: int = 1,
+    horizon_length: int = 32,
     num_envs: int = 1,
+    num_evals: int = 1,
+    action_repeat: int = 1,
     max_devices_per_host: Optional[int] = None,
     num_eval_envs: int = 128,
     learning_rate: float = 1e-4,
     seed: int = 0,
-    truncation_length: Optional[int] = None,
     max_gradient_norm: float = 1e9,
-    num_evals: int = 1,
     normalize_observations: bool = False,
     deterministic_eval: bool = False,
     network_factory: types.NetworkFactory[
@@ -91,10 +92,9 @@ def train(
       process_id, local_device_count, local_devices_to_use)
   device_count = local_devices_to_use * process_count
 
-  if truncation_length is not None:
-    assert truncation_length > 0
-
+  num_updates = jnp.ceil(timesteps / (num_envs * horizon_length)) # Total # of policy updates
   num_evals_after_init = max(num_evals - 1, 1)
+  updates_per_epoch = jnp.ceil(num_updates / (num_evals_after_init))
 
   assert num_envs % device_count == 0
   env = environment
