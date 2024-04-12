@@ -42,7 +42,7 @@ class MLP(linen.Module):
   activate_final: bool = False
   bias: bool = True
   layer_norm: bool = False
-
+  
   @linen.compact
   def __call__(self, data: jnp.ndarray):
     hidden = data
@@ -55,8 +55,8 @@ class MLP(linen.Module):
               hidden)
       if i != len(self.layer_sizes) - 1 or self.activate_final:
         hidden = self.activation(hidden)
-      if self.layer_norm:
-        hidden = linen.LayerNorm()(hidden)
+        if self.layer_norm:
+          hidden = linen.LayerNorm()(hidden)
     return hidden
 
 
@@ -89,12 +89,15 @@ def make_policy_network(
     preprocess_observations_fn: types.PreprocessObservationFn = types
     .identity_observation_preprocessor,
     hidden_layer_sizes: Sequence[int] = (256, 256),
-    activation: ActivationFn = linen.relu) -> FeedForwardNetwork:
+    activation: ActivationFn = linen.relu,
+    kernel_init: Initializer = jax.nn.initializers.lecun_uniform(),
+    layer_norm: bool = False) -> FeedForwardNetwork:
   """Creates a policy network."""
   policy_module = MLP(
       layer_sizes=list(hidden_layer_sizes) + [param_size],
       activation=activation,
-      kernel_init=jax.nn.initializers.lecun_uniform())
+      kernel_init=kernel_init,
+      layer_norm=layer_norm)
 
   def apply(processor_params, policy_params, obs):
     obs = preprocess_observations_fn(obs, processor_params)

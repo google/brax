@@ -53,10 +53,11 @@ class TrainingState:
 def _unpmap(v):
   return jax.tree_util.tree_map(lambda x: x[0], v)
 
+
 def train(
     environment: Union[envs_v1.Env, envs.Env],
-    timesteps: int,
     episode_length: int,
+    policy_updates: int,
     horizon_length: int = 32,
     num_envs: int = 1,
     num_evals: int = 1,
@@ -66,7 +67,8 @@ def train(
     learning_rate: float = 1e-4,
     adam_b: list = [0.7, 0.95],
     use_schedule: bool = True,
-    schedule_decay: float = 0.995,
+    use_float64: bool = True,
+    schedule_decay: float = 0.997,
     seed: int = 0,
     max_gradient_norm: float = 1e9,
     normalize_observations: bool = False,
@@ -95,9 +97,9 @@ def train(
       process_id, local_device_count, local_devices_to_use)
   device_count = local_devices_to_use * process_count
 
-  num_updates = jnp.ceil(timesteps / (num_envs * horizon_length)) # Total # of policy updates
+  num_updates = policy_updates
   num_evals_after_init = max(num_evals - 1, 1)
-  updates_per_epoch = jnp.ceil(num_updates / (num_evals_after_init))
+  updates_per_epoch = jnp.round(num_updates / (num_evals_after_init))
 
   assert num_envs % device_count == 0
   env = environment
@@ -125,6 +127,7 @@ def train(
   )
   
   reset_fn = jax.jit(jax.vmap(env.reset))
+  step_fn = jax.jit(jax.vmap(env.step))
 
   normalize = lambda x, y: x
   if normalize_observations:
@@ -148,8 +151,9 @@ def train(
   )
 
   def scramble_times(state, key):
-    state.info['steps'] = jnp.round(jax.random.uniform(key, (local_devices_to_use, num_envs,), maxval=episode_length))
-    
+    state.info['steps'] = jnp.round(
+      jax.random.uniform(key, (local_devices_to_use, num_envs,), 
+                         maxval=episode_length))
     return state
 
   def env_step(
@@ -161,77 +165,65 @@ def train(
     key, key_sample = jax.random.split(key)
     actions = policy(env_state.obs, key_sample)[0]
     nstate = env.step(env_state, actions)
-    # if truncation_length is not None: # TODO: Remove
-    #   nstate = jax.lax.cond(
-    #       jnp.mod(step_index + 1, truncation_length) == 0.,
-    #       jax.lax.stop_gradient, lambda x: x, nstate)
 
     return (nstate, key), (nstate.reward, env_state.obs)
 
-  def loss(env_state, policy_params, normalizer_params, key):
-    key_reset, key_scan = jax.random.split(key)
-    # env_state = env.reset(
-    #     jax.random.split(key_reset, num_envs // process_count))
+  def loss(policy_params, normalizer_params, env_state, key):
     f = functools.partial(
         env_step, policy=make_policy((normalizer_params, policy_params)))
     (state_h, _), (rewards,
-     obs) = jax.lax.scan(f, (env_state, key_scan),
+     obs) = jax.lax.scan(f, (env_state, key),
                          (jnp.arange(horizon_length // action_repeat)))
-    return -jnp.mean(rewards), obs, state_h
+    jax.debug.print("{x}", x=jnp.mean(rewards))
 
-  gradient_update_fn = gradients.gradient_update_fn(
-    loss, optimizer, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True)
-  # loss_grad = jax.grad(loss, has_aux=True)
+    return -jnp.mean(rewards), (obs, state_h)
+
+  loss_grad = jax.grad(loss, has_aux=True)
+
+  def clip_by_global_norm(updates):
+    g_norm = optax.global_norm(updates)
+    trigger = g_norm < max_gradient_norm
+    return jax.tree_util.tree_map(
+        lambda t: jnp.where(trigger, t, (t / g_norm) * max_gradient_norm),
+        updates)
 
   def minibatch_step(
       carry, epoch_step_index: int):
     (optimizer_state, normalizer_params, 
-     params, key, state) = carry
-    key, key_loss = jax.random.split(key)
-    (_, obs, state_h), params, optimizer_state = gradient_update_fn(
-        state,
-        params,
-        normalizer_params,
-        key_loss,
-        optimizer_state=optimizer_state)
+     policy_params, key, state) = carry
     
+    key, key_grad = jax.random.split(key)
+    grad, (obs, state_h) = loss_grad(policy_params,
+                          normalizer_params, 
+                          state,
+                          key_grad)
+
+    grad = clip_by_global_norm(grad)
+    grad = jax.lax.pmean(grad, axis_name='i')
+    params_update, optimizer_state = optimizer.update(
+        grad, optimizer_state)
+    policy_params = optax.apply_updates(policy_params,
+                                        params_update)
+
     normalizer_params = running_statistics.update(
         normalizer_params, obs, pmap_axis_name=_PMAP_AXIS_NAME)
 
-    return (optimizer_state, normalizer_params, params, key, state_h), metrics
-  
-  # def clip_by_global_norm(updates): # TODO: remove
-  #   g_norm = optax.global_norm(updates)
-  #   trigger = g_norm < max_gradient_norm
-  #   return jax.tree_util.tree_map(
-  #       lambda t: jnp.where(trigger, t, (t / g_norm) * max_gradient_norm),
-  #       updates)
+    metrics = {
+        'grad_norm': optax.global_norm(grad),
+        'params_norm': optax.global_norm(policy_params)
+    }
 
+    return (optimizer_state, normalizer_params, policy_params, key, state_h), metrics
+  
   def training_epoch(training_state: TrainingState, env_state: Union[envs.State, envs_v1.State], key: PRNGKey):
-    # key, key_epoch = jax.random.split(key)
 
     (optimizer_state, normalizer_params, 
      policy_params, key, state_h), metrics = jax.lax.scan(
       minibatch_step,
-      (optimizer_state, training_state.normalizer_params,
+      (training_state.optimizer_state, training_state.normalizer_params,
        training_state.policy_params, key, env_state),
       jnp.arange(updates_per_epoch))
-     
-    # key, key_grad = jax.random.split(key)
-    # grad, obs = loss_grad(training_state.policy_params,
-    #                       training_state.normalizer_params, key_grad)
-    # grad = clip_by_global_norm(grad)
-    # grad = jax.lax.pmean(grad, axis_name='i')
-    # params_update, optimizer_state = optimizer.update(
-    #     grad, training_state.optimizer_state)
-    # policy_params = optax.apply_updates(training_state.policy_params,
-    #                                     params_update)
 
-
-    # metrics = {
-    #     'grad_norm': optax.global_norm(grad),
-    #     'params_norm': optax.global_norm(policy_params)
-    # }
     return TrainingState(
         optimizer_state=optimizer_state,
         normalizer_params=normalizer_params,
@@ -266,11 +258,12 @@ def train(
   policy_params = apg_network.policy_network.init(global_key)
   del global_key
 
+  dtype = 'float64' if use_float64 else 'float32'
   training_state = TrainingState(
       optimizer_state=optimizer.init(policy_params),
       policy_params=policy_params,
       normalizer_params=running_statistics.init_state(
-          specs.Array((env.observation_size,), jnp.dtype('float32'))))
+          specs.Array((env.observation_size,), jnp.dtype(dtype))))
   training_state = jax.device_put_replicated(
       training_state,
       jax.local_devices()[:local_devices_to_use])
@@ -298,35 +291,51 @@ def train(
 
   # Run initial eval
   metrics = {}
-  if process_id == 0 and num_evals > 1:
-    metrics = evaluator.run_evaluation(
-        _unpmap(
-            (training_state.normalizer_params, training_state.policy_params)),
-        training_metrics={})
-    logging.info(metrics)
-    progress_fn(0, metrics)
 
-    init_key, scramble_key, local_key = jax.random.split(local_key, 3)
-    keys = jax.random.split(init_key, (local_devices_to_use, num_envs))
-    env_state = reset_fn(keys) # First batch axes for process, 2nd for envs.
-    env_state = scramble_times(env_state, scramble_key)
-  print(env_state.info['steps'])
+  # if process_id == 0 and num_evals > 1:
+  #   metrics = evaluator.run_evaluation(
+  #       _unpmap(
+  #           (training_state.normalizer_params, training_state.policy_params)),
+  #       training_metrics={})
+  #   logging.info(metrics)
+  #   progress_fn(0, metrics)
+
+  init_key, scramble_key, local_key = jax.random.split(local_key, 3)
+  init_key = jax.random.split(init_key, (local_devices_to_use, num_envs // process_count))
+  env_state = reset_fn(init_key)
+  env_state = scramble_times(env_state, scramble_key)
+  env_state = step_fn(env_state, jnp.zeros((local_devices_to_use, num_envs // process_count, 
+                                            env.action_size))) # Prevent recompilation on the second epoch
+  
+  epoch_key, local_key = jax.random.split(local_key)
+  epoch_key = jax.random.split(epoch_key, local_devices_to_use)
+
   for it in range(num_evals_after_init):
     logging.info('starting iteration %s %s', it, time.time() - xt)
 
     # optimization
+    from pathlib import Path
+    import pickle
+
+    file_name = f'checkpoint_{it}.pkl'
+    base_path = "/tmp/checkpoints/"
+    save_to = str(Path(
+                    Path(base_path),
+                    Path(file_name)))
+    algo_state = {'training_state': training_state}
+    pickle.dump(algo_state, open(save_to, "wb"))
 
     (training_state, env_state,
-     training_metrics, keys) = training_epoch_with_timing(training_state, env_state, keys)
+     training_metrics, epoch_key) = training_epoch_with_timing(training_state, env_state, epoch_key)
 
-    if process_id == 0:
-      # Run evals.
-      metrics = evaluator.run_evaluation(
-          _unpmap(
-              (training_state.normalizer_params, training_state.policy_params)),
-          training_metrics)
-      logging.info(metrics)
-      progress_fn(it + 1, metrics)
+    # if process_id == 0:
+    #   # Run evals.
+    #   metrics = evaluator.run_evaluation(
+    #       _unpmap(
+    #           (training_state.normalizer_params, training_state.policy_params)),
+    #       training_metrics)
+    #   logging.info(metrics)
+    #   progress_fn(it + 1, metrics)
 
   # If there was no mistakes the training_state should still be identical on all
   # devices.
@@ -335,3 +344,4 @@ def train(
       (training_state.normalizer_params, training_state.policy_params))
   pmap.synchronize_hosts()
   return (make_policy, params, metrics)
+
