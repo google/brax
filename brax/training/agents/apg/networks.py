@@ -55,7 +55,8 @@ def make_apg_networks(
     preprocess_observations_fn: types.PreprocessObservationFn = types
     .identity_observation_preprocessor,
     hidden_layer_sizes: Sequence[int] = (32,) * 4,
-    activation: networks.ActivationFn = linen.swish) -> APGNetworks:
+    activation: networks.ActivationFn = linen.elu,
+    layer_norm: bool = True) -> APGNetworks:
   """Make APG networks."""
   parametric_action_distribution = distribution.NormalTanhDistribution(
       event_size=action_size, var_scale=0.1)
@@ -63,7 +64,8 @@ def make_apg_networks(
       parametric_action_distribution.param_size,
       observation_size,
       preprocess_observations_fn=preprocess_observations_fn,
-      hidden_layer_sizes=hidden_layer_sizes, activation=activation)
+      hidden_layer_sizes=hidden_layer_sizes, activation=activation,
+      layer_norm=layer_norm)
   return APGNetworks(
       policy_network=policy_network,
       parametric_action_distribution=parametric_action_distribution)

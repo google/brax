@@ -41,6 +41,7 @@ class MLP(linen.Module):
   kernel_init: Initializer = jax.nn.initializers.lecun_uniform()
   activate_final: bool = False
   bias: bool = True
+  layer_norm: bool = False
 
   @linen.compact
   def __call__(self, data: jnp.ndarray):
@@ -54,6 +55,8 @@ class MLP(linen.Module):
               hidden)
       if i != len(self.layer_sizes) - 1 or self.activate_final:
         hidden = self.activation(hidden)
+      if self.layer_norm:
+        hidden = linen.LayerNorm()(hidden)
     return hidden
 
 
