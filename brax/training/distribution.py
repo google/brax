@@ -137,6 +137,7 @@ class NormalTanhDistribution(ParametricDistribution):
     Args:
       event_size: the size of events (i.e. actions).
       min_std: minimum std for the gaussian.
+      var_scale: adjust the gaussian's scale parameter.
     """
     # We apply tanh to gaussian actions to bound them.
     # Normally we would use TransformedDistribution to automatically

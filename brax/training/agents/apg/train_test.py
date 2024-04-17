@@ -21,7 +21,9 @@ from brax import envs
 from brax.training.acme import running_statistics
 from brax.training.agents.apg import networks as apg_networks
 from brax.training.agents.apg import train as apg
-import jax
+from jax import config
+config.update("jax_enable_x64", True)
+config.update('jax_default_matmul_precision', jax.lax.Precision.HIGH)
 
 
 class APGTest(parameterized.TestCase):
@@ -31,6 +33,7 @@ class APGTest(parameterized.TestCase):
     """Test APG with a simple env."""
     _, _, metrics = apg.train(
         envs.get_environment('fast'),
+        policy_updates=200,
         episode_length=128,
         num_envs=64,
         num_evals=200,
@@ -45,13 +48,14 @@ class APGTest(parameterized.TestCase):
     env = envs.get_environment('fast')
     original_inference, params, _ = apg.train(
         envs.get_environment('fast'),
+        policy_updates=200,
         episode_length=100,
         action_repeat=4,
         num_envs=16,
         learning_rate=3e-3,
         normalize_observations=normalize_observations,
-        num_evals=200,
-        truncation_length=10)
+        num_evals=200
+    )
     normalize_fn = lambda x, y: x
     if normalize_observations:
       normalize_fn = running_statistics.normalize
@@ -86,6 +90,7 @@ class APGTest(parameterized.TestCase):
 
     _, _, _ = apg.train(
         envs.get_environment('inverted_pendulum', backend='spring'),
+        policy_updates=200,
         episode_length=100,
         num_envs=8,
         num_evals=10,
