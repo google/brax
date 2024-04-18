@@ -22,6 +22,7 @@ from brax.training import types
 from brax.training.types import PRNGKey
 import flax
 from flax import linen
+from flax.linen.initializers import orthogonal
 
 
 @flax.struct.dataclass
@@ -55,15 +56,18 @@ def make_apg_networks(
     preprocess_observations_fn: types.PreprocessObservationFn = types
     .identity_observation_preprocessor,
     hidden_layer_sizes: Sequence[int] = (32,) * 4,
-    activation: networks.ActivationFn = linen.swish) -> APGNetworks:
+    activation: networks.ActivationFn = linen.elu,
+    layer_norm: bool = True) -> APGNetworks:
   """Make APG networks."""
   parametric_action_distribution = distribution.NormalTanhDistribution(
-      event_size=action_size)
+      event_size=action_size, var_scale=0.1)
   policy_network = networks.make_policy_network(
       parametric_action_distribution.param_size,
       observation_size,
       preprocess_observations_fn=preprocess_observations_fn,
-      hidden_layer_sizes=hidden_layer_sizes, activation=activation)
+      hidden_layer_sizes=hidden_layer_sizes, activation=activation,
+      kernel_init = orthogonal(0.01),
+      layer_norm=layer_norm)
   return APGNetworks(
       policy_network=policy_network,
       parametric_action_distribution=parametric_action_distribution)
