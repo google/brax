@@ -22,10 +22,6 @@ from brax.training.acme import running_statistics
 from brax.training.agents.apg import networks as apg_networks
 from brax.training.agents.apg import train as apg
 import jax
-from jax import config
-config.update("jax_enable_x64", True)
-config.update('jax_default_matmul_precision', jax.lax.Precision.HIGH)
-
 
 class APGTest(parameterized.TestCase):
   """Tests for APG module."""

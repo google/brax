@@ -67,7 +67,7 @@ def train(
     learning_rate: float = 1e-4,
     adam_b: list = [0.7, 0.95],
     use_schedule: bool = True,
-    use_float64: bool = True,
+    use_float64: bool = False,
     schedule_decay: float = 0.997,
     seed: int = 0,
     max_gradient_norm: float = 1e9,
