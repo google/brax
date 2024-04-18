@@ -22,7 +22,6 @@ from brax.training import types
 from brax.training.types import PRNGKey
 import flax
 from flax import linen
-from flax.linen.initializers import orthogonal
 
 
 @flax.struct.dataclass
@@ -66,7 +65,7 @@ def make_apg_networks(
       observation_size,
       preprocess_observations_fn=preprocess_observations_fn,
       hidden_layer_sizes=hidden_layer_sizes, activation=activation,
-      kernel_init = orthogonal(0.01),
+      kernel_init=linen.initializers.orthogonal(0.01),
       layer_norm=layer_norm)
   return APGNetworks(
       policy_network=policy_network,

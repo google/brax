@@ -23,6 +23,7 @@ from brax.training.agents.apg import networks as apg_networks
 from brax.training.agents.apg import train as apg
 import jax
 
+
 class APGTest(parameterized.TestCase):
   """Tests for APG module."""
 
@@ -95,7 +96,6 @@ class APGTest(parameterized.TestCase):
         normalize_observations=True,
         randomization_fn=rand_fn,
     )
-
 
 if __name__ == '__main__':
   absltest.main()

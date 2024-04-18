@@ -121,8 +121,8 @@ flags.DEFINE_float('reward_shift', 0.,
                    'A reward shift to get rid of "stay alive" bonus.')
 
 # ARS hps.
-flags.DEFINE_integer('truncation_length', None,
-                     'Truncation for gradient propagation in APG.')
+flags.DEFINE_integer('policy updates', None,
+                     'Number of policy updates in APG.')
 
 
 def main(unused_argv):
@@ -205,6 +205,7 @@ def main(unused_argv):
     if FLAGS.learner == 'apg':
       make_policy, params, _ = apg.train(
           environment=get_environment(FLAGS.env),
+          policy_updates=FLAGS.policy_updates,
           num_envs=FLAGS.num_envs,
           action_repeat=FLAGS.action_repeat,
           num_evals=FLAGS.num_evals,
@@ -214,7 +215,6 @@ def main(unused_argv):
           normalize_observations=FLAGS.normalize_observations,
           max_gradient_norm=FLAGS.max_gradient_norm,
           episode_length=FLAGS.episode_length,
-          truncation_length=FLAGS.truncation_length,
           progress_fn=writer.write_scalars)
     if FLAGS.learner == 'ars':
       make_policy, params, _ = ars.train(

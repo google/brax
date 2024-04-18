@@ -24,7 +24,7 @@ from mujoco import mjx
 
 def _reformat_contact(sys: System, data: State) -> State:
   """Reformats the mjx.Contact into a brax.base.Contact."""
-  if data.contact is None:
+  if data.contact is None or data.ncon == 0:
     return data
 
   elasticity = jp.zeros(data.contact.pos.shape[0])

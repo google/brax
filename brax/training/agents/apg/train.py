@@ -65,7 +65,7 @@ def train(
     max_devices_per_host: Optional[int] = None,
     num_eval_envs: int = 128,
     learning_rate: float = 1e-4,
-    adam_b: list = [0.7, 0.95],
+    adam_b: tuple[float, float] = (0.7, 0.95),
     use_schedule: bool = True,
     use_float64: bool = False,
     schedule_decay: float = 0.997,
@@ -125,7 +125,7 @@ def train(
       action_repeat=action_repeat,
       randomization_fn=v_randomiation_fn,
   )
-  
+
   reset_fn = jax.jit(jax.vmap(env.reset))
   step_fn = jax.jit(jax.vmap(env.step))
 
@@ -137,7 +137,7 @@ def train(
       env.action_size,
       preprocess_observations_fn=normalize)
   make_policy = apg_networks.make_inference_fn(apg_network)
-  
+
   if use_schedule:
     learning_rate = optax.exponential_decay(
         init_value=learning_rate,
@@ -152,7 +152,7 @@ def train(
 
   def scramble_times(state, key):
     state.info['steps'] = jnp.round(
-      jax.random.uniform(key, (local_devices_to_use, num_envs,), 
+      jax.random.uniform(key, (local_devices_to_use, num_envs,),
                          maxval=episode_length))
     return state
 
@@ -170,10 +170,11 @@ def train(
 
   def loss(policy_params, normalizer_params, env_state, key):
     f = functools.partial(
-        env_step, policy=make_policy((normalizer_params, policy_params)))
-    (state_h, _), (rewards,
-     obs) = jax.lax.scan(f, (env_state, key),
-                         (jnp.arange(horizon_length // action_repeat)))
+        env_step, policy=make_policy((normalizer_params, policy_params))
+    )
+    (state_h, _), (rewards, obs) = jax.lax.scan(
+        f, (env_state, key), (jnp.arange(horizon_length // action_repeat))
+    )
 
     return -jnp.mean(rewards), (obs, state_h)
 
@@ -184,61 +185,89 @@ def train(
     trigger = g_norm < max_gradient_norm
     return jax.tree_util.tree_map(
         lambda t: jnp.where(trigger, t, (t / g_norm) * max_gradient_norm),
-        updates)
+        updates,
+    )
 
-  def minibatch_step(
-      carry, epoch_step_index: int):
-    (optimizer_state, normalizer_params, 
-     policy_params, key, state) = carry
-    
+  def minibatch_step(carry, epoch_step_index: int):
+    (optimizer_state, normalizer_params, policy_params, key, state) = carry
+
     key, key_grad = jax.random.split(key)
-    grad, (obs, state_h) = loss_grad(policy_params,
-                          normalizer_params, 
-                          state,
-                          key_grad)
+    grad, (obs, state_h) = loss_grad(
+        policy_params, normalizer_params, state, key_grad
+    )
 
     grad = clip_by_global_norm(grad)
     grad = jax.lax.pmean(grad, axis_name='i')
-    params_update, optimizer_state = optimizer.update(
-        grad, optimizer_state)
-    policy_params = optax.apply_updates(policy_params,
-                                        params_update)
+    params_update, optimizer_state = optimizer.update(grad, optimizer_state)
+    policy_params = optax.apply_updates(policy_params, params_update)
 
     normalizer_params = running_statistics.update(
-        normalizer_params, obs, pmap_axis_name=_PMAP_AXIS_NAME)
+        normalizer_params, obs, pmap_axis_name=_PMAP_AXIS_NAME
+    )
 
     metrics = {
         'grad_norm': optax.global_norm(grad),
-        'params_norm': optax.global_norm(policy_params)
+        'params_norm': optax.global_norm(policy_params),
     }
 
-    return (optimizer_state, normalizer_params, policy_params, key, state_h), metrics
-  
-  def training_epoch(training_state: TrainingState, env_state: Union[envs.State, envs_v1.State], key: PRNGKey):
+    return (
+        optimizer_state,
+        normalizer_params,
+        policy_params,
+        key,
+        state_h,
+    ), metrics
 
-    (optimizer_state, normalizer_params, 
-     policy_params, key, state_h), metrics = jax.lax.scan(
-      minibatch_step,
-      (training_state.optimizer_state, training_state.normalizer_params,
-       training_state.policy_params, key, env_state),
-      jnp.arange(updates_per_epoch))
+  def training_epoch(
+      training_state: TrainingState,
+      env_state: Union[envs.State, envs_v1.State],
+      key: PRNGKey,
+  ):
 
-    return TrainingState(
-        optimizer_state=optimizer_state,
-        normalizer_params=normalizer_params,
-        policy_params=policy_params), state_h, metrics, key
+    (
+        optimizer_state,
+        normalizer_params,
+        policy_params,
+        key,
+        state_h,
+    ), metrics = jax.lax.scan(
+        minibatch_step,
+        (
+            training_state.optimizer_state,
+            training_state.normalizer_params,
+            training_state.policy_params,
+            key,
+            env_state,
+        ),
+        jnp.arange(updates_per_epoch),
+    )
+
+    return (
+        TrainingState(
+            optimizer_state=optimizer_state,
+            normalizer_params=normalizer_params,
+            policy_params=policy_params,
+        ),
+        state_h,
+        metrics,
+        key,
+    )
 
   training_epoch = jax.pmap(training_epoch, axis_name=_PMAP_AXIS_NAME)
 
   training_walltime = 0
 
   # Note that this is NOT a pure jittable method.
-  def training_epoch_with_timing(training_state: TrainingState,
-                                 env_state: Union[envs.State, envs_v1.State],
-                                 key: PRNGKey) -> Tuple[TrainingState, Metrics]:
+  def training_epoch_with_timing(
+      training_state: TrainingState,
+      env_state: Union[envs.State, envs_v1.State],
+      key: PRNGKey,
+  ) -> Tuple[TrainingState, Union[envs.State, envs_v1.State], Metrics, PRNGKey]:
     nonlocal training_walltime
     t = time.time()
-    (training_state, env_state, metrics, key) = training_epoch(training_state, env_state, key)
+    (training_state, env_state, metrics, key) = training_epoch(
+        training_state, env_state, key
+    )
     metrics = jax.tree_util.tree_map(jnp.mean, metrics)
     jax.tree_util.tree_map(lambda x: x.block_until_ready(), metrics)
 
@@ -294,33 +323,45 @@ def train(
   if process_id == 0 and num_evals > 1:
     metrics = evaluator.run_evaluation(
         _unpmap(
-            (training_state.normalizer_params, training_state.policy_params)),
-        training_metrics={})
+            (training_state.normalizer_params, training_state.policy_params)
+        ),
+        training_metrics={},
+    )
     logging.info(metrics)
     progress_fn(0, metrics)
 
   init_key, scramble_key, local_key = jax.random.split(local_key, 3)
-  init_key = jax.random.split(init_key, (local_devices_to_use, num_envs // process_count))
+  init_key = jax.random.split(
+      init_key, (local_devices_to_use, num_envs // process_count)
+  )
   env_state = reset_fn(init_key)
+  # TODO: this may be better off as an env wrapper
   env_state = scramble_times(env_state, scramble_key)
-  env_state = step_fn(env_state, jnp.zeros((local_devices_to_use, num_envs // process_count, 
-                                            env.action_size))) # Prevent recompilation on the second epoch
-  
+  env_state = step_fn(
+      env_state,
+      jnp.zeros(
+          (local_devices_to_use, num_envs // process_count, env.action_size)
+      ),
+  )  # Prevent recompilation on the second epoch
+
   epoch_key, local_key = jax.random.split(local_key)
   epoch_key = jax.random.split(epoch_key, local_devices_to_use)
 
   for it in range(num_evals_after_init):
     logging.info('starting iteration %s %s', it, time.time() - xt)
 
-    (training_state, env_state,
-     training_metrics, epoch_key) = training_epoch_with_timing(training_state, env_state, epoch_key)
+    (training_state, env_state, training_metrics, epoch_key) = (
+        training_epoch_with_timing(training_state, env_state, epoch_key)
+    )
 
     if process_id == 0:
       # Run evals.
       metrics = evaluator.run_evaluation(
           _unpmap(
-              (training_state.normalizer_params, training_state.policy_params)),
-          training_metrics)
+              (training_state.normalizer_params, training_state.policy_params)
+          ),
+          training_metrics,
+      )
       logging.info(metrics)
       progress_fn(it + 1, metrics)
 
@@ -331,4 +372,3 @@ def train(
       (training_state.normalizer_params, training_state.policy_params))
   pmap.synchronize_hosts()
   return (make_policy, params, metrics)
-

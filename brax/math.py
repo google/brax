@@ -165,15 +165,6 @@ def quat_to_3x3(q: jax.Array) -> jax.Array:
   ])
 
 
-def quat_from_3x3(m: jax.Array) -> jax.Array:
-  """Converts 3x3 rotation matrix to quaternion."""
-  w = jp.sqrt(1 + m[0, 0] + m[1, 1] + m[2, 2]) / 2.0
-  x = (m[2][1] - m[1][2]) / (w * 4)
-  y = (m[0][2] - m[2][0]) / (w * 4)
-  z = (m[1][0] - m[0][1]) / (w * 4)
-  return jp.array([w, x, y, z])
-
-
 def quat_mul_ang(q: jax.Array, ang: jax.Array) -> jax.Array:
   """Multiplies a quat by an angular velocity."""
   mat = jp.array([

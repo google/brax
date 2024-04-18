@@ -42,7 +42,7 @@ class MLP(linen.Module):
   activate_final: bool = False
   bias: bool = True
   layer_norm: bool = False
-  
+
   @linen.compact
   def __call__(self, data: jnp.ndarray):
     hidden = data

@@ -35,8 +35,8 @@ def get(sys: System, x: Transform) -> Optional[Contact]:
   Returns:
     Contact pytree
   """
-  ncon = mjx.ncon(sys)
-  if not ncon:
+  d = mjx.make_data(sys)
+  if d.ncon == 0:
     return None
 
   @jax.vmap
@@ -53,7 +53,7 @@ def get(sys: System, x: Transform) -> Optional[Contact]:
   )
 
   # pytype: disable=wrong-arg-types
-  d = mjx.make_data(sys).replace(geom_xpos=geom_xpos, geom_xmat=geom_xmat)
+  d = d.replace(geom_xpos=geom_xpos, geom_xmat=geom_xmat)
   d = mjx.collision(sys, d)
   # pytype: enable=wrong-arg-types
 

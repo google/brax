@@ -297,8 +297,7 @@ def disc_loss_fn(
       indices = jax.random.permutation(loss_key, indices)
       d = d[indices[:target_d.shape[0]]]
     else:
-      indices = jnp.arange(0, target_d.shape[0])
-      indices = jax.random.shuffle(loss_key, indices)
+      indices = jax.random.permutation(loss_key, target_d.shape[0])
       target_d = target_d[indices[:d.shape[0]]]
   disc_loss = -jnp.mean(
       disc.ll(d, jnp.zeros(d.shape[:-1] + (1,)), params=params))

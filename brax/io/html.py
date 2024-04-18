@@ -15,7 +15,9 @@
 # pylint:disable=g-multiple-import
 """Exports a system config and trajectory as an html view."""
 
+import base64
 from typing import List, Optional, Union
+import zlib
 
 import brax
 from brax.base import State, System
@@ -44,8 +46,9 @@ def render_from_json(
     base_url = 'https://cdn.jsdelivr.net/gh/google/brax'
     js_url = f'{base_url}@v{brax.__version__}/brax/visualizer/js/viewer.js'
 
+  sys = base64.b64encode(zlib.compress(bytes(sys, 'utf-8'))).decode('ascii')
   html = template.render(
-      system_json=sys, height=height, js_url=js_url, colab=colab
+      system_json_b64=sys, height=height, js_url=js_url, colab=colab
   )
   return html
 
