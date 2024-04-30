@@ -8,7 +8,7 @@ from brax.envs.wrappers.training import VmapWrapper
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.20"
 import copy
 import functools
-from typing import Dict, Union, List, Tuple
+from typing import Dict, Union, List, Tuple, Callable
 
 import jax
 import jax.numpy as jp
@@ -96,14 +96,6 @@ def _write_sys(sys, attr, val):
 
 
 # TODO traverse_sys and write_sys can probably be collapsed into one function
-
-
-
-
-
-
-
-
 
 ### RANDOMIZATION CONFIG LOGIC ###
 
@@ -313,7 +305,7 @@ class _ConcreteVSysWrapper(_VSysWrapper):
 
         self.skrs = skrs
 
-    def set_vsys(self, rng: jp.ndarray, current_sys: System, mask: jp.ndarray):
+    def randomize_vsys(self, rng: jp.ndarray, current_sys: System, mask: jp.ndarray):
         """
         Args:
             rng: a rng key vector of size self.batch_size
@@ -324,11 +316,16 @@ class _ConcreteVSysWrapper(_VSysWrapper):
         """
         raise NotImplementedError()
 
+def split_key(key, num):
+    reset_rng, *set_rng = jax.random.split(key, num + 1)
+    set_rng = jp.reshape(jp.stack(set_rng), (num, 2))
+    return reset_rng, set_rng
+
 
 class DomainRandVSysWrapper(_ConcreteVSysWrapper):
     """Maintains episode step count and sets done at episode end."""
 
-    def __init__(self, env: Env, skrs: List[SysKeyRange], randomize_every_nsteps: Union[int, None, Tuple[int, int]]):
+    def __init__(self, env: Env, skrs: List[SysKeyRange], inital_rng: jax.random.PRNGKey, do_on_reset: int, do_every_N_step: Union[Callable[[jax.random.PRNGKeyArray], int], int], do_at_creation: int):
         super().__init__(env, skrs)
 
         def _sample_for_one_key(rng):
@@ -352,17 +349,23 @@ class DomainRandVSysWrapper(_ConcreteVSysWrapper):
         else:
             self._sample_batch_skrs = jax.vmap(_sample_for_one_key)
 
-        self.randomize_every_nsteps = randomize_every_nsteps
-        self.random_range_nsteps = False
-        if isinstance(self.randomize_every_nsteps, tuple):
-            assert len(self.randomize_every_nsteps) == 2
-            lower, higher = self.randomize_every_nsteps
-            self.higher_init_nsteps = higher - lower
-            self.lower_init_nsteps = 0
-            self.randomize_every_nsteps = higher
-            self.random_range_nsteps = True
+        self.do_on_reset = do_on_reset >= 1
+        if isinstance(do_every_N_step, int):
+            def _do_every_N_step(rng: jax.random.PRNGKey):
+                return do_every_N_step * jp.ones(self.batch_size)
+            self.do_every_N_step = _do_every_N_step
+        else:
+            def vmapped_do_every_N_step(rng: jax.random.PRNGKey):
+                _, *rngs = jax.random.split(rng, self.batch_size+1)
+                return jax.vmap(do_every_N_step)(rngs)
+            self.do_every_N_step = vmapped_do_every_N_step
 
-    def set_vsys(self, rng: jp.ndarray, current_sys: System, mask: jp.ndarray):
+        self.do_at_creation = do_at_creation >= 1
+
+        if self.do_at_creation:
+            self.baseline_vsys = self.randomize_vsys(inital_rng, self.baseline_vsys, mask=jp.ones(self.batch_size,))
+
+    def randomize_vsys(self, rng: jp.ndarray, current_sys: System, mask: jp.ndarray):
         """
         Args:
             rng: a rng key vector of size self.batch_size
@@ -371,130 +374,55 @@ class DomainRandVSysWrapper(_ConcreteVSysWrapper):
         Returns:
 
         """
-        state_rng, vals = self._sample_batch_skrs(rng)
+        _, batch_rng = split_key(rng, self.batch_size)
+        state_rng, vals = self._sample_batch_skrs(batch_rng)
         current_sys = self._sysset(current_sys, mask, vals)
         self.current_skrs_vals = self._sysread(current_sys)
-        return state_rng, current_sys
+        return current_sys
 
-    def reset(self, rng: jp.ndarray) -> State:
-        reset_rng, *set_rng = jax.random.split(rng, self.batch_size+1)
-        set_rng = jp.reshape(jp.stack(set_rng), (self.batch_size, 2))
-        if self.single_env:
-            set_rng = set_rng[0]
+    def reset(self, key: jp.ndarray) -> State:
+        key, set_rng = jax.random.split(key)
 
-        state_rng, sys = self.set_vsys(rng=set_rng, current_sys=self.baseline_vsys, mask=jp.ones(self.batch_size, ))
+        mask = jp.ones(self.batch_size,) * self.do_on_reset
+        sys = self.randomize_vsys(rng=set_rng, current_sys=self.baseline_vsys, mask=mask)
 
-        reset_rng, stepcount_rng = jax.random.split(reset_rng)
+        key, reset_rng = jax.random.split(key)
         state = self.env.reset(sys=sys, rng=reset_rng)
 
-        if self.randomize_every_nsteps and self.random_range_nsteps:
-            vsys_stepcount = jax.random.randint(stepcount_rng,
-                                                (self.batch_size,),
-                                                minval=self.lower_init_nsteps,
-                                                maxval=self.higher_init_nsteps
-                                                )
-        else:
-            vsys_stepcount = jp.zeros(self.batch_size)
+        key, stepcount_rng = jax.random.split(key)
+        vsys_stepcount = self.do_every_N_step(stepcount_rng)
 
-        state = state.replace(vsys_stepcount=vsys_stepcount, vsys_rng=state_rng)
+        state = state.replace(vsys_stepcount=vsys_stepcount, vsys_rng=split_key(key, self.batch_size)[-1])
         return state
 
     def step(self, state, action):
-        step_count = state.vsys_stepcount + 1
+        key = state.vsys_rng[0]
+        key, stepcount_rng = jax.random.split(key)
 
+        mask_resample = state.vsys_stepcount == 1
+        decr_vsys_stepcount = jp.clip(state.vsys_stepcount - 1, 0, jp.inf)
+        maybe_new_vsys_stepcount = self.do_every_N_step(stepcount_rng)
+        new_vsys_stepcount = decr_vsys_stepcount * jp.logical_not(mask_resample) + maybe_new_vsys_stepcount * mask_resample
+
+        mask_resample = mask_resample + state.done
+        key, rng_randomize = jax.random.split(key)
+        resampled_sys = self.randomize_vsys(rng=rng_randomize, current_sys=state.sys, mask=mask_resample)
+
+        state = state.replace(sys=resampled_sys, vsys_rng=split_key(key, self.batch_size)[-1], vsys_stepcount=new_vsys_stepcount)
         state = self.env.step(state, action)
-        step_count = step_count * (1-state.done)
 
-        if self.randomize_every_nsteps:
-            step_count_tripped = -jp.mod(step_count, self.randomize_every_nsteps) + 1
-        else:
-            step_count_tripped = jp.zeros_like(step_count)
-        # step_count_tripped: 1 if need to resample, <0 value otherwise
-        resample_mask = state.done + step_count_tripped
-        state_rng, resampled_sys = self.set_vsys(rng=state.vsys_rng, current_sys=state.sys, mask=resample_mask)
+        #state_info = state.info
+        #state_info["skrs_vals"] = self.current_skrs_vals
+        #state_info["skrs_resampled"] = mask_resample
 
-        state_info = state.info
-        state_info["skrs_vals"] = self.current_skrs_vals
-        state_info["skrs_resampled"] = step_count_tripped > 0
-
-        state = state.replace(sys=resampled_sys, vsys_rng=state_rng, vsys_stepcount=step_count, info=state_info)
+        #state = state.replace(info=state_info)
         return state
 
-class DomainCartesianVSysWrapper(_ConcreteVSysWrapper):
-    """Maintains episode step count and sets done at episode end."""
-
-    @classmethod
-    def find_discretization_level(cls, desired_batch_size: int, frame_batch_size: int, num_params: int):
-        # WRONG, FIXME
-        discretization_level = jp.log(desired_batch_size / frame_batch_size) / jp.log(num_params)
-        return int(discretization_level)
-
-    @classmethod
-    def find_batch_size_for_discretization_level(cls, discretization_level: int, frame_batch_size: int, num_params: int):
-        num_envs = discretization_level ** num_params * frame_batch_size
-        return num_envs
-
-    def __init__(self, env: Env, skrs: List[SysKeyRange], discretization_level: int):
-        super().__init__(env, skrs)
-
-        self.num_params = len(self.skrs)
-        self.discretization_level = discretization_level
-        self.num_frames = self.batch_size / self.discretization_level ** self.num_params
-        assert int(self.num_frames) == self.num_frames
-        self.num_frames = int(self.num_frames)
-        assert DomainCartesianVSysWrapper.find_batch_size_for_discretization_level(
-            self.discretization_level,
-            self.num_frames,
-            self.num_params) == self.batch_size
-
-        # assumes each skr needs same level of discretization
-
-        def make_prod_grid():
-            # would some kind of jp.mgrid call be faster? yeah, but much less comprehensible, imo.
-            linspaces = []
-            for skr in skrs:
-                linspaces += [skr.base + jp.linspace(skr.min, skr.max, discretization_level)]
-
-            prod = list(itertools.product(*linspaces))
-
-            # can't use any array-methods here because the linspaces might not have compatible shapes!
-            pad_prod = []
-            for param_set in prod:
-                for frame in range(self.num_frames):
-                    pad_prod += [param_set]
-
-            final_prod = []
-            for param_id in range(self.num_params):
-                collected_cartesian = []
-                for tup in pad_prod:
-                    collected_cartesian += [tup[param_id]]
-                final_prod += [jp.array(collected_cartesian)]
-
-            def _map_index_to_params(id: int):
-                cast_down = id / self.num_frames
-                return prod[int(cast_down)]
-            map_index_to_params = jax.jit(_map_index_to_params, static_argnums=0)
-            for i in range(len(final_prod)):
-                map_index_to_params(i)  # warmup
-
-            # shape: []
-            return final_prod, map_index_to_params
-        self.cartesian_params, self.index_to_params = make_prod_grid()
-
-    def set_vsys(self, rng: jp.ndarray, current_sys: System, mask: jp.ndarray):
-        current_sys = self._sysset(current_sys, mask, self.cartesian_params)
-        return current_sys
-
-    def reset(self, rng: jp.ndarray) -> State:
-        sys = self.set_vsys(rng=None, current_sys=self.baseline_vsys, mask=jp.ones(self.batch_size, ))
-        state = self.env.reset(sys=sys, rng=rng)
-        return state
 
 if __name__ == "__main__":
     rng = jax.random.PRNGKey(0)
     rng, key = jax.random.split(rng, 2)
     ret = jax.random.normal(key)
-
 
     # num_train_envs * num_frames * num_params ^ discr_level = num_desired_envs
 
@@ -509,12 +437,12 @@ if __name__ == "__main__":
 
     x = make_skrs(env, "./inertia.yaml")
 
-    env = DomainRandVSysWrapper(env, x, 1)
+    env = DomainRandVSysWrapper(env, x, jax.random.PRNGKey(10), do_on_reset=True, do_at_creation=False, do_every_N_step=5)
     #env = IdentityVSysWrapper(env)
     #env = DomainCartesianVSysWrapper(env, x, DISCRETIZATION_LEVEL)
     key = jax.random.PRNGKey(0)
 
-    USE_JIT = False
+    USE_JIT = True
     if USE_JIT:
         reset_func = jax.jit(env.reset)
         step_func = jax.jit(env.step)
