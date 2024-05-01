@@ -356,7 +356,7 @@ class DomainRandVSysWrapper(_ConcreteVSysWrapper):
             self.do_every_N_step = _do_every_N_step
         else:
             def vmapped_do_every_N_step(rng: jax.random.PRNGKey):
-                _, *rngs = jax.random.split(rng, self.batch_size+1)
+                _, rngs = split_key(rng, self.batch_size)
                 return jax.vmap(do_every_N_step)(rngs)
             self.do_every_N_step = vmapped_do_every_N_step
 
