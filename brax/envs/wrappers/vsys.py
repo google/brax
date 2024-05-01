@@ -392,7 +392,7 @@ class DomainRandVSysWrapper(_ConcreteVSysWrapper):
         key, stepcount_rng = jax.random.split(key)
         vsys_stepcount = self.do_every_N_step(stepcount_rng)
 
-        state = state.replace(vsys_stepcount=vsys_stepcount, vsys_rng=split_key(key, self.batch_size)[-1])
+        state = state.replace(sys=sys, vsys_stepcount=vsys_stepcount, vsys_rng=split_key(key, self.batch_size)[-1])
         return state
 
     def step(self, state, action):
