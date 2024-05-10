@@ -225,7 +225,7 @@ def safe_arcsin(x: jax.Array) -> jax.Array:
 def _safe_arcsin_jvp(primal, tangent):
   (x,) = primal
   (x_dot,) = tangent
-  primal_out = safe_arccos(x)
+  primal_out = safe_arcsin(x)
   tangent_out = x_dot / jp.sqrt(1.0 - jp.clip(x, -1 + 1e-7, 1 - 1e-7) ** 2.0)
   return primal_out, tangent_out
 
