@@ -51,7 +51,7 @@ def resolve(sys: System, state: State) -> Motion:
     # solver in Heiden et al's Tiny Differentiable Simulator
     temp = jax.vmap(jp.dot)(i_inv, jp.cross(rel_pos, -c.frame[0]))
     ang = jp.dot(-c.frame[0], jp.sum(jp.cross(temp, rel_pos), axis=0))
-    baumgarte_vel = sys.baumgarte_erp / sys.dt * c.dist
+    baumgarte_vel = sys.baumgarte_erp / sys.opt.timestep * c.dist
     impulse = (-1.0 * (1.0 + c.elasticity) * normal_vel - baumgarte_vel) / (
         i_mass[0] + i_mass[1] + ang
     )

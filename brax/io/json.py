@@ -32,7 +32,8 @@ _STATE_ATTR = ['x', 'contact']
 # Fields that get json encoded.
 _ENCODE_FIELDS = [
     'contact',
-    'dt',
+    'opt',
+    'timestep',
     'face',
     'size',
     'link_idx',

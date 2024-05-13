@@ -143,7 +143,7 @@ def simulate(path):
 
   for i in range(steps):
     if act_fn == 'sin':
-      act = 0.5 * jp.sin(jp.ones(sys.act_size()) * 5 * i * sys.dt)
+      act = 0.5 * jp.sin(jp.ones(sys.act_size()) * 5 * i * sys.opt.timestep)
     elif act_fn == 'zero':
       act = jp.zeros(sys.act_size())
     elif act_fn == 'zero_p':

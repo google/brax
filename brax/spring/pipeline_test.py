@@ -31,7 +31,7 @@ class PipelineTest(absltest.TestCase):
 
   def test_pendulum(self):
     sys = test_utils.load_fixture('triple_pendulum.xml')
-    sys = sys.replace(dt=0.0001)
+    sys = sys.tree_replace({'opt.timestep': 0.0001})
     sys = sys.replace(
         link=sys.link.replace(constraint_stiffness=jp.array([800_000.0] * 3))
     )
@@ -67,7 +67,7 @@ class PipelineTest(absltest.TestCase):
     link = link.replace(constraint_vel_damping=jp.array([200.0] * 2))
     sys = sys.replace(link=link)
     sys = sys.replace(ang_damping=0.0)
-    sys = sys.replace(dt=0.001)
+    sys = sys.tree_replace({'opt.timestep': 0.001})
     sys = sys.replace(solver_iterations=500)
 
     state = pipeline.init(sys, init_q, init_qd)
@@ -100,7 +100,7 @@ class PipelineTest(absltest.TestCase):
     link = link.replace(constraint_vel_damping=jp.array([200.0] * 3))
     sys = sys.replace(link=link)
     sys = sys.replace(ang_damping=0.0)
-    sys = sys.replace(dt=0.001)
+    sys = sys.tree_replace({'opt.timestep': 0.001})
     sys = sys.replace(solver_iterations=500)
 
     state = pipeline.init(sys, init_q, init_qd)
@@ -142,7 +142,7 @@ class PipelineTest(absltest.TestCase):
     link = link.replace(constraint_vel_damping=jp.array([200.0]))
     sys = sys.replace(link=link)
     sys = sys.replace(ang_damping=0.0)
-    sys = sys.replace(dt=0.001)
+    sys = sys.tree_replace({'opt.timestep': 0.001})
     sys = sys.replace(solver_iterations=500)
 
     state = pipeline.init(sys, init_q, init_qd)
@@ -170,7 +170,7 @@ class PipelineTest(absltest.TestCase):
             constraint_vel_damping=150 * jp.ones(sys.num_links())
         )
     )
-    sys = sys.replace(dt=0.001)
+    sys = sys.tree_replace({'opt.timestep': 0.001})
 
     qd = jp.zeros(sys.qd_size())
     qd = qd.at[0].set(2.5)
@@ -198,7 +198,7 @@ class PipelineTest(absltest.TestCase):
   def test_3d_sliding_joint(self):
     # tests launching a capsule at a wall with 3 sliding dofs
     sys = test_utils.load_fixture('triple_prismatic.xml')
-    sys = sys.replace(dt=0.001)
+    sys = sys.tree_replace({'opt.timestep': 0.001})
 
     qd = jp.zeros(sys.qd_size())
     qd = qd.at[0].set(2.5)
@@ -226,7 +226,7 @@ class PipelineTest(absltest.TestCase):
   def test_2d_prismaversal_joint(self):
     # tests a prismatic+universal 2dof joint sliding/rotating into its limits
     sys = test_utils.load_fixture('prismaversal_2dof_joint.xml')
-    sys = sys.replace(dt=0.001)
+    sys = sys.tree_replace({'opt.timestep': 0.001})
 
     qd = jp.zeros(sys.qd_size())
     qd = qd.at[0].set(2.5)
@@ -248,7 +248,7 @@ class PipelineTest(absltest.TestCase):
   def test_3d_prismaversal_joint(self):
     # tests a prismatic+spherical 3dof joint sliding/rotating into its limits
     sys = test_utils.load_fixture('prismaversal_3dof_joint.xml')
-    sys = sys.replace(dt=0.001)
+    sys = sys.tree_replace({'opt.timestep': 0.001})
 
     qd = jp.zeros(sys.qd_size())
     qd = qd.at[0].set(2.5)
@@ -272,7 +272,7 @@ class PipelineTest(absltest.TestCase):
 
   def test_sliding_capsule(self):
     sys = test_utils.load_fixture('capsule.xml')
-    sys = sys.replace(dt=0.001)
+    sys = sys.tree_replace({'opt.timestep': 0.001})
 
     qd = jp.zeros(sys.qd_size())
     qd = qd.at[0].set(5.0)

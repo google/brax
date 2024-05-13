@@ -34,7 +34,10 @@ def integrate_xdv(sys: System, xd: Motion, xdv: Motion) -> Motion:
     xd: updated velocity
   """
   damp = Motion(vel=sys.vel_damping, ang=sys.ang_damping)
-  xd = jax.tree_map(lambda d, x: jp.exp(d * sys.dt) * x, damp, xd) + xdv
+  xd = (
+      jax.tree_map(lambda d, x: jp.exp(d * sys.opt.timestep) * x, damp, xd)
+      + xdv
+  )
 
   return xd
 
@@ -58,14 +61,14 @@ def integrate_xdd(
     xd: updated velocity
   """
 
-  xd = xd + xdd * sys.dt
+  xd = xd + xdd * sys.opt.timestep
   damp = Motion(vel=sys.vel_damping, ang=sys.ang_damping)
-  xd = jax.tree_map(lambda d, x: jp.exp(d * sys.dt) * x, damp, xd)
+  xd = jax.tree_map(lambda d, x: jp.exp(d * sys.opt.timestep) * x, damp, xd)
 
   @jax.vmap
   def op(x, xd):
-    pos = x.pos + xd.vel * sys.dt
-    rot_at_ang_quat = math.ang_to_quat(xd.ang) * 0.5 * sys.dt
+    pos = x.pos + xd.vel * sys.opt.timestep
+    rot_at_ang_quat = math.ang_to_quat(xd.ang) * 0.5 * sys.opt.timestep
     rot, _ = math.normalize(x.rot + math.quat_mul(rot_at_ang_quat, x.rot))
     return Transform(pos=pos, rot=rot)
 
@@ -91,9 +94,9 @@ def project_xd(sys: System, x: Transform, x_prev: Transform) -> Motion:
 
   @jax.vmap
   def op(x, x_prev):
-    vel = (x.pos - x_prev.pos) / sys.dt
+    vel = (x.pos - x_prev.pos) / sys.opt.timestep
     dq = math.relative_quat(x_prev.rot, x.rot)
-    ang = 2.0 * dq[1:] / sys.dt
+    ang = 2.0 * dq[1:] / sys.opt.timestep
     scale = jp.where(dq[0] >= 0.0, 1.0, -1.0)
     ang = scale * ang
     return Motion(vel=vel, ang=ang)

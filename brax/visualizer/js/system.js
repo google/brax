@@ -240,8 +240,8 @@ function createScene(system) {
 }
 
 function createTrajectory(system) {
-  const times =
-      [...Array(system.states.x.pos.length).keys()].map(x => x * system.dt);
+  const times = [...Array(system.states.x.pos.length).keys()].map(
+      x => x * system.opt.timestep);
   const tracks = [];
 
   Object.entries(system.geoms).forEach(function(geom_tuple) {

@@ -448,7 +448,6 @@ def load_model(mj: mujoco.MjModel) -> System:
   mjx_model = mjx.put_model(mj)
 
   sys = System(  # pytype: disable=wrong-arg-types  # jax-ndarray
-      dt=mj.opt.timestep,
       gravity=mj.opt.gravity,
       viscosity=mj.opt.viscosity,
       density=mj.opt.density,

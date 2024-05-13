@@ -72,7 +72,8 @@ def render(
         format=fmt,
         append_images=frames[1:],
         save_all=True,
-        duration=sys.dt * 1000,
-        loop=0)
+        duration=sys.opt.timestep * 1000,
+        loop=0,
+    )
 
   return f.getvalue()

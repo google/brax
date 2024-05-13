@@ -181,7 +181,7 @@ def resolve_velocity(
     v_t = rel_vel - n * v_n
     v_t_dir, v_t_norm = math.normalize(v_t)
     dvel = -v_t_dir * jp.minimum(
-        contact.friction[0] * jp.abs(dlambda) / sys.dt, v_t_norm
+        contact.friction[0] * jp.abs(dlambda) / sys.opt.timestep, v_t_norm
     )
 
     angw_1 = jp.cross((contact.pos - x.pos[0]), v_t_dir)

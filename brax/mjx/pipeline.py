@@ -15,6 +15,7 @@
 """Physics pipeline for fully articulated dynamics and collisiion."""
 # pylint:disable=g-multiple-import
 # pylint:disable=g-importing-member
+from typing import Optional
 from brax.base import Contact, Motion, System, Transform
 from brax.mjx.base import State
 import jax
@@ -40,7 +41,11 @@ def _reformat_contact(sys: System, data: State) -> State:
 
 
 def init(
-    sys: System, q: jax.Array, qd: jax.Array, unused_debug: bool = False
+    sys: System,
+    q: jax.Array,
+    qd: jax.Array,
+    act: Optional[jax.Array] = None,
+    unused_debug: bool = False,
 ) -> State:
   """Initializes physics data.
 
@@ -48,6 +53,7 @@ def init(
     sys: a brax System
     q: (q_size,) joint angle vector
     qd: (qd_size,) joint velocity vector
+    act: actuator activations
     unused_debug: ignored
 
   Returns:
@@ -56,6 +62,9 @@ def init(
 
   data = mjx.make_data(sys)
   data = data.replace(qpos=q, qvel=qd)
+  if act is not None:
+    data = data.replace(act=act)
+
   data = mjx.forward(sys, data)
 
   q, qd = data.qpos, data.qvel

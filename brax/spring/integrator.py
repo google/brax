@@ -45,14 +45,16 @@ def integrate(
   def op(x_i, xd_i, xdv_i):
     # damp velocity and add acceleration
     xd_i = Motion(
-        vel=jp.exp(sys.vel_damping * sys.dt) * xd_i.vel,
-        ang=jp.exp(sys.ang_damping * sys.dt) * xd_i.ang)
+        vel=jp.exp(sys.vel_damping * sys.opt.timestep) * xd_i.vel,
+        ang=jp.exp(sys.ang_damping * sys.opt.timestep) * xd_i.ang,
+    )
     xd_i += xdv_i
 
-    rot_at_ang_quat = math.ang_to_quat(xd_i.ang) * 0.5 * sys.dt
+    rot_at_ang_quat = math.ang_to_quat(xd_i.ang) * 0.5 * sys.opt.timestep
     rot = x_i.rot + math.quat_mul(rot_at_ang_quat, x_i.rot)
-    x_i = Transform(pos=x_i.pos + xd_i.vel * sys.dt,
-                    rot=rot / jp.linalg.norm(rot))
+    x_i = Transform(
+        pos=x_i.pos + xd_i.vel * sys.opt.timestep, rot=rot / jp.linalg.norm(rot)
+    )
 
     return x_i, xd_i
 

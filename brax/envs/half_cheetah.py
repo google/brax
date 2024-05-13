@@ -137,7 +137,7 @@ class Halfcheetah(PipelineEnv):
     n_frames = 5
 
     if backend in ['spring', 'positional']:
-      sys = sys.replace(dt=0.003125)
+      sys = sys.tree_replace({'opt.timestep': 0.003125})
       n_frames = 16
       gear = jp.array([120, 90, 60, 120, 100, 100])
       sys = sys.replace(actuator=sys.actuator.replace(gear=gear))

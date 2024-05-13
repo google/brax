@@ -126,7 +126,7 @@ class InvertedDoublePendulum(PipelineEnv):
     n_frames = 2
 
     if backend in ['spring', 'positional']:
-      sys = sys.replace(dt=0.005)
+      sys = sys.tree_replace({'opt.timestep': 0.005})
       n_frames = 4
 
     kwargs['n_frames'] = kwargs.get('n_frames', n_frames)

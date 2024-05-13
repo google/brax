@@ -31,7 +31,7 @@ assert_almost_equal = np.testing.assert_almost_equal
 
 
 def _actuator_step(pipeline, sys, q, qd, act, dt, n):
-  sys = sys.replace(dt=dt)
+  sys = sys.tree_replace({'opt.timestep': dt})
   def f(state, _):
     return jax.jit(pipeline.step)(sys, state, act), None
 
@@ -163,7 +163,9 @@ class ActuatorTest(parameterized.TestCase):
       mujoco.mj_step(mj_model, mj_data)
     mq, mqd = jp.asarray(mj_data.qpos), jp.asarray(mj_data.qvel)
 
-    gq, gqd = _actuator_step(g_pipeline, sys, q, qd, act=act, dt=sys.dt, n=1000)
+    gq, gqd = _actuator_step(
+        g_pipeline, sys, q, qd, act=act, dt=sys.opt.timestep, n=1000
+    )
     np.testing.assert_array_almost_equal(gq, mq, 3)
     np.testing.assert_array_almost_equal(gqd, mqd, 3)
 
@@ -178,8 +180,12 @@ class ActuatorTest(parameterized.TestCase):
 
     q, qd = sys.init_q, jp.zeros(sys.qd_size())
 
-    sq, sqd = _actuator_step(s_pipeline, sys, q, qd, act=act, dt=sys.dt, n=500)
-    pq, pqd = _actuator_step(p_pipeline, sys, q, qd, act=act, dt=sys.dt, n=500)
+    sq, sqd = _actuator_step(
+        s_pipeline, sys, q, qd, act=act, dt=sys.opt.timestep, n=500
+    )
+    pq, pqd = _actuator_step(
+        p_pipeline, sys, q, qd, act=act, dt=sys.opt.timestep, n=500
+    )
     np.testing.assert_array_almost_equal(sq, pq, 2)
     np.testing.assert_array_almost_equal(sqd, pqd, 2)
 

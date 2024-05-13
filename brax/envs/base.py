@@ -26,8 +26,6 @@ from brax.positional import pipeline as p_pipeline
 from brax.spring import pipeline as s_pipeline
 from flax import struct
 import jax
-import mujoco
-from mujoco import mjx
 import numpy as np
 
 
@@ -114,9 +112,11 @@ class PipelineEnv(Env):
     self._n_frames = n_frames
     self._debug = debug
 
-  def pipeline_init(self, q: jax.Array, qd: jax.Array) -> base.State:
+  def pipeline_init(
+      self, q: jax.Array, qd: jax.Array, act: Optional[jax.Array] = None
+  ) -> base.State:
     """Initializes the pipeline state."""
-    return self._pipeline.init(self.sys, q, qd, self._debug)
+    return self._pipeline.init(self.sys, q, qd, act, self._debug)
 
   def pipeline_step(self, pipeline_state: Any, action: jax.Array) -> base.State:
     """Takes a physics step using the physics pipeline."""
@@ -132,7 +132,7 @@ class PipelineEnv(Env):
   @property
   def dt(self) -> jax.Array:
     """The timestep used for each env step."""
-    return self.sys.dt * self._n_frames
+    return self.sys.opt.timestep * self._n_frames  # pytype: disable=attribute-error
 
   @property
   def observation_size(self) -> int:

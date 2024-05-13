@@ -15,6 +15,7 @@
 # pylint:disable=g-multiple-import
 """Physics pipeline for generalized coordinates engine."""
 
+from typing import Optional
 from brax import actuator
 from brax import contact
 from brax import kinematics
@@ -29,7 +30,11 @@ import jax
 
 
 def init(
-    sys: System, q: jax.Array, qd: jax.Array, debug: bool = False
+    sys: System,
+    q: jax.Array,
+    qd: jax.Array,
+    unused_act: Optional[jax.Array] = None,
+    debug: bool = False,
 ) -> State:
   """Initializes physics state.
 

@@ -14,6 +14,7 @@
 
 """Physics pipeline for fully articulated dynamics and collisiion."""
 # pylint:disable=g-multiple-import
+from typing import Optional
 from brax import actuator
 from brax import com
 from brax import contact
@@ -29,7 +30,11 @@ import jax
 
 
 def init(
-    sys: System, q: jax.Array, qd: jax.Array, debug: bool = False
+    sys: System,
+    q: jax.Array,
+    qd: jax.Array,
+    unused_act: Optional[jax.Array] = None,
+    debug: bool = False,
 ) -> State:
   """Initializes physics state.
 

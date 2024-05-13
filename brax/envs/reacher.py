@@ -161,7 +161,7 @@ class Reacher(PipelineEnv):
     n_frames = 2
 
     if backend in ['spring', 'positional']:
-      sys = sys.replace(dt=0.005)
+      sys = sys.tree_replace({'opt.timestep': 0.005})
       sys = sys.replace(
           actuator=sys.actuator.replace(gear=jp.array([25.0, 25.0]))
       )

@@ -416,7 +416,6 @@ class System(mjx.Model):
   r"""Describes a physical environment: its links, joints and geometries.
 
   Attributes:
-    dt: timestep used for the simulation
     gravity: (3,) linear universal force applied during forward dynamics
     viscosity: (1,) viscosity of the medium applied to all links
     density: (1,) density of the medium applied to all links
@@ -451,7 +450,6 @@ class System(mjx.Model):
     mj_model: mujoco.MjModel that was used to build this brax System
   """
 
-  dt: jax.Array
   gravity: jax.Array
   viscosity: Union[float, jax.Array]
   density: Union[float, jax.Array]

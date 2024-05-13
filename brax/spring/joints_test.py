@@ -40,7 +40,7 @@ class JointTest(parameterized.TestCase):
         2 * jp.pi * jp.sqrt(inertia_about_anchor / (mass * g * dist_to_anchor))
     )
     num_timesteps = 1_000
-    sys = sys.replace(dt=period / num_timesteps)
+    sys = sys.tree_replace({'opt.timestep': period / num_timesteps})
     link = sys.link.replace(constraint_limit_stiffness=jp.array([0.0] * 1))
     link = link.replace(constraint_stiffness=jp.array([10_000.0] * 1))
     link = link.replace(constraint_ang_damping=jp.array([0.0] * 1))
