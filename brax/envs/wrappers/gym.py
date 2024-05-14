@@ -17,9 +17,14 @@ from typing import ClassVar, Optional
 
 from brax.envs.base import PipelineEnv
 from brax.io import image
-import gymnasium as gym
-from gymnasium import spaces
-from gymnasium.vector import utils
+try:
+    import gym
+    from gym import spaces
+    from gym.vector import utils
+except ImportError:
+    from gymnasium import gym
+    from gymnasium import spaces
+    from gymnasium.vector import utils
 import jax
 import numpy as np
 

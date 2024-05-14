@@ -46,7 +46,6 @@ setup(
         "flax",
         # TODO: remove grpcio and gym after dropping legacy v1 code
         "grpcio",
-        "gymnasium",
         "jax>=0.4.6",
         "jaxlib>=0.4.6",
         "jaxopt",
@@ -66,6 +65,8 @@ setup(
     ],
     extras_require={
         "develop": ["pytest", "transforms3d"],
+        "gym": ["gym"],
+        "gymnasium": ["gymnasium"],
     },
     classifiers=[
         "Development Status :: 4 - Beta",
