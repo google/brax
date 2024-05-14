@@ -19,17 +19,16 @@ from typing import ClassVar, Dict, Optional
 
 from brax.v1 import jumpy as jp
 from brax.v1.envs import env as brax_env
-import dm_env
-from dm_env import specs
-import flax
+
 try:
     import gym
     from gym import spaces
     from gym.vector import utils
 except ImportError:
-    from gymnasium import gym
+    import gymnasium as gym
     from gymnasium import spaces
     from gymnasium.vector import utils
+
 import jax
 import jax.numpy as jnp
 
