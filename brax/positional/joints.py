@@ -55,7 +55,7 @@ def acceleration_update(sys: System, state: State, tau: jax.Array) -> Force:
   def j_fn(typ, link, jd, dof, tau):
     # change dof-shape variables into link-shape
     reshape_fn = lambda x: x.reshape((jd.ang.shape[0], -1) + x.shape[1:])
-    tau, dof = jax.tree_map(reshape_fn, (tau, dof))
+    tau, dof = jax.tree.map(reshape_fn, (tau, dof))
     j_fn_map = {
         'f': _free_joint,
         '1': _damp,
@@ -75,7 +75,7 @@ def acceleration_update(sys: System, state: State, tau: jax.Array) -> Force:
   parent_idx = jp.array(sys.link_parents)
   x_i_parent = state.x_i.take(parent_idx)
   fp = Transform.create(pos=state.a_p.pos - x_i_parent.pos).vmap().do(xf)
-  fp = jax.tree_map(lambda x: segment_sum(x, parent_idx, sys.num_links()), fp)
+  fp = jax.tree.map(lambda x: segment_sum(x, parent_idx, sys.num_links()), fp)
   xf_i = fc - fp
   return xf_i
 
@@ -98,8 +98,8 @@ def position_update(sys: System, state: State) -> Transform:
   # pad sys and dof data withs 0s along inactive axes
   d_j = jax.vmap(_three_dof_joint_update)(j, *_sphericalize(sys, j))
   free_mask = jp.array([l != 'f' for l in sys.link_types])
-  d_j = jax.tree_map(lambda x: jax.vmap(jp.multiply)(x, free_mask), d_j)
-  d_w = jax.tree_map(lambda x: jax.vmap(math.rotate)(x, a_p.rot), d_j)
+  d_j = jax.tree.map(lambda x: jax.vmap(jp.multiply)(x, free_mask), d_j)
+  d_w = jax.tree.map(lambda x: jax.vmap(math.rotate)(x, a_p.rot), d_j)
 
   i_inv = com.inv_inertia(sys, state.x)
   i_inv_p = jax.vmap(jp.multiply)(i_inv[p_idx], p_idx > -1)
@@ -113,7 +113,7 @@ def position_update(sys: System, state: State) -> Transform:
 
   dp_c = dp_c_pos * sys.joint_scale_pos + dp_c_ang * sys.joint_scale_ang
   dp_p = dp_p_pos * sys.joint_scale_pos + dp_p_ang * sys.joint_scale_ang
-  dp_p = jax.tree_map(lambda f: segment_sum(f, p_idx, sys.num_links()), dp_p)
+  dp_p = jax.tree.map(lambda f: segment_sum(f, p_idx, sys.num_links()), dp_p)
 
   return state.x_i + dp_c + dp_p
 
@@ -180,7 +180,7 @@ def _sphericalize(sys, j):
   def pad_x_dof(dof, x):
     if dof.limit:
       stack_fn = lambda a: jp.concatenate((a, jp.zeros(3 - x)))
-      limit = jax.tree_map(stack_fn, dof.limit)
+      limit = jax.tree.map(stack_fn, dof.limit)
     else:
       inf = jp.array([jp.inf, jp.inf, jp.inf])
       limit = (-inf, inf)
@@ -190,7 +190,7 @@ def _sphericalize(sys, j):
   def j_fn(typ, j, dof):
     # change dof-shape variables into link-shape
     reshape_fn = lambda x: x.reshape((j.pos.shape[0], -1) + x.shape[1:])
-    dof = jax.tree_map(reshape_fn, dof)
+    dof = jax.tree.map(reshape_fn, dof)
     j_fn_map = {
         'f': pad_free,
         '1': lambda x: pad_x_dof(x, 1),

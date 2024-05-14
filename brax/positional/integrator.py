@@ -35,7 +35,7 @@ def integrate_xdv(sys: System, xd: Motion, xdv: Motion) -> Motion:
   """
   damp = Motion(vel=sys.vel_damping, ang=sys.ang_damping)
   xd = (
-      jax.tree_map(lambda d, x: jp.exp(d * sys.opt.timestep) * x, damp, xd)
+      jax.tree.map(lambda d, x: jp.exp(d * sys.opt.timestep) * x, damp, xd)
       + xdv
   )
 
@@ -63,7 +63,7 @@ def integrate_xdd(
 
   xd = xd + xdd * sys.opt.timestep
   damp = Motion(vel=sys.vel_damping, ang=sys.ang_damping)
-  xd = jax.tree_map(lambda d, x: jp.exp(d * sys.opt.timestep) * x, damp, xd)
+  xd = jax.tree.map(lambda d, x: jp.exp(d * sys.opt.timestep) * x, damp, xd)
 
   @jax.vmap
   def op(x, xd):

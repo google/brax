@@ -46,7 +46,7 @@ def friction_randomizer(env: Env, friction_range: jp.ndarray):
           }
       })
 
-    in_axes = (jax.tree_map(lambda x: 0
+    in_axes = (jax.tree.map(lambda x: 0
                             if hasattr(x, 'shape') else None, custom_tree),)
   return custom_tree, in_axes
 
@@ -91,7 +91,7 @@ def joint_randomizer(env: Env,
           },
       })
 
-  in_axes = (jax.tree_map(lambda x: 0
+  in_axes = (jax.tree.map(lambda x: 0
                           if hasattr(x, 'shape') else None, custom_tree),)
 
   return custom_tree, in_axes

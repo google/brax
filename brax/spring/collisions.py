@@ -84,11 +84,11 @@ def resolve(sys: System, state: State) -> Motion:
   p, is_contact = impulse(c, link_idx, x_i, xd_i, i_inv, i_mass)
 
   # calculate the impulse to each link center of mass
-  p = jax.tree_map(lambda x: jp.concatenate((x, -x)), p)
+  p = jax.tree.map(lambda x: jp.concatenate((x, -x)), p)
   pos = jp.tile(c.pos, (2, 1))
   link_idx = jp.concatenate(c.link_idx)
   xp_i = Transform.create(pos=pos - state.x_i.take(link_idx).pos).vmap().do(p)
-  xp_i = jax.tree_map(lambda x: segment_sum(x, link_idx, sys.num_links()), xp_i)
+  xp_i = jax.tree.map(lambda x: segment_sum(x, link_idx, sys.num_links()), xp_i)
 
   # average the impulse across multiple contacts
   num_contacts = segment_sum(jp.tile(is_contact, 2), link_idx, sys.num_links())

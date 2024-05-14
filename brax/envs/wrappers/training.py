@@ -127,7 +127,7 @@ class AutoResetWrapper(Wrapper):
         done = jp.reshape(done, [x.shape[0]] + [1] * (len(x.shape) - 1))  # type: ignore
       return jp.where(done, x, y)
 
-    pipeline_state = jax.tree_map(
+    pipeline_state = jax.tree.map(
         where_done, state.info['first_pipeline_state'], state.pipeline_state
     )
     obs = where_done(state.info['first_obs'], state.obs)

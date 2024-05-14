@@ -80,7 +80,7 @@ class DomainRandomizationWrapper(brax_env.Wrapper):
       env = self.env_fn(post_process_fn=post_process_fn)
       return env.step(custom_tree['state'], custom_tree['action'])
 
-    self.custom_tree_in_axes[0]['state'] = jax.tree_map(
+    self.custom_tree_in_axes[0]['state'] = jax.tree.map(
         lambda x: 0 if x.shape else None, state)
     self.custom_tree_in_axes[0]['action'] = 0
     self.custom_tree['state'] = state

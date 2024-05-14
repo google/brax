@@ -47,7 +47,7 @@ def _take(obj: Y, idxs: Sequence[int]) -> Y:
       x = x.take(jp.array(idxs), axis=0, mode='wrap')
     return x
 
-  return jax.tree_map(take, obj)
+  return jax.tree.map(take, obj)
 
 
 def tree(
@@ -108,7 +108,7 @@ def tree(
         def index_sum(x, b=(len(link_idxs),), p=jp.array(parent_map)):
           return jp.zeros(b + x.shape[1:]).at[p].add(x)
 
-        y = jax.tree_map(index_sum, y)
+        y = jax.tree.map(index_sum, y)
 
       y = f(y, *in_args)
       ys.insert(0, y)
@@ -124,7 +124,7 @@ def tree(
       y = f(y, *in_args)
       ys.append(y)
 
-  y = jax.tree_map(lambda *x: jp.concatenate(x), *ys)
+  y = jax.tree.map(lambda *x: jp.concatenate(x), *ys)
 
   # we concatenated results out of order, so put back in order if needed
   order = sum([d['l'] for d in depth_idxs], [])
@@ -174,7 +174,7 @@ def link_types(
     in_args = [_take(a, typ_idxs[t]) for a, t in zip(args, in_types)]
     ys.append(f(typ, *in_args))
 
-  y = jax.tree_map(lambda *x: jp.concatenate(x), *ys)
+  y = jax.tree.map(lambda *x: jp.concatenate(x), *ys)
 
   # we concatenated results out of order, so put back in order if needed
 

@@ -341,7 +341,7 @@ def load_model(mj: mujoco.MjModel) -> System:
   )
   # skip link 0 which is the world body in mujoco
   # copy to avoid writing to mj model
-  link = jax.tree_map(lambda x: x[1:].copy(), link)
+  link = jax.tree.map(lambda x: x[1:].copy(), link)
 
   # create dofs
   mj.jnt_range[~(mj.jnt_limited == 1), :] = np.array([-np.inf, np.inf])
@@ -371,11 +371,11 @@ def load_model(mj: mujoco.MjModel) -> System:
     motions.append(motion)
     limits.append(limit)
     stiffnesses.append(stiffness)
-  motion = jax.tree_map(lambda *x: np.concatenate(x), *motions)
+  motion = jax.tree.map(lambda *x: np.concatenate(x), *motions)
 
   limit = None
   if np.any(mj.jnt_limited):
-    limit = jax.tree_map(lambda *x: np.concatenate(x), *limits)
+    limit = jax.tree.map(lambda *x: np.concatenate(x), *limits)
   stiffness = np.concatenate(stiffnesses)
   solver_params_jnt = np.concatenate((mj.jnt_solref, mj.jnt_solimp), axis=1)
   solver_params_dof = solver_params_jnt[mj.dof_jntid]
@@ -411,7 +411,7 @@ def load_model(mj: mujoco.MjModel) -> System:
       'bias_q': bias_q,
       'bias_qd': bias_qd,
   }
-  act_kwargs = jax.tree_map(lambda x: x[act_mask], act_kwargs)
+  act_kwargs = jax.tree.map(lambda x: x[act_mask], act_kwargs)
 
   actuator = Actuator(  # pytype: disable=wrong-arg-types
       q_id=q_id,
@@ -475,7 +475,7 @@ def load_model(mj: mujoco.MjModel) -> System:
       **mjx_model.__dict__,
   )
 
-  sys = jax.tree_map(jp.array, sys)
+  sys = jax.tree.map(jp.array, sys)
 
   return sys
 

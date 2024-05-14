@@ -128,7 +128,7 @@ def world_to_joint(
   # move into joint coordinates
   xd_joint = xd - xd_wj
   inv_rotate = jax.vmap(math.inv_rotate)
-  jd = jax.tree_map(lambda x: inv_rotate(x, a_p.rot), xd_joint)
+  jd = jax.tree.map(lambda x: inv_rotate(x, a_p.rot), xd_joint)
 
   return j, jd, a_p, a_c
 
@@ -342,7 +342,7 @@ def inverse(
     jd = jd.replace(ang=math.inv_rotate(jd.ang, j_rot))
     joint_frame, parity = link_to_joint_frame(motion)
     axis, angles, _ = axis_angle_ang(j, joint_frame, parity)
-    angle_vels = jax.tree_map(lambda x: jp.dot(x, jd.ang), axis)
+    angle_vels = jax.tree.map(lambda x: jp.dot(x, jd.ang), axis)
     _, slides, slide_vels = axis_slide_vel(j, jd, motion)
     # TODO: investigate removing this `where`
     q = jp.where(
@@ -356,7 +356,7 @@ def inverse(
     return q, qd
 
   def q_fn(typ, j, jd, parent_idx, motion):
-    motion = jax.tree_map(
+    motion = jax.tree.map(
         lambda y: y.reshape((-1, base.QD_WIDTHS[typ], 3)), motion
     )
     q_fn_map = {

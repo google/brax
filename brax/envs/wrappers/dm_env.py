@@ -49,7 +49,7 @@ class DmEnvWrapper(dm_env.Environment):
     if hasattr(self._env, 'action_spec'):
       self._action_spec = self._env.action_spec()
     else:
-      action = jax.tree_map(np.array, self._env.sys.actuator.ctrl_range)
+      action = jax.tree.map(np.array, self._env.sys.actuator.ctrl_range)
       self._action_spec = specs.BoundedArray((self._env.action_size,),
                                              minimum=action[:, 0],
                                              maximum=action[:, 1],

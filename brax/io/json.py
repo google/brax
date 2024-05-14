@@ -100,12 +100,12 @@ def _compress_contact(states: State) -> State:
     return r
 
   def compress(contact, i):
-    return jax.tree_map(
+    return jax.tree.map(
         lambda x: pad(x[contact_mask[i]], n_contact), contact.take(i)
     )
 
   c = [compress(states.contact, i) for i in range(states.x.pos.shape[0])]
-  return states.replace(contact=jax.tree_map(lambda *x: jp.stack(x), *c))
+  return states.replace(contact=jax.tree.map(lambda *x: jp.stack(x), *c))
 
 
 def _get_mesh(mj: mujoco.MjModel, i: int) -> Tuple[np.ndarray, np.ndarray]:
@@ -180,7 +180,7 @@ def dumps(sys: System, states: List[State]) -> Text:
   d['geoms'] = link_geoms
 
   # stack states for the viewer
-  states = jax.tree_map(lambda *x: jp.stack(x), *states)
+  states = jax.tree.map(lambda *x: jp.stack(x), *states)
   states = _compress_contact(states)
 
   states = _to_dict(states)

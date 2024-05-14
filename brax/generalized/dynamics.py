@@ -80,7 +80,7 @@ def transform_com(sys: System, state: State) -> State:
       j = j.vmap().do(j_stack.take(i, axis=1))
 
     # interleave jds back together to match joint stack order
-    motion = jax.tree_map(lambda *x: jp.column_stack(x), *jds).reshape((-1, 3))
+    motion = jax.tree.map(lambda *x: jp.column_stack(x), *jds).reshape((-1, 3))
 
     return motion
 
@@ -108,9 +108,9 @@ def transform_com(sys: System, state: State) -> State:
   def cdofd_fn(typ, cd, cdof, cdof_qd):
     if typ == 'f':
       cdof_qd = cdof_qd.reshape((-1, 6, 3))
-      cd = jax.tree_map(lambda x: jp.sum(x[:, 0:3], axis=1), cdof_qd)
+      cd = jax.tree.map(lambda x: jp.sum(x[:, 0:3], axis=1), cdof_qd)
       cdofd = cd.vmap().vmap(in_axes=(None, 0)).cross(cdof.reshape((-1, 6, 3)))
-      cdofd = jax.tree_map(lambda x: x.at[:, 0:3].set(jp.zeros(3)), cdofd)
+      cdofd = jax.tree.map(lambda x: x.at[:, 0:3].set(jp.zeros(3)), cdofd)
       return cdofd.reshape((-1, 3))
 
     # group cdof_qd by link, so each has num_dofs joints
@@ -123,7 +123,7 @@ def transform_com(sys: System, state: State) -> State:
       cds.append(cds[-1] + cdof_qd.take(i, axis=1))
 
     # interleave cds back together to match joint stack order
-    cd = jax.tree_map(lambda *x: jp.column_stack(x), *cds).reshape((-1, 3))
+    cd = jax.tree.map(lambda *x: jp.column_stack(x), *cds).reshape((-1, 3))
     cdofd = cd.vmap().cross(cdof)
 
     return cdofd

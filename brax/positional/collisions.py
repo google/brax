@@ -117,11 +117,11 @@ def resolve_position(
     return dp_p, dp_c, dlambda * coll_mask
 
   dp_p, dp_c, dlambda = translate(contact)
-  dp = jax.tree_map(lambda x, y: jp.vstack([x, y]), dp_p, dp_c)
-  dp = jax.tree_map(lambda x: jp.where(jp.isnan(x), 0.0, x), dp)
+  dp = jax.tree.map(lambda x, y: jp.vstack([x, y]), dp_p, dp_c)
+  dp = jax.tree.map(lambda x: jp.where(jp.isnan(x), 0.0, x), dp)
   link_idx = jp.concatenate(contact.link_idx)
   dp *= link_idx.reshape((-1, 1)) > -1
-  dp = jax.tree_map(
+  dp = jax.tree.map(
       lambda f: jax.ops.segment_sum(f, link_idx, sys.num_links()), dp
   )
   x_i = state.x_i + dp
@@ -222,11 +222,11 @@ def resolve_velocity(
   p, is_contact = impulse(contact, dlambda)
 
   # calculate the impulse to each link center of mass
-  p = jax.tree_map(lambda x: jp.concatenate((x, -x)), p)
+  p = jax.tree.map(lambda x: jp.concatenate((x, -x)), p)
   pos = jp.tile(contact.pos, (2, 1))
   link_idx = jp.concatenate(contact.link_idx)
   xp_i = Transform.create(pos=pos - x_i.take(link_idx).pos).vmap().do(p)
-  xp_i = jax.tree_map(lambda x: segment_sum(x, link_idx, sys.num_links()), xp_i)
+  xp_i = jax.tree.map(lambda x: segment_sum(x, link_idx, sys.num_links()), xp_i)
 
   # average the impulse across multiple contacts
   num_contacts = segment_sum(jp.tile(is_contact, 2), link_idx, sys.num_links())

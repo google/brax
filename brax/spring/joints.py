@@ -324,7 +324,7 @@ def resolve(sys: System, state: State, tau: jax.Array) -> Force:
   def j_fn(typ, link, j, jd, dof, tau):
     # change dof-shape variables into link-shape
     reshape_fn = lambda x: x.reshape((j.pos.shape[0], -1) + x.shape[1:])
-    tau, dof = jax.tree_map(reshape_fn, (tau, dof))
+    tau, dof = jax.tree.map(reshape_fn, (tau, dof))
     j_fn_map = {
         'f': _free,
         '1': _one_dof,
@@ -344,6 +344,6 @@ def resolve(sys: System, state: State, tau: jax.Array) -> Force:
   parent_idx = jp.array(sys.link_parents)
   x_i_parent = state.x_i.take(parent_idx)
   fp = Transform.create(pos=state.a_p.pos - x_i_parent.pos).vmap().do(xf)
-  fp = jax.tree_map(lambda x: segment_sum(x, parent_idx, sys.num_links()), fp)
+  fp = jax.tree.map(lambda x: segment_sum(x, parent_idx, sys.num_links()), fp)
   xf_i = fc - fp
   return xf_i

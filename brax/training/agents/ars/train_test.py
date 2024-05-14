@@ -61,7 +61,7 @@ class ARSTest(parameterized.TestCase):
         return pos
 
       sys_v = sys.tree_replace({'link.inertia.transform.pos': get_offset(rng)})
-      in_axes = jax.tree_map(lambda x: None, sys)
+      in_axes = jax.tree.map(lambda x: None, sys)
       in_axes = in_axes.tree_replace({'link.inertia.transform.pos': 0})
       return sys_v, in_axes
 

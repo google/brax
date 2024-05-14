@@ -170,9 +170,9 @@ def jac_contact(
     diag = jp.tile(t + c.friction[0] * c.friction[0] * t, 4)
     diag *= 2 * c.friction[0] * c.friction[0] * (1 - imp) / (imp + 1e-8)
 
-    return jax.tree_map(lambda x: x * (c.dist < 0), (jac, diag, aref))
+    return jax.tree.map(lambda x: x * (c.dist < 0), (jac, diag, aref))
 
-  return jax.tree_map(jp.concatenate, jax.vmap(row_fn)(c))
+  return jax.tree.map(jp.concatenate, jax.vmap(row_fn)(c))
 
 
 def jacobian(sys: System, state: State) -> State:
@@ -186,7 +186,7 @@ def jacobian(sys: System, state: State) -> State:
     state: generalized state with jac, pos, diag, aref updated
   """
   jpds = jac_contact(sys, state), jac_limit(sys, state)
-  jac, diag, aref = jax.tree_map(lambda *x: jp.concatenate(x), *jpds)
+  jac, diag, aref = jax.tree.map(lambda *x: jp.concatenate(x), *jpds)
   return state.replace(con_jac=jac, con_diag=diag, con_aref=aref)
 
 
