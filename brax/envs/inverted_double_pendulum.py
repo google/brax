@@ -46,14 +46,14 @@ class InvertedDoublePendulum(PipelineEnv):
 
   The agent take a 1-element vector for actions.
 
-  The action space is a continuous `(action)` in `[-3, 3]`, where `action`
+  The action space is a continuous `(action)` in `[-1, 1]`, where `action`
   represents the numerical force applied to the cart (with magnitude
   representing the amount of force and sign representing the direction)
 
   | Num | Action                    | Control Min | Control Max | Name (in
   corresponding config) | Joint | Unit      |
   |-----|---------------------------|-------------|-------------|--------------------------------|-------|-----------|
-  | 0   | Force applied on the cart | -3          | 3           | slider
+  | 0   | Force applied on the cart | -1          | 1           | slider
   | slide | Force (N) |
 
   ### Observation Space
