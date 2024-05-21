@@ -193,6 +193,14 @@ class Pusher(PipelineEnv):
     return State(pipeline_state, obs, reward, done, metrics)
 
   def step(self, state: State, action: jax.Array) -> State:
+
+    # Scale action from [-1,1] to actuator limits
+    action_min = self.sys.actuator.ctrl_range[:, 0]
+    action_max = self.sys.actuator.ctrl_range[:, 1]
+    action = (action + 1) * (action_max - action_min) * 0.5 + action_min
+
+    pipeline_state = self.pipeline_step(state.pipeline_state, action)
+
     assert state.pipeline_state is not None
     x_i = state.pipeline_state.x.vmap().do(
         base.Transform.create(pos=self.sys.link.inertia.transform.pos)
@@ -204,8 +212,6 @@ class Pusher(PipelineEnv):
     reward_dist = -math.safe_norm(vec_2)
     reward_ctrl = -jp.square(action).sum()
     reward = reward_dist + 0.1 * reward_ctrl + 0.5 * reward_near
-
-    pipeline_state = self.pipeline_step(state.pipeline_state, action)
 
     obs = self._get_obs(pipeline_state)
     state.metrics.update(
