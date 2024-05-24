@@ -187,7 +187,7 @@ class Pusher(PipelineEnv):
 
     pipeline_state = self.pipeline_init(sys, qpos, qvel)
 
-    obs = self._get_obs(pipeline_state)
+    obs = self._get_obs(sys, pipeline_state)
     reward, done, zero = jp.zeros(3)
     metrics = {'reward_dist': zero, 'reward_ctrl': zero, 'reward_near': zero}
     return State(pipeline_state, obs, reward, done, sys, metrics)
