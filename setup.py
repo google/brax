@@ -56,6 +56,7 @@ setup(
         "mujoco-mjx",
         "numpy",
         "optax",
+        "orbax-checkpoint",
         # TODO: remove pytinyrenderer after dropping legacy v1 code
         "Pillow",
         "pytinyrenderer",

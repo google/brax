@@ -272,7 +272,7 @@ def main(unused_argv):
     for i in range(FLAGS.num_videos):
       html_path = f'{FLAGS.logdir}/saved_videos/trajectory_{i:04d}.html'
       if isinstance(env, envs.Env):
-        html.save(html_path, env.sys.replace(dt=env.dt), trajectories[i])
+        html.save(html_path, env.sys.tree_replace({'opt.timestep': env.dt}), trajectories[i])
       else:
         html_v1.save_html(html_path, env.sys, trajectories[i], make_dir=True)
   elif FLAGS.num_videos > 0:
