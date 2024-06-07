@@ -14,7 +14,7 @@
 
 """Import top-level classes and functions here for encapsulation/clarity."""
 
-__version__ = '0.10.4'
+__version__ = '0.10.5'
 
 from brax.base import Motion
 from brax.base import State
