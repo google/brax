@@ -45,6 +45,7 @@ setup(
         "flask_cors",
         "flax",
         # TODO: remove grpcio and gym after dropping legacy v1 code
+        "gymnasium",
         "grpcio",
         "jax>=0.4.6",
         "jaxlib>=0.4.6",
@@ -65,8 +66,6 @@ setup(
     ],
     extras_require={
         "develop": ["pytest", "transforms3d"],
-        "gym": ["gym"],
-        "gymnasium": ["gymnasium"],
     },
     classifiers=[
         "Development Status :: 4 - Beta",
