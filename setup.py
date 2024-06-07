@@ -45,8 +45,8 @@ setup(
         "flask_cors",
         "flax",
         # TODO: remove grpcio and gym after dropping legacy v1 code
+        "gymnasium",
         "grpcio",
-        "gym",
         "jax>=0.4.6",
         "jaxlib>=0.4.6",
         "jaxopt",
