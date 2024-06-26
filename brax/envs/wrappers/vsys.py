@@ -240,12 +240,10 @@ class IdentityVSysWrapper(_VSysWrapper):
         return self.env.reset(self.sys, rng)
 
 
-
 def split_key(key, num):
     reset_rng, *set_rng = jax.random.split(key, num + 1)
     set_rng = jp.reshape(jp.stack(set_rng), (num, 2))
     return reset_rng, set_rng
-
 
 
 class DomainRandVSysWrapper(_VSysWrapper):
