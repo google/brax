@@ -240,81 +240,6 @@ class IdentityVSysWrapper(_VSysWrapper):
         return self.env.reset(self.sys, rng)
 
 
-class _ConcreteVSysWrapper(_VSysWrapper):
-    def __init__(self, env: Env, skrs: List[SysKeyRange]):
-        super().__init__(env)
-        self.baseline_sys = self.env.unwrapped.sys
-        def _make_vsys():
-            def _identity(sys, _):
-                return sys
-            return jax.vmap(functools.partial(_identity, self.baseline_sys))(jp.arange(self.batch_size))
-        self.baseline_vsys = _make_vsys() if not self.single_env else self.baseline_sys
-        self.current_sys = _make_vsys()
-
-        def make_sysset(skrs: List[SysKeyRange], is_single_env: bool):
-            keys = [skr.key.split(KEY_SEP) for skr in skrs]
-
-            def receive_sys(sys: System, mask: jp.ndarray, vals: List[jp.ndarray]):
-                mask = mask > 0
-
-                def apply_mask(sys: System, mask: jp.ndarray, vals: List[jp.ndarray]):
-                    def identity(sys: System, vals: List[jp.ndarray]) -> System:
-                        return sys
-
-                    def resamply(sys: System, vals: List[jp.ndarray]) -> System:
-                        """Sets params in the System."""
-                        for key, val in zip(keys, vals):
-                            sys = _write_sys(sys, key, val)
-                        return sys
-
-                    sys = jax.lax.cond(
-                        mask,
-                        resamply,
-                        identity,
-                        sys, vals
-                    )
-                    return sys
-
-                if is_single_env:
-                    return apply_mask(sys, mask[0], vals)
-                else:
-                    return jax.vmap(apply_mask)(sys, mask, vals)
-
-            return receive_sys
-
-        def make_readsys(skrs: List[SysKeyRange], is_single_env: bool):
-            keys = [skr.key.split(KEY_SEP) for skr in skrs]
-
-            def get_current_skrs_vals(sys: System):
-                """Sets params in the System."""
-                ret = []
-                for key in keys:
-                    read = _traverse_sys(sys, key, None)
-                    ret.append(read)
-                return ret
-
-            def readsys(sys: System):
-                if is_single_env:
-                    return get_current_skrs_vals
-                else:
-                    return jax.vmap(get_current_skrs_vals)(sys)
-            return readsys
-
-        self._sysset = make_sysset(skrs, self.single_env)
-        self._sysread = make_readsys(skrs, self.single_env)
-
-        self.skrs = skrs
-
-    def randomize_vsys(self, rng: jp.ndarray, current_sys: System, mask: jp.ndarray):
-        """
-        Args:
-            rng: a rng key vector of size self.batch_size
-            mask: only resample for positive nonzero mask indices
-
-        Returns:
-
-        """
-        raise NotImplementedError()
 
 def split_key(key, num):
     reset_rng, *set_rng = jax.random.split(key, num + 1)
@@ -322,11 +247,47 @@ def split_key(key, num):
     return reset_rng, set_rng
 
 
-class DomainRandVSysWrapper(_ConcreteVSysWrapper):
+
+class DomainRandVSysWrapper(_VSysWrapper):
     """Maintains episode step count and sets done at episode end."""
 
     def __init__(self, env: Env, skrs: List[SysKeyRange], inital_rng: jax.random.PRNGKey, do_on_reset: int, do_every_N_step: Union[Callable[[jax.random.PRNGKeyArray], int], int], do_at_creation: int):
-        super().__init__(env, skrs)
+        super().__init__(env)
+
+        self.baseline_sys = self.env.unwrapped.sys
+        self.baseline_vsys = jax.vmap(functools.partial(lambda x: self.baseline_sys))(jp.arange(self.batch_size))
+
+        keys = [skr.key.split(KEY_SEP) for skr in skrs]
+
+        def receive_sys(sys: System, mask: jp.ndarray, vals: List[jp.ndarray]):
+            def identity(sys: System, v: List[jp.ndarray]) -> System:
+                return sys
+            def resamply(sys: System, vals: List[jp.ndarray]) -> System:
+                """Sets params in the System."""
+                for key, val in zip(keys, vals):
+                    sys = _write_sys(sys, key, val)
+                return sys
+
+            return jax.lax.cond(
+                    mask > 0,
+                    resamply,
+                    identity,
+                    sys, vals
+                )
+
+        self._sysset = jax.vmap(receive_sys)
+
+        def get_current_skrs_vals(sys: System):
+            """Sets params in the System."""
+            ret = []
+            for key in keys:
+                read = _traverse_sys(sys, key, None)
+                ret.append(read)
+            return ret
+        self._sysread = jax.vmap(get_current_skrs_vals)
+
+        self.skrs = skrs
+
 
         def _sample_for_one_key(rng):
             vals = []
@@ -336,20 +297,11 @@ class DomainRandVSysWrapper(_ConcreteVSysWrapper):
                 rand = jax.random.uniform(key=key, minval=skr.min, maxval=skr.max, shape=skr.max.shape)
                 val = skr.base + rand
                 vals.append(val)
-
-            return rng, vals
-        _sample_for_one_key = jax.jit(_sample_for_one_key)
-
-        if self.single_env:
-            @jax.jit
-            def __sample_for_one_key(rng):
-                ret_rng, ret_vals = _sample_for_one_key(rng)
-                return ret_rng, ret_vals
-            self._sample_batch_skrs = __sample_for_one_key
-        else:
-            self._sample_batch_skrs = jax.vmap(_sample_for_one_key)
+            return vals
+        self._sample_batch_skrs = jax.vmap(_sample_for_one_key)
 
         self.do_on_reset = do_on_reset >= 1
+
         if isinstance(do_every_N_step, int):
             def _do_every_N_step(rng: jax.random.PRNGKey):
                 return do_every_N_step * jp.ones(self.batch_size)
@@ -361,11 +313,10 @@ class DomainRandVSysWrapper(_ConcreteVSysWrapper):
             self.do_every_N_step = vmapped_do_every_N_step
 
         self.do_at_creation = do_at_creation >= 1
-
         if self.do_at_creation:
             self.baseline_vsys = self.randomize_vsys(inital_rng, self.baseline_vsys, mask=jp.ones(self.batch_size,))
 
-    def randomize_vsys(self, rng: jp.ndarray, current_sys: System, mask: jp.ndarray):
+    def randomize_vsys(self, key: jp.ndarray, current_sys: System, mask: jp.ndarray):
         """
         Args:
             rng: a rng key vector of size self.batch_size
@@ -374,8 +325,8 @@ class DomainRandVSysWrapper(_ConcreteVSysWrapper):
         Returns:
 
         """
-        _, batch_rng = split_key(rng, self.batch_size)
-        state_rng, vals = self._sample_batch_skrs(batch_rng)
+        key, batch_rng = split_key(key, self.batch_size)
+        vals = self._sample_batch_skrs(batch_rng)
         current_sys = self._sysset(current_sys, mask, vals)
         self.current_skrs_vals = self._sysread(current_sys)
         return current_sys
@@ -384,7 +335,7 @@ class DomainRandVSysWrapper(_ConcreteVSysWrapper):
         key, set_rng = jax.random.split(key)
 
         mask = jp.ones(self.batch_size,) * self.do_on_reset
-        sys = self.randomize_vsys(rng=set_rng, current_sys=self.baseline_vsys, mask=mask)
+        sys = self.randomize_vsys(key=set_rng, current_sys=self.baseline_vsys, mask=mask)
 
         key, reset_rng = jax.random.split(key)
         state = self.env.reset(sys=sys, rng=reset_rng)
@@ -404,9 +355,9 @@ class DomainRandVSysWrapper(_ConcreteVSysWrapper):
         maybe_new_vsys_stepcount = self.do_every_N_step(stepcount_rng)
         new_vsys_stepcount = decr_vsys_stepcount * jp.logical_not(mask_resample) + maybe_new_vsys_stepcount * mask_resample
 
-        mask_resample = mask_resample + state.done
+        mask_resample = mask_resample + (state.done * self.do_on_reset)
         key, rng_randomize = jax.random.split(key)
-        resampled_sys = self.randomize_vsys(rng=rng_randomize, current_sys=state.sys, mask=mask_resample)
+        resampled_sys = self.randomize_vsys(key=rng_randomize, current_sys=state.sys, mask=mask_resample)
 
         state = state.replace(sys=resampled_sys, vsys_rng=split_key(key, self.batch_size)[-1], vsys_stepcount=new_vsys_stepcount)
         state = self.env.step(state, action)
