@@ -41,8 +41,8 @@ from brax.training.types import Params
 from brax.v1 import envs as envs_v1
 from flax import struct
 
-import losses as td3_losses
-import networks as td3_networks
+from brax.training.agents.td3 import losses as td3_losses
+from brax.training.agents.td3 import networks as td3_networks
 
 Metrics = types.Metrics
 Transition = types.Transition
