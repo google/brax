@@ -14,6 +14,7 @@
     <numeric data="10" name="constraint_ang_damping"/>
     <numeric data="50" name="constraint_vel_damping"/>
     <numeric data="0" name="ang_damping"/>
+    <numeric data="-1" name="vel_damping"/>
     <numeric data="1" name="spring_mass_scale"/>
     <numeric data="1" name="spring_inertia_scale"/>
     <numeric data="10" name="solver_maxls"/>
