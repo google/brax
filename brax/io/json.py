@@ -16,7 +16,7 @@
 """Saves a system config and trajectory as json."""
 
 import json
-from typing import List, Text, Tuple
+from typing import Optional, List, Text, Tuple
 
 from brax.base import State, System
 from etils import epath
@@ -26,12 +26,8 @@ import mujoco
 import numpy as np
 
 
-# State attributes needed for the visualizer.
-_STATE_ATTR = ['x', 'contact']
-
 # Fields that get json encoded.
 _ENCODE_FIELDS = [
-    'contact',
     'opt',
     'timestep',
     'face',
@@ -82,30 +78,6 @@ def _to_dict(obj):
   if isinstance(obj, float) and (np.isnan(obj) or np.isinf(obj)):
     return str(obj)
   return obj
-
-
-def _compress_contact(states: State) -> State:
-  """Reduces the number of contacts based on penetration > 0."""
-  if states.contact is None or states.contact.pos.shape[0] == 0:
-    return states
-
-  contact_mask = states.contact.dist < 0
-  n_contact = contact_mask.sum(axis=1).max()
-
-  def pad(arr, n):
-    r = jp.zeros(n)
-    if len(arr.shape) > 1:
-      r = jp.zeros((n, *arr.shape[1:]))
-    r = r.at[: arr.shape[0], ...].set(arr)
-    return r
-
-  def compress(contact, i):
-    return jax.tree.map(
-        lambda x: pad(x[contact_mask[i]], n_contact), contact.take(i)
-    )
-
-  c = [compress(states.contact, i) for i in range(states.x.pos.shape[0])]
-  return states.replace(contact=jax.tree.map(lambda *x: jp.stack(x), *c))
 
 
 def _get_mesh(mj: mujoco.MjModel, i: int) -> Tuple[np.ndarray, np.ndarray]:
@@ -179,12 +151,8 @@ def dumps(sys: System, states: List[State]) -> Text:
 
   d['geoms'] = link_geoms
 
-  # stack states for the viewer
-  states = jax.tree.map(lambda *x: jp.stack(x), *states)
-  states = _compress_contact(states)
-
-  states = _to_dict(states)
-  d['states'] = {k: states[k] for k in _STATE_ATTR}
+  # add states for the viewer, we only need 'x' (positions and orientations).
+  d['states'] = {'x': [_to_dict(s.x) for s in states]}
 
   return json.dumps(d)
 

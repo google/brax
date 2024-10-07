@@ -25,7 +25,7 @@ from mujoco import mjx
 
 def _reformat_contact(sys: System, data: State) -> State:
   """Reformats the mjx.Contact into a brax.base.Contact."""
-  if data.contact is None or data.ncon == 0:
+  if data.contact is None:
     return data
 
   elasticity = jp.zeros(data.contact.pos.shape[0])
@@ -45,6 +45,7 @@ def init(
     q: jax.Array,
     qd: jax.Array,
     act: Optional[jax.Array] = None,
+    ctrl: Optional[jax.Array] = None,
     unused_debug: bool = False,
 ) -> State:
   """Initializes physics data.
@@ -54,6 +55,7 @@ def init(
     q: (q_size,) joint angle vector
     qd: (qd_size,) joint velocity vector
     act: actuator activations
+    ctrl: actuator controls
     unused_debug: ignored
 
   Returns:
@@ -64,6 +66,8 @@ def init(
   data = data.replace(qpos=q, qvel=qd)
   if act is not None:
     data = data.replace(act=act)
+  if ctrl is not None:
+    data = data.replace(ctrl=ctrl)
 
   data = mjx.forward(sys, data)
 
@@ -106,5 +110,6 @@ def step(
   offset = Transform.create(pos=offset)
   xd = offset.vmap().do(cvel)
 
-  data = _reformat_contact(sys, data)
+  if data.ncon > 0:
+    data = _reformat_contact(sys, data)
   return data.replace(q=q, qd=qd, x=x, xd=xd)

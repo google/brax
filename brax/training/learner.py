@@ -46,8 +46,8 @@ flags.DEFINE_string('env', 'ant', 'Name of environment to train.')
 flags.DEFINE_bool('use_v2', True, 'Use Brax v2.')
 flags.DEFINE_enum(
     'backend',
-    'generalized',
-    ['spring', 'generalized', 'positional'],
+    'mjx',
+    ['mjx', 'spring', 'generalized', 'positional'],
     'The physics backend to use.',
 )
 flags.DEFINE_bool('legacy_spring', False, 'Brax v1 backend.')
@@ -121,7 +121,7 @@ flags.DEFINE_float('reward_shift', 0.,
                    'A reward shift to get rid of "stay alive" bonus.')
 
 # ARS hps.
-flags.DEFINE_integer('policy updates', None,
+flags.DEFINE_integer('policy_updates', None,
                      'Number of policy updates in APG.')
 
 

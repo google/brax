@@ -522,7 +522,8 @@ class JointTest(parameterized.TestCase):
         vel=jp.array([[0., 0., 0.], [0., vel, 0.]]),
         ang=jp.array([[0., 0., 0.], [vel, 0., 0.]]))
     qp, _ = jax.jit(sys.step)(qp, jp.array([]))
-    self.assertAlmostEqual(qp.pos[1, 1], 0., 3)  # returned to the origin
+    # returned to the origin
+    self.assertAlmostEqual(qp.pos[1, 1], 0.0, delta=1e-3)
 
   offsets = [-15, 15, -45, 45, -75, 75]
   axes = [

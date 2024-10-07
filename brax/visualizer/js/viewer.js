@@ -38,25 +38,21 @@ function downloadFile(name, contents, mime) {
 }
 
 /**
- * Toggles the contact point debug in the scene.
+ * Toggles the debug mode for the scene.
  * @param {!ObjType} obj A Scene or Mesh object.
- * @param {boolean} debug Whether to add contact debugging.
+ * @param {boolean} debug Whether to add axes and transparency to the scene.
  */
-function toggleContactDebug(obj, debug) {
+function toggleDebugMode(obj, debug) {
   for (let i = 0; i < obj.children.length; i++) {
     let c = obj.children[i];
     if (c.type == 'AxesHelper') {
       /* toggle visibility on world axis */
       c.visible = debug;
     }
-    if (c.type == 'Group' && c.name && c.name.startsWith('contact')) {
-      /* toggle visibility of all contact points */
-      c.children[0].visible = debug;
-    }
     if (c.type == 'Group') {
       /* recurse over group's children */
       for (let j = 0; j < c.children.length; j++) {
-        toggleContactDebug(c.children[j], debug);
+        toggleDebugMode(c.children[j], debug);
       }
     }
   }
@@ -160,7 +156,7 @@ class Viewer {
     this.bodyFolders = {};
 
     for (let c of this.scene.children) {
-      if (!c.name || c.name.startsWith('contact')) continue;
+      if (!c.name) continue;
       const folder = bodiesFolder.addFolder(c.name);
       this.bodyFolders[c.name] = folder;
       folder.close();
@@ -185,11 +181,11 @@ class Viewer {
     saveFolder.close();
 
     /* debugger */
-    this.contactDebug = system.states.contact !== null;
+    this.debugMode = false;
     let debugFolder = this.gui.addFolder('Debugger');
-    debugFolder.add(this, 'contactDebug')
-        .name(system.states.contact ? 'contacts' : 'axis')
-        .onChange((value) => this.setContactDebug(value));
+    debugFolder.add(this, 'debugMode')
+        .name('axis')
+        .onChange((value) => this.setDebugMode(value));
 
     /* done setting up the gui */
     this.gui.close();
@@ -253,7 +249,7 @@ class Viewer {
   }
 
   render() {
-    toggleContactDebug(this.scene, this.contactDebug);
+    toggleDebugMode(this.scene, this.debugMode);
     this.renderer.render(this.scene, this.camera);
     this.needsRender = false;
   }
@@ -319,8 +315,8 @@ class Viewer {
     downloadFile('system.json', JSON.stringify(this.system));
   }
 
-  setContactDebug(val) {
-    this.contactDebug = val;
+  setDebugMode(val) {
+    this.debugMode = val;
   }
 
   setHover(object, hovering) {

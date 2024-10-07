@@ -26,7 +26,7 @@ class ForiLoopTest(absltest.TestCase):
 
   def testForiLoopTest(self):
     a = jp.fori_loop(2, 4, lambda i, x: i + x, jp.array(1.))
-    self.assertIsInstance(a, np.float_)
+    self.assertIsInstance(a, np.float64)
     self.assertEqual(a.shape, ())
     self.assertAlmostEqual(a, 1.0 + 2.0 + 3.0)
 

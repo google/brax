@@ -35,6 +35,7 @@ def init(
     q: jax.Array,
     qd: jax.Array,
     unused_act: Optional[jax.Array] = None,
+    unused_ctrl: Optional[jax.Array] = None,
     debug: bool = False,
 ) -> State:
   """Initializes physics state.

@@ -217,30 +217,11 @@ function createScene(system) {
     scene.add(parent);
   });
 
-  if (system.states.contact) {
-    /* add contact point spheres  */
-    for (let i = 0; i < system.states.contact.pos[0].length; i++) {
-      const parent = new THREE.Group();
-      parent.name = 'contact' + i;
-      let child;
-
-      const mat = new THREE.MeshPhongMaterial({color: 0xff0000});
-      const sphere_geom = new THREE.SphereGeometry(minAxisSize / 20.0, 6, 6);
-      child = new THREE.Mesh(sphere_geom, mat);
-      child.baseMaterial = child.material;
-      child.castShadow = false;
-      child.position.set(0, 0, 0);
-
-      parent.add(child);
-      scene.add(parent);
-    }
-  }
-
   return scene;
 }
 
 function createTrajectory(system) {
-  const times = [...Array(system.states.x.pos.length).keys()].map(
+  const times = [...Array(system.states.x.length).keys()].map(
       x => x * system.opt.timestep);
   const tracks = [];
 
@@ -252,29 +233,16 @@ function createTrajectory(system) {
       return;
     }
     const group = name.replaceAll('/', '_');  // sanitize node name
-    const pos = system.states.x.pos.map(p => [p[i][0], p[i][1], p[i][2]]);
+    const pos = system.states.x.map(
+        x => [x.pos[i][0], x.pos[i][1], x.pos[i][2]]);
     const rot =
-        system.states.x.rot.map(r => [r[i][1], r[i][2], r[i][3], r[i][0]]);
+        system.states.x.map(
+            x => [x.rot[i][1], x.rot[i][2], x.rot[i][3], x.rot[i][0]]);
     tracks.push(new THREE.VectorKeyframeTrack(
         'scene/' + group + '.position', times, pos.flat()));
     tracks.push(new THREE.QuaternionKeyframeTrack(
         'scene/' + group + '.quaternion', times, rot.flat()));
   });
-
-  if (system.states.contact) {
-    /* add contact debug point trajectory */
-    for (let i = 0; i < system.states.contact.pos[0].length; i++) {
-      const group = 'contact' + i;
-      const pos = system.states.contact.pos.map(p => [p[i][0], p[i][1], p[i][2]]);
-      const visible = system.states.contact.dist.map(p => p[i] < -1e-6);
-      tracks.push(new THREE.VectorKeyframeTrack(
-          'scene/' + group + '.position', times, pos.flat(),
-          THREE.InterpolateDiscrete));
-      tracks.push(new THREE.BooleanKeyframeTrack(
-          'scene/' + group + '.visible', times, visible,
-          THREE.InterpolateDiscrete));
-    }
-  }
 
   return new THREE.AnimationClip('Action', -1, tracks);
 }

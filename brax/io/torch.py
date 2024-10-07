@@ -64,7 +64,7 @@ def _torch_dict_to_jax(
 
 
 @functools.singledispatch
-def jax_to_torch(value: Any, device: Device = None) -> Any:
+def jax_to_torch(value: Any, device: Union[Device, None] = None) -> Any:
   """Convert JAX values to PyTorch Tensors.
 
   Args:
@@ -82,7 +82,7 @@ def jax_to_torch(value: Any, device: Device = None) -> Any:
 
 @jax_to_torch.register(jax.Array)
 def _jaxarray_to_tensor(
-    value: jax.Array, device: Device = None
+    value: jax.Array, device: Union[Device, None] = None
 ) -> torch.Tensor:
   """Converts a jax.Array into PyTorch Tensor."""
   dpack = jax_dlpack.to_dlpack(value.astype("float32"))
@@ -95,7 +95,7 @@ def _jaxarray_to_tensor(
 @jax_to_torch.register(abc.Mapping)
 def _jax_dict_to_torch(
     value: Dict[str, Union[jax.Array, Any]],
-    device: Device = None) -> Dict[str, Union[torch.Tensor, Any]]:
+    device: Union[Device, None] = None) -> Dict[str, Union[torch.Tensor, Any]]:
   """Converts a dict of jax.Arrays into a dict of PyTorch tensors."""
   return type(value)(
       **{k: jax_to_torch(v, device=device) for k, v in value.items()})  # type: ignore
