@@ -19,12 +19,11 @@ from typing import ClassVar, Dict, Optional
 
 from brax.v1 import jumpy as jp
 from brax.v1.envs import env as brax_env
-import dm_env
-from dm_env import specs
-import flax
+
 import gym
 from gym import spaces
 from gym.vector import utils
+
 import jax
 import jax.numpy as jnp
 
