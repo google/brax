@@ -58,6 +58,7 @@ def train(
     environment: Union[envs_v1.Env, envs.Env],
     episode_length: int,
     policy_updates: int,
+    wrap_env: bool = True,
     horizon_length: int = 32,
     num_envs: int = 1,
     num_evals: int = 1,
@@ -102,29 +103,30 @@ def train(
   updates_per_epoch = jnp.round(num_updates / (num_evals_after_init))
 
   assert num_envs % device_count == 0
-  env = environment
-  if isinstance(env, envs.Env):
-    wrap_for_training = envs.training.wrap
-  else:
-    wrap_for_training = envs_v1.wrappers.wrap_for_training
-
   key = jax.random.PRNGKey(seed)
   global_key, local_key = jax.random.split(key)
   rng, global_key = jax.random.split(global_key, 2)
   local_key = jax.random.fold_in(local_key, process_id)
   local_key, eval_key = jax.random.split(local_key)
 
-  v_randomiation_fn = None
-  if randomization_fn is not None:
-    v_randomiation_fn = functools.partial(
-        randomization_fn, rng=jax.random.split(rng, num_envs // process_count)
+  env = environment
+  if wrap_env:
+    if isinstance(env, envs.Env):
+      wrap_for_training = envs.training.wrap
+    else:
+      wrap_for_training = envs_v1.wrappers.wrap_for_training
+
+    v_randomization_fn = None
+    if randomization_fn is not None:
+      v_randomization_fn = functools.partial(
+          randomization_fn, rng=jax.random.split(rng, num_envs // process_count)
+      )
+    env = wrap_for_training(
+        env,
+        episode_length=episode_length,
+        action_repeat=action_repeat,
+        randomization_fn=v_randomization_fn,
     )
-  env = wrap_for_training(
-      env,
-      episode_length=episode_length,
-      action_repeat=action_repeat,
-      randomization_fn=v_randomiation_fn,
-  )
 
   reset_fn = jax.jit(jax.vmap(env.reset))
   step_fn = jax.jit(jax.vmap(env.step))
@@ -298,16 +300,17 @@ def train(
 
   if not eval_env:
     eval_env = environment
-  if randomization_fn is not None:
-    v_randomiation_fn = functools.partial(
-        randomization_fn, rng=jax.random.split(eval_key, num_eval_envs)
+  if wrap_env:
+    if randomization_fn is not None:
+      v_randomization_fn = functools.partial(
+          randomization_fn, rng=jax.random.split(eval_key, num_eval_envs)
+      )
+    eval_env = wrap_for_training(
+        eval_env,
+        episode_length=episode_length,
+        action_repeat=action_repeat,
+        randomization_fn=v_randomization_fn,
     )
-  eval_env = wrap_for_training(
-      eval_env,
-      episode_length=episode_length,
-      action_repeat=action_repeat,
-      randomization_fn=v_randomiation_fn,
-  )
 
   evaluator = acting.Evaluator(
       eval_env,

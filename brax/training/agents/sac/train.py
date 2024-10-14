@@ -108,6 +108,7 @@ def train(
     environment: Union[envs_v1.Env, envs.Env],
     num_timesteps,
     episode_length: int,
+    wrap_env: bool = True,
     action_repeat: int = 1,
     num_envs: int = 1,
     num_eval_envs: int = 128,
@@ -167,26 +168,27 @@ def train(
 
   assert num_envs % device_count == 0
   env = environment
-  if isinstance(env, envs.Env):
-    wrap_for_training = envs.training.wrap
-  else:
-    wrap_for_training = envs_v1.wrappers.wrap_for_training
+  if wrap_env:
+    if isinstance(env, envs.Env):
+      wrap_for_training = envs.training.wrap
+    else:
+      wrap_for_training = envs_v1.wrappers.wrap_for_training
 
-  rng = jax.random.PRNGKey(seed)
-  rng, key = jax.random.split(rng)
-  v_randomization_fn = None
-  if randomization_fn is not None:
-    v_randomization_fn = functools.partial(
-        randomization_fn,
-        rng=jax.random.split(
-            key, num_envs // jax.process_count() // local_devices_to_use),
+    rng = jax.random.PRNGKey(seed)
+    rng, key = jax.random.split(rng)
+    v_randomization_fn = None
+    if randomization_fn is not None:
+      v_randomization_fn = functools.partial(
+          randomization_fn,
+          rng=jax.random.split(
+              key, num_envs // jax.process_count() // local_devices_to_use),
+      )
+    env = wrap_for_training(
+        env,
+        episode_length=episode_length,
+        action_repeat=action_repeat,
+        randomization_fn=v_randomization_fn,
     )
-  env = wrap_for_training(
-      env,
-      episode_length=episode_length,
-      action_repeat=action_repeat,
-      randomization_fn=v_randomization_fn,
-  )
 
   obs_size = env.observation_size
   action_size = env.action_size
@@ -431,16 +433,17 @@ def train(
 
   if not eval_env:
     eval_env = environment
-  if randomization_fn is not None:
-    v_randomization_fn = functools.partial(
-        randomization_fn, rng=jax.random.split(eval_key, num_eval_envs)
+  if wrap_env:
+    if randomization_fn is not None:
+      v_randomization_fn = functools.partial(
+          randomization_fn, rng=jax.random.split(eval_key, num_eval_envs)
+      )
+    eval_env = wrap_for_training(
+        eval_env,
+        episode_length=episode_length,
+        action_repeat=action_repeat,
+        randomization_fn=v_randomization_fn,
     )
-  eval_env = wrap_for_training(
-      eval_env,
-      episode_length=episode_length,
-      action_repeat=action_repeat,
-      randomization_fn=v_randomization_fn,
-  )
 
   evaluator = acting.Evaluator(
       eval_env,

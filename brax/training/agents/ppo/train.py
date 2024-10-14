@@ -76,6 +76,7 @@ def train(
     environment: Union[envs_v1.Env, envs.Env],
     num_timesteps: int,
     episode_length: int,
+    wrap_env: bool = True,
     action_repeat: int = 1,
     num_envs: int = 1,
     max_devices_per_host: Optional[int] = None,
@@ -113,6 +114,8 @@ def train(
     environment: the environment to train
     num_timesteps: the total number of environment steps to use during training
     episode_length: the length of an environment episode
+    wrap_env: If True, wrap the environment for training. Otherwise use the
+      environment as is.
     action_repeat: the number of timesteps to repeat an action
     num_envs: the number of parallel environments to use for rollouts
       NOTE: `num_envs` must be divisible by the total number of chips since each
@@ -202,26 +205,26 @@ def train(
 
   assert num_envs % device_count == 0
 
-  v_randomization_fn = None
-  if randomization_fn is not None:
-    randomization_batch_size = num_envs // local_device_count
-    # all devices gets the same randomization rng
-    randomization_rng = jax.random.split(key_env, randomization_batch_size)
-    v_randomization_fn = functools.partial(
-        randomization_fn, rng=randomization_rng
+  env = environment
+  if wrap_env:
+    v_randomization_fn = None
+    if randomization_fn is not None:
+      randomization_batch_size = num_envs // local_device_count
+      # all devices gets the same randomization rng
+      randomization_rng = jax.random.split(key_env, randomization_batch_size)
+      v_randomization_fn = functools.partial(
+          randomization_fn, rng=randomization_rng
+      )
+    if isinstance(environment, envs.Env):
+      wrap_for_training = envs.training.wrap
+    else:
+      wrap_for_training = envs_v1.wrappers.wrap_for_training
+    env = wrap_for_training(
+        environment,
+        episode_length=episode_length,
+        action_repeat=action_repeat,
+        randomization_fn=v_randomization_fn,
     )
-
-  if isinstance(environment, envs.Env):
-    wrap_for_training = envs.training.wrap
-  else:
-    wrap_for_training = envs_v1.wrappers.wrap_for_training
-
-  env = wrap_for_training(
-      environment,
-      episode_length=episode_length,
-      action_repeat=action_repeat,
-      randomization_fn=v_randomization_fn,
-  )
 
   reset_fn = jax.jit(jax.vmap(env.reset))
   key_envs = jax.random.split(key_env, num_envs // process_count)
@@ -409,16 +412,17 @@ def train(
 
   if not eval_env:
     eval_env = environment
-  if randomization_fn is not None:
-    v_randomization_fn = functools.partial(
-        randomization_fn, rng=jax.random.split(eval_key, num_eval_envs)
+  if wrap_env:
+    if randomization_fn is not None:
+      v_randomization_fn = functools.partial(
+          randomization_fn, rng=jax.random.split(eval_key, num_eval_envs)
+      )
+    eval_env = wrap_for_training(
+        eval_env,
+        episode_length=episode_length,
+        action_repeat=action_repeat,
+        randomization_fn=v_randomization_fn,
     )
-  eval_env = wrap_for_training(
-      eval_env,
-      episode_length=episode_length,
-      action_repeat=action_repeat,
-      randomization_fn=v_randomization_fn,
-  )
 
   evaluator = acting.Evaluator(
       eval_env,

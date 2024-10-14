@@ -75,6 +75,7 @@ class FitnessShaping(enum.Enum):
 # TODO: Pass the network as argument.
 def train(
     environment: Union[envs_v1.Env, envs.Env],
+    wrap_env: bool = True,
     num_timesteps: int = 100,
     episode_length: int = 1000,
     action_repeat: int = 1,
@@ -125,23 +126,24 @@ def train(
 
   assert num_envs % local_devices_to_use == 0
   env = environment
-  if isinstance(env, envs.Env):
-    wrap_for_training = envs.training.wrap
-  else:
-    wrap_for_training = envs_v1.wrappers.wrap_for_training
+  if wrap_env:
+    if isinstance(env, envs.Env):
+      wrap_for_training = envs.training.wrap
+    else:
+      wrap_for_training = envs_v1.wrappers.wrap_for_training
 
-  v_randomization_fn = None
-  if randomization_fn is not None:
-    v_randomization_fn = functools.partial(
-        randomization_fn,
-        rng=jax.random.split(rng_key, num_envs // local_devices_to_use),
+    v_randomization_fn = None
+    if randomization_fn is not None:
+      v_randomization_fn = functools.partial(
+          randomization_fn,
+          rng=jax.random.split(rng_key, num_envs // local_devices_to_use),
+      )
+    env = wrap_for_training(
+        env,
+        episode_length=episode_length,
+        action_repeat=action_repeat,
+        randomization_fn=v_randomization_fn,
     )
-  env = wrap_for_training(
-      env,
-      episode_length=episode_length,
-      action_repeat=action_repeat,
-      randomization_fn=v_randomization_fn,
-  )
 
   obs_size = env.observation_size
 
@@ -325,16 +327,17 @@ def train(
 
   if not eval_env:
     eval_env = environment
-  if randomization_fn is not None:
-    v_randomization_fn = functools.partial(
-        randomization_fn, rng=jax.random.split(eval_key, num_eval_envs)
+  if wrap_env:
+    if randomization_fn is not None:
+      v_randomization_fn = functools.partial(
+          randomization_fn, rng=jax.random.split(eval_key, num_eval_envs)
+      )
+    eval_env = wrap_for_training(
+        eval_env,
+        episode_length=episode_length,
+        action_repeat=action_repeat,
+        randomization_fn=v_randomization_fn,
     )
-  eval_env = wrap_for_training(
-      eval_env,
-      episode_length=episode_length,
-      action_repeat=action_repeat,
-      randomization_fn=v_randomization_fn,
-  )
 
   # Evaluator function
   evaluator = acting.Evaluator(
