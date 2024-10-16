@@ -385,13 +385,6 @@ def train(
           specs.Array(env_state.obs.shape[-1:], jnp.dtype('float32'))),
       env_steps=0)
 
-  if num_timesteps == 0:
-    return (
-        make_policy,
-        (training_state.normalizer_params, training_state.params),
-        {},
-    )
-
   if (
       restore_checkpoint_path is not None
       and epath.Path(restore_checkpoint_path).exists()
@@ -404,6 +397,13 @@ def train(
     )
     training_state = training_state.replace(
         normalizer_params=normalizer_params, params=init_params
+    )
+
+  if num_timesteps == 0:
+    return (
+        make_policy,
+        (training_state.normalizer_params, training_state.params),
+        {},
     )
 
   training_state = jax.device_put_replicated(
