@@ -136,7 +136,8 @@ def make_q_network(
     .identity_observation_preprocessor,
     hidden_layer_sizes: Sequence[int] = (256, 256),
     activation: ActivationFn = linen.relu,
-    n_critics: int = 2) -> FeedForwardNetwork:
+    n_critics: int = 2,
+    layer_norm: bool = False) -> FeedForwardNetwork:
   """Creates a value network."""
 
   class QModule(linen.Module):
@@ -151,7 +152,8 @@ def make_q_network(
         q = MLP(
             layer_sizes=list(hidden_layer_sizes) + [1],
             activation=activation,
-            kernel_init=jax.nn.initializers.lecun_uniform())(
+            kernel_init=jax.nn.initializers.lecun_uniform(),
+            layer_norm=layer_norm)(
                 hidden)
         res.append(q)
       return jnp.concatenate(res, axis=-1)

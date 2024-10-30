@@ -43,7 +43,7 @@ def _in_jit() -> bool:
 
   if jax.__version_info__ <= (0, 4, 33):
     return 'DynamicJaxprTrace' in str(
-        jax.core.thread_local_state.trace_state.trace_stack
+        jax.core.thread_local_state.trace_state.trace_stack  # type: ignore
     )
 
   return jax.core.unsafe_am_i_under_a_jit_DO_NOT_USE()
