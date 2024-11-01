@@ -149,6 +149,6 @@ class VectorGymWrapper(gym.vector.VectorEnv):
       sys, state = self._env.sys, self._state
       if state is None:
         raise RuntimeError('must call reset or step before rendering')
-      return image.render_array(sys, state.pipeline_state.take(0), 256, 256)
+      return np.stack([image.render_array(sys, state.take(i).pipeline_state, 256, 256) for i in range(self.num_envs)])
     else:
       return super().render(mode=mode)  # just raise an exception
