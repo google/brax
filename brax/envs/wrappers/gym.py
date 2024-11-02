@@ -77,12 +77,12 @@ class GymWrapper(gym.Env):
   def seed(self, seed: int = 0):
     self._key = jax.random.PRNGKey(seed)
 
-  def render(self, mode='human'):
+  def render(self, mode='human', width=256, height=256):
     if mode == 'rgb_array':
       sys, state = self._env.sys, self._state
       if state is None:
         raise RuntimeError('must call reset or step before rendering')
-      return image.render_array(sys, state.pipeline_state, 256, 256)
+      return image.render_array(sys, state.pipeline_state, width=width, height=height)
     else:
       return super().render(mode=mode)  # just raise an exception
 
@@ -144,11 +144,11 @@ class VectorGymWrapper(gym.vector.VectorEnv):
   def seed(self, seed: int = 0):
     self._key = jax.random.PRNGKey(seed)
 
-  def render(self, mode='human'):
+  def render(self, mode='human', width=256, height=256):
     if mode == 'rgb_array':
       sys, state = self._env.sys, self._state
       if state is None:
         raise RuntimeError('must call reset or step before rendering')
-      return np.stack([image.render_array(sys, state.take(i).pipeline_state, 256, 256) for i in range(self.num_envs)])
+      return np.stack([image.render_array(sys, state.take(i).pipeline_state, width=width, height=height) for i in range(self.num_envs)])
     else:
       return super().render(mode=mode)  # just raise an exception
