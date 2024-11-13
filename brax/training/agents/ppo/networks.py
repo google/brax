@@ -41,7 +41,9 @@ def make_inference_fn(ppo_networks: PPONetworks):
 
     def policy(observations: types.Observation,
                key_sample: PRNGKey) -> Tuple[types.Action, types.Extra]:
-      logits = policy_network.apply(*params, observations)
+      # Discard the value function.
+      param_subset = (params[0], params[1].policy)
+      logits = policy_network.apply(*param_subset, observations)
       if deterministic:
         return ppo_networks.parametric_action_distribution.mode(logits), {}
       raw_actions = parametric_action_distribution.sample_no_postprocessing(
