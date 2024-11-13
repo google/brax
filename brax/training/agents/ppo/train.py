@@ -295,7 +295,7 @@ def train(
     key_sgd, key_generate_unroll, new_key = jax.random.split(key, 3)
 
     policy = make_policy(
-        (training_state.normalizer_params, training_state.params.policy))
+        (training_state.normalizer_params, training_state.params))
 
     def f(carry, unused_t):
       current_state, current_key = carry
@@ -437,7 +437,7 @@ def train(
   if process_id == 0 and num_evals > 1:
     metrics = evaluator.run_evaluation(
         _unpmap(
-            (training_state.normalizer_params, training_state.params.policy)),
+            (training_state.normalizer_params, training_state.params)),
         training_metrics={})
     logging.info(metrics)
     progress_fn(0, metrics)
@@ -467,7 +467,7 @@ def train(
       # Run evals.
       metrics = evaluator.run_evaluation(
           _unpmap(
-              (training_state.normalizer_params, training_state.params.policy)),
+              (training_state.normalizer_params, training_state.params)),
           training_metrics)
       logging.info(metrics)
       progress_fn(current_step, metrics)
@@ -483,7 +483,7 @@ def train(
   # devices.
   pmap.assert_is_replicated(training_state)
   params = _unpmap(
-      (training_state.normalizer_params, training_state.params.policy))
+      (training_state.normalizer_params, training_state.params))
   logging.info('total steps: %s', total_steps)
   pmap.synchronize_hosts()
   return (make_policy, params, metrics)
