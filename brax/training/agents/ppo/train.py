@@ -294,8 +294,11 @@ def train(
     training_state, state, key = carry
     key_sgd, key_generate_unroll, new_key = jax.random.split(key, 3)
 
-    policy = make_policy(
-        (training_state.normalizer_params, training_state.params))
+    policy = make_policy((
+        training_state.normalizer_params,
+        training_state.params.policy,
+        training_state.params.value,
+    ))
 
     def f(carry, unused_t):
       current_state, current_key = carry
@@ -402,7 +405,11 @@ def train(
   if num_timesteps == 0:
     return (
         make_policy,
-        (training_state.normalizer_params, training_state.params),
+        (
+            training_state.normalizer_params,
+            training_state.params.policy,
+            training_state.params.value,
+        ),
         {},
     )
 
@@ -436,9 +443,13 @@ def train(
   metrics = {}
   if process_id == 0 and num_evals > 1:
     metrics = evaluator.run_evaluation(
-        _unpmap(
-            (training_state.normalizer_params, training_state.params)),
-        training_metrics={})
+        _unpmap((
+            training_state.normalizer_params,
+            training_state.params.policy,
+            training_state.params.value,
+        )),
+        training_metrics={},
+    )
     logging.info(metrics)
     progress_fn(0, metrics)
 
@@ -466,9 +477,13 @@ def train(
     if process_id == 0:
       # Run evals.
       metrics = evaluator.run_evaluation(
-          _unpmap(
-              (training_state.normalizer_params, training_state.params)),
-          training_metrics)
+          _unpmap((
+              training_state.normalizer_params,
+              training_state.params.policy,
+              training_state.params.value,
+          )),
+          training_metrics,
+      )
       logging.info(metrics)
       progress_fn(current_step, metrics)
       params = _unpmap(
@@ -482,8 +497,11 @@ def train(
   # If there was no mistakes the training_state should still be identical on all
   # devices.
   pmap.assert_is_replicated(training_state)
-  params = _unpmap(
-      (training_state.normalizer_params, training_state.params))
+  params = _unpmap((
+      training_state.normalizer_params,
+      training_state.params.policy,
+      training_state.params.value,
+  ))
   logging.info('total steps: %s', total_steps)
   pmap.synchronize_hosts()
   return (make_policy, params, metrics)

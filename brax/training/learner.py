@@ -28,12 +28,11 @@ from brax.training.agents.apg import train as apg
 from brax.training.agents.ars import train as ars
 from brax.training.agents.es import train as es
 from brax.training.agents.ppo import train as ppo
+from brax.training.agents.sac import networks as sac_networks
 from brax.training.agents.sac import train as sac
-from brax.v1 import envs as envs_v1
-from brax.v1.io import html as html_v1
-from brax.v1.io import npy_file
 import jax
-
+import mediapy as media
+from etils import epath
 
 FLAGS = flags.FLAGS
 
@@ -43,14 +42,12 @@ flags.DEFINE_string('env', 'ant', 'Name of environment to train.')
 
 # TODO move npy_file to v2.
 
-flags.DEFINE_bool('use_v2', True, 'Use Brax v2.')
 flags.DEFINE_enum(
     'backend',
     'mjx',
     ['mjx', 'spring', 'generalized', 'positional'],
     'The physics backend to use.',
 )
-flags.DEFINE_bool('legacy_spring', False, 'Brax v1 backend.')
 flags.DEFINE_integer('total_env_steps', 50000000,
                      'Number of env steps to run training for.')
 flags.DEFINE_integer('num_evals', 10, 'How many times to run an eval.')
@@ -104,6 +101,7 @@ flags.DEFINE_integer(
     'grad_updates_per_step', 1,
     'How many SAC gradient updates to run per one step in the '
     'environment.')
+flags.DEFINE_bool('q_network_layer_norm', False, 'Critic network layer norm.')
 # PPO hps.
 flags.DEFINE_float('gae_lambda', .95, 'General advantage estimation lambda.')
 flags.DEFINE_float('clipping_epsilon', .3, 'Policy loss clipping epsilon.')
@@ -119,23 +117,29 @@ flags.DEFINE_float('exploration_noise_std', 0.1,
                    'Std of a random noise added by ARS.')
 flags.DEFINE_float('reward_shift', 0.,
                    'A reward shift to get rid of "stay alive" bonus.')
-
 # ARS hps.
 flags.DEFINE_integer('policy_updates', None,
                      'Number of policy updates in APG.')
+# Wrap.
+flags.DEFINE_bool('playground_dm_control_suite', False,
+                  'Wrap the environment for MuJoco Playground.')
+
+
+def get_env_factory():
+  """Returns a function that creates an environment."""
+  if FLAGS.playground_dm_control_suite:
+    get_environment = lambda *args, **kwargs: mjp.wrapper.BraxEnvWrapper(
+        mjp.dm_control_suite.load(*args, **kwargs))
+  else:
+    get_environment = functools.partial(
+        envs.get_environment, backend=FLAGS.backend
+    )
+  return get_environment
 
 
 def main(unused_argv):
 
-  if FLAGS.use_v2:
-    get_environment = functools.partial(
-        envs.get_environment, backend=FLAGS.backend
-    )
-  else:
-    get_environment = functools.partial(
-        envs_v1.get_environment, legacy_spring=FLAGS.legacy_spring
-    )
-
+  get_environment = get_env_factory()
   with metrics.Writer(FLAGS.logdir) as writer:
     writer.write_hparams({
         'num_evals': FLAGS.num_evals,
@@ -143,6 +147,11 @@ def main(unused_argv):
         'total_env_steps': FLAGS.total_env_steps
     })
     if FLAGS.learner == 'sac':
+      network_factory = sac_networks.make_sac_networks
+      if FLAGS.q_network_layer_norm:
+        network_factory = functools.partial(
+            sac_networks.make_sac_networks, q_network_layer_norm=True
+        )
       make_policy, params, _ = sac.train(
           environment=get_environment(FLAGS.env),
           num_envs=FLAGS.num_envs,
@@ -153,6 +162,7 @@ def main(unused_argv):
           batch_size=FLAGS.batch_size,
           min_replay_size=FLAGS.min_replay_size,
           max_replay_size=FLAGS.max_replay_size,
+          network_factory=network_factory,
           learning_rate=FLAGS.learning_rate,
           discounting=FLAGS.discounting,
           max_devices_per_host=FLAGS.max_devices_per_host,
@@ -239,11 +249,7 @@ def main(unused_argv):
   model.save_params(path, params)
 
   # Output an episode trajectory.
-  if FLAGS.use_v2:
-    env = envs.create(FLAGS.env, backend=FLAGS.backend)
-  else:
-    env = envs_v1.create(FLAGS.env, legacy_spring=FLAGS.legacy_spring)
-
+  env = get_environment(FLAGS.env)
   @jax.jit
   def jit_next_state(state, key):
     new_key, tmp_key = jax.random.split(key)
@@ -253,13 +259,11 @@ def main(unused_argv):
   def do_rollout(rng):
     rng, env_key = jax.random.split(rng)
     state = env.reset(env_key)
-    states = []
-    while not state.done:
-      if isinstance(env, envs.Env):
-        states.append(state.pipeline_state)
-      else:
-        states.append(state.qp)
+    t, states = 0, []
+    while not state.done and t < FLAGS.episode_length:
+      states.append(state)
       state, _, rng = jit_next_state(state, rng)
+      t += 1
     return states, rng
 
   trajectories = []
@@ -268,19 +272,24 @@ def main(unused_argv):
     qps, rng = do_rollout(rng)
     trajectories.append(qps)
 
-  if hasattr(env, 'sys'):
+  video_path = ''
+  if hasattr(env, 'sys') and hasattr(env.sys, 'link_names'):
     for i in range(FLAGS.num_videos):
-      html_path = f'{FLAGS.logdir}/saved_videos/trajectory_{i:04d}.html'
-      if isinstance(env, envs.Env):
-        html.save(html_path, env.sys.tree_replace({'opt.timestep': env.dt}), trajectories[i])
-      else:
-        html_v1.save_html(html_path, env.sys, trajectories[i], make_dir=True)
+      video_path = f'{FLAGS.logdir}/saved_videos/trajectory_{i:04d}.html'
+      html.save(
+          video_path,
+          env.sys.tree_replace({'opt.timestep': env.dt}),
+          [t.pipeline_state for t in trajectories[i]],
+      )  # pytype: disable=wrong-arg-types
+  elif hasattr(env, 'render'):
+    for i in range(FLAGS.num_videos):
+      path_ = epath.Path(f'{FLAGS.logdir}/saved_videos/trajectory_{i:04d}.mp4')
+      path_.parent.mkdir(parents=True)
+      frames = env.render(trajectories[i])
+      media.write_video(path_, frames, fps=1.0 / env.dt)
+      video_path = path_.as_posix()
   elif FLAGS.num_videos > 0:
     logging.warn('Cannot save videos for non physics environments.')
-
-  for i in range(FLAGS.num_trajectories_npy):
-    qp_path = f'{FLAGS.logdir}/saved_qps/trajectory_{i:04d}.npy'
-    npy_file.save(qp_path, trajectories[i], make_dir=True)
 
 
 
