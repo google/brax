@@ -274,7 +274,8 @@ def train(
       reward_scaling=reward_scaling,
       gae_lambda=gae_lambda,
       clipping_epsilon=clipping_epsilon,
-      normalize_advantage=normalize_advantage)
+      normalize_advantage=normalize_advantage,
+      dict_obs=True)
 
   gradient_update_fn = gradients.gradient_update_fn(
       loss_fn, optimizer, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True)
