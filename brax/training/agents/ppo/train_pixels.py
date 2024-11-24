@@ -114,6 +114,7 @@ def train(
     randomization_fn: Optional[
         Callable[[base.System, jnp.ndarray], Tuple[base.System, base.System]]
     ] = None,
+    augment_image: bool = True,
     restore_checkpoint_path: Optional[str] = None,
 ):
   """PPO training.
@@ -247,19 +248,24 @@ def train(
   key_envs = jnp.reshape(key_envs,
                          (local_devices_to_use, -1) + key_envs.shape[1:])
   env_state = reset_fn(key_envs)
-  ndarray_obs = isinstance(env_state.obs, jnp.ndarray) # Check whether observations are in dictionary form.
-  obs_shape = env_state.obs.shape if ndarray_obs else env_state.obs['state'].shape
+  ndarray_obs = isinstance(env_state.obs, jnp.ndarray) # TODO: Remove
 
+  if normalize_observations:
+    assert "state" in env.observation_size, "Observation normalisation only supported for states."
+  # assert not ("state" in env.observation_size ^ normalize_observations) # 
+
+  # obs_shape = env_state.obs.shape if ndarray_obs else env_state.obs['state'].shape
   # Hop on the chance to find the # chans.
+
   chans2shift = len(shift_settings)
-  if shift_settings[-1][-1] != env_state.obs.shape[-1]:
-      print(f"Warning: at least channel {shift_settings[-1][-1]} not shifted")
+  # if shift_settings[-1][-1] != env_state.obs.shape[-1]:
+  #     print(f"Warning: at least channel {shift_settings[-1][-1]} not shifted")
 
   normalize = lambda x, y: x
   if normalize_observations:
     normalize = running_statistics.normalize
   ppo_network = network_factory(
-      obs_shape[-1],
+      3,
       env.action_size,
       preprocess_observations_fn=normalize)
   make_policy = ppo_networks.make_inference_fn(ppo_network)
@@ -299,50 +305,87 @@ def train(
     optimizer_state, params, key = carry
     key, key_perm, key_grad = jax.random.split(key, 3)
     # assert len(data.observation.shape) == 1 + 1 + 3, print(data.observation.shape) # B, unroll, obs.
-    assert data.observation.shape[1] == unroll_length
+    # assert data.observation.shape[1] == unroll_length
     """ 
     TODO:
     - Separate transformations across the channels
     - Separate transformations across dim 0
     - Sample once per sgd_step, on the input data. (Different randomness per policy update)
     """
-    def random_shift_observations(obs, key):
+    def random_shift_observations(obs: Mapping[str, jax.Array], key):
       @jax.vmap
-      def random_shifts(nb_obs, key):
-          keys = jax.random.split(key, chans2shift)
-          def shift_channel(i_c):
-              c_start, c_stop = shift_settings[i_c]
-              # c_size = chan_sizes[i_c]
-              key_shift = keys[i_c]
+      def rt_all_views(nb_obs: Mapping[str, jax.Array], key) -> Mapping[str, jax.Array]:
+          # Expects dictionary of unbatched observations.
+        def rt_view(key, img: jax.Array, padding) -> jax.Array: # TxHxWxC
+          # Randomly translates a set of pixel inputs.
+          crop_from = jax.random.randint(key, (2, ), 0, 2 * padding + 1)
+          zero = jnp.zeros((1, ), dtype=jnp.int32)
+          crop_from =  jnp.concatenate([zero, crop_from, zero])
+          padded_img = jnp.pad(img, ((0, 0), (padding, padding), (padding, padding), (0, 0)),
+                              mode='edge')
+          return jax.lax.dynamic_slice(padded_img, crop_from, img.shape)
+        
+        out = {}
+        for k_view, v_view in nb_obs.items():
+          if k_view.startswith('pixels/'):
+            key, key_shift = jax.random.split(key)
+            out[k_view] = rt_view(key_shift, v_view, 4)
+        nb_obs.update(out)
+        return nb_obs
 
-              # Expects HWC.
-              def random_crop(key, img, padding):
-                  crop_from = jax.random.randint(key, (2, ), 0, 2 * padding + 1)
-                  zero = jp.zeros((1, ), dtype=jp.int32)
-                  crop_from =  jp.concatenate([zero, crop_from, zero])
-                  padded_img = jp.pad(img, ((0, 0), (padding, padding), (padding, padding), (0, 0)),
-                                      mode='edge')
-                  return jax.lax.dynamic_slice(padded_img, crop_from, img.shape)
-
-              nb_nc_obs = nb_obs[:,:,:,c_start:c_stop]
-              out = random_crop(key_shift, nb_nc_obs, 4)
-              return out
-
-          outs = jp.concat(
-              [shift_channel(i) for i in range(chans2shift)],
-              axis=-1
-          ) # T x W x H x C
-          return outs
-      
-      keys = jax.random.split(key, obs.shape[0])
-      out = random_shifts(obs, keys)
-      out = obs.at[:,:,:,:,:shift_settings[-1][-1]].set(out)
-      return out
+      bdim = next(iter(obs.items()), None)[1].shape[0]
+      keys = jax.random.split(key, bdim)
+      obs = rt_all_views(obs, keys)
+      return obs
     
-    key, key_obs, key_nobs = jax.random.split(key, 3) # Key a coherent noise between obs and its next.
-    observations = random_shift_observations(data.observation, key_obs) # B x T x ...
-    next_observations = random_shift_observations(data.next_observation, key_obs)
-    # next_observations = 
+    key, key_obs = jax.random.split(key) # Key a coherent noise between obs and its next.
+    if augment_image:
+      observations = random_shift_observations(data.observation, key_obs) # B x T x ...
+      next_observations = random_shift_observations(data.next_observation, key_obs)
+    else:
+      observations = data.observation
+      next_observations = data.next_observation
+    # observations = data.observation
+    # next_observations = data.next_observation
+
+    # def random_shift_observations(obs, key):
+    #   @jax.vmap
+    #   def random_shifts(nb_obs, key):
+    #       keys = jax.random.split(key, chans2shift)
+    #       def shift_channel(i_c):
+    #           c_start, c_stop = shift_settings[i_c]
+    #           # c_size = chan_sizes[i_c]
+    #           key_shift = keys[i_c]
+
+    #           # Expects HWC.
+    #           def random_crop(key, img, padding):
+    #               crop_from = jax.random.randint(key, (2, ), 0, 2 * padding + 1)
+    #               zero = jp.zeros((1, ), dtype=jp.int32)
+    #               crop_from =  jp.concatenate([zero, crop_from, zero])
+    #               padded_img = jp.pad(img, ((0, 0), (padding, padding), (padding, padding), (0, 0)),
+    #                                   mode='edge')
+    #               return jax.lax.dynamic_slice(padded_img, crop_from, img.shape)
+
+    #           nb_nc_obs = nb_obs[:,:,:,c_start:c_stop]
+    #           out = random_crop(key_shift, nb_nc_obs, 4)
+    #           return out
+
+    #       outs = jp.concat(
+    #           [shift_channel(i) for i in range(chans2shift)],
+    #           axis=-1
+    #       ) # T x W x H x C
+    #       return outs
+      
+    #   keys = jax.random.split(key, obs.shape[0])
+    #   out = random_shifts(obs, keys)
+    #   out = obs.at[:,:,:,:,:shift_settings[-1][-1]].set(out)
+    #   return out
+    
+    # key, key_obs, key_nobs = jax.random.split(key, 3) # Key a coherent noise between obs and its next.
+    # observations = random_shift_observations(data.observation, key_obs) # B x T x ...
+    # next_observations = random_shift_observations(data.next_observation, key_obs)
+    # observations = data.observation
+    # next_observations = data.next_observation 
 
     data = types.Transition(
       observation=observations,
@@ -399,10 +442,13 @@ def train(
     assert data.discount.shape[1:] == (unroll_length,)
 
     # Update normalization params and normalize observations.
-    normalizer_params = running_statistics.update(
-        training_state.normalizer_params,
-        data.observation if ndarray_obs else data.observation['state'],
-        pmap_axis_name=_PMAP_AXIS_NAME)
+    if normalize_observations:
+      normalizer_params = running_statistics.update(
+          training_state.normalizer_params,
+          data.observation if ndarray_obs else data.observation['state'],
+          pmap_axis_name=_PMAP_AXIS_NAME)
+    else:
+      normalizer_params = training_state.normalizer_params
 
     (optimizer_state, params, _), metrics = jax.lax.scan(
         functools.partial(
@@ -467,7 +513,7 @@ def train(
       optimizer_state=optimizer.init(init_params),  # pytype: disable=wrong-arg-types  # numpy-scalars
       params=init_params,
       normalizer_params=running_statistics.init_state(
-          specs.Array(obs_shape[-1:], jnp.dtype('float32'))),
+          specs.Array((3,), jnp.dtype('float32'))),
       env_steps=0)
 
   if (
