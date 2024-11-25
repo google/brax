@@ -36,7 +36,6 @@ from brax.training.agents.ppo import networks as ppo_networks
 from brax.training.agents.ppo.wrappers import wrap
 from brax.training.types import Params
 from brax.training.types import PRNGKey
-from brax.v1 import envs as envs_v1
 from etils import epath
 import flax
 import jax
@@ -44,11 +43,6 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 from orbax import checkpoint as ocp
-from jax.flatten_util import ravel_pytree
-from brax.envs.base import Env, State, Wrapper
-from mujoco_playground.core import MjxEnv
-
-import jax.numpy as jp
 
 
 InferenceParams = Tuple[running_statistics.NestedMeanStd, Params]
@@ -80,15 +74,13 @@ def _strip_weak_type(tree):
 
 
 def train(
-    environment: Union[envs_v1.Env, envs.Env],
+    environment: envs.Env,
     num_timesteps: int,
     episode_length: int,
-    shift_settings: Tuple[Tuple[int, int]], # Tuple of shifting image channels [start:stop]
     wrap_env: bool = True,
     action_repeat: int = 1,
     num_envs: int = 1,
     max_devices_per_host: Optional[int] = None,
-    num_eval_envs: int = 128,
     learning_rate: float = 1e-4,
     entropy_cost: float = 1e-4,
     discounting: float = 0.9,
@@ -109,7 +101,6 @@ def train(
     ] = ppo_networks.make_ppo_networks,
     progress_fn: Callable[[int, Metrics], None] = lambda *args: None,
     normalize_advantage: bool = True,
-    eval_env: Optional[envs.Env] = None,
     policy_params_fn: Callable[..., None] = lambda *args: None,
     randomization_fn: Optional[
         Callable[[base.System, jnp.ndarray], Tuple[base.System, base.System]]
@@ -134,8 +125,6 @@ def train(
         updates over `num_minibatches` of data, where each minibatch has a
         leading dimension of `batch_size`
     max_devices_per_host: maximum number of chips to use per host process
-    num_eval_envs: the number of envs to use for evluation. Each env will run 1
-      episode, and all envs run in parallel during eval.
     learning_rate: learning rate for ppo loss
     entropy_cost: entropy reward for ppo loss, higher values increase entropy of
       the policy
@@ -161,7 +150,6 @@ def train(
       functions
     progress_fn: a user-defined callback function for reporting/plotting metrics
     normalize_advantage: whether to normalize advantage estimate
-    eval_env: an optional environment for eval only, defaults to `environment`
     policy_params_fn: a user-defined callback function that can be used for
       saving policy checkpoints
     randomization_fn: a user-defined callback function that generates randomized
@@ -174,6 +162,8 @@ def train(
 
   assert batch_size * num_minibatches % num_envs == 0
   xt = time.time()
+
+  assert type(environment.observation_size) == dict, "Pixels PPO assumes dictionary-valued observations and observation sizes."
 
   process_count = jax.process_count()
   process_id = jax.process_index()
@@ -222,6 +212,7 @@ def train(
 
   assert num_envs % device_count == 0
 
+  # Madrona-MJX environments currently can't be wrapped as usual due to a bug with vmap(scan(render)).
   env = environment
   if wrap_env:
     v_randomization_fn = None
@@ -235,7 +226,8 @@ def train(
     if isinstance(environment, envs.Env):
       wrap_for_training = wrap
     else:
-      wrap_for_training = envs_v1.wrappers.wrap_for_training
+      raise ValueError(f"Unsupported environment type. Please see https://github.com/google-deepmind/mujoco/blob/main/mjx/tutorial.ipynb for examples.")
+
     env = wrap_for_training(
         environment,
         episode_length=episode_length,
@@ -248,18 +240,9 @@ def train(
   key_envs = jnp.reshape(key_envs,
                          (local_devices_to_use, -1) + key_envs.shape[1:])
   env_state = reset_fn(key_envs)
-  ndarray_obs = isinstance(env_state.obs, jnp.ndarray) # TODO: Remove
 
   if normalize_observations:
     assert "state" in env.observation_size, "Observation normalisation only supported for states."
-  # assert not ("state" in env.observation_size ^ normalize_observations) # 
-
-  # obs_shape = env_state.obs.shape if ndarray_obs else env_state.obs['state'].shape
-  # Hop on the chance to find the # chans.
-
-  chans2shift = len(shift_settings)
-  # if shift_settings[-1][-1] != env_state.obs.shape[-1]:
-  #     print(f"Warning: at least channel {shift_settings[-1][-1]} not shifted")
 
   normalize = lambda x, y: x
   if normalize_observations:
@@ -304,14 +287,7 @@ def train(
                normalizer_params: running_statistics.RunningStatisticsState):
     optimizer_state, params, key = carry
     key, key_perm, key_grad = jax.random.split(key, 3)
-    # assert len(data.observation.shape) == 1 + 1 + 3, print(data.observation.shape) # B, unroll, obs.
-    # assert data.observation.shape[1] == unroll_length
-    """ 
-    TODO:
-    - Separate transformations across the channels
-    - Separate transformations across dim 0
-    - Sample once per sgd_step, on the input data. (Different randomness per policy update)
-    """
+
     def random_shift_observations(obs: Mapping[str, jax.Array], key):
       @jax.vmap
       def rt_all_views(nb_obs: Mapping[str, jax.Array], key) -> Mapping[str, jax.Array]:
@@ -345,47 +321,6 @@ def train(
     else:
       observations = data.observation
       next_observations = data.next_observation
-    # observations = data.observation
-    # next_observations = data.next_observation
-
-    # def random_shift_observations(obs, key):
-    #   @jax.vmap
-    #   def random_shifts(nb_obs, key):
-    #       keys = jax.random.split(key, chans2shift)
-    #       def shift_channel(i_c):
-    #           c_start, c_stop = shift_settings[i_c]
-    #           # c_size = chan_sizes[i_c]
-    #           key_shift = keys[i_c]
-
-    #           # Expects HWC.
-    #           def random_crop(key, img, padding):
-    #               crop_from = jax.random.randint(key, (2, ), 0, 2 * padding + 1)
-    #               zero = jp.zeros((1, ), dtype=jp.int32)
-    #               crop_from =  jp.concatenate([zero, crop_from, zero])
-    #               padded_img = jp.pad(img, ((0, 0), (padding, padding), (padding, padding), (0, 0)),
-    #                                   mode='edge')
-    #               return jax.lax.dynamic_slice(padded_img, crop_from, img.shape)
-
-    #           nb_nc_obs = nb_obs[:,:,:,c_start:c_stop]
-    #           out = random_crop(key_shift, nb_nc_obs, 4)
-    #           return out
-
-    #       outs = jp.concat(
-    #           [shift_channel(i) for i in range(chans2shift)],
-    #           axis=-1
-    #       ) # T x W x H x C
-    #       return outs
-      
-    #   keys = jax.random.split(key, obs.shape[0])
-    #   out = random_shifts(obs, keys)
-    #   out = obs.at[:,:,:,:,:shift_settings[-1][-1]].set(out)
-    #   return out
-    
-    # key, key_obs, key_nobs = jax.random.split(key, 3) # Key a coherent noise between obs and its next.
-    # observations = random_shift_observations(data.observation, key_obs) # B x T x ...
-    # next_observations = random_shift_observations(data.next_observation, key_obs)
-    # observations = data.observation
-    # next_observations = data.next_observation 
 
     data = types.Transition(
       observation=observations,
@@ -445,7 +380,7 @@ def train(
     if normalize_observations:
       normalizer_params = running_statistics.update(
           training_state.normalizer_params,
-          data.observation if ndarray_obs else data.observation['state'],
+          data.observation['state'],
           pmap_axis_name=_PMAP_AXIS_NAME)
     else:
       normalizer_params = training_state.normalizer_params
@@ -498,22 +433,21 @@ def train(
     }
     return training_state, env_state, metrics  # pytype: disable=bad-return-type  # py311-upgrade
 
-  # Print network sizes.
-  ppo_params = ppo_network.policy_network.init(key_policy)
-  flattened_vals, _ = ravel_pytree(ppo_params)
-  print(f"Param length: {len(flattened_vals)}")
-
   # Initialize model params and training state.
   init_params = ppo_losses.PPONetworkParams(
-      policy=ppo_params,
+      policy=ppo_network.policy_network.init(key_policy),
       value=ppo_network.value_network.init(key_value),
   )
+
+  # Dummy value if normalization is unused.
+  normalizer_params=running_statistics.init_state(
+    specs.Array(env.observation_size['state'] if normalize_observations else (1,),
+                 jnp.dtype('float32')))
 
   training_state = TrainingState(  # pytype: disable=wrong-arg-types  # jax-ndarray
       optimizer_state=optimizer.init(init_params),  # pytype: disable=wrong-arg-types  # numpy-scalars
       params=init_params,
-      normalizer_params=running_statistics.init_state(
-          specs.Array((3,), jnp.dtype('float32'))),
+      normalizer_params=normalizer_params,
       env_steps=0)
 
   if (
@@ -541,26 +475,12 @@ def train(
       training_state,
       jax.local_devices()[:local_devices_to_use])
 
-  if not eval_env:
-    eval_env = environment
-  if wrap_env:
-    if randomization_fn is not None:
-      v_randomization_fn = functools.partial(
-          randomization_fn, rng=jax.random.split(eval_key, num_eval_envs)
-      )
-    eval_env = wrap_for_training(
-        eval_env,
-        episode_length=episode_length,
-        action_repeat=action_repeat,
-        randomization_fn=v_randomization_fn,
-    )
-  else:
-    eval_env = env # Take the wrapped version.
+  eval_env = env
 
   evaluator = acting.Evaluator(
       eval_env,
       functools.partial(make_policy, deterministic=deterministic_eval),
-      num_eval_envs=num_eval_envs,
+      num_eval_envs=num_envs,
       episode_length=episode_length,
       action_repeat=action_repeat,
       key=eval_key)
