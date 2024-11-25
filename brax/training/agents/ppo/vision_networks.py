@@ -1,23 +1,23 @@
 """PPO vision networks."""
-
 from functools import partial
-from typing import Sequence, Tuple, Any, Callable
+from typing import Sequence, Tuple, Any, Callable, Mapping
+
+import jax
+import jax.numpy as jp
+import flax
+from flax import linen
 
 from brax.training import distribution
 from brax.training import networks
 from brax.training import types
 from brax.training.types import PRNGKey
+from brax.training.agents.ppo.cnn_networks import VisionMLP
 
-import flax
-from flax import linen
-import jax
-import jax.numpy as jp
-
-from vision_cnn import NatureCNN
 
 ModuleDef = Any
 ActivationFn = Callable[[jp.ndarray], jp.ndarray]
 Initializer = Callable[..., Any]
+
 
 @flax.struct.dataclass
 class PPONetworks:
@@ -28,17 +28,17 @@ class PPONetworks:
 
 def make_vision_policy_network(
   network_type: str,
-  observation_shape: Tuple[int, int, int, int],
+  observation_size: Mapping[str, Tuple[int, ...]],
   output_size: int,
   preprocess_observations_fn: types.PreprocessObservationFn = types.identity_observation_preprocessor,
-  policy_hidden_layer_sizes: Sequence[int] = [256, 256],
+  hidden_layer_sizes: Sequence[int] = [256, 256],
   activation: ActivationFn = linen.swish,
   kernel_init: Initializer = jax.nn.initializers.lecun_uniform(),
   layer_norm: bool = False) -> networks.FeedForwardNetwork:
 
   if network_type == 'cnn':
-    module = ManiSkillCNN(
-        layer_sizes=list(policy_hidden_layer_sizes) + [output_size],
+    module = VisionMLP(
+        layer_sizes=list(hidden_layer_sizes) + [output_size],
         activation=activation,
         kernel_init=kernel_init,
         layer_norm=layer_norm)
@@ -46,36 +46,38 @@ def make_vision_policy_network(
     raise ValueError(f'Unsupported network_type: {network_type}')
 
   def apply(processor_params, policy_params, obs):
-    obs = preprocess_observations_fn(obs, processor_params)
+    obs['state'] = preprocess_observations_fn(obs['state'], processor_params)
     return module.apply(policy_params, obs)
 
-  dummy_obs = jp.zeros(observation_shape)
+  dummy_obs = {key: jp.zeros((1,) + shape ) 
+               for key, shape in observation_size.items()}
+  
   return networks.FeedForwardNetwork(
       init=lambda key: module.init(key, dummy_obs), apply=apply)
 
 
 def make_vision_value_network(
   network_type: str,
-  observation_shape: Tuple[int, int, int, int],
+  observation_size: Mapping[str, Tuple[int, ...]],
   preprocess_observations_fn: types.PreprocessObservationFn = types.identity_observation_preprocessor,
-  value_hidden_layer_sizes: Sequence[int] = [256, 256],
+  hidden_layer_sizes: Sequence[int] = [256, 256],
   activation: ActivationFn = linen.swish,
-  kernel_init: Initializer = jax.nn.initializers.lecun_uniform()
-  ) -> networks.FeedForwardNetwork:
+  kernel_init: Initializer = jax.nn.initializers.lecun_uniform()) -> networks.FeedForwardNetwork:
 
-  if network_type == 'cnn':
-    value_module = ManiSkillCNN(
-        layer_sizes=list(value_hidden_layer_sizes) + [1],
+  if  network_type == 'cnn':
+    value_module = VisionMLP(
+        layer_sizes=list(hidden_layer_sizes) + [1],
         activation=activation,
         kernel_init=kernel_init)
   else:
     raise ValueError(f'Unsupported network_type: {network_type}')
 
   def apply(processor_params, policy_params, obs):
-    obs = preprocess_observations_fn(obs, processor_params)
+    obs['state'] = preprocess_observations_fn(obs['state'], processor_params)
     return jp.squeeze(value_module.apply(policy_params, obs), axis=-1)
 
-  dummy_obs = jp.zeros(observation_shape)
+  dummy_obs = {key: jp.zeros((1,) + shape ) 
+               for key, shape in observation_size.items()}
   return networks.FeedForwardNetwork(
       init=lambda key: value_module.init(key, dummy_obs), apply=apply)
 
@@ -108,34 +110,33 @@ def make_inference_fn(ppo_networks: PPONetworks):
 
 
 def make_vision_ppo_networks(
-  channel_size: int,
+  # channel_size: int,
+  observation_size: Mapping[str, Tuple[int, ...]],
   action_size: int,
   preprocess_observations_fn: types.PreprocessObservationFn = types
   .identity_observation_preprocessor,
   policy_hidden_layer_sizes: Sequence[int] = [256, 256],
   value_hidden_layer_sizes: Sequence[int] = [256, 256],
-  image_dim: Tuple[int, int] = [64, 64],
   activation: ActivationFn = linen.swish) -> PPONetworks:
   """Make Vision PPO networks with preprocessor."""
-  
-  # Temp hack since brax only passes the last value of shape for observation size
-  image_observation_shape = (1, image_dim[0], image_dim[1], channel_size)
 
   parametric_action_distribution = distribution.NormalTanhDistribution(
     event_size=action_size)
 
   policy_network = make_vision_policy_network(
-    'cnn',
-    image_observation_shape,
-    parametric_action_distribution.param_size,
+    network_type='cnn',
+    observation_size=observation_size,
+    output_size=parametric_action_distribution.param_size,
     preprocess_observations_fn=preprocess_observations_fn,
-    activation=linen.relu)
+    activation=activation,
+    hidden_layer_sizes=policy_hidden_layer_sizes)
 
   value_network = make_vision_value_network(
-    'cnn',
-    image_observation_shape,
+    network_type='cnn',
+    observation_size=observation_size,
     preprocess_observations_fn=preprocess_observations_fn,
-    activation=linen.relu)
+    activation=activation,
+    hidden_layer_sizes=value_hidden_layer_sizes)
 
   return PPONetworks(
     policy_network=policy_network,
