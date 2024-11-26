@@ -40,14 +40,16 @@ def make_vision_policy_network(
   hidden_layer_sizes: Sequence[int] = [256, 256],
   activation: ActivationFn = linen.swish,
   kernel_init: Initializer = jax.nn.initializers.lecun_uniform(),
-  layer_norm: bool = False) -> networks.FeedForwardNetwork:
+  layer_norm: bool = False,
+  normalise_channels: bool = False) -> networks.FeedForwardNetwork:
 
   if network_type == 'cnn':
     module = VisionMLP(
         layer_sizes=list(hidden_layer_sizes) + [output_size],
         activation=activation,
         kernel_init=kernel_init,
-        layer_norm=layer_norm)
+        layer_norm=layer_norm,
+        normalise_channels=normalise_channels)
   else:
     raise ValueError(f'Unsupported network_type: {network_type}')
 
@@ -73,13 +75,15 @@ def make_vision_value_network(
   preprocess_observations_fn: types.PreprocessObservationFn = types.identity_observation_preprocessor,
   hidden_layer_sizes: Sequence[int] = [256, 256],
   activation: ActivationFn = linen.swish,
-  kernel_init: Initializer = jax.nn.initializers.lecun_uniform()) -> networks.FeedForwardNetwork:
+  kernel_init: Initializer = jax.nn.initializers.lecun_uniform(),
+  normalise_channels: bool = False) -> networks.FeedForwardNetwork:
 
   if  network_type == 'cnn':
     value_module = VisionMLP(
         layer_sizes=list(hidden_layer_sizes) + [1],
         activation=activation,
-        kernel_init=kernel_init)
+        kernel_init=kernel_init,
+        normalise_channels=normalise_channels)
   else:
     raise ValueError(f'Unsupported network_type: {network_type}')
 
@@ -132,7 +136,8 @@ def make_vision_ppo_networks(
   .identity_observation_preprocessor,
   policy_hidden_layer_sizes: Sequence[int] = [256, 256],
   value_hidden_layer_sizes: Sequence[int] = [256, 256],
-  activation: ActivationFn = linen.swish) -> PPONetworks:
+  activation: ActivationFn = linen.swish,
+  normalise_channels: bool = False) -> PPONetworks:
   """Make Vision PPO networks with preprocessor."""
 
   parametric_action_distribution = distribution.NormalTanhDistribution(
@@ -144,14 +149,16 @@ def make_vision_ppo_networks(
     output_size=parametric_action_distribution.param_size,
     preprocess_observations_fn=preprocess_observations_fn,
     activation=activation,
-    hidden_layer_sizes=policy_hidden_layer_sizes)
+    hidden_layer_sizes=policy_hidden_layer_sizes,
+    normalise_channels=normalise_channels)
 
   value_network = make_vision_value_network(
     network_type='cnn',
     observation_size=observation_size,
     preprocess_observations_fn=preprocess_observations_fn,
     activation=activation,
-    hidden_layer_sizes=value_hidden_layer_sizes)
+    hidden_layer_sizes=value_hidden_layer_sizes,
+    normalise_channels=normalise_channels)
 
   return PPONetworks(
     policy_network=policy_network,
