@@ -1,17 +1,12 @@
-from brax.envs.base import Env, State, Wrapper
-from brax.training import types
-from brax.training.types import Params
+from typing import Callable, Optional, Tuple
+
 import jax.numpy as jp
 import jax
 
-from typing import Callable, Dict, Optional, Tuple
-
 from brax.base import System
 from brax.envs import training
-from typing import Callable, Dict, Optional, Tuple
+from brax.envs.base import Env, State, Wrapper
 
-from brax.base import System
-from brax.envs import training
 
 class VisionEpisodeWrapper(Wrapper):
   """Maintains episode step count and sets done at episode end.

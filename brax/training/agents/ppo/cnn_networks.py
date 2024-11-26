@@ -5,15 +5,11 @@ Network implementations
 from functools import partial
 from typing import Sequence, Tuple, Any, Callable
 
-from brax.training import distribution
-from brax.training import networks
-from brax.training import types
-from brax.training.types import PRNGKey
-
-import flax
 from flax import linen
 import jax
 import jax.numpy as jp
+
+from brax.training import networks
 
 ModuleDef = Any
 ActivationFn = Callable[[jp.ndarray], jp.ndarray]

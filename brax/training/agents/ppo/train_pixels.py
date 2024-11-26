@@ -19,8 +19,7 @@ See: https://arxiv.org/pdf/1707.06347.pdf
 
 import functools
 import time
-from typing import Callable, Optional, Tuple, Union, Mapping
-import warnings
+from typing import Callable, Optional, Tuple, Mapping
 
 from absl import logging
 from brax import base

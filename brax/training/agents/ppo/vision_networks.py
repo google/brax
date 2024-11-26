@@ -1,5 +1,5 @@
 """PPO vision networks."""
-from functools import partial
+
 from typing import Sequence, Tuple, Any, Callable, Mapping
 
 import jax
