@@ -232,10 +232,9 @@ def train(
                          (local_devices_to_use, -1) + key_envs.shape[1:])
   env_state = reset_fn(key_envs)
   ndarray_obs = isinstance(env_state.obs, jnp.ndarray) # Check whether observations are in dictionary form.
-  if not ndarray_obs and normalize_observations:
-    assert "state" in env.observation_size, "Observation normalisation only supported for states."
 
-  obs_shape = env_state.obs.shape[-1] if ndarray_obs else env.observation_size
+  obs_shape = env_state.obs.shape[-1] if ndarray_obs \
+    else jax.tree_util.tree_map(lambda x: x.shape[2:], env_state.obs) # Discard batch axes.
 
   normalize = lambda x, y: x
   if normalize_observations:
@@ -256,8 +255,7 @@ def train(
       reward_scaling=reward_scaling,
       gae_lambda=gae_lambda,
       clipping_epsilon=clipping_epsilon,
-      normalize_advantage=normalize_advantage,
-      dict_obs=not ndarray_obs)
+      normalize_advantage=normalize_advantage)
 
   gradient_update_fn = gradients.gradient_update_fn(
       loss_fn, optimizer, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True)

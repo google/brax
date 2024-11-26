@@ -79,7 +79,7 @@ class NetworkFactory(Protocol[NetworkType]):
 
   def __call__(
       self,
-      observation_size: Union[int, Mapping[str, Tuple[int, ...]]],
+      observation_size: Union[int, Mapping[str, Union[Tuple[int, ...], int]]],
       action_size: int,
       preprocess_observations_fn:
       PreprocessObservationFn = identity_observation_preprocessor
