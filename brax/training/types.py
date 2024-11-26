@@ -14,7 +14,7 @@
 
 """Brax training types."""
 
-from typing import Any, Mapping, NamedTuple, Tuple, TypeVar
+from typing import Any, Mapping, NamedTuple, Tuple, TypeVar, Union
 
 from brax.training.acme.types import NestedArray
 import jax.numpy as jnp
@@ -30,7 +30,7 @@ except ImportError:
 Params = Any
 PRNGKey = jnp.ndarray
 Metrics = Mapping[str, jnp.ndarray]
-Observation = jnp.ndarray
+Observation = Union[jnp.ndarray, Mapping[str, jnp.ndarray]]
 Action = jnp.ndarray
 Extra = Mapping[str, Any]
 PolicyParams = Any
@@ -79,7 +79,7 @@ class NetworkFactory(Protocol[NetworkType]):
 
   def __call__(
       self,
-      observation_size: int,
+      observation_size: Union[int, Mapping[str, Tuple[int, ...]]],
       action_size: int,
       preprocess_observations_fn:
       PreprocessObservationFn = identity_observation_preprocessor

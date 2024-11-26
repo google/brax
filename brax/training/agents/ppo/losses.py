@@ -104,7 +104,8 @@ def compute_ppo_loss(
     reward_scaling: float = 1.0,
     gae_lambda: float = 0.95,
     clipping_epsilon: float = 0.3,
-    normalize_advantage: bool = True) -> Tuple[jnp.ndarray, types.Metrics]:
+    normalize_advantage: bool = True,
+    dict_obs: bool = False) -> Tuple[jnp.ndarray, types.Metrics]:
   """Computes PPO loss.
 
   Args:
@@ -136,8 +137,13 @@ def compute_ppo_loss(
 
   baseline = value_apply(normalizer_params, params.value, data.observation)
 
+  if dict_obs:
+    terminal_obs = jax.tree_util.tree_map(lambda x: x[-1], data.next_observation)
+  else:
+    terminal_obs = data.next_observation[-1]
+
   bootstrap_value = value_apply(normalizer_params, params.value,
-                                data.next_observation[-1])
+                                terminal_obs)
 
   rewards = data.reward * reward_scaling
   truncation = data.extras['state_extras']['truncation']

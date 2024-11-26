@@ -16,7 +16,7 @@
 """A brax environment for training and inference."""
 
 import abc
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import Any, Dict, List, Optional, Sequence, Union, Mapping
 
 from brax import base
 from brax.generalized import pipeline as g_pipeline
@@ -34,7 +34,7 @@ class State(base.Base):
   """Environment state for training and inference."""
 
   pipeline_state: Optional[base.State]
-  obs: jax.Array
+  obs: Union[jax.Array, Mapping[str, jax.Array]]
   reward: jax.Array
   done: jax.Array
   metrics: Dict[str, jax.Array] = struct.field(default_factory=dict)
