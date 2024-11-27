@@ -31,6 +31,7 @@ def wrap(
     randomization_fn: Optional[
         Callable[[System], Tuple[System, System]]
     ] = None,
+    scan: bool = False
 ) -> Wrapper:
   """Common wrapper pattern for all training agents.
 
@@ -46,7 +47,7 @@ def wrap(
     environment did not already have batch dimensions, it is additional Vmap
     wrapped.
   """
-  env = EpisodeWrapper(env, episode_length, action_repeat)
+  env = EpisodeWrapper(env, episode_length, action_repeat, scan)
   if randomization_fn is None:
     env = VmapWrapper(env)
   else:
@@ -74,10 +75,13 @@ class VmapWrapper(Wrapper):
 class EpisodeWrapper(Wrapper):
   """Maintains episode step count and sets done at episode end."""
 
-  def __init__(self, env: Env, episode_length: int, action_repeat: int):
+  def __init__(
+      self, env: Env, episode_length: int, 
+      action_repeat: int, scan: bool = False):
     super().__init__(env)
     self.episode_length = episode_length
     self.action_repeat = action_repeat
+    self._scan = scan
 
   def reset(self, rng: jax.Array) -> State:
     state = self.env.reset(rng)
@@ -90,8 +94,12 @@ class EpisodeWrapper(Wrapper):
       nstate = self.env.step(state, action)
       return nstate, nstate.reward
 
-    state, rewards = jax.lax.scan(f, state, (), self.action_repeat)
-    state = state.replace(reward=jp.sum(rewards, axis=0))
+    if self._scan:
+      state, rewards = jax.lax.scan(f, state, (), self.action_repeat)
+      state = state.replace(reward=jp.sum(rewards, axis=0))
+    else:
+      state = self.env.step(state, action)
+
     steps = state.info['steps'] + self.action_repeat
     one = jp.ones_like(state.done)
     zero = jp.zeros_like(state.done)
