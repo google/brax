@@ -31,6 +31,7 @@ Params = Any
 PRNGKey = jnp.ndarray
 Metrics = Mapping[str, jnp.ndarray]
 Observation = Union[jnp.ndarray, Mapping[str, jnp.ndarray]]
+ObservationSize = Union[Union[Tuple, int], Mapping[str, Union[Tuple[int, ...], int]]]
 Action = jnp.ndarray
 Extra = Mapping[str, Any]
 PolicyParams = Any
@@ -79,7 +80,7 @@ class NetworkFactory(Protocol[NetworkType]):
 
   def __call__(
       self,
-      observation_size: Union[int, Mapping[str, Union[Tuple[int, ...], int]]],
+      observation_size: ObservationSize,
       action_size: int,
       preprocess_observations_fn:
       PreprocessObservationFn = identity_observation_preprocessor

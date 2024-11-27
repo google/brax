@@ -233,8 +233,8 @@ def train(
   env_state = reset_fn(key_envs)
   ndarray_obs = isinstance(env_state.obs, jnp.ndarray) # Check whether observations are in dictionary form.
 
-  obs_shape = env_state.obs.shape[-1] if ndarray_obs \
-    else jax.tree_util.tree_map(lambda x: x.shape[2:], env_state.obs) # Discard batch axes.
+  # Discard the batch axes over devices and envs.
+  obs_shape = jax.tree_util.tree_map(lambda x: x.shape[2:], env_state.obs)
 
   normalize = lambda x, y: x
   if normalize_observations:
@@ -326,13 +326,10 @@ def train(
     assert data.discount.shape[1:] == (unroll_length,)
 
     # Update normalization params and normalize observations.
-    if normalize_observations:
-      normalizer_params = running_statistics.update(
-          training_state.normalizer_params,
-          data.observation if ndarray_obs else data.observation['state'],
-          pmap_axis_name=_PMAP_AXIS_NAME)
-    else:
-      normalizer_params = training_state.normalizer_params
+    normalizer_params = running_statistics.update(
+        training_state.normalizer_params,
+        data.observation if ndarray_obs else data.observation['state'],
+        pmap_axis_name=_PMAP_AXIS_NAME)
 
     (optimizer_state, params, _), metrics = jax.lax.scan(
         functools.partial(
@@ -387,12 +384,8 @@ def train(
       policy=ppo_network.policy_network.init(key_policy),
       value=ppo_network.value_network.init(key_value),
   )
-  
-  if normalize_observations:
-    obs_shape = env_state.obs.shape if ndarray_obs else env_state.obs['state'].shape
-  else:
-    obs_shape = (1,) # Dummy
 
+  obs_shape = env_state.obs.shape if ndarray_obs else env_state.obs['state'].shape
   training_state = TrainingState(  # pytype: disable=wrong-arg-types  # jax-ndarray
       optimizer_state=optimizer.init(init_params),  # pytype: disable=wrong-arg-types  # numpy-scalars
       params=init_params,
