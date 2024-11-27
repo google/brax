@@ -28,7 +28,7 @@ class Fast(PipelineEnv):
     self._dt = 0.02
     self._reset_count = 0
     self._step_count = 0
-    self._dict_obs = kwargs.get('dict_obs', False)
+    self._use_dict_obs = kwargs.get('use_dict_obs', False)
 
   def reset(self, rng: jax.Array) -> State:
     self._reset_count += 1
@@ -40,7 +40,7 @@ class Fast(PipelineEnv):
         contact=None
     )
     obs = jp.zeros(2)
-    obs = {'state': obs} if self._dict_obs else obs
+    obs = {'state': obs} if self._use_dict_obs else obs
     reward, done = jp.array(0.0), jp.array(0.0)
     return State(pipeline_state, obs, reward, done)
 
@@ -55,7 +55,7 @@ class Fast(PipelineEnv):
         xd=state.pipeline_state.xd.replace(vel=vel),
     )
     obs = jp.array([pos[0], vel[0]])
-    obs = {'state': obs} if self._dict_obs else obs
+    obs = {'state': obs} if self._use_dict_obs else obs
     reward = pos[0]
 
     return state.replace(pipeline_state=qp, obs=obs, reward=reward)

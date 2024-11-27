@@ -28,9 +28,9 @@ class PPOTest(parameterized.TestCase):
   """Tests for PPO module."""
 
   @parameterized.parameters(True, False)
-  def testTrain(self, dict_obs):
+  def testTrain(self, use_dict_obs):
     """Test PPO with a simple env."""
-    fast = envs.get_environment('fast', dict_obs=dict_obs)
+    fast = envs.get_environment('fast', use_dict_obs=use_dict_obs)
     _, _, metrics = ppo.train(
         fast,
         num_timesteps=2**15,

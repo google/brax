@@ -16,7 +16,7 @@
 """A brax environment for training and inference."""
 
 import abc
-from typing import Any, Dict, List, Optional, Sequence, Union, Mapping
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Union
 
 from brax import base
 from brax.generalized import pipeline as g_pipeline
@@ -24,6 +24,7 @@ from brax.io import image
 from brax.mjx import pipeline as m_pipeline
 from brax.positional import pipeline as p_pipeline
 from brax.spring import pipeline as s_pipeline
+from brax.training.types import ObservationSize
 from flax import struct
 import jax
 import numpy as np
@@ -54,7 +55,7 @@ class Env(abc.ABC):
 
   @property
   @abc.abstractmethod
-  def observation_size(self) -> int:
+  def observation_size(self) -> ObservationSize:
     """The size of the observation vector returned in step and reset."""
 
   @property
@@ -139,10 +140,14 @@ class PipelineEnv(Env):
     return self.sys.opt.timestep * self._n_frames  # pytype: disable=attribute-error
 
   @property
-  def observation_size(self) -> int:
+  def observation_size(self) -> ObservationSize:
     rng = jax.random.PRNGKey(0)
     reset_state = self.unwrapped.reset(rng)
-    return reset_state.obs.shape[-1]
+    obs = reset_state.obs
+    if isinstance(obs, jax.Array) and len(obs.shape) == 1:
+      return obs.shape[-1]
+    else:
+      return jax.tree_util.tree_map(lambda x: x.shape, obs)
 
   @property
   def action_size(self) -> int:
@@ -176,7 +181,7 @@ class Wrapper(Env):
     return self.env.step(state, action)
 
   @property
-  def observation_size(self) -> int:
+  def observation_size(self) -> ObservationSize:
     return self.env.observation_size
 
   @property
