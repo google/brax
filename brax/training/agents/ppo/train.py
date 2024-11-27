@@ -243,14 +243,13 @@ def train(
       preprocess_observations_fn=normalize)
   make_policy = ppo_networks.make_inference_fn(ppo_network)
 
+  optimizer = optax.adam(learning_rate=learning_rate)
   if max_grad_norm is not None:
-    # TODO(btaba): Move gradient clipping to `training/gradients.py`.
+    # TODO: Move gradient clipping to `training/gradients.py`.
     optimizer = optax.chain(
         optax.clip_by_global_norm(max_grad_norm),
         optax.adam(learning_rate=learning_rate)
     )
-  else:
-    optimizer = optax.adam(learning_rate=learning_rate)
 
   loss_fn = functools.partial(
       ppo_losses.compute_ppo_loss,
