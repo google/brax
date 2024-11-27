@@ -103,8 +103,8 @@ def make_policy_network(
       layer_norm=layer_norm)
 
   def apply(processor_params, policy_params, obs):
-    obs = obs if isinstance(obs, jnp.ndarray) \
-      else obs['state'] # state-only in the case of dict obs.
+    obs = (obs if isinstance(obs, jnp.ndarray)
+      else obs['state']) # state-only in the case of dict obs.
     obs = preprocess_observations_fn(obs, processor_params)
     return policy_module.apply(policy_params, obs)
 
@@ -127,8 +127,8 @@ def make_value_network(
       kernel_init=jax.nn.initializers.lecun_uniform())
 
   def apply(processor_params, value_params, obs):
-    obs = obs if isinstance(obs, jnp.ndarray) \
-      else obs['state'] # state-only in the case of dict obs.
+    obs = (obs if isinstance(obs, jnp.ndarray)
+      else obs['state']) # state-only in the case of dict obs.
     obs = preprocess_observations_fn(obs, processor_params)
     return jnp.squeeze(value_module.apply(value_params, obs), axis=-1)
 

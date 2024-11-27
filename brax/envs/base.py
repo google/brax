@@ -16,7 +16,7 @@
 """A brax environment for training and inference."""
 
 import abc
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Union
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 from brax import base
 from brax.generalized import pipeline as g_pipeline
@@ -24,11 +24,11 @@ from brax.io import image
 from brax.mjx import pipeline as m_pipeline
 from brax.positional import pipeline as p_pipeline
 from brax.spring import pipeline as s_pipeline
-from brax.training.types import ObservationSize
 from flax import struct
 import jax
 import numpy as np
 
+ObservationSize = Union[Union[Tuple, int], Mapping[str, Union[Tuple[int, ...], int]]]
 
 @struct.dataclass
 class State(base.Base):
@@ -144,10 +144,10 @@ class PipelineEnv(Env):
     rng = jax.random.PRNGKey(0)
     reset_state = self.unwrapped.reset(rng)
     obs = reset_state.obs
+    # Compatibility with existing training agents for vector ndarray obs
     if isinstance(obs, jax.Array) and len(obs.shape) == 1:
       return obs.shape[-1]
-    else:
-      return jax.tree_util.tree_map(lambda x: x.shape, obs)
+    return jax.tree_util.tree_map(lambda x: x.shape, obs)
 
   @property
   def action_size(self) -> int:
