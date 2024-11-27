@@ -27,10 +27,10 @@ import jax
 class PPOTest(parameterized.TestCase):
   """Tests for PPO module."""
 
-
-  def testTrain(self):
+  @parameterized.parameters(True, False)
+  def testTrain(self, use_dict_obs):
     """Test PPO with a simple env."""
-    fast = envs.get_environment('fast')
+    fast = envs.get_environment('fast', use_dict_obs=use_dict_obs)
     _, _, metrics = ppo.train(
         fast,
         num_timesteps=2**15,

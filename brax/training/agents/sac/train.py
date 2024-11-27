@@ -191,6 +191,9 @@ def train(
     )
 
   obs_size = env.observation_size
+  if isinstance(obs_size, Dict):
+    raise NotImplementedError("Dictionary observations not implemented in SAC")
+
   action_size = env.action_size
 
   normalize_fn = lambda x, y: x

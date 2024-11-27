@@ -15,7 +15,7 @@
 """Network definitions."""
 
 import dataclasses
-from typing import Any, Callable, Sequence, Tuple
+from typing import Any, Callable, Mapping, Sequence, Tuple
 import warnings
 
 from brax.training import types
@@ -82,10 +82,13 @@ class SNMLP(linen.Module):
         hidden = self.activation(hidden)
     return hidden
 
+def get_obs_state_size(obs_size: types.ObservationSize) -> int:
+    obs_size = obs_size['state'] if isinstance(obs_size, Mapping) else obs_size
+    return jax.tree_util.tree_flatten(obs_size)[0][-1] # Size can be tuple or int.
 
 def make_policy_network(
     param_size: int,
-    obs_size: int,
+    obs_size: types.ObservationSize,
     preprocess_observations_fn: types.PreprocessObservationFn = types
     .identity_observation_preprocessor,
     hidden_layer_sizes: Sequence[int] = (256, 256),
@@ -100,30 +103,36 @@ def make_policy_network(
       layer_norm=layer_norm)
 
   def apply(processor_params, policy_params, obs):
+    obs = (obs if isinstance(obs, jnp.ndarray)
+      else obs['state']) # state-only in the case of dict obs.
     obs = preprocess_observations_fn(obs, processor_params)
     return policy_module.apply(policy_params, obs)
 
+  obs_size = get_obs_state_size(obs_size)
   dummy_obs = jnp.zeros((1, obs_size))
   return FeedForwardNetwork(
       init=lambda key: policy_module.init(key, dummy_obs), apply=apply)
 
 
 def make_value_network(
-    obs_size: int,
+    obs_size: types.ObservationSize,
     preprocess_observations_fn: types.PreprocessObservationFn = types
     .identity_observation_preprocessor,
     hidden_layer_sizes: Sequence[int] = (256, 256),
     activation: ActivationFn = linen.relu) -> FeedForwardNetwork:
-  """Creates a policy network."""
+  """Creates a value network."""
   value_module = MLP(
       layer_sizes=list(hidden_layer_sizes) + [1],
       activation=activation,
       kernel_init=jax.nn.initializers.lecun_uniform())
 
-  def apply(processor_params, policy_params, obs):
+  def apply(processor_params, value_params, obs):
+    obs = (obs if isinstance(obs, jnp.ndarray)
+      else obs['state']) # state-only in the case of dict obs.
     obs = preprocess_observations_fn(obs, processor_params)
-    return jnp.squeeze(value_module.apply(policy_params, obs), axis=-1)
+    return jnp.squeeze(value_module.apply(value_params, obs), axis=-1)
 
+  obs_size = get_obs_state_size(obs_size)
   dummy_obs = jnp.zeros((1, obs_size))
   return FeedForwardNetwork(
       init=lambda key: value_module.init(key, dummy_obs), apply=apply)

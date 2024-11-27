@@ -16,7 +16,7 @@
 """A brax environment for training and inference."""
 
 import abc
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 from brax import base
 from brax.generalized import pipeline as g_pipeline
@@ -28,13 +28,14 @@ from flax import struct
 import jax
 import numpy as np
 
+ObservationSize = Union[int, Mapping[str, Union[Tuple[int, ...], int]]]
 
 @struct.dataclass
 class State(base.Base):
   """Environment state for training and inference."""
 
   pipeline_state: Optional[base.State]
-  obs: jax.Array
+  obs: Union[jax.Array, Mapping[str, jax.Array]]
   reward: jax.Array
   done: jax.Array
   metrics: Dict[str, jax.Array] = struct.field(default_factory=dict)
@@ -54,7 +55,7 @@ class Env(abc.ABC):
 
   @property
   @abc.abstractmethod
-  def observation_size(self) -> int:
+  def observation_size(self) -> ObservationSize:
     """The size of the observation vector returned in step and reset."""
 
   @property
@@ -139,10 +140,13 @@ class PipelineEnv(Env):
     return self.sys.opt.timestep * self._n_frames  # pytype: disable=attribute-error
 
   @property
-  def observation_size(self) -> int:
+  def observation_size(self) -> ObservationSize:
     rng = jax.random.PRNGKey(0)
     reset_state = self.unwrapped.reset(rng)
-    return reset_state.obs.shape[-1]
+    obs = reset_state.obs
+    if isinstance(obs, jax.Array):
+      return obs.shape[-1]
+    return jax.tree_util.tree_map(lambda x: x.shape, obs)
 
   @property
   def action_size(self) -> int:
@@ -176,7 +180,7 @@ class Wrapper(Env):
     return self.env.step(state, action)
 
   @property
-  def observation_size(self) -> int:
+  def observation_size(self) -> ObservationSize:
     return self.env.observation_size
 
   @property

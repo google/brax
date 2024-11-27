@@ -131,11 +131,15 @@ def train(
   reset_fn = jax.jit(jax.vmap(env.reset))
   step_fn = jax.jit(jax.vmap(env.step))
 
+  obs_size = env.observation_size
+  if isinstance(obs_size, Dict):
+    raise NotImplementedError("Dictionary observations not implemented in APG")
+
   normalize = lambda x, y: x
   if normalize_observations:
     normalize = running_statistics.normalize
   apg_network = network_factory(
-      env.observation_size,
+      obs_size,
       env.action_size,
       preprocess_observations_fn=normalize)
   make_policy = apg_networks.make_inference_fn(apg_network)

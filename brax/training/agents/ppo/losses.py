@@ -135,9 +135,9 @@ def compute_ppo_loss(
                                data.observation)
 
   baseline = value_apply(normalizer_params, params.value, data.observation)
-
+  terminal_obs = jax.tree_util.tree_map(lambda x: x[-1], data.next_observation)
   bootstrap_value = value_apply(normalizer_params, params.value,
-                                data.next_observation[-1])
+                                terminal_obs)
 
   rewards = data.reward * reward_scaling
   truncation = data.extras['state_extras']['truncation']

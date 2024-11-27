@@ -146,7 +146,9 @@ def train(
     )
 
   obs_size = env.observation_size
-
+  if isinstance(obs_size, Dict):
+    raise NotImplementedError("Dictionary observations not implemented in ES")
+  
   normalize_fn = lambda x, y: x
   if normalize_observations:
     normalize_fn = running_statistics.normalize
