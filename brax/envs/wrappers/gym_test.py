@@ -55,10 +55,10 @@ class GymTest(absltest.TestCase):
   def test_vector_render(self):
     """Tests rendering in the VectorGymWrapper."""
     base_env = envs.create('pusher')
-    env = gym.VectorGymWrapper(training.VmapWrapper(base_env, batch_size=256))
+    env = gym.VectorGymWrapper(training.VmapWrapper(base_env, batch_size=16))
     env.reset()
     img = env.render(mode='rgb_array', width=250, height=236)
-    self.assertEqual(img.shape, (256, 236, 250, 3))
+    self.assertEqual(img.shape, (16, 236, 250, 3))
 
 if __name__ == '__main__':
   absltest.main()
