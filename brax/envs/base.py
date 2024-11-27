@@ -28,7 +28,7 @@ from flax import struct
 import jax
 import numpy as np
 
-ObservationSize = Union[Union[Tuple, int], Mapping[str, Union[Tuple[int, ...], int]]]
+ObservationSize = Union[int, Mapping[str, Union[Tuple[int, ...], int]]]
 
 @struct.dataclass
 class State(base.Base):
@@ -144,8 +144,7 @@ class PipelineEnv(Env):
     rng = jax.random.PRNGKey(0)
     reset_state = self.unwrapped.reset(rng)
     obs = reset_state.obs
-    # Compatibility with existing training agents for vector ndarray obs
-    if isinstance(obs, jax.Array) and len(obs.shape) == 1:
+    if isinstance(obs, jax.Array):
       return obs.shape[-1]
     return jax.tree_util.tree_map(lambda x: x.shape, obs)
 
