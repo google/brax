@@ -6,6 +6,7 @@ import jax
 import jax.numpy as jp
 import flax
 from flax import linen
+from flax.core import FrozenDict
 
 from brax.training import distribution
 from brax.training import networks
@@ -24,12 +25,6 @@ class PPONetworks:
   policy_network: networks.FeedForwardNetwork
   value_network: networks.FeedForwardNetwork
   parametric_action_distribution: distribution.ParametricDistribution
-
-
-def pure_pop(key: str, x: dict) -> Tuple[Any, dict]:
-    _x = dict(x)
-    v = _x.pop(key)
-    return v, _x
 
 
 def make_vision_policy_network(
@@ -54,13 +49,11 @@ def make_vision_policy_network(
     raise ValueError(f'Unsupported network_type: {network_type}')
 
   def apply(processor_params, policy_params, obs):
-    state_obs, _obs = pure_pop('state', obs)
-    appl = {
-        'state': preprocess_observations_fn(state_obs, processor_params),
-        **_obs
-    }
-
-    return module.apply(policy_params, appl)
+    # Mutable dicts easily lead to incorrect gradients.
+    assert isinstance(obs, FrozenDict)
+    if 'state' in obs:
+      obs = obs.copy({'state': preprocess_observations_fn(obs['state'], processor_params)})
+    return module.apply(policy_params, obs)
 
   dummy_obs = {key: jp.zeros((1,) + shape ) 
                for key, shape in observation_size.items()}
@@ -88,12 +81,10 @@ def make_vision_value_network(
     raise ValueError(f'Unsupported network_type: {network_type}')
 
   def apply(processor_params, policy_params, obs):
-    state_obs, _obs = pure_pop('state', obs)
-    appl = {
-        'state': preprocess_observations_fn(state_obs, processor_params),
-        **_obs
-    }
-    return jp.squeeze(value_module.apply(policy_params, appl), axis=-1)
+    assert isinstance(obs, FrozenDict)
+    if 'state' in obs:
+      obs = obs.copy({'state': preprocess_observations_fn(obs['state'], processor_params)})
+    return jp.squeeze(value_module.apply(policy_params, obs), axis=-1)
 
   dummy_obs = {key: jp.zeros((1,) + shape ) 
                for key, shape in observation_size.items()}
