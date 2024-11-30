@@ -14,7 +14,7 @@
 
 """PPO networks."""
 
-from typing import Optional, Sequence, Tuple
+from typing import Sequence, Tuple
 
 from brax.training import distribution
 from brax.training import networks
