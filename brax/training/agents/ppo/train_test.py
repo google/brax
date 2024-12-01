@@ -15,6 +15,7 @@
 """PPO tests."""
 import pickle
 
+import functools
 from absl.testing import absltest
 from absl.testing import parameterized
 from brax import envs
@@ -22,6 +23,7 @@ from brax.training.acme import running_statistics
 from brax.training.agents.ppo import networks as ppo_networks
 from brax.training.agents.ppo import train as ppo
 import jax
+import jax.numpy as jp
 
 
 class PPOTest(parameterized.TestCase):
@@ -129,6 +131,53 @@ class PPOTest(parameterized.TestCase):
         reward_scaling=10,
         normalize_advantage=False,
         randomization_fn=rand_fn,
+    )
+
+  def testTrainAsymmetricActorCritic(self):
+    """Test PPO with asymmetric actor critic."""
+
+    from brax.envs.fast import Fast
+
+    def _add_privileged_state(state, observation_size):
+      return state.tree_replace({
+        'obs': {
+          'state': state.obs['state'],
+          'privileged_state': jp.zeros(2 * observation_size),
+        }
+      })
+
+    class FastAsymmetric(Fast):
+      def reset(self, rng):
+        reset_state = super().reset(rng)
+        return _add_privileged_state(reset_state, self.observation_size)
+
+      def step(self, state, action):
+        step_state = super().step(state, action)
+        return _add_privileged_state(step_state, self.observation_size)
+
+    network_factory = functools.partial(
+      ppo_networks.make_ppo_networks,
+      policy_state_key='state',
+      value_state_key='privileged_state'
+    )
+
+    _, _, _ = ppo.train(
+        FastAsymmetric(use_dict_obs=True),
+        num_timesteps=2**15,
+        episode_length=1000,
+        num_envs=64,
+        learning_rate=3e-4,
+        entropy_cost=1e-2,
+        discounting=0.95,
+        unroll_length=5,
+        batch_size=64,
+        num_minibatches=8,
+        num_updates_per_batch=4,
+        normalize_observations=True,
+        seed=2,
+        reward_scaling=10,
+        normalize_advantage=False,
+        network_factory=network_factory,
     )
 
 
