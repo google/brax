@@ -48,7 +48,7 @@ class GymTest(absltest.TestCase):
     """Tests rendering in the GymWrapper."""
     base_env = envs.create('pusher')
     env = gym.GymWrapper(base_env)
-    env.reset()
+    _ = env.reset()
     img = env.render(mode='rgb_array', width=250, height=236)
     self.assertEqual(img.shape, (236, 250, 3))
   
@@ -56,7 +56,7 @@ class GymTest(absltest.TestCase):
     """Tests rendering in the VectorGymWrapper."""
     base_env = envs.create('pusher')
     env = gym.VectorGymWrapper(training.VmapWrapper(base_env, batch_size=2))
-    env.reset()
+    _ = env.reset()
     img = env.render(mode='rgb_array', width=128, height=128)
     self.assertEqual(img.shape, (2, 128, 128, 3))
 
