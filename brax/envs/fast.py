@@ -34,7 +34,10 @@ class Fast(PipelineEnv):
       raise ValueError('asymmetric_obs requires use_dict_obs=True')
 
   def _get_obs(self):
-    obs = {'state': jp.zeros(2)} if self._use_dict_obs else jp.zeros(2)
+    if not self._use_dict_obs:
+      return jp.zeros(2)
+
+    obs = {'state': jp.zeros(2)}
     if self._asymmetric_obs:
       obs['privileged_state'] = jp.zeros(4)
     return obs
@@ -78,12 +81,13 @@ class Fast(PipelineEnv):
 
   @property
   def observation_size(self):
-    if self._use_dict_obs:
-      size = {'state': 2}
-      if self._asymmetric_obs:
-        size['privileged_state'] = 4
-      return size
-    return 2
+    if not self._use_dict_obs:
+      return 2
+
+    obs = {'state': 2}
+    if self._asymmetric_obs:
+      obs['privileged_state'] = 4
+    return obs
 
   @property
   def action_size(self):
