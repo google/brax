@@ -33,15 +33,6 @@ class Fast(PipelineEnv):
     if self._asymmetric_obs and not self._use_dict_obs:
       raise ValueError('asymmetric_obs requires use_dict_obs=True')
 
-  def _get_obs(self):
-    if not self._use_dict_obs:
-      return jp.zeros(2)
-
-    obs = {'state': jp.zeros(2)}
-    if self._asymmetric_obs:
-      obs['privileged_state'] = jp.zeros(4)
-    return obs
-
   def reset(self, rng: jax.Array) -> State:
     del rng  # Unused.
     self._reset_count += 1
@@ -52,7 +43,10 @@ class Fast(PipelineEnv):
         xd=base.Motion.create(vel=jp.zeros(3)),
         contact=None
     )
-    obs = self._get_obs()
+    obs = jp.zeros(2)
+    obs = {'state': obs} if self._use_dict_obs else obs
+    if self._asymmetric_obs:
+      obs['privileged_state'] = jp.zeros(4)  # Dummy privileged state.
     reward, done = jp.array(0.0), jp.array(0.0)
     return State(pipeline_state, obs, reward, done)
 
@@ -61,14 +55,15 @@ class Fast(PipelineEnv):
     self._step_count += 1
     vel = state.pipeline_state.xd.vel + (action > 0) * self._dt
     pos = state.pipeline_state.x.pos + vel * self._dt
-
     qp = state.pipeline_state.replace(
         x=state.pipeline_state.x.replace(pos=pos),
         xd=state.pipeline_state.xd.replace(vel=vel),
     )
-    obs = self._get_obs()
+    obs = jp.array([pos[0], vel[0]])
+    obs = {'state': obs} if self._use_dict_obs else obs
+    if self._asymmetric_obs:
+      obs['privileged_state'] = jp.zeros(4)  # Dummy privileged state.
     reward = pos[0]
-
     return state.replace(pipeline_state=qp, obs=obs, reward=reward)
 
   @property
