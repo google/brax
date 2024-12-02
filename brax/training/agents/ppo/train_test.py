@@ -135,12 +135,14 @@ class PPOTest(parameterized.TestCase):
 
   def testTrainAsymmetricActorCritic(self):
     """Test PPO with asymmetric actor critic."""
+    key = jax.random.PRNGKey(0)
 
     env = envs.get_environment('fast', asymmetric_obs=True, use_dict_obs=True)
 
-    # Check that the networks use the provided observation keys.
     network_factory = functools.partial(
       ppo_networks.make_ppo_networks,
+      policy_hidden_layer_sizes=(32,),
+      value_hidden_layer_sizes=(32,),
       policy_obs_key='state',
       value_obs_key='privileged_state'
     )
@@ -149,25 +151,34 @@ class PPOTest(parameterized.TestCase):
       action_size=env.action_size,
       preprocess_observations_fn=lambda x, y: x,
     )
-    key = jax.random.PRNGKey(0)
+
     key, reset_key = jax.random.split(key)
     state = env.reset(reset_key)
+
     key, key_policy = jax.random.split(key)
     policy_params = ppo_network.policy_network.init(key_policy)
+    self.assertEqual(
+      policy_params['params']['hidden_0']['kernel'].shape,
+      (env.observation_size['state'], 32),
+    )
     ppo_network.policy_network.apply(
       processor_params=None,
       policy_params=policy_params,
       obs=state.obs,
     )
+
     key, key_value = jax.random.split(key)
     value_params = ppo_network.value_network.init(key_value)
+    self.assertEqual(
+      value_params['params']['hidden_0']['kernel'].shape,
+      (env.observation_size['privileged_state'], 32),
+    )
     ppo_network.value_network.apply(
       processor_params=None,
       value_params=value_params,
       obs=state.obs,
     )
 
-    # Check that the training loop works.
     _, _, _ = ppo.train(
         env,
         num_timesteps=2**15,
