@@ -12,7 +12,7 @@ from brax.training import distribution
 from brax.training import networks
 from brax.training import types
 from brax.training.types import PRNGKey
-from brax.training.agents.ppo.cnn_networks import VisionMLP
+from brax.training.agents.ppo.networks_cnn import VisionMLP
 
 
 ModuleDef = Any
