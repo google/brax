@@ -76,7 +76,7 @@ class EpisodeWrapper(Wrapper):
   """Maintains episode step count and sets done at episode end."""
 
   def __init__(
-      self, env: Env, episode_length: int, 
+      self, env: Env, episode_length: int,
       action_repeat: int, scan: bool = False):
     super().__init__(env)
     self.episode_length = episode_length

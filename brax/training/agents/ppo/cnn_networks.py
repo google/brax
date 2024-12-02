@@ -3,7 +3,7 @@ Network implementations
 """
 
 from functools import partial
-from typing import Sequence, Tuple, Any, Callable
+from typing import Any, Callable, Sequence, Tuple
 
 from flax import linen
 import jax

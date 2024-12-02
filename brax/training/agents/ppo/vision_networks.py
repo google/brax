@@ -1,6 +1,6 @@
 """PPO vision networks."""
 
-from typing import Sequence, Tuple, Any, Callable, Mapping
+from typing import Any, Callable, Mapping, Sequence, Tuple
 
 import jax
 import jax.numpy as jp
@@ -27,8 +27,17 @@ class PPONetworks:
   parametric_action_distribution: distribution.ParametricDistribution
 
 
+def remove_pixels(obs: FrozenDict) -> FrozenDict:
+  """Remove pixel observations from the observation dict.
+  FrozenDicts are used to avoid incorrect gradients."""
+  pixel_keys = [k for k in obs.keys() if k.startswith('pixels/')]
+  state_obs = obs
+  for k in pixel_keys:
+    state_obs, _ = state_obs.pop(k)
+  return state_obs
+
+
 def make_vision_policy_network(
-  network_type: str,
   observation_size: Mapping[str, Tuple[int, ...]],
   output_size: int,
   preprocess_observations_fn: types.PreprocessObservationFn = types.identity_observation_preprocessor,
@@ -36,23 +45,22 @@ def make_vision_policy_network(
   activation: ActivationFn = linen.swish,
   kernel_init: Initializer = jax.nn.initializers.lecun_uniform(),
   layer_norm: bool = False,
+  state_obs_key: str = '',
   normalise_channels: bool = False) -> networks.FeedForwardNetwork:
 
-  if network_type == 'cnn':
-    module = VisionMLP(
-        layer_sizes=list(hidden_layer_sizes) + [output_size],
-        activation=activation,
-        kernel_init=kernel_init,
-        layer_norm=layer_norm,
-        normalise_channels=normalise_channels)
-  else:
-    raise ValueError(f'Unsupported network_type: {network_type}')
+  module = VisionMLP(
+      layer_sizes=list(hidden_layer_sizes) + [output_size],
+      activation=activation,
+      kernel_init=kernel_init,
+      layer_norm=layer_norm,
+      normalise_channels=normalise_channels)
 
   def apply(processor_params, policy_params, obs):
-    # Mutable dicts easily lead to incorrect gradients.
-    assert isinstance(obs, FrozenDict)
-    if 'state' in obs:
-      obs = obs.copy({'state': preprocess_observations_fn(obs['state'], processor_params)})
+    if state_obs_key:
+      state_obs = preprocess_observations_fn(
+        remove_pixels(obs), processor_params
+      )
+      obs = obs.copy({state_obs_key: state_obs[state_obs_key]})
     return module.apply(policy_params, obs)
 
   dummy_obs = {key: jp.zeros((1,) + shape ) 
@@ -63,60 +71,33 @@ def make_vision_policy_network(
 
 
 def make_vision_value_network(
-  network_type: str,
   observation_size: Mapping[str, Tuple[int, ...]],
   preprocess_observations_fn: types.PreprocessObservationFn = types.identity_observation_preprocessor,
   hidden_layer_sizes: Sequence[int] = [256, 256],
   activation: ActivationFn = linen.swish,
   kernel_init: Initializer = jax.nn.initializers.lecun_uniform(),
+  state_obs_key: str = '',
   normalise_channels: bool = False) -> networks.FeedForwardNetwork:
 
-  if  network_type == 'cnn':
-    value_module = VisionMLP(
-        layer_sizes=list(hidden_layer_sizes) + [1],
-        activation=activation,
-        kernel_init=kernel_init,
-        normalise_channels=normalise_channels)
-  else:
-    raise ValueError(f'Unsupported network_type: {network_type}')
+  value_module = VisionMLP(
+      layer_sizes=list(hidden_layer_sizes) + [1],
+      activation=activation,
+      kernel_init=kernel_init,
+      normalise_channels=normalise_channels)
 
   def apply(processor_params, policy_params, obs):
-    assert isinstance(obs, FrozenDict)
-    if 'state' in obs:
-      obs = obs.copy({'state': preprocess_observations_fn(obs['state'], processor_params)})
+    if state_obs_key:
+      # Apply normaliser to state-based params.
+      state_obs = preprocess_observations_fn(
+        remove_pixels(obs), processor_params
+      )
+      obs = obs.copy({state_obs_key: state_obs[state_obs_key]})
     return jp.squeeze(value_module.apply(policy_params, obs), axis=-1)
 
   dummy_obs = {key: jp.zeros((1,) + shape ) 
                for key, shape in observation_size.items()}
   return networks.FeedForwardNetwork(
       init=lambda key: value_module.init(key, dummy_obs), apply=apply)
-
-
-def make_inference_fn(ppo_networks: PPONetworks):
-  """Creates params and inference function for the PPO agent."""
-
-  def make_policy(params: types.PolicyParams,
-                  deterministic: bool = False) -> types.Policy:
-    policy_network = ppo_networks.policy_network
-    parametric_action_distribution = ppo_networks.parametric_action_distribution
-
-    def policy(observations: types.Observation,
-               key_sample: PRNGKey) -> Tuple[types.Action, types.Extra]:
-      logits = policy_network.apply(*params, observations)
-      if deterministic:
-        return ppo_networks.parametric_action_distribution.mode(logits), {}
-      raw_actions = parametric_action_distribution.sample_no_postprocessing(
-          logits, key_sample)
-      log_prob = parametric_action_distribution.log_prob(logits, raw_actions)
-      postprocessed_actions = parametric_action_distribution.postprocess(
-          raw_actions)
-      return postprocessed_actions, {
-          'log_prob': log_prob,
-          'raw_action': raw_actions
-      }
-    return policy
-
-  return make_policy
 
 
 def make_vision_ppo_networks(
@@ -135,7 +116,6 @@ def make_vision_ppo_networks(
     event_size=action_size)
 
   policy_network = make_vision_policy_network(
-    network_type='cnn',
     observation_size=observation_size,
     output_size=parametric_action_distribution.param_size,
     preprocess_observations_fn=preprocess_observations_fn,
@@ -144,7 +124,6 @@ def make_vision_ppo_networks(
     normalise_channels=normalise_channels)
 
   value_network = make_vision_value_network(
-    network_type='cnn',
     observation_size=observation_size,
     preprocess_observations_fn=preprocess_observations_fn,
     activation=activation,
