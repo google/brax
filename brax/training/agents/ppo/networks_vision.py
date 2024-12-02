@@ -59,6 +59,7 @@ def make_policy_network_vision(
       normalise_channels=normalise_channels)
 
   def apply(processor_params, policy_params, obs):
+    obs = FrozenDict(obs)
     if state_obs_key:
       state_obs = preprocess_observations_fn(
         remove_pixels(obs), processor_params
@@ -89,6 +90,7 @@ def make_value_network_vision(
       normalise_channels=normalise_channels)
 
   def apply(processor_params, policy_params, obs):
+    obs = FrozenDict(obs)
     if state_obs_key:
       # Apply normaliser to state-based params.
       state_obs = preprocess_observations_fn(

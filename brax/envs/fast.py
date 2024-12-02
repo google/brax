@@ -32,6 +32,7 @@ class Fast(PipelineEnv):
     self._use_dict_obs = kwargs.get('use_dict_obs', False)
     self._asymmetric_obs = kwargs.get('asymmetric_obs', False)
     self._pixel_obs = kwargs.get('pixel_obs', False)
+    self._pixels_only = kwargs.get('pixels_only', False)
     if (self._asymmetric_obs or self._pixel_obs) and not self._use_dict_obs:
       raise ValueError('asymmetric_obs requires use_dict_obs=True')
 
@@ -50,8 +51,10 @@ class Fast(PipelineEnv):
     if self._asymmetric_obs:
       obs['privileged_state'] = jp.zeros(4)  # Dummy privileged state.
     if self._pixel_obs:
-      obs['pixels/view_0'] = jp.zeros((4, 4, 3)) # Small dummy image.
-      obs['pixels/view_1'] = jp.zeros((4, 4, 3))
+      pixels = dict(
+          {f'pixels/view_{i}': jp.zeros((4, 4, 3)) for i in range(2)}
+      )
+      obs = pixels if self._pixels_only else {**obs, **pixels}
     obs = FrozenDict(obs) if self._use_dict_obs else obs
     reward, done = jp.array(0.0), jp.array(0.0)
     return State(pipeline_state, obs, reward, done)
@@ -70,8 +73,10 @@ class Fast(PipelineEnv):
     if self._asymmetric_obs:
       obs['privileged_state'] = jp.zeros(4)  # Dummy privileged state.
     if self._pixel_obs:
-      obs['pixels/view_0'] = jp.zeros((4, 4, 3)) # Small dummy image.
-      obs['pixels/view_1'] = jp.zeros((4, 4, 3))
+      pixels = dict(
+          {f'pixels/view_{i}': jp.zeros((4, 4, 3)) for i in range(2)}
+      )
+      obs = pixels if self._pixels_only else {**obs, **pixels}
     reward = pos[0]
     obs = FrozenDict(obs) if self._use_dict_obs else obs
     return state.replace(pipeline_state=qp, obs=obs, reward=reward)

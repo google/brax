@@ -278,7 +278,7 @@ def train(
       loss_fn, optimizer, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True)
 
   def random_translate_pixels(obs: Mapping[str, jax.Array], key):
-    assert isinstance(obs, FrozenDict)
+    obs = FrozenDict(obs)
     @jax.vmap
     def rt_all_views(ub_obs: Mapping[str, jax.Array], key) -> Mapping[str, jax.Array]:
         # Expects dictionary of unbatched observations.

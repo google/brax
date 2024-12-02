@@ -173,16 +173,30 @@ class PPOTest(parameterized.TestCase):
       (env.observation_size['privileged_state'], 32),
     )
 
-  @parameterized.parameters(True, False)
-  def testPixelsPPO(self, asymmetric_obs):
+  @parameterized.parameters(
+      {"asymmetric_obs": False, "pixels_only": False},
+      {"asymmetric_obs": True, "pixels_only": False},
+      {"asymmetric_obs": False, "pixels_only": True},
+  )
+  def testPixelsPPO(self, asymmetric_obs, pixels_only):
     """Test PPO with pixel observations."""
-    env = envs.get_environment('fast', pixel_obs=True, asymmetric_obs=asymmetric_obs, use_dict_obs=True)
+    env = envs.get_environment('fast', pixel_obs=True, 
+                               asymmetric_obs=asymmetric_obs, 
+                               use_dict_obs=True,
+                               pixels_only =pixels_only)
+    if pixels_only:
+      policy_obs_key = ''
+      value_obs_key = ''
+    else:
+      policy_obs_key = 'state'
+      value_obs_key = 'privileged_state' if asymmetric_obs else 'state'
+
     network_factory = functools.partial(
       ppo_networks_vision.make_ppo_networks_vision,
       policy_hidden_layer_sizes=(32,),
       value_hidden_layer_sizes=(32,),
-      policy_obs_key='state',
-      value_obs_key='privileged_state' if asymmetric_obs else 'state',
+      policy_obs_key=policy_obs_key,
+      value_obs_key=value_obs_key,
     )
 
     _, _, _ = ppo.train(
