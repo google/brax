@@ -246,7 +246,6 @@ def train(
 
   # Discard the batch axes over devices and envs.
   obs_shape = jax.tree_util.tree_map(lambda x: x.shape[2:], env_state.obs)
-  pixel_keys = [k for k in obs_shape.keys() if k.startswith('pixels/')]
   
   normalize = lambda x, y: x
   if normalize_observations:

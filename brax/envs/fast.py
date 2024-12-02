@@ -19,6 +19,7 @@ from brax import base
 from brax.envs.base import PipelineEnv, State
 import jax
 from jax import numpy as jp
+from flax.core import FrozenDict
 
 
 class Fast(PipelineEnv):
@@ -30,7 +31,8 @@ class Fast(PipelineEnv):
     self._step_count = 0
     self._use_dict_obs = kwargs.get('use_dict_obs', False)
     self._asymmetric_obs = kwargs.get('asymmetric_obs', False)
-    if self._asymmetric_obs and not self._use_dict_obs:
+    self._pixel_obs = kwargs.get('pixel_obs', False)
+    if (self._asymmetric_obs or self._pixel_obs) and not self._use_dict_obs:
       raise ValueError('asymmetric_obs requires use_dict_obs=True')
 
   def reset(self, rng: jax.Array) -> State:
@@ -47,6 +49,10 @@ class Fast(PipelineEnv):
     obs = {'state': obs} if self._use_dict_obs else obs
     if self._asymmetric_obs:
       obs['privileged_state'] = jp.zeros(4)  # Dummy privileged state.
+    if self._pixel_obs:
+      obs['pixels/view_0'] = jp.zeros((4, 4, 3)) # Small dummy image.
+      obs['pixels/view_1'] = jp.zeros((4, 4, 3))
+    obs = FrozenDict(obs) if self._use_dict_obs else obs
     reward, done = jp.array(0.0), jp.array(0.0)
     return State(pipeline_state, obs, reward, done)
 
@@ -63,7 +69,11 @@ class Fast(PipelineEnv):
     obs = {'state': obs} if self._use_dict_obs else obs
     if self._asymmetric_obs:
       obs['privileged_state'] = jp.zeros(4)  # Dummy privileged state.
+    if self._pixel_obs:
+      obs['pixels/view_0'] = jp.zeros((4, 4, 3)) # Small dummy image.
+      obs['pixels/view_1'] = jp.zeros((4, 4, 3))
     reward = pos[0]
+    obs = FrozenDict(obs) if self._use_dict_obs else obs
     return state.replace(pipeline_state=qp, obs=obs, reward=reward)
 
   @property
@@ -82,6 +92,9 @@ class Fast(PipelineEnv):
     obs = {'state': 2}
     if self._asymmetric_obs:
       obs['privileged_state'] = 4
+    if self._pixel_obs:
+      obs['pixels/view_0'] = (4, 4, 3)
+      obs['pixels/view_1'] = (4, 4, 3)
     return obs
 
   @property

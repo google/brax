@@ -21,9 +21,9 @@ from absl.testing import parameterized
 from brax import envs
 from brax.training.acme import running_statistics
 from brax.training.agents.ppo import networks as ppo_networks
+from brax.training.agents.ppo import networks_vision as ppo_networks_vision
 from brax.training.agents.ppo import train as ppo
 import jax
-import jax.numpy as jp
 
 
 class PPOTest(parameterized.TestCase):
@@ -173,6 +173,36 @@ class PPOTest(parameterized.TestCase):
       (env.observation_size['privileged_state'], 32),
     )
 
+  @parameterized.parameters(True, False)
+  def testPixelsPPO(self, asymmetric_obs):
+    """Test PPO with pixel observations."""
+    env = envs.get_environment('fast', pixel_obs=True, asymmetric_obs=asymmetric_obs, use_dict_obs=True)
+    network_factory = functools.partial(
+      ppo_networks_vision.make_ppo_networks_vision,
+      policy_hidden_layer_sizes=(32,),
+      value_hidden_layer_sizes=(32,),
+      policy_obs_key='state',
+      value_obs_key='privileged_state' if asymmetric_obs else 'state',
+    )
+
+    _, _, _ = ppo.train(
+        env,
+        num_timesteps=2**15,
+        episode_length=1000,
+        num_envs=64,
+        learning_rate=3e-4,
+        entropy_cost=1e-2,
+        discounting=0.95,
+        unroll_length=5,
+        batch_size=64,
+        num_minibatches=8,
+        num_updates_per_batch=4,
+        normalize_observations=True,
+        seed=2,
+        reward_scaling=10,
+        normalize_advantage=False,
+        network_factory=network_factory,
+        augment_pixels=True)
 
 if __name__ == '__main__':
   absltest.main()

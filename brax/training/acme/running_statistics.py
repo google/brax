@@ -124,11 +124,12 @@ def update(state: RunningStatisticsState,
   # We require exactly the same structure to avoid issues when flattened
   # batch and state have different order of elements.
   assert jax.tree_util.tree_structure(batch) == jax.tree_util.tree_structure(state.mean)
-  batch_shape = jax.tree_util.tree_leaves(batch)[0].shape if batch else ()
+  batch_leaves = jax.tree_util.tree_leaves(batch)
+  batch_shape = batch_leaves[0].shape if batch_leaves else ()
   # We assume the batch dimensions always go first.
   batch_dims = batch_shape[:len(batch_shape) -
-                           (jax.tree_util.tree_leaves(state.mean)[0].ndim
-                            if state.mean else 0)]
+                           (jax.tree_util.tree_leaves(state.mean)[0].ndim if
+                             batch_leaves else 0)]
   batch_axis = range(len(batch_dims))
   if weights is None:
     step_increment = jnp.prod(jnp.array(batch_dims))

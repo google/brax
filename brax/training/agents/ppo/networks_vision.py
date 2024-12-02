@@ -1,6 +1,6 @@
 """PPO vision networks."""
 
-from typing import Any, Callable, Mapping, Sequence, Tuple
+from typing import Any, Callable, Mapping, Sequence, Tuple, Union
 
 import jax
 import jax.numpy as jp
@@ -27,9 +27,12 @@ class PPONetworks:
   parametric_action_distribution: distribution.ParametricDistribution
 
 
-def remove_pixels(obs: FrozenDict) -> FrozenDict:
+def remove_pixels(obs: Union[jp.ndarray, Mapping]) -> Union[jp.ndarray, Mapping]:
   """Remove pixel observations from the observation dict.
   FrozenDicts are used to avoid incorrect gradients."""
+  if not isinstance(obs, Mapping):
+    return obs
+  obs = FrozenDict(obs)
   pixel_keys = [k for k in obs.keys() if k.startswith('pixels/')]
   state_obs = obs
   for k in pixel_keys:
@@ -37,7 +40,7 @@ def remove_pixels(obs: FrozenDict) -> FrozenDict:
   return state_obs
 
 
-def make_vision_policy_network(
+def make_policy_network_vision(
   observation_size: Mapping[str, Tuple[int, ...]],
   output_size: int,
   preprocess_observations_fn: types.PreprocessObservationFn = types.identity_observation_preprocessor,
@@ -70,7 +73,7 @@ def make_vision_policy_network(
       init=lambda key: module.init(key, dummy_obs), apply=apply)
 
 
-def make_vision_value_network(
+def make_value_network_vision(
   observation_size: Mapping[str, Tuple[int, ...]],
   preprocess_observations_fn: types.PreprocessObservationFn = types.identity_observation_preprocessor,
   hidden_layer_sizes: Sequence[int] = [256, 256],
@@ -100,7 +103,7 @@ def make_vision_value_network(
       init=lambda key: value_module.init(key, dummy_obs), apply=apply)
 
 
-def make_vision_ppo_networks(
+def make_ppo_networks_vision(
   # channel_size: int,
   observation_size: Mapping[str, Tuple[int, ...]],
   action_size: int,
@@ -109,25 +112,29 @@ def make_vision_ppo_networks(
   policy_hidden_layer_sizes: Sequence[int] = [256, 256],
   value_hidden_layer_sizes: Sequence[int] = [256, 256],
   activation: ActivationFn = linen.swish,
-  normalise_channels: bool = False) -> PPONetworks:
+  normalise_channels: bool = False,
+  policy_obs_key: str = '',
+  value_obs_key: str = '') -> PPONetworks:
   """Make Vision PPO networks with preprocessor."""
 
   parametric_action_distribution = distribution.NormalTanhDistribution(
     event_size=action_size)
 
-  policy_network = make_vision_policy_network(
+  policy_network = make_policy_network_vision(
     observation_size=observation_size,
     output_size=parametric_action_distribution.param_size,
     preprocess_observations_fn=preprocess_observations_fn,
     activation=activation,
     hidden_layer_sizes=policy_hidden_layer_sizes,
+    state_obs_key=policy_obs_key,
     normalise_channels=normalise_channels)
 
-  value_network = make_vision_value_network(
+  value_network = make_value_network_vision(
     observation_size=observation_size,
     preprocess_observations_fn=preprocess_observations_fn,
     activation=activation,
     hidden_layer_sizes=value_hidden_layer_sizes,
+    state_obs_key=value_obs_key,
     normalise_channels=normalise_channels)
 
   return PPONetworks(
