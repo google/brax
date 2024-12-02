@@ -233,7 +233,6 @@ def train(
   key_envs = jnp.reshape(key_envs,
                          (local_devices_to_use, -1) + key_envs.shape[1:])
   env_state = reset_fn(key_envs)
-  ndarray_obs = isinstance(env_state.obs, jnp.ndarray) # Check whether observations are in dictionary form.
 
   # Discard the batch axes over devices and envs.
   obs_shape = jax.tree_util.tree_map(lambda x: x.shape[2:], env_state.obs)
@@ -336,7 +335,7 @@ def train(
     # Update normalization params and normalize observations.
     normalizer_params = running_statistics.update(
         training_state.normalizer_params,
-        data.observation if ndarray_obs else data.observation['state'],
+        data.observation,
         pmap_axis_name=_PMAP_AXIS_NAME)
 
     (optimizer_state, params, _), metrics = jax.lax.scan(
@@ -393,12 +392,13 @@ def train(
       value=ppo_network.value_network.init(key_value),
   )
 
-  obs_shape = env_state.obs.shape if ndarray_obs else env_state.obs['state'].shape
+  obs_shape = jax.tree_util.tree_map(
+    lambda x: specs.Array(x.shape[-1:], jnp.dtype('float32')), env_state.obs
+  )
   training_state = TrainingState(  # pytype: disable=wrong-arg-types  # jax-ndarray
       optimizer_state=optimizer.init(init_params),  # pytype: disable=wrong-arg-types  # numpy-scalars
       params=init_params,
-      normalizer_params=running_statistics.init_state(
-          specs.Array(obs_shape[-1:], jnp.dtype('float32'))),
+      normalizer_params=running_statistics.init_state(obs_shape),
       env_steps=0)
 
   if (

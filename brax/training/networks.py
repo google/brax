@@ -82,8 +82,8 @@ class SNMLP(linen.Module):
         hidden = self.activation(hidden)
     return hidden
 
-def get_obs_state_size(obs_size: types.ObservationSize) -> int:
-    obs_size = obs_size['state'] if isinstance(obs_size, Mapping) else obs_size
+def get_obs_state_size(obs_size: types.ObservationSize, obs_key: str) -> int:
+    obs_size = obs_size[obs_key] if isinstance(obs_size, Mapping) else obs_size
     return jax.tree_util.tree_flatten(obs_size)[0][-1] # Size can be tuple or int.
 
 def make_policy_network(
@@ -94,7 +94,8 @@ def make_policy_network(
     hidden_layer_sizes: Sequence[int] = (256, 256),
     activation: ActivationFn = linen.relu,
     kernel_init: Initializer = jax.nn.initializers.lecun_uniform(),
-    layer_norm: bool = False) -> FeedForwardNetwork:
+    layer_norm: bool = False,
+    obs_key: str = 'state') -> FeedForwardNetwork:
   """Creates a policy network."""
   policy_module = MLP(
       layer_sizes=list(hidden_layer_sizes) + [param_size],
@@ -103,12 +104,11 @@ def make_policy_network(
       layer_norm=layer_norm)
 
   def apply(processor_params, policy_params, obs):
-    obs = (obs if isinstance(obs, jnp.ndarray)
-      else obs['state']) # state-only in the case of dict obs.
     obs = preprocess_observations_fn(obs, processor_params)
+    obs = obs if isinstance(obs, jnp.ndarray) else obs[obs_key]
     return policy_module.apply(policy_params, obs)
 
-  obs_size = get_obs_state_size(obs_size)
+  obs_size = get_obs_state_size(obs_size, obs_key)
   dummy_obs = jnp.zeros((1, obs_size))
   return FeedForwardNetwork(
       init=lambda key: policy_module.init(key, dummy_obs), apply=apply)
@@ -119,7 +119,8 @@ def make_value_network(
     preprocess_observations_fn: types.PreprocessObservationFn = types
     .identity_observation_preprocessor,
     hidden_layer_sizes: Sequence[int] = (256, 256),
-    activation: ActivationFn = linen.relu) -> FeedForwardNetwork:
+    activation: ActivationFn = linen.relu,
+    obs_key: str = 'state') -> FeedForwardNetwork:
   """Creates a value network."""
   value_module = MLP(
       layer_sizes=list(hidden_layer_sizes) + [1],
@@ -127,12 +128,11 @@ def make_value_network(
       kernel_init=jax.nn.initializers.lecun_uniform())
 
   def apply(processor_params, value_params, obs):
-    obs = (obs if isinstance(obs, jnp.ndarray)
-      else obs['state']) # state-only in the case of dict obs.
     obs = preprocess_observations_fn(obs, processor_params)
+    obs = obs if isinstance(obs, jnp.ndarray) else obs[obs_key]
     return jnp.squeeze(value_module.apply(value_params, obs), axis=-1)
 
-  obs_size = get_obs_state_size(obs_size)
+  obs_size = get_obs_state_size(obs_size, obs_key)
   dummy_obs = jnp.zeros((1, obs_size))
   return FeedForwardNetwork(
       init=lambda key: value_module.init(key, dummy_obs), apply=apply)
