@@ -69,8 +69,8 @@ def make_ppo_networks(
     policy_hidden_layer_sizes: Sequence[int] = (32,) * 4,
     value_hidden_layer_sizes: Sequence[int] = (256,) * 5,
     activation: networks.ActivationFn = linen.swish,
-    policy_state_key: str = 'state',
-    value_state_key: str = 'state') -> PPONetworks:
+    policy_obs_key: str = 'state',
+    value_obs_key: str = 'state') -> PPONetworks:
   """Make PPO networks with preprocessor."""
   parametric_action_distribution = distribution.NormalTanhDistribution(
       event_size=action_size)
@@ -80,13 +80,13 @@ def make_ppo_networks(
       preprocess_observations_fn=preprocess_observations_fn,
       hidden_layer_sizes=policy_hidden_layer_sizes,
       activation=activation,
-      state_key=policy_state_key)
+      obs_key=policy_obs_key)
   value_network = networks.make_value_network(
       observation_size,
       preprocess_observations_fn=preprocess_observations_fn,
       hidden_layer_sizes=value_hidden_layer_sizes,
       activation=activation,
-      state_key=value_state_key)
+      obs_key=value_obs_key)
   return PPONetworks(
       policy_network=policy_network,
       value_network=value_network,

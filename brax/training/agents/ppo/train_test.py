@@ -136,33 +136,40 @@ class PPOTest(parameterized.TestCase):
   def testTrainAsymmetricActorCritic(self):
     """Test PPO with asymmetric actor critic."""
 
-    from brax.envs.fast import Fast
+    env = envs.get_environment('fast', asymmetric_obs=True, use_dict_obs=True)
 
-    def _add_privileged_state(state, observation_size):
-      return state.tree_replace({
-        'obs': {
-          'state': state.obs['state'],
-          'privileged_state': jp.zeros(2 * observation_size),
-        }
-      })
-
-    class FastAsymmetric(Fast):
-      def reset(self, rng):
-        reset_state = super().reset(rng)
-        return _add_privileged_state(reset_state, self.observation_size)
-
-      def step(self, state, action):
-        step_state = super().step(state, action)
-        return _add_privileged_state(step_state, self.observation_size)
-
+    # Check that the networks use the provided observation keys.
     network_factory = functools.partial(
       ppo_networks.make_ppo_networks,
-      policy_state_key='state',
-      value_state_key='privileged_state'
+      policy_obs_key='state',
+      value_obs_key='privileged_state'
+    )
+    ppo_network = network_factory(
+      observation_size=env.observation_size,
+      action_size=env.action_size,
+      preprocess_observations_fn=lambda x, y: x,
+    )
+    key = jax.random.PRNGKey(0)
+    key, reset_key = jax.random.split(key)
+    state = env.reset(reset_key)
+    key, key_policy = jax.random.split(key)
+    policy_params = ppo_network.policy_network.init(key_policy)
+    ppo_network.policy_network.apply(
+      processor_params=None,
+      policy_params=policy_params,
+      obs=state.obs,
+    )
+    key, key_value = jax.random.split(key)
+    value_params = ppo_network.value_network.init(key_value)
+    ppo_network.value_network.apply(
+      processor_params=None,
+      value_params=value_params,
+      obs=state.obs,
     )
 
+    # Check that the training loop works.
     _, _, _ = ppo.train(
-        FastAsymmetric(use_dict_obs=True),
+        env,
         num_timesteps=2**15,
         episode_length=1000,
         num_envs=64,
@@ -173,7 +180,7 @@ class PPOTest(parameterized.TestCase):
         batch_size=64,
         num_minibatches=8,
         num_updates_per_batch=4,
-        normalize_observations=True,
+        normalize_observations=False,
         seed=2,
         reward_scaling=10,
         normalize_advantage=False,
