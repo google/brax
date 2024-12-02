@@ -56,7 +56,8 @@ def make_policy_network_vision(
       activation=activation,
       kernel_init=kernel_init,
       layer_norm=layer_norm,
-      normalise_channels=normalise_channels)
+      normalise_channels=normalise_channels,
+      state_obs_key=state_obs_key)
 
   def apply(processor_params, policy_params, obs):
     obs = FrozenDict(obs)
@@ -87,7 +88,8 @@ def make_value_network_vision(
       layer_sizes=list(hidden_layer_sizes) + [1],
       activation=activation,
       kernel_init=kernel_init,
-      normalise_channels=normalise_channels)
+      normalise_channels=normalise_channels,
+      state_obs_key=state_obs_key)
 
   def apply(processor_params, policy_params, obs):
     obs = FrozenDict(obs)

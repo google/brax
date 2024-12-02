@@ -199,7 +199,7 @@ class PPOTest(parameterized.TestCase):
       value_obs_key=value_obs_key,
     )
 
-    _, _, _ = ppo.train(
+    _, (_, policy_params, value_params), _ = ppo.train(
         env,
         num_timesteps=2**15,
         episode_length=1000,
@@ -217,6 +217,22 @@ class PPOTest(parameterized.TestCase):
         normalize_advantage=False,
         network_factory=network_factory,
         augment_pixels=True)
+    num_views = 2
+    cnn_features = 64
+    
+    if asymmetric_obs:
+      self.assertEqual(
+        policy_params['params']['MLP_0']['hidden_0']['kernel'].shape,
+        (num_views * cnn_features + env.observation_size['state'], 32),
+      )
+      self.assertEqual(
+        value_params['params']['MLP_0']['hidden_0']['kernel'].shape,
+        (num_views * cnn_features + env.observation_size['privileged_state'], 32),
+      )
+    if pixels_only:
+      self.assertEqual(
+        policy_params['params']['MLP_0']['hidden_0']['kernel'].shape,
+        (num_views * cnn_features, 32))
 
 if __name__ == '__main__':
   absltest.main()

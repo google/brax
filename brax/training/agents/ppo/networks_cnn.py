@@ -53,6 +53,8 @@ class VisionMLP(linen.Module):
   activate_final: bool = False
   layer_norm: bool = False
   normalise_channels: bool = False
+  state_obs_key: str = ''
+  
 
   @linen.compact
   def __call__(self, data: dict):
@@ -80,8 +82,8 @@ class VisionMLP(linen.Module):
                         use_bias=False)
     cnn_outs = [natureCNN()(pixels_hidden[key]) for key in pixels_hidden.keys()]
     cnn_outs = [jp.mean(cnn_out, axis=(-2, -3)) for cnn_out in cnn_outs]
-    if 'state' in data:
-      cnn_outs.append(data['state']) # TODO: Try with dedicated state network
+    if self.state_obs_key:
+      cnn_outs.append(data[self.state_obs_key]) # TODO: Try with dedicated state network
 
     hidden = jp.concatenate(cnn_outs, axis=-1)
     return networks.MLP(layer_sizes=self.layer_sizes,
