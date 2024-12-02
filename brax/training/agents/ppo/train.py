@@ -246,7 +246,7 @@ def train(
 
   # Discard the batch axes over devices and envs.
   obs_shape = jax.tree_util.tree_map(lambda x: x.shape[2:], env_state.obs)
-  
+
   normalize = lambda x, y: x
   if normalize_observations:
     normalize = running_statistics.normalize
@@ -279,24 +279,26 @@ def train(
 
   def random_translate_pixels(obs: Mapping[str, jax.Array], key):
     obs = FrozenDict(obs)
+
     @jax.vmap
     def rt_all_views(ub_obs: Mapping[str, jax.Array], key) -> Mapping[str, jax.Array]:
-        # Expects dictionary of unbatched observations.
-      def rt_view(key, img: jax.Array, padding) -> jax.Array: # TxHxWxC
+      # Expects dictionary of unbatched observations.
+      def rt_view(key, img: jax.Array, padding) -> jax.Array:  # TxHxWxC
         # Randomly translates a set of pixel inputs.
-        crop_from = jax.random.randint(key, (2, ), 0, 2 * padding + 1)
-        zero = jnp.zeros((1, ), dtype=jnp.int32)
-        crop_from =  jnp.concatenate([zero, crop_from, zero])
-        padded_img = jnp.pad(img, ((0, 0), (padding, padding), (padding, padding), (0, 0)),
-                            mode='edge')
+        crop_from = jax.random.randint(key, (2,), 0, 2 * padding + 1)
+        zero = jnp.zeros((1,), dtype=jnp.int32)
+        crop_from = jnp.concatenate([zero, crop_from, zero])
+        padded_img = jnp.pad(
+          img, ((0, 0), (padding, padding), (padding, padding), (0, 0)), mode="edge"
+        )
         return jax.lax.dynamic_slice(padded_img, crop_from, img.shape)
 
       out = {}
       for k_view, v_view in ub_obs.items():
-        if k_view.startswith('pixels/'):
+        if k_view.startswith("pixels/"):
           key, key_shift = jax.random.split(key)
           out[k_view] = rt_view(key_shift, v_view, 4)
-      ub_obs = ub_obs.copy(out) # Update the shifted fields
+      ub_obs = ub_obs.copy(out)  # Update the shifted fields
       return ub_obs
 
     bdim = next(iter(obs.items()), None)[1].shape[0]
@@ -385,7 +387,8 @@ def train(
     normalizer_params = running_statistics.update(
         training_state.normalizer_params,
         remove_pixels(data.observation),
-        pmap_axis_name=_PMAP_AXIS_NAME)
+        pmap_axis_name=_PMAP_AXIS_NAME
+    )
 
     (optimizer_state, params, _), metrics = jax.lax.scan(
         functools.partial(

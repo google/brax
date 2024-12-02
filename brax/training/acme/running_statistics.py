@@ -127,9 +127,10 @@ def update(state: RunningStatisticsState,
   batch_leaves = jax.tree_util.tree_leaves(batch)
   batch_shape = batch_leaves[0].shape if batch_leaves else ()
   # We assume the batch dimensions always go first.
-  batch_dims = batch_shape[:len(batch_shape) -
-                           (jax.tree_util.tree_leaves(state.mean)[0].ndim if
-                             batch_leaves else 0)]
+  batch_dims = batch_shape[
+    : len(batch_shape)
+    - (jax.tree_util.tree_leaves(state.mean)[0].ndim if batch_leaves else 0)
+  ]
   batch_axis = range(len(batch_dims))
   if weights is None:
     step_increment = jnp.prod(jnp.array(batch_dims))

@@ -174,22 +174,25 @@ class PPOTest(parameterized.TestCase):
     )
 
   @parameterized.parameters(
-      {"asymmetric_obs": False, "pixels_only": False},
-      {"asymmetric_obs": True, "pixels_only": False},
-      {"asymmetric_obs": False, "pixels_only": True},
+    {"asymmetric_obs": False, "pixels_only": False},
+    {"asymmetric_obs": True, "pixels_only": False},
+    {"asymmetric_obs": False, "pixels_only": True},
   )
   def testPixelsPPO(self, asymmetric_obs, pixels_only):
     """Test PPO with pixel observations."""
-    env = envs.get_environment('fast', pixel_obs=True, 
-                               asymmetric_obs=asymmetric_obs, 
-                               use_dict_obs=True,
-                               pixels_only =pixels_only)
+    env = envs.get_environment(
+      "fast",
+      pixel_obs=True,
+      asymmetric_obs=asymmetric_obs,
+      use_dict_obs=True,
+      pixels_only=pixels_only,
+    )
     if pixels_only:
-      policy_obs_key = ''
-      value_obs_key = ''
+      policy_obs_key = ""
+      value_obs_key = ""
     else:
-      policy_obs_key = 'state'
-      value_obs_key = 'privileged_state' if asymmetric_obs else 'state'
+      policy_obs_key = "state"
+      value_obs_key = "privileged_state" if asymmetric_obs else "state"
 
     network_factory = functools.partial(
       ppo_networks_vision.make_ppo_networks_vision,
@@ -200,39 +203,42 @@ class PPOTest(parameterized.TestCase):
     )
 
     _, (_, policy_params, value_params), _ = ppo.train(
-        env,
-        num_timesteps=2**15,
-        episode_length=1000,
-        num_envs=64,
-        learning_rate=3e-4,
-        entropy_cost=1e-2,
-        discounting=0.95,
-        unroll_length=5,
-        batch_size=64,
-        num_minibatches=8,
-        num_updates_per_batch=4,
-        normalize_observations=True,
-        seed=2,
-        reward_scaling=10,
-        normalize_advantage=False,
-        network_factory=network_factory,
-        augment_pixels=True)
+      env,
+      num_timesteps=2**15,
+      episode_length=1000,
+      num_envs=64,
+      learning_rate=3e-4,
+      entropy_cost=1e-2,
+      discounting=0.95,
+      unroll_length=5,
+      batch_size=64,
+      num_minibatches=8,
+      num_updates_per_batch=4,
+      normalize_observations=True,
+      seed=2,
+      reward_scaling=10,
+      normalize_advantage=False,
+      network_factory=network_factory,
+      augment_pixels=True,
+    )
     num_views = 2
     cnn_features = 64
-    
+
     if asymmetric_obs:
       self.assertEqual(
-        policy_params['params']['MLP_0']['hidden_0']['kernel'].shape,
-        (num_views * cnn_features + env.observation_size['state'], 32),
+        policy_params["params"]["MLP_0"]["hidden_0"]["kernel"].shape,
+        (num_views * cnn_features + env.observation_size["state"], 32),
       )
       self.assertEqual(
-        value_params['params']['MLP_0']['hidden_0']['kernel'].shape,
-        (num_views * cnn_features + env.observation_size['privileged_state'], 32),
+        value_params["params"]["MLP_0"]["hidden_0"]["kernel"].shape,
+        (num_views * cnn_features + env.observation_size["privileged_state"], 32),
       )
     if pixels_only:
       self.assertEqual(
-        policy_params['params']['MLP_0']['hidden_0']['kernel'].shape,
-        (num_views * cnn_features, 32))
+        policy_params["params"]["MLP_0"]["hidden_0"]["kernel"].shape,
+        (num_views * cnn_features, 32),
+      )
+
 
 if __name__ == '__main__':
   absltest.main()
