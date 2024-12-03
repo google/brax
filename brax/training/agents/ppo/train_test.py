@@ -29,10 +29,10 @@ import jax
 class PPOTest(parameterized.TestCase):
   """Tests for PPO module."""
 
-  @parameterized.parameters(True, False)
-  def testTrain(self, use_dict_obs):
+  @parameterized.parameters("ndarray", "dict_state")
+  def testTrain(self, obs_mode):
     """Test PPO with a simple env."""
-    fast = envs.get_environment('fast', use_dict_obs=use_dict_obs)
+    fast = envs.get_environment('fast', obs_mode=obs_mode)
     _, _, metrics = ppo.train(
         fast,
         num_timesteps=2**15,
@@ -135,7 +135,7 @@ class PPOTest(parameterized.TestCase):
 
   def testTrainAsymmetricActorCritic(self):
     """Test PPO with asymmetric actor critic."""
-    env = envs.get_environment('fast', asymmetric_obs=True, use_dict_obs=True)
+    env = envs.get_environment('fast', asymmetric_obs=True, obs_mode="dict_state")
 
     network_factory = functools.partial(
       ppo_networks.make_ppo_networks,
@@ -174,20 +174,19 @@ class PPOTest(parameterized.TestCase):
     )
 
   @parameterized.parameters(
-    {"asymmetric_obs": False, "use_state": True},
-    {"asymmetric_obs": True,  "use_state": True},
-    {"asymmetric_obs": False, "use_state": False},
+    {"asymmetric_obs": True,  "obs_mode": "dict_pixels_state"},
+    {"asymmetric_obs": False, "obs_mode": "dict_pixels_state"},
+    {"asymmetric_obs": False, "obs_mode": "dict_pixels"},
   )
-  def testPixelsPPO(self, asymmetric_obs, use_state):
+  def testPixelsPPO(self, asymmetric_obs, obs_mode):
     """Test PPO with pixel observations."""
     env = envs.get_environment(
       "fast",
       pixel_obs=True,
       asymmetric_obs=asymmetric_obs,
-      use_dict_obs=True,
-      use_state=use_state,
+      obs_mode=obs_mode,
     )
-    if not use_state:
+    if obs_mode == "dict_pixels":
       policy_obs_key = ""
       value_obs_key = ""
     else:
@@ -233,7 +232,7 @@ class PPOTest(parameterized.TestCase):
         value_params["params"]["MLP_0"]["hidden_0"]["kernel"].shape,
         (num_views * cnn_features + env.observation_size["privileged_state"], 32),
       )
-    if not use_state:
+    if obs_mode == "dict_pixels":
       self.assertEqual(
         policy_params["params"]["MLP_0"]["hidden_0"]["kernel"].shape,
         (num_views * cnn_features, 32),
