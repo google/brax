@@ -291,6 +291,7 @@ def train(
       # Expects dictionary of unbatched observations.
       def rt_view(key, img: jax.Array, padding) -> jax.Array:  # TxHxWxC
         # Randomly translates a set of pixel inputs.
+        # Adapted from https://github.com/ikostrikov/jaxrl/blob/main/jaxrl/agents/drq/augmentations.py
         crop_from = jax.random.randint(key, (2,), 0, 2 * padding + 1)
         zero = jnp.zeros((1,), dtype=jnp.int32)
         crop_from = jnp.concatenate([zero, crop_from, zero])
