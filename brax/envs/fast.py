@@ -25,16 +25,24 @@ from flax.core import FrozenDict
 class Fast(PipelineEnv):
   """Trains an agent to go fast."""
 
-  def __init__(self, **kwargs):
+  def __init__(self,
+               use_dict_obs: bool = False,
+               asymmetric_obs: bool = False,
+               pixel_obs: bool = False,
+               state_obs: bool = True,
+               **kwargs):
     self._dt = 0.02
     self._reset_count = 0
     self._step_count = 0
-    self._use_dict_obs = kwargs.get('use_dict_obs', False)
-    self._asymmetric_obs = kwargs.get('asymmetric_obs', False)
-    self._pixel_obs = kwargs.get('pixel_obs', False)
-    self._pixels_only = kwargs.get('pixels_only', False)
+    self._use_dict_obs = use_dict_obs
+    self._asymmetric_obs = asymmetric_obs
+    self._pixel_obs = pixel_obs
+    self._state_obs = state_obs
+    
+    if not (self._pixel_obs or self._state_obs):
+      raise ValueError('pixel_obs and/or state_obs required')
     if (self._asymmetric_obs or self._pixel_obs) and not self._use_dict_obs:
-      raise ValueError('asymmetric_obs requires use_dict_obs=True')
+      raise ValueError('asymmetric_obs and pixel_obs require use_dict_obs=True')
 
   def reset(self, rng: jax.Array) -> State:
     del rng  # Unused.
@@ -51,10 +59,9 @@ class Fast(PipelineEnv):
     if self._asymmetric_obs:
       obs['privileged_state'] = jp.zeros(4)  # Dummy privileged state.
     if self._pixel_obs:
-      pixels = dict(
-          {f'pixels/view_{i}': jp.zeros((4, 4, 3)) for i in range(2)}
-      )
-      obs = pixels if self._pixels_only else {**obs, **pixels}
+      pixels = {'pixels/view_0': jp.zeros((4, 4, 3)),
+                'pixels/view_1': jp.zeros((4, 4, 3))}
+      obs = {**obs, **pixels} if self._state_obs else pixels
     obs = FrozenDict(obs) if self._use_dict_obs else obs
     reward, done = jp.array(0.0), jp.array(0.0)
     return State(pipeline_state, obs, reward, done)
@@ -73,10 +80,9 @@ class Fast(PipelineEnv):
     if self._asymmetric_obs:
       obs['privileged_state'] = jp.zeros(4)  # Dummy privileged state.
     if self._pixel_obs:
-      pixels = dict(
-          {f'pixels/view_{i}': jp.zeros((4, 4, 3)) for i in range(2)}
-      )
-      obs = pixels if self._pixels_only else {**obs, **pixels}
+      pixels = {'pixels/view_0': jp.zeros((4, 4, 3)),
+                'pixels/view_1': jp.zeros((4, 4, 3))}
+      obs = {**obs, **pixels} if self._state_obs else pixels
     reward = pos[0]
     obs = FrozenDict(obs) if self._use_dict_obs else obs
     return state.replace(pipeline_state=qp, obs=obs, reward=reward)

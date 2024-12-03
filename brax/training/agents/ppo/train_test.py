@@ -174,20 +174,20 @@ class PPOTest(parameterized.TestCase):
     )
 
   @parameterized.parameters(
-    {"asymmetric_obs": False, "pixels_only": False},
-    {"asymmetric_obs": True, "pixels_only": False},
-    {"asymmetric_obs": False, "pixels_only": True},
+    {"asymmetric_obs": False, "use_state": True},
+    {"asymmetric_obs": True,  "use_state": True},
+    {"asymmetric_obs": False, "use_state": False},
   )
-  def testPixelsPPO(self, asymmetric_obs, pixels_only):
+  def testPixelsPPO(self, asymmetric_obs, use_state):
     """Test PPO with pixel observations."""
     env = envs.get_environment(
       "fast",
       pixel_obs=True,
       asymmetric_obs=asymmetric_obs,
       use_dict_obs=True,
-      pixels_only=pixels_only,
+      use_state=use_state,
     )
-    if pixels_only:
+    if not use_state:
       policy_obs_key = ""
       value_obs_key = ""
     else:
@@ -233,7 +233,7 @@ class PPOTest(parameterized.TestCase):
         value_params["params"]["MLP_0"]["hidden_0"]["kernel"].shape,
         (num_views * cnn_features + env.observation_size["privileged_state"], 32),
       )
-    if pixels_only:
+    if not use_state:
       self.assertEqual(
         policy_params["params"]["MLP_0"]["hidden_0"]["kernel"].shape,
         (num_views * cnn_features, 32),
