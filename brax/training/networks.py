@@ -82,6 +82,30 @@ class SNMLP(linen.Module):
         hidden = self.activation(hidden)
     return hidden
 
+
+class CNN(linen.Module):
+  """CNN module. Inputs are expected in Batch * HWC format."""
+
+  num_filters: Sequence[int]
+  kernel_sizes: Sequence[Tuple]
+  strides: Sequence[Tuple]
+  activation: ActivationFn = linen.relu
+  use_bias: bool = True
+
+  @linen.compact
+  def __call__(self, data: jnp.ndarray):
+    hidden = data
+    for i, (num_filter, kernel_size, stride) in enumerate(
+      zip(self.num_filters, self.kernel_sizes, self.strides)
+    ):
+      hidden = linen.Conv(
+        num_filter, kernel_size=kernel_size, strides=stride, use_bias=self.use_bias
+      )(hidden)
+
+      hidden = self.activation(hidden)
+    return hidden
+  
+
 def get_obs_state_size(obs_size: types.ObservationSize, obs_key: str) -> int:
     obs_size = obs_size[obs_key] if isinstance(obs_size, Mapping) else obs_size
     return jax.tree_util.tree_flatten(obs_size)[0][-1] # Size can be tuple or int.

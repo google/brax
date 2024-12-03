@@ -32,12 +32,7 @@ def remove_pixels(obs: Union[jp.ndarray, Mapping]) -> Union[jp.ndarray, Mapping]
   FrozenDicts are used to avoid incorrect gradients."""
   if not isinstance(obs, Mapping):
     return obs
-  obs = FrozenDict(obs)
-  pixel_keys = [k for k in obs.keys() if k.startswith("pixels/")]
-  state_obs = obs
-  for k in pixel_keys:
-    state_obs, _ = state_obs.pop(k)
-  return state_obs
+  return FrozenDict({k: v for k, v in obs.items() if not k.startswith("pixels/")})
 
 
 def make_policy_network_vision(

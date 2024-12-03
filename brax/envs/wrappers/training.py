@@ -31,7 +31,7 @@ def wrap(
     randomization_fn: Optional[
         Callable[[System], Tuple[System, System]]
     ] = None,
-    scan: bool = False
+    scan: bool = True
 ) -> Wrapper:
   """Common wrapper pattern for all training agents.
 
@@ -77,7 +77,7 @@ class EpisodeWrapper(Wrapper):
 
   def __init__(
       self, env: Env, episode_length: int,
-      action_repeat: int, scan: bool = False):
+      action_repeat: int, scan: bool = True):
     super().__init__(env)
     self.episode_length = episode_length
     self.action_repeat = action_repeat
