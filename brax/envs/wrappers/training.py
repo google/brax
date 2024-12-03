@@ -89,7 +89,7 @@ class EpisodeWrapper(Wrapper):
     def f(state, _):
       nstate = self.env.step(state, action)
       return nstate, nstate.reward
-    
+
     state, rewards = jax.lax.scan(f, state, (), self.action_repeat)
     state = state.replace(reward=jp.sum(rewards, axis=0))
     steps = state.info['steps'] + self.action_repeat

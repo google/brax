@@ -15,18 +15,19 @@
 """Network definitions."""
 
 import dataclasses
+import functools
 from typing import Any, Callable, Mapping, Sequence, Tuple
 import warnings
-import functools
-
-from brax.training import types
-from brax.training.spectral_norm import SNDense
-from brax.training.acme.running_statistics import RunningStatisticsState
 
 from flax import linen
 from flax.core import FrozenDict
 import jax
 import jax.numpy as jnp
+
+from brax.training import types
+from brax.training.acme.running_statistics import RunningStatisticsState
+from brax.training.spectral_norm import SNDense
+
 
 ActivationFn = Callable[[jnp.ndarray], jnp.ndarray]
 Initializer = Callable[..., Any]
@@ -221,13 +222,15 @@ def make_value_network(
       init=lambda key: value_module.init(key, dummy_obs), apply=apply)
 
 
-def normalizer_select(processor_params: RunningStatisticsState, obs_key: str) -> RunningStatisticsState:
+def normalizer_select(
+  processor_params: RunningStatisticsState, obs_key: str
+) -> RunningStatisticsState:
   return RunningStatisticsState(
-        count=processor_params,
-        mean=processor_params.mean[obs_key],
-        summed_variance=processor_params.summed_variance[obs_key],
-        std = processor_params.std[obs_key],
-      )
+    count=processor_params,
+    mean=processor_params.mean[obs_key],
+    summed_variance=processor_params.summed_variance[obs_key],
+    std=processor_params.std[obs_key],
+  )
 
 def make_policy_network_vision(
   observation_size: Mapping[str, Tuple[int, ...]],
@@ -253,14 +256,12 @@ def make_policy_network_vision(
     obs = FrozenDict(obs)
     if state_obs_key:
       state_obs = preprocess_observations_fn(
-        obs[state_obs_key],
-        normalizer_select(processor_params, state_obs_key)
+        obs[state_obs_key], normalizer_select(processor_params, state_obs_key)
       )
       obs = obs.copy({state_obs_key: state_obs})
     return module.apply(policy_params, obs)
 
   dummy_obs = {key: jnp.zeros((1,) + shape) for key, shape in observation_size.items()}
-
   return FeedForwardNetwork(
     init=lambda key: module.init(key, dummy_obs), apply=apply
   )
@@ -287,8 +288,7 @@ def make_value_network_vision(
     obs = FrozenDict(obs)
     if state_obs_key:
       state_obs = preprocess_observations_fn(
-        obs[state_obs_key],
-        normalizer_select(processor_params, state_obs_key)
+        obs[state_obs_key], normalizer_select(processor_params, state_obs_key)
       )
       obs = obs.copy({state_obs_key: state_obs})
     return jnp.squeeze(value_module.apply(policy_params, obs), axis=-1)
@@ -297,6 +297,7 @@ def make_value_network_vision(
   return FeedForwardNetwork(
     init=lambda key: value_module.init(key, dummy_obs), apply=apply
   )
+
 
 def make_q_network(
     obs_size: int,

@@ -25,12 +25,14 @@ from flax.core import FrozenDict
 class Fast(PipelineEnv):
   """Trains an agent to go fast."""
 
-  def __init__(self,
-               use_dict_obs: bool = False,
-               asymmetric_obs: bool = False,
-               pixel_obs: bool = False,
-               state_obs: bool = True,
-               **kwargs):
+  def __init__(
+    self,
+    use_dict_obs: bool = False,
+    asymmetric_obs: bool = False,
+    pixel_obs: bool = False,
+    state_obs: bool = True,
+    **kwargs,
+  ):
     self._dt = 0.02
     self._reset_count = 0
     self._step_count = 0
@@ -38,29 +40,31 @@ class Fast(PipelineEnv):
     self._asymmetric_obs = asymmetric_obs
     self._pixel_obs = pixel_obs
     self._state_obs = state_obs
-    
+
     if not (self._pixel_obs or self._state_obs):
-      raise ValueError('pixel_obs and/or state_obs required')
+      raise ValueError("pixel_obs and/or state_obs required")
     if (self._asymmetric_obs or self._pixel_obs) and not self._use_dict_obs:
-      raise ValueError('asymmetric_obs and pixel_obs require use_dict_obs=True')
+      raise ValueError("asymmetric_obs and pixel_obs require use_dict_obs=True")
 
   def reset(self, rng: jax.Array) -> State:
     del rng  # Unused.
     self._reset_count += 1
     pipeline_state = base.State(
-        q=jp.zeros(1),
-        qd=jp.zeros(1),
-        x=base.Transform.create(pos=jp.zeros(3)),
-        xd=base.Motion.create(vel=jp.zeros(3)),
-        contact=None
+      q=jp.zeros(1),
+      qd=jp.zeros(1),
+      x=base.Transform.create(pos=jp.zeros(3)),
+      xd=base.Motion.create(vel=jp.zeros(3)),
+      contact=None,
     )
     obs = jp.zeros(2)
-    obs = {'state': obs} if self._use_dict_obs else obs
+    obs = {"state": obs} if self._use_dict_obs else obs
     if self._asymmetric_obs:
-      obs['privileged_state'] = jp.zeros(4)  # Dummy privileged state.
+      obs["privileged_state"] = jp.zeros(4)  # Dummy privileged state.
     if self._pixel_obs:
-      pixels = {'pixels/view_0': jp.zeros((4, 4, 3)),
-                'pixels/view_1': jp.zeros((4, 4, 3))}
+      pixels = {
+        "pixels/view_0": jp.zeros((4, 4, 3)),
+        "pixels/view_1": jp.zeros((4, 4, 3)),
+      }
       obs = {**obs, **pixels} if self._state_obs else pixels
     obs = FrozenDict(obs) if self._use_dict_obs else obs
     reward, done = jp.array(0.0), jp.array(0.0)
@@ -72,16 +76,18 @@ class Fast(PipelineEnv):
     vel = state.pipeline_state.xd.vel + (action > 0) * self._dt
     pos = state.pipeline_state.x.pos + vel * self._dt
     qp = state.pipeline_state.replace(
-        x=state.pipeline_state.x.replace(pos=pos),
-        xd=state.pipeline_state.xd.replace(vel=vel),
+      x=state.pipeline_state.x.replace(pos=pos),
+      xd=state.pipeline_state.xd.replace(vel=vel),
     )
     obs = jp.array([pos[0], vel[0]])
-    obs = {'state': obs} if self._use_dict_obs else obs
+    obs = {"state": obs} if self._use_dict_obs else obs
     if self._asymmetric_obs:
-      obs['privileged_state'] = jp.zeros(4)  # Dummy privileged state.
+      obs["privileged_state"] = jp.zeros(4)  # Dummy privileged state.
     if self._pixel_obs:
-      pixels = {'pixels/view_0': jp.zeros((4, 4, 3)),
-                'pixels/view_1': jp.zeros((4, 4, 3))}
+      pixels = {
+        "pixels/view_0": jp.zeros((4, 4, 3)),
+        "pixels/view_1": jp.zeros((4, 4, 3)),
+      }
       obs = {**obs, **pixels} if self._state_obs else pixels
     reward = pos[0]
     obs = FrozenDict(obs) if self._use_dict_obs else obs
@@ -100,12 +106,12 @@ class Fast(PipelineEnv):
     if not self._use_dict_obs:
       return 2
 
-    obs = {'state': 2}
+    obs = {"state": 2}
     if self._asymmetric_obs:
-      obs['privileged_state'] = 4
+      obs["privileged_state"] = 4
     if self._pixel_obs:
-      obs['pixels/view_0'] = (4, 4, 3)
-      obs['pixels/view_1'] = (4, 4, 3)
+      obs["pixels/view_0"] = (4, 4, 3)
+      obs["pixels/view_1"] = (4, 4, 3)
     return obs
 
   @property

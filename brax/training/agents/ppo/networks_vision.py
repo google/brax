@@ -16,9 +16,9 @@
 
 from typing import Any, Callable, Mapping, Sequence, Tuple
 
-import jax.numpy as jp
 import flax
 from flax import linen
+import jax.numpy as jp
 
 from brax.training import distribution
 from brax.training import networks
