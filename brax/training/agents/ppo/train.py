@@ -178,6 +178,7 @@ def train(
   if madrona_backend:
     assert not eval_env, "Madrona-MJX doesn't support multiple env instances"
     assert num_eval_envs == num_envs, "Madrona-MJX requires a fixed batch size"
+    assert action_repeat == 1, "Implement action_repeat using PipelineEnv's _n_frames to avoid unnecessary rendering!"
 
   assert batch_size * num_minibatches % num_envs == 0
   xt = time.time()
@@ -233,9 +234,7 @@ def train(
           randomization_fn, rng=randomization_rng
       )
     if isinstance(environment, envs.Env):
-      wrap_for_training = functools.partial(
-        envs.training.wrap, scan = not madrona_backend
-      )
+      wrap_for_training = envs.training.wrap
     else:
       wrap_for_training = envs_v1.wrappers.wrap_for_training
     env = wrap_for_training(
