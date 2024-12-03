@@ -233,7 +233,6 @@ def train(
   key_envs = jnp.reshape(key_envs,
                          (local_devices_to_use, -1) + key_envs.shape[1:])
   env_state = reset_fn(key_envs)
-
   # Discard the batch axes over devices and envs.
   obs_shape = jax.tree_util.tree_map(lambda x: x.shape[2:], env_state.obs)
 
@@ -393,7 +392,7 @@ def train(
   )
 
   obs_shape = jax.tree_util.tree_map(
-    lambda x: specs.Array(x.shape[-1:], jnp.dtype('float32')), env_state.obs
+      lambda x: specs.Array(x.shape[-1:], jnp.dtype('float32')), env_state.obs
   )
   training_state = TrainingState(  # pytype: disable=wrong-arg-types  # jax-ndarray
       optimizer_state=optimizer.init(init_params),  # pytype: disable=wrong-arg-types  # numpy-scalars

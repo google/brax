@@ -87,6 +87,7 @@ def make_ppo_networks(
       hidden_layer_sizes=value_hidden_layer_sizes,
       activation=activation,
       obs_key=value_obs_key)
+
   return PPONetworks(
       policy_network=policy_network,
       value_network=value_network,

@@ -6,3 +6,6 @@
 * Change PPO train function to return both value and policy network params, rather than just policy params.
 * Merge https://github.com/google/brax/pull/561, adds grad norm clipping to PPO.
 * Merge https://github.com/google/brax/issues/477, changes pusher vel damping.
+* Merge https://github.com/google/brax/pull/558, adds `mocap_pos` and `mocap_quat` to render function.
+* Merge https://github.com/google/brax/pull/559, allows for dictionary observations environment `State`.
+* Merge https://github.com/google/brax/pull/562, which supports asymmetric actor-critic for PPO.

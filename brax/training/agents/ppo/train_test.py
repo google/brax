@@ -29,6 +29,7 @@ import jax.numpy as jp
 class PPOTest(parameterized.TestCase):
   """Tests for PPO module."""
 
+
   @parameterized.parameters(True, False)
   def testTrain(self, use_dict_obs):
     """Test PPO with a simple env."""
@@ -71,7 +72,48 @@ class PPOTest(parameterized.TestCase):
         normalize_observations=True,
         seed=2,
         reward_scaling=10,
-        normalize_advantage=False)
+        normalize_advantage=False,
+    )
+
+  def testTrainAsymmetricActorCritic(self):
+    """Test PPO with asymmetric actor critic."""
+    env = envs.get_environment('fast', asymmetric_obs=True, use_dict_obs=True)
+
+    network_factory = functools.partial(
+        ppo_networks.make_ppo_networks,
+        policy_hidden_layer_sizes=(32,),
+        value_hidden_layer_sizes=(32,),
+        policy_obs_key='state',
+        value_obs_key='privileged_state',
+    )
+
+    _, (_, policy_params, value_params), _ = ppo.train(
+        env,
+        num_timesteps=2**15,
+        episode_length=1000,
+        num_envs=64,
+        learning_rate=3e-4,
+        entropy_cost=1e-2,
+        discounting=0.95,
+        unroll_length=5,
+        batch_size=64,
+        num_minibatches=8,
+        num_updates_per_batch=4,
+        normalize_observations=False,
+        seed=2,
+        reward_scaling=10,
+        normalize_advantage=False,
+        network_factory=network_factory,
+    )
+
+    self.assertEqual(
+        policy_params['params']['hidden_0']['kernel'].shape,
+        (env.observation_size['state'], 32),
+    )
+    self.assertEqual(
+        value_params['params']['hidden_0']['kernel'].shape,
+        (env.observation_size['privileged_state'], 32),
+    )
 
   @parameterized.parameters(True, False)
   def testNetworkEncoding(self, normalize_observations):
@@ -131,46 +173,6 @@ class PPOTest(parameterized.TestCase):
         reward_scaling=10,
         normalize_advantage=False,
         randomization_fn=rand_fn,
-    )
-
-  def testTrainAsymmetricActorCritic(self):
-    """Test PPO with asymmetric actor critic."""
-    env = envs.get_environment('fast', asymmetric_obs=True, use_dict_obs=True)
-
-    network_factory = functools.partial(
-      ppo_networks.make_ppo_networks,
-      policy_hidden_layer_sizes=(32,),
-      value_hidden_layer_sizes=(32,),
-      policy_obs_key='state',
-      value_obs_key='privileged_state'
-    )
-
-    _, (_, policy_params, value_params), _ = ppo.train(
-        env,
-        num_timesteps=2**15,
-        episode_length=1000,
-        num_envs=64,
-        learning_rate=3e-4,
-        entropy_cost=1e-2,
-        discounting=0.95,
-        unroll_length=5,
-        batch_size=64,
-        num_minibatches=8,
-        num_updates_per_batch=4,
-        normalize_observations=False,
-        seed=2,
-        reward_scaling=10,
-        normalize_advantage=False,
-        network_factory=network_factory,
-    )
-
-    self.assertEqual(
-      policy_params['params']['hidden_0']['kernel'].shape,
-      (env.observation_size['state'], 32),
-    )
-    self.assertEqual(
-      value_params['params']['hidden_0']['kernel'].shape,
-      (env.observation_size['privileged_state'], 32),
     )
 
 

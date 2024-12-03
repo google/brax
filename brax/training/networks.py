@@ -82,9 +82,11 @@ class SNMLP(linen.Module):
         hidden = self.activation(hidden)
     return hidden
 
-def get_obs_state_size(obs_size: types.ObservationSize, obs_key: str) -> int:
-    obs_size = obs_size[obs_key] if isinstance(obs_size, Mapping) else obs_size
-    return jax.tree_util.tree_flatten(obs_size)[0][-1] # Size can be tuple or int.
+
+def _get_obs_state_size(obs_size: types.ObservationSize, obs_key: str) -> int:
+  obs_size = obs_size[obs_key] if isinstance(obs_size, Mapping) else obs_size
+  return jax.tree_util.tree_flatten(obs_size)[0][-1]
+
 
 def make_policy_network(
     param_size: int,
@@ -105,10 +107,10 @@ def make_policy_network(
 
   def apply(processor_params, policy_params, obs):
     obs = preprocess_observations_fn(obs, processor_params)
-    obs = obs if isinstance(obs, jnp.ndarray) else obs[obs_key]
+    obs = obs if isinstance(obs, jax.Array) else obs[obs_key]
     return policy_module.apply(policy_params, obs)
 
-  obs_size = get_obs_state_size(obs_size, obs_key)
+  obs_size = _get_obs_state_size(obs_size, obs_key)
   dummy_obs = jnp.zeros((1, obs_size))
   return FeedForwardNetwork(
       init=lambda key: policy_module.init(key, dummy_obs), apply=apply)
@@ -129,17 +131,17 @@ def make_value_network(
 
   def apply(processor_params, value_params, obs):
     obs = preprocess_observations_fn(obs, processor_params)
-    obs = obs if isinstance(obs, jnp.ndarray) else obs[obs_key]
+    obs = obs if isinstance(obs, jax.Array) else obs[obs_key]
     return jnp.squeeze(value_module.apply(value_params, obs), axis=-1)
 
-  obs_size = get_obs_state_size(obs_size, obs_key)
+  obs_size = _get_obs_state_size(obs_size, obs_key)
   dummy_obs = jnp.zeros((1, obs_size))
   return FeedForwardNetwork(
       init=lambda key: value_module.init(key, dummy_obs), apply=apply)
 
 
 def make_q_network(
-    obs_size: int,
+    obs_size: types.ObservationSize,
     action_size: int,
     preprocess_observations_fn: types.PreprocessObservationFn = types
     .identity_observation_preprocessor,
