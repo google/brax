@@ -1,18 +1,28 @@
+# Copyright 2024 The Brax Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """PPO vision networks."""
 
-from typing import Any, Callable, Mapping, Sequence, Tuple, Union
+from typing import Any, Callable, Mapping, Sequence, Tuple
 
-import jax
 import jax.numpy as jp
 import flax
 from flax import linen
-from flax.core import FrozenDict
 
 from brax.training import distribution
 from brax.training import networks
 from brax.training import types
-from brax.training.agents.ppo.networks_cnn import VisionMLP
-from brax.training.acme.running_statistics import RunningStatisticsState
 
 
 ModuleDef = Any
@@ -25,85 +35,6 @@ class PPONetworks:
   policy_network: networks.FeedForwardNetwork
   value_network: networks.FeedForwardNetwork
   parametric_action_distribution: distribution.ParametricDistribution
-
-
-def normalizer_select(processor_params: RunningStatisticsState, obs_key: str) -> RunningStatisticsState:
-  return RunningStatisticsState(
-        count=processor_params,
-        mean=processor_params.mean[obs_key],
-        summed_variance=processor_params.summed_variance[obs_key],
-        std = processor_params.std[obs_key],
-      )
-
-
-def make_policy_network_vision(
-  observation_size: Mapping[str, Tuple[int, ...]],
-  output_size: int,
-  preprocess_observations_fn: types.PreprocessObservationFn = types.identity_observation_preprocessor,
-  hidden_layer_sizes: Sequence[int] = [256, 256],
-  activation: ActivationFn = linen.swish,
-  kernel_init: Initializer = jax.nn.initializers.lecun_uniform(),
-  layer_norm: bool = False,
-  state_obs_key: str = "",
-  normalise_channels: bool = False,
-) -> networks.FeedForwardNetwork:
-  module = VisionMLP(
-    layer_sizes=list(hidden_layer_sizes) + [output_size],
-    activation=activation,
-    kernel_init=kernel_init,
-    layer_norm=layer_norm,
-    normalise_channels=normalise_channels,
-    state_obs_key=state_obs_key,
-  )
-
-  def apply(processor_params, policy_params, obs):
-    obs = FrozenDict(obs)
-    if state_obs_key:
-      state_obs = preprocess_observations_fn(
-        obs[state_obs_key],
-        normalizer_select(processor_params, state_obs_key)
-      )
-      obs = obs.copy({state_obs_key: state_obs})
-    return module.apply(policy_params, obs)
-
-  dummy_obs = {key: jp.zeros((1,) + shape) for key, shape in observation_size.items()}
-
-  return networks.FeedForwardNetwork(
-    init=lambda key: module.init(key, dummy_obs), apply=apply
-  )
-
-
-def make_value_network_vision(
-  observation_size: Mapping[str, Tuple[int, ...]],
-  preprocess_observations_fn: types.PreprocessObservationFn = types.identity_observation_preprocessor,
-  hidden_layer_sizes: Sequence[int] = [256, 256],
-  activation: ActivationFn = linen.swish,
-  kernel_init: Initializer = jax.nn.initializers.lecun_uniform(),
-  state_obs_key: str = "",
-  normalise_channels: bool = False,
-) -> networks.FeedForwardNetwork:
-  value_module = VisionMLP(
-    layer_sizes=list(hidden_layer_sizes) + [1],
-    activation=activation,
-    kernel_init=kernel_init,
-    normalise_channels=normalise_channels,
-    state_obs_key=state_obs_key,
-  )
-
-  def apply(processor_params, policy_params, obs):
-    obs = FrozenDict(obs)
-    if state_obs_key:
-      state_obs = preprocess_observations_fn(
-        obs[state_obs_key],
-        normalizer_select(processor_params, state_obs_key)
-      )
-      obs = obs.copy({state_obs_key: state_obs})
-    return jp.squeeze(value_module.apply(policy_params, obs), axis=-1)
-
-  dummy_obs = {key: jp.zeros((1,) + shape) for key, shape in observation_size.items()}
-  return networks.FeedForwardNetwork(
-    init=lambda key: value_module.init(key, dummy_obs), apply=apply
-  )
 
 
 def make_ppo_networks_vision(
@@ -124,7 +55,7 @@ def make_ppo_networks_vision(
     event_size=action_size
   )
 
-  policy_network = make_policy_network_vision(
+  policy_network = networks.make_policy_network_vision(
     observation_size=observation_size,
     output_size=parametric_action_distribution.param_size,
     preprocess_observations_fn=preprocess_observations_fn,
@@ -134,7 +65,7 @@ def make_ppo_networks_vision(
     normalise_channels=normalise_channels,
   )
 
-  value_network = make_value_network_vision(
+  value_network = networks.make_value_network_vision(
     observation_size=observation_size,
     preprocess_observations_fn=preprocess_observations_fn,
     activation=activation,

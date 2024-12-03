@@ -17,10 +17,14 @@
 import dataclasses
 from typing import Any, Callable, Mapping, Sequence, Tuple
 import warnings
+import functools
 
 from brax.training import types
 from brax.training.spectral_norm import SNDense
+from brax.training.acme.running_statistics import RunningStatisticsState
+
 from flax import linen
+from flax.core import FrozenDict
 import jax
 import jax.numpy as jnp
 
@@ -104,7 +108,62 @@ class CNN(linen.Module):
 
       hidden = self.activation(hidden)
     return hidden
+
+
+class VisionMLP(linen.Module):
+  """ 
+  Applies a CNN backbone then an MLP.
   
+  The CNN architecture originates from the paper:
+  "Human-level control through deep reinforcement learning",
+  Nature 518, no. 7540 (2015): 529-533
+  """
+  layer_sizes: Sequence[int]
+  activation: ActivationFn = linen.relu
+  kernel_init: Initializer = jax.nn.initializers.lecun_uniform()
+  activate_final: bool = False
+  layer_norm: bool = False
+  normalise_channels: bool = False
+  state_obs_key: str = ""
+
+  @linen.compact
+  def __call__(self, data: dict):
+    pixels_hidden = {k: v for k, v in data.items() if k.startswith("pixels/")}
+    if self.normalise_channels:
+      # Calculates shared statistics over an entire 2D image.
+      image_layernorm = functools.partial(
+        linen.LayerNorm, use_bias=False, use_scale=False, reduction_axes=(-1, -2)
+      )
+      def ln_per_chan(v: jax.Array):
+        normalised = [image_layernorm()(v[..., chan]) for chan in range(v.shape[-1])]
+        return jnp.stack(normalised, axis=-1)
+
+      pixels_hidden = jax.tree.map(ln_per_chan, pixels_hidden)
+
+    natureCNN = functools.partial(
+      CNN,
+      num_filters=[32, 64, 64],
+      kernel_sizes=[(8, 8), (4, 4), (3, 3)],
+      strides=[(4, 4), (2, 2), (1, 1)],
+      activation=linen.relu,
+      use_bias=False,
+    )
+    cnn_outs = [natureCNN()(pixels_hidden[key]) for key in pixels_hidden]
+    cnn_outs = [jnp.mean(cnn_out, axis=(-2, -3)) for cnn_out in cnn_outs]
+    if self.state_obs_key:
+      cnn_outs.append(
+        data[self.state_obs_key]
+      )  # TODO: Try with dedicated state network
+
+    hidden = jnp.concatenate(cnn_outs, axis=-1)
+    return MLP(
+      layer_sizes=self.layer_sizes,
+      activation=self.activation,
+      kernel_init=self.kernel_init,
+      activate_final=self.activate_final,
+      layer_norm=self.layer_norm,
+    )(hidden)  
+
 
 def get_obs_state_size(obs_size: types.ObservationSize, obs_key: str) -> int:
     obs_size = obs_size[obs_key] if isinstance(obs_size, Mapping) else obs_size
@@ -161,6 +220,83 @@ def make_value_network(
   return FeedForwardNetwork(
       init=lambda key: value_module.init(key, dummy_obs), apply=apply)
 
+
+def normalizer_select(processor_params: RunningStatisticsState, obs_key: str) -> RunningStatisticsState:
+  return RunningStatisticsState(
+        count=processor_params,
+        mean=processor_params.mean[obs_key],
+        summed_variance=processor_params.summed_variance[obs_key],
+        std = processor_params.std[obs_key],
+      )
+
+def make_policy_network_vision(
+  observation_size: Mapping[str, Tuple[int, ...]],
+  output_size: int,
+  preprocess_observations_fn: types.PreprocessObservationFn = types.identity_observation_preprocessor,
+  hidden_layer_sizes: Sequence[int] = [256, 256],
+  activation: ActivationFn = linen.swish,
+  kernel_init: Initializer = jax.nn.initializers.lecun_uniform(),
+  layer_norm: bool = False,
+  state_obs_key: str = "",
+  normalise_channels: bool = False,
+) -> FeedForwardNetwork:
+  module = VisionMLP(
+    layer_sizes=list(hidden_layer_sizes) + [output_size],
+    activation=activation,
+    kernel_init=kernel_init,
+    layer_norm=layer_norm,
+    normalise_channels=normalise_channels,
+    state_obs_key=state_obs_key,
+  )
+
+  def apply(processor_params, policy_params, obs):
+    obs = FrozenDict(obs)
+    if state_obs_key:
+      state_obs = preprocess_observations_fn(
+        obs[state_obs_key],
+        normalizer_select(processor_params, state_obs_key)
+      )
+      obs = obs.copy({state_obs_key: state_obs})
+    return module.apply(policy_params, obs)
+
+  dummy_obs = {key: jnp.zeros((1,) + shape) for key, shape in observation_size.items()}
+
+  return FeedForwardNetwork(
+    init=lambda key: module.init(key, dummy_obs), apply=apply
+  )
+
+
+def make_value_network_vision(
+  observation_size: Mapping[str, Tuple[int, ...]],
+  preprocess_observations_fn: types.PreprocessObservationFn = types.identity_observation_preprocessor,
+  hidden_layer_sizes: Sequence[int] = [256, 256],
+  activation: ActivationFn = linen.swish,
+  kernel_init: Initializer = jax.nn.initializers.lecun_uniform(),
+  state_obs_key: str = "",
+  normalise_channels: bool = False,
+) -> FeedForwardNetwork:
+  value_module = VisionMLP(
+    layer_sizes=list(hidden_layer_sizes) + [1],
+    activation=activation,
+    kernel_init=kernel_init,
+    normalise_channels=normalise_channels,
+    state_obs_key=state_obs_key,
+  )
+
+  def apply(processor_params, policy_params, obs):
+    obs = FrozenDict(obs)
+    if state_obs_key:
+      state_obs = preprocess_observations_fn(
+        obs[state_obs_key],
+        normalizer_select(processor_params, state_obs_key)
+      )
+      obs = obs.copy({state_obs_key: state_obs})
+    return jnp.squeeze(value_module.apply(policy_params, obs), axis=-1)
+
+  dummy_obs = {key: jnp.zeros((1,) + shape) for key, shape in observation_size.items()}
+  return FeedForwardNetwork(
+    init=lambda key: value_module.init(key, dummy_obs), apply=apply
+  )
 
 def make_q_network(
     obs_size: int,
