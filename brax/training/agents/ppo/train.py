@@ -32,7 +32,6 @@ from brax.training.acme import running_statistics
 from brax.training.acme import specs
 from brax.training.agents.ppo import losses as ppo_losses
 from brax.training.agents.ppo import networks as ppo_networks
-from brax.training.agents.ppo.networks_vision import remove_pixels
 from brax.training.types import Params
 from brax.training.types import PRNGKey
 from brax.v1 import envs as envs_v1
@@ -72,6 +71,14 @@ def _strip_weak_type(tree):
     leaf = jnp.asarray(leaf)
     return leaf.astype(leaf.dtype)
   return jax.tree_util.tree_map(f, tree)
+
+
+def remove_pixels(obs: Union[jnp.ndarray, Mapping]) -> Union[jnp.ndarray, Mapping]:
+  """Remove pixel observations from the observation dict.
+  FrozenDicts are used to avoid incorrect gradients."""
+  if not isinstance(obs, Mapping):
+    return obs
+  return FrozenDict({k: v for k, v in obs.items() if not k.startswith("pixels/")})
 
 
 def train(

@@ -11,8 +11,8 @@ from flax.core import FrozenDict
 from brax.training import distribution
 from brax.training import networks
 from brax.training import types
-from brax.training.types import PRNGKey
 from brax.training.agents.ppo.networks_cnn import VisionMLP
+from brax.training.acme.running_statistics import RunningStatisticsState
 
 
 ModuleDef = Any
@@ -27,12 +27,13 @@ class PPONetworks:
   parametric_action_distribution: distribution.ParametricDistribution
 
 
-def remove_pixels(obs: Union[jp.ndarray, Mapping]) -> Union[jp.ndarray, Mapping]:
-  """Remove pixel observations from the observation dict.
-  FrozenDicts are used to avoid incorrect gradients."""
-  if not isinstance(obs, Mapping):
-    return obs
-  return FrozenDict({k: v for k, v in obs.items() if not k.startswith("pixels/")})
+def normalizer_select(processor_params: RunningStatisticsState, obs_key: str) -> RunningStatisticsState:
+  return RunningStatisticsState(
+        count=processor_params,
+        mean=processor_params.mean[obs_key],
+        summed_variance=processor_params.summed_variance[obs_key],
+        std = processor_params.std[obs_key],
+      )
 
 
 def make_policy_network_vision(
@@ -58,8 +59,11 @@ def make_policy_network_vision(
   def apply(processor_params, policy_params, obs):
     obs = FrozenDict(obs)
     if state_obs_key:
-      state_obs = preprocess_observations_fn(remove_pixels(obs), processor_params)
-      obs = obs.copy({state_obs_key: state_obs[state_obs_key]})
+      state_obs = preprocess_observations_fn(
+        obs[state_obs_key],
+        normalizer_select(processor_params, state_obs_key)
+      )
+      obs = obs.copy({state_obs_key: state_obs})
     return module.apply(policy_params, obs)
 
   dummy_obs = {key: jp.zeros((1,) + shape) for key, shape in observation_size.items()}
@@ -89,9 +93,11 @@ def make_value_network_vision(
   def apply(processor_params, policy_params, obs):
     obs = FrozenDict(obs)
     if state_obs_key:
-      # Apply normaliser to state-based params.
-      state_obs = preprocess_observations_fn(remove_pixels(obs), processor_params)
-      obs = obs.copy({state_obs_key: state_obs[state_obs_key]})
+      state_obs = preprocess_observations_fn(
+        obs[state_obs_key],
+        normalizer_select(processor_params, state_obs_key)
+      )
+      obs = obs.copy({state_obs_key: state_obs})
     return jp.squeeze(value_module.apply(policy_params, obs), axis=-1)
 
   dummy_obs = {key: jp.zeros((1,) + shape) for key, shape in observation_size.items()}
