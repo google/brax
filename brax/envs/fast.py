@@ -26,6 +26,15 @@ from brax.envs.base import PipelineEnv, State
 
 
 class ObservationMode(Enum):
+  """
+  Describes observation formats.
+
+  Attributes:
+    NDARRAY: Flat NumPy array of state info.
+    DICT_STATE: Dictionary of state info.
+    DICT_PIXELS: Dictionary of pixel observations.
+    DICT_PIXELS_STATE: Dictionary of both state and pixel info.
+  """
   NDARRAY = "ndarray"
   DICT_STATE = "dict_state"
   DICT_PIXELS = "dict_pixels"
@@ -122,9 +131,8 @@ class Fast(PipelineEnv):
     ret = super().observation_size
     if self._obs_mode == ObservationMode.NDARRAY:
       return ret
-    else:
-      # Turn 1-D tuples to ints.
-      return {key: value[0] if len(value) == 1 else value for key, value in ret.items()}
+    # Turn 1-D tuples to ints.
+    return {key: value[0] if len(value) == 1 else value for key, value in ret.items()}
 
   @property
   def action_size(self):

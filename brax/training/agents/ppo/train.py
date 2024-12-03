@@ -74,11 +74,44 @@ def _strip_weak_type(tree):
 
 
 def remove_pixels(obs: Union[jnp.ndarray, Mapping]) -> Union[jnp.ndarray, Mapping]:
-  """Remove pixel observations from the observation dict.
+  """Removes pixel observations from the observation dict.
   FrozenDicts are used to avoid incorrect gradients."""
   if not isinstance(obs, Mapping):
     return obs
   return FrozenDict({k: v for k, v in obs.items() if not k.startswith("pixels/")})
+
+
+def random_translate_pixels(obs: Mapping[str, jax.Array], key: PRNGKey):
+  """Apply random translations to B x T x ... pixel observations. 
+  The same shift is applied across the unroll_length (T) dimension."""
+  obs = FrozenDict(obs)
+
+  @jax.vmap
+  def rt_all_views(ub_obs: Mapping[str, jax.Array], key: PRNGKey) -> Mapping[str, jax.Array]:
+    # Expects dictionary of unbatched observations.
+    def rt_view(img: jax.Array, padding: int, key: PRNGKey) -> jax.Array:  # TxHxWxC
+      # Randomly translates a set of pixel inputs.
+      # Adapted from https://github.com/ikostrikov/jaxrl/blob/main/jaxrl/agents/drq/augmentations.py
+      crop_from = jax.random.randint(key, (2,), 0, 2 * padding + 1)
+      zero = jnp.zeros((1,), dtype=jnp.int32)
+      crop_from = jnp.concatenate([zero, crop_from, zero])
+      padded_img = jnp.pad(
+        img, ((0, 0), (padding, padding), (padding, padding), (0, 0)), mode="edge"
+      )
+      return jax.lax.dynamic_slice(padded_img, crop_from, img.shape)
+
+    out = {}
+    for k_view, v_view in ub_obs.items():
+      if k_view.startswith("pixels/"):
+        key, key_shift = jax.random.split(key)
+        out[k_view] = rt_view(v_view, 4, key_shift)
+    ub_obs = ub_obs.copy(out)  # Update the shifted fields
+    return ub_obs
+
+  bdim = next(iter(obs.items()), None)[1].shape[0]
+  keys = jax.random.split(key, bdim)
+  obs = rt_all_views(obs, keys)
+  return obs
 
 
 def train(
@@ -176,9 +209,12 @@ def train(
     Tuple of (make_policy function, network params, metrics)
   """
   if madrona_backend:
-    assert not eval_env, "Madrona-MJX doesn't support multiple env instances"
-    assert num_eval_envs == num_envs, "Madrona-MJX requires a fixed batch size"
-    assert action_repeat == 1, "Implement action_repeat using PipelineEnv's _n_frames to avoid unnecessary rendering!"
+    if eval_env:
+        raise ValueError("Madrona-MJX doesn't support multiple env instances")
+    if num_eval_envs != num_envs:
+        raise ValueError("Madrona-MJX requires a fixed batch size")
+    if action_repeat != 1:
+        raise ValueError("Implement action_repeat using PipelineEnv's _n_frames to avoid unnecessary rendering!")
 
   assert batch_size * num_minibatches % num_envs == 0
   xt = time.time()
@@ -283,36 +319,6 @@ def train(
   gradient_update_fn = gradients.gradient_update_fn(
       loss_fn, optimizer, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True)
 
-  def random_translate_pixels(obs: Mapping[str, jax.Array], key):
-    obs = FrozenDict(obs)
-
-    @jax.vmap
-    def rt_all_views(ub_obs: Mapping[str, jax.Array], key) -> Mapping[str, jax.Array]:
-      # Expects dictionary of unbatched observations.
-      def rt_view(key, img: jax.Array, padding) -> jax.Array:  # TxHxWxC
-        # Randomly translates a set of pixel inputs.
-        # Adapted from https://github.com/ikostrikov/jaxrl/blob/main/jaxrl/agents/drq/augmentations.py
-        crop_from = jax.random.randint(key, (2,), 0, 2 * padding + 1)
-        zero = jnp.zeros((1,), dtype=jnp.int32)
-        crop_from = jnp.concatenate([zero, crop_from, zero])
-        padded_img = jnp.pad(
-          img, ((0, 0), (padding, padding), (padding, padding), (0, 0)), mode="edge"
-        )
-        return jax.lax.dynamic_slice(padded_img, crop_from, img.shape)
-
-      out = {}
-      for k_view, v_view in ub_obs.items():
-        if k_view.startswith("pixels/"):
-          key, key_shift = jax.random.split(key)
-          out[k_view] = rt_view(key_shift, v_view, 4)
-      ub_obs = ub_obs.copy(out)  # Update the shifted fields
-      return ub_obs
-
-    bdim = next(iter(obs.items()), None)[1].shape[0]
-    keys = jax.random.split(key, bdim)
-    obs = rt_all_views(obs, keys)
-    return obs
-    
   def minibatch_step(
       carry, data: types.Transition,
       normalizer_params: running_statistics.RunningStatisticsState):
@@ -332,11 +338,6 @@ def train(
     optimizer_state, params, key = carry
     key, key_perm, key_grad = jax.random.split(key, 3)
 
-    def convert_data(x: jnp.ndarray):
-      x = jax.random.permutation(key_perm, x)
-      x = jnp.reshape(x, (num_minibatches, -1) + x.shape[1:])
-      return x
-
     if augment_pixels:
       key, key_rt = jax.random.split(key)
       r_translate = functools.partial(random_translate_pixels, key=key_rt)
@@ -348,6 +349,11 @@ def train(
         next_observation=r_translate(data.next_observation),
         extras=data.extras
       )
+
+    def convert_data(x: jnp.ndarray):
+      x = jax.random.permutation(key_perm, x)
+      x = jnp.reshape(x, (num_minibatches, -1) + x.shape[1:])
+      return x
 
     shuffled_data = jax.tree_util.tree_map(convert_data, data)
     (optimizer_state, params, _), metrics = jax.lax.scan(
