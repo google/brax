@@ -46,7 +46,7 @@ class SACTest(parameterized.TestCase):
         num_evals=3,
         seed=0)
     self.assertGreater(metrics['eval/episode_reward'], 140 * 0.995)
-    self.assertEqual(fast.reset_count, 2)  # type: ignore
+    self.assertEqual(fast.reset_count, 3)  # type: ignore
     # once for prefill, once for train, once for eval
     self.assertEqual(fast.step_count, 3)  # type: ignore
 
