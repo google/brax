@@ -13,6 +13,7 @@
 # limitations under the License.
 
 """Analytic policy gradient tests."""
+
 import pickle
 
 from absl.testing import absltest
@@ -52,13 +53,14 @@ class APGTest(parameterized.TestCase):
         num_envs=16,
         learning_rate=3e-3,
         normalize_observations=normalize_observations,
-        num_evals=200
+        num_evals=200,
     )
     normalize_fn = lambda x, y: x
     if normalize_observations:
       normalize_fn = running_statistics.normalize
-    apg_network = apg_networks.make_apg_networks(env.observation_size,
-                                                 env.action_size, normalize_fn)
+    apg_network = apg_networks.make_apg_networks(
+        env.observation_size, env.action_size, normalize_fn
+    )
     inference = apg_networks.make_inference_fn(apg_network)
     byte_encoding = pickle.dumps(params)
     decoded_params = pickle.loads(byte_encoding)
@@ -66,7 +68,8 @@ class APGTest(parameterized.TestCase):
     # Compute one action.
     state = env.reset(jax.random.PRNGKey(0))
     original_action = original_inference(decoded_params)(
-        state.obs, jax.random.PRNGKey(0))[0]
+        state.obs, jax.random.PRNGKey(0)
+    )[0]
     action = inference(decoded_params)(state.obs, jax.random.PRNGKey(0))[0]
     self.assertSequenceEqual(original_action, action)
     env.step(state, action)
@@ -96,6 +99,7 @@ class APGTest(parameterized.TestCase):
         normalize_observations=True,
         randomization_fn=rand_fn,
     )
+
 
 if __name__ == '__main__':
   absltest.main()

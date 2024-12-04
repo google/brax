@@ -203,7 +203,7 @@ class Walker2d(PipelineEnv):
   def step(self, state: State, action: jax.Array) -> State:
     """Runs one timestep of the environment's dynamics."""
     pipeline_state0 = state.pipeline_state
-    assert pipeline_state0  is not None
+    assert pipeline_state0 is not None
     pipeline_state = self.pipeline_step(pipeline_state0, action)
 
     x_velocity = (

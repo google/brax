@@ -13,6 +13,7 @@
 # limitations under the License.
 
 """Wrappers to convert brax envs to gym envs."""
+
 from typing import ClassVar, Optional
 
 from brax.envs.base import PipelineEnv
@@ -31,14 +32,13 @@ class GymWrapper(gym.Env):
   # `_reset` as signs of a deprecated gym Env API.
   _gym_disable_underscore_compat: ClassVar[bool] = True
 
-  def __init__(self,
-               env: PipelineEnv,
-               seed: int = 0,
-               backend: Optional[str] = None):
+  def __init__(
+      self, env: PipelineEnv, seed: int = 0, backend: Optional[str] = None
+  ):
     self._env = env
     self.metadata = {
         'render.modes': ['human', 'rgb_array'],
-        'video.frames_per_second': 1 / self._env.dt
+        'video.frames_per_second': 1 / self._env.dt,
     }
     self.seed(seed)
     self.backend = backend
@@ -94,14 +94,13 @@ class VectorGymWrapper(gym.vector.VectorEnv):
   # `_reset` as signs of a deprecated gym Env API.
   _gym_disable_underscore_compat: ClassVar[bool] = True
 
-  def __init__(self,
-               env: PipelineEnv,
-               seed: int = 0,
-               backend: Optional[str] = None):
+  def __init__(
+      self, env: PipelineEnv, seed: int = 0, backend: Optional[str] = None
+  ):
     self._env = env
     self.metadata = {
         'render.modes': ['human', 'rgb_array'],
-        'video.frames_per_second': 1 / self._env.dt
+        'video.frames_per_second': 1 / self._env.dt,
     }
     if not hasattr(self._env, 'batch_size'):
       raise ValueError('underlying env must be batched')

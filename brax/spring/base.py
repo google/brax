@@ -36,6 +36,7 @@ class State(base.State):
     i_inv: link inverse inertia
     mass: link mass
   """
+
   x_i: Transform
   xd_i: Motion
   j: Transform

@@ -319,6 +319,7 @@ def main(unused_argv):
 
   # Output an episode trajectory.
   env = get_environment(_ENV.value)
+
   @jax.jit
   def jit_next_state(state, key):
     new_key, tmp_key = jax.random.split(key)

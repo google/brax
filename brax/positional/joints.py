@@ -13,6 +13,7 @@
 # limitations under the License.
 
 """Joint definition and apply functions."""
+
 # pylint:disable=g-multiple-import
 from typing import Tuple
 
@@ -106,7 +107,8 @@ def position_update(sys: System, state: State) -> Transform:
   mass_inv = 1 / (sys.link.inertia.mass ** (1 - sys.spring_mass_scale))
   mass_inv_p = mass_inv[p_idx] * (p_idx > -1)
   dp_p_pos, dp_c_pos = jax.vmap(_translation_update)(
-      a_p, xi_p, i_inv_p, mass_inv_p, a_c, state.x_i, i_inv, mass_inv, -d_w.pos)
+      a_p, xi_p, i_inv_p, mass_inv_p, a_c, state.x_i, i_inv, mass_inv, -d_w.pos
+  )
   dp_p_ang, dp_c_ang = jax.vmap(_rotation_update)(
       xi_p, i_inv_p, state.x_i, i_inv, d_w.rot
   )
@@ -175,7 +177,10 @@ def _sphericalize(sys, j):
   def pad_free(_):
     # create dummy data for free links
     inf = jp.array([jp.inf, jp.inf, jp.inf])
-    return (-inf, inf), Motion(ang=jp.eye(3), vel=jp.eye(3)),
+    return (
+        (-inf, inf),
+        Motion(ang=jp.eye(3), vel=jp.eye(3)),
+    )
 
   def pad_x_dof(dof, x):
     if dof.limit:

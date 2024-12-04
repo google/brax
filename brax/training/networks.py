@@ -40,6 +40,7 @@ class FeedForwardNetwork:
 
 class MLP(linen.Module):
   """MLP module."""
+
   layer_sizes: Sequence[int]
   activation: ActivationFn = linen.relu
   kernel_init: Initializer = jax.nn.initializers.lecun_uniform()
@@ -55,8 +56,8 @@ class MLP(linen.Module):
           hidden_size,
           name=f'hidden_{i}',
           kernel_init=self.kernel_init,
-          use_bias=self.bias)(
-              hidden)
+          use_bias=self.bias,
+      )(hidden)
       if i != len(self.layer_sizes) - 1 or self.activate_final:
         hidden = self.activation(hidden)
         if self.layer_norm:
@@ -66,6 +67,7 @@ class MLP(linen.Module):
 
 class SNMLP(linen.Module):
   """MLP module with Spectral Normalization."""
+
   layer_sizes: Sequence[int]
   activation: ActivationFn = linen.relu
   kernel_init: Initializer = jax.nn.initializers.lecun_uniform()
@@ -80,8 +82,8 @@ class SNMLP(linen.Module):
           hidden_size,
           name=f'hidden_{i}',
           kernel_init=self.kernel_init,
-          use_bias=self.bias)(
-              hidden)
+          use_bias=self.bias,
+      )(hidden)
       if i != len(self.layer_sizes) - 1 or self.activate_final:
         hidden = self.activation(hidden)
     return hidden
@@ -182,19 +184,20 @@ def _get_obs_state_size(obs_size: types.ObservationSize, obs_key: str) -> int:
 def make_policy_network(
     param_size: int,
     obs_size: types.ObservationSize,
-    preprocess_observations_fn: types.PreprocessObservationFn = types
-    .identity_observation_preprocessor,
+    preprocess_observations_fn: types.PreprocessObservationFn = types.identity_observation_preprocessor,
     hidden_layer_sizes: Sequence[int] = (256, 256),
     activation: ActivationFn = linen.relu,
     kernel_init: Initializer = jax.nn.initializers.lecun_uniform(),
     layer_norm: bool = False,
-    obs_key: str = 'state') -> FeedForwardNetwork:
+    obs_key: str = 'state',
+) -> FeedForwardNetwork:
   """Creates a policy network."""
   policy_module = MLP(
       layer_sizes=list(hidden_layer_sizes) + [param_size],
       activation=activation,
       kernel_init=kernel_init,
-      layer_norm=layer_norm)
+      layer_norm=layer_norm,
+  )
 
   def apply(processor_params, policy_params, obs):
     obs = preprocess_observations_fn(obs, processor_params)
@@ -204,21 +207,23 @@ def make_policy_network(
   obs_size = _get_obs_state_size(obs_size, obs_key)
   dummy_obs = jnp.zeros((1, obs_size))
   return FeedForwardNetwork(
-      init=lambda key: policy_module.init(key, dummy_obs), apply=apply)
+      init=lambda key: policy_module.init(key, dummy_obs), apply=apply
+  )
 
 
 def make_value_network(
     obs_size: types.ObservationSize,
-    preprocess_observations_fn: types.PreprocessObservationFn = types
-    .identity_observation_preprocessor,
+    preprocess_observations_fn: types.PreprocessObservationFn = types.identity_observation_preprocessor,
     hidden_layer_sizes: Sequence[int] = (256, 256),
     activation: ActivationFn = linen.relu,
-    obs_key: str = 'state') -> FeedForwardNetwork:
+    obs_key: str = 'state',
+) -> FeedForwardNetwork:
   """Creates a value network."""
   value_module = MLP(
       layer_sizes=list(hidden_layer_sizes) + [1],
       activation=activation,
-      kernel_init=jax.nn.initializers.lecun_uniform())
+      kernel_init=jax.nn.initializers.lecun_uniform(),
+  )
 
   def apply(processor_params, value_params, obs):
     obs = preprocess_observations_fn(obs, processor_params)
@@ -228,22 +233,24 @@ def make_value_network(
   obs_size = _get_obs_state_size(obs_size, obs_key)
   dummy_obs = jnp.zeros((1, obs_size))
   return FeedForwardNetwork(
-      init=lambda key: value_module.init(key, dummy_obs), apply=apply)
+      init=lambda key: value_module.init(key, dummy_obs), apply=apply
+  )
 
 
 def make_q_network(
     obs_size: types.ObservationSize,
     action_size: int,
-    preprocess_observations_fn: types.PreprocessObservationFn = types
-    .identity_observation_preprocessor,
+    preprocess_observations_fn: types.PreprocessObservationFn = types.identity_observation_preprocessor,
     hidden_layer_sizes: Sequence[int] = (256, 256),
     activation: ActivationFn = linen.relu,
     n_critics: int = 2,
-    layer_norm: bool = False) -> FeedForwardNetwork:
+    layer_norm: bool = False,
+) -> FeedForwardNetwork:
   """Creates a value network."""
 
   class QModule(linen.Module):
     """Q Module."""
+
     n_critics: int
 
     @linen.compact
@@ -255,8 +262,8 @@ def make_q_network(
             layer_sizes=list(hidden_layer_sizes) + [1],
             activation=activation,
             kernel_init=jax.nn.initializers.lecun_uniform(),
-            layer_norm=layer_norm)(
-                hidden)
+            layer_norm=layer_norm,
+        )(hidden)
         res.append(q)
       return jnp.concatenate(res, axis=-1)
 
@@ -269,7 +276,8 @@ def make_q_network(
   dummy_obs = jnp.zeros((1, obs_size))
   dummy_action = jnp.zeros((1, action_size))
   return FeedForwardNetwork(
-      init=lambda key: q_module.init(key, dummy_obs, dummy_action), apply=apply)
+      init=lambda key: q_module.init(key, dummy_obs, dummy_action), apply=apply
+  )
 
 
 def make_model(
@@ -290,25 +298,28 @@ def make_model(
     a model
   """
   warnings.warn(
-      'make_model is deprecated, use make_{policy|q|value}_network instead.')
+      'make_model is deprecated, use make_{policy|q|value}_network instead.'
+  )
   dummy_obs = jnp.zeros((1, obs_size))
   if spectral_norm:
     module = SNMLP(layer_sizes=layer_sizes, activation=activation)
     model = FeedForwardNetwork(
-        init=lambda rng1, rng2: module.init({
-            'params': rng1,
-            'sing_vec': rng2
-        }, dummy_obs),
-        apply=module.apply)
+        init=lambda rng1, rng2: module.init(
+            {'params': rng1, 'sing_vec': rng2}, dummy_obs
+        ),
+        apply=module.apply,
+    )
   else:
     module = MLP(layer_sizes=layer_sizes, activation=activation)
     model = FeedForwardNetwork(
-        init=lambda rng: module.init(rng, dummy_obs), apply=module.apply)
+        init=lambda rng: module.init(rng, dummy_obs), apply=module.apply
+    )
   return model
 
 
-def make_models(policy_params_size: int,
-                obs_size: int) -> Tuple[FeedForwardNetwork, FeedForwardNetwork]:
+def make_models(
+    policy_params_size: int, obs_size: int
+) -> Tuple[FeedForwardNetwork, FeedForwardNetwork]:
   """Creates models for policy and value functions.
 
   Args:
@@ -319,7 +330,8 @@ def make_models(policy_params_size: int,
     a model for policy and a model for value function
   """
   warnings.warn(
-      'make_models is deprecated, use make_{policy|q|value}_network instead.')
+      'make_models is deprecated, use make_{policy|q|value}_network instead.'
+  )
   policy_model = make_model([32, 32, 32, 32, policy_params_size], obs_size)
   value_model = make_model([256, 256, 256, 256, 256, 1], obs_size)
   return policy_model, value_model

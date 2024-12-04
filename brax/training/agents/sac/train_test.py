@@ -44,7 +44,8 @@ class SACTest(parameterized.TestCase):
         reward_scaling=10,
         grad_updates_per_step=64,
         num_evals=3,
-        seed=0)
+        seed=0,
+    )
     self.assertGreater(metrics['eval/episode_reward'], 140 * 0.995)
     self.assertEqual(fast.reset_count, 3)  # type: ignore
     # once for prefill, once for train, once for eval
@@ -58,12 +59,14 @@ class SACTest(parameterized.TestCase):
         num_timesteps=128,
         episode_length=128,
         num_envs=128,
-        normalize_observations=normalize_observations)
+        normalize_observations=normalize_observations,
+    )
     normalize_fn = lambda x, y: x
     if normalize_observations:
       normalize_fn = running_statistics.normalize
-    sac_network = sac_networks.make_sac_networks(env.observation_size,
-                                                 env.action_size, normalize_fn)
+    sac_network = sac_networks.make_sac_networks(
+        env.observation_size, env.action_size, normalize_fn
+    )
     inference = sac_networks.make_inference_fn(sac_network)
     byte_encoding = pickle.dumps(params)
     decoded_params = pickle.loads(byte_encoding)
@@ -71,7 +74,8 @@ class SACTest(parameterized.TestCase):
     # Compute one action.
     state = env.reset(jax.random.PRNGKey(0))
     original_action = original_inference(decoded_params)(
-        state.obs, jax.random.PRNGKey(0))[0]
+        state.obs, jax.random.PRNGKey(0)
+    )[0]
     action = inference(decoded_params)(state.obs, jax.random.PRNGKey(0))[0]
     self.assertSequenceEqual(original_action, action)
     env.step(state, action)

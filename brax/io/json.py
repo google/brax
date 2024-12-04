@@ -16,7 +16,7 @@
 """Saves a system config and trajectory as json."""
 
 import json
-from typing import Optional, List, Text, Tuple
+from typing import List, Optional, Text, Tuple
 
 from brax.base import State, System
 from etils import epath

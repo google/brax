@@ -84,6 +84,7 @@ def point_jacobian(
   Returns:
     pt: point jacobian
   """
+
   # backward scan up tree: build the link mask corresponding to link_idx
   def mask_fn(mask_child, link):
     mask = link == link_idx

@@ -141,5 +141,6 @@ class MjcfTest(absltest.TestCase):
     with self.assertRaisesRegex(NotImplementedError, 'transmission types'):
       mjcf.validate_model(mj)  # raises an error
 
+
 if __name__ == '__main__':
   absltest.main()

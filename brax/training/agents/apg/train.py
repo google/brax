@@ -45,6 +45,7 @@ _PMAP_AXIS_NAME = 'i'
 @flax.struct.dataclass
 class TrainingState:
   """Contains training state for the learner."""
+
   optimizer_state: optax.OptState
   normalizer_params: running_statistics.RunningStatisticsState
   policy_params: Params
@@ -94,8 +95,13 @@ def train(
     local_devices_to_use = min(local_devices_to_use, max_devices_per_host)
   logging.info(
       'Device count: %d, process count: %d (id %d), local device count: %d, '
-      'devices to be used count: %d', jax.device_count(), process_count,
-      process_id, local_device_count, local_devices_to_use)
+      'devices to be used count: %d',
+      jax.device_count(),
+      process_count,
+      process_id,
+      local_device_count,
+      local_devices_to_use,
+  )
   device_count = local_devices_to_use * process_count
 
   num_updates = policy_updates
@@ -139,27 +145,31 @@ def train(
   if normalize_observations:
     normalize = running_statistics.normalize
   apg_network = network_factory(
-      obs_size,
-      env.action_size,
-      preprocess_observations_fn=normalize)
+      obs_size, env.action_size, preprocess_observations_fn=normalize
+  )
   make_policy = apg_networks.make_inference_fn(apg_network)
 
   if use_schedule:
     learning_rate = optax.exponential_decay(
-        init_value=learning_rate,
-        transition_steps=1,
-        decay_rate=schedule_decay
+        init_value=learning_rate, transition_steps=1, decay_rate=schedule_decay
     )
 
   optimizer = optax.chain(
       optax.clip(1.0),
-      optax.adam(learning_rate=learning_rate, b1=adam_b[0], b2=adam_b[1])
+      optax.adam(learning_rate=learning_rate, b1=adam_b[0], b2=adam_b[1]),
   )
 
   def scramble_times(state, key):
     state.info['steps'] = jnp.round(
-      jax.random.uniform(key, (local_devices_to_use, num_envs,),
-                         maxval=episode_length))
+        jax.random.uniform(
+            key,
+            (
+                local_devices_to_use,
+                num_envs,
+            ),
+            maxval=episode_length,
+        )
+    )
     return state
 
   def env_step(
@@ -283,7 +293,7 @@ def train(
     metrics = {
         'training/sps': sps,
         'training/walltime': training_walltime,
-        **{f'training/{name}': value for name, value in metrics.items()}
+        **{f'training/{name}': value for name, value in metrics.items()},
     }
     return training_state, env_state, metrics, key  # pytype: disable=bad-return-type  # py311-upgrade
 
@@ -297,10 +307,12 @@ def train(
       optimizer_state=optimizer.init(policy_params),
       policy_params=policy_params,
       normalizer_params=running_statistics.init_state(
-          specs.Array((env.observation_size,), jnp.dtype(dtype))))
+          specs.Array((env.observation_size,), jnp.dtype(dtype))
+      ),
+  )
   training_state = jax.device_put_replicated(
-      training_state,
-      jax.local_devices()[:local_devices_to_use])
+      training_state, jax.local_devices()[:local_devices_to_use]
+  )
 
   if not eval_env:
     eval_env = environment
@@ -322,7 +334,8 @@ def train(
       num_eval_envs=num_eval_envs,
       episode_length=episode_length,
       action_repeat=action_repeat,
-      key=eval_key)
+      key=eval_key,
+  )
 
   # Run initial eval
   metrics = {}
@@ -376,6 +389,7 @@ def train(
   # devices.
   pmap.assert_is_replicated(training_state)
   params = _unpmap(
-      (training_state.normalizer_params, training_state.policy_params))
+      (training_state.normalizer_params, training_state.policy_params)
+  )
   pmap.synchronize_hosts()
   return (make_policy, params, metrics)

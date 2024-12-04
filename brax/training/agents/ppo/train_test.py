@@ -13,6 +13,7 @@
 # limitations under the License.
 
 """PPO tests."""
+
 import functools
 import pickle
 from absl.testing import absltest
@@ -29,10 +30,10 @@ class PPOTest(parameterized.TestCase):
   """Tests for PPO module."""
 
 
-  @parameterized.parameters("ndarray", "dict_state")
+  @parameterized.parameters('ndarray', 'dict_state')
   def testTrain(self, obs_mode):
     """Test PPO with a simple env."""
-    fast = envs.get_environment("fast", obs_mode=obs_mode)
+    fast = envs.get_environment('fast', obs_mode=obs_mode)
     _, _, metrics = ppo.train(
         fast,
         num_timesteps=2**15,
@@ -49,7 +50,8 @@ class PPOTest(parameterized.TestCase):
         seed=2,
         num_evals=3,
         reward_scaling=10,
-        normalize_advantage=False)
+        normalize_advantage=False,
+    )
     self.assertGreater(metrics['eval/episode_reward'], 135)
     self.assertEqual(fast.reset_count, 2)  # type: ignore
     self.assertEqual(fast.step_count, 2)  # type: ignore
@@ -76,7 +78,9 @@ class PPOTest(parameterized.TestCase):
 
   def testTrainAsymmetricActorCritic(self):
     """Test PPO with asymmetric actor critic."""
-    env = envs.get_environment('fast', asymmetric_obs=True, obs_mode='dict_state')
+    env = envs.get_environment(
+        'fast', asymmetric_obs=True, obs_mode='dict_state'
+    )
 
     network_factory = functools.partial(
         ppo_networks.make_ppo_networks,
@@ -122,12 +126,14 @@ class PPOTest(parameterized.TestCase):
         num_timesteps=128,
         episode_length=128,
         num_envs=128,
-        normalize_observations=normalize_observations)
+        normalize_observations=normalize_observations,
+    )
     normalize_fn = lambda x, y: x
     if normalize_observations:
       normalize_fn = running_statistics.normalize
-    ppo_network = ppo_networks.make_ppo_networks(env.observation_size,
-                                                 env.action_size, normalize_fn)
+    ppo_network = ppo_networks.make_ppo_networks(
+        env.observation_size, env.action_size, normalize_fn
+    )
     inference = ppo_networks.make_inference_fn(ppo_network)
     byte_encoding = pickle.dumps(params)
     decoded_params = pickle.loads(byte_encoding)
@@ -135,7 +141,8 @@ class PPOTest(parameterized.TestCase):
     # Compute one action.
     state = env.reset(jax.random.PRNGKey(0))
     original_action = original_inference(decoded_params)(
-        state.obs, jax.random.PRNGKey(0))[0]
+        state.obs, jax.random.PRNGKey(0)
+    )[0]
     action = inference(decoded_params)(state.obs, jax.random.PRNGKey(0))[0]
     self.assertSequenceEqual(original_action, action)
     env.step(state, action)

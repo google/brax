@@ -13,6 +13,7 @@
 # limitations under the License.
 
 """Functions to convert Jax Arrays into PyTorch Tensors and vice-versa."""
+
 from collections import abc
 import functools
 from typing import Any, Dict, Union
@@ -28,7 +29,8 @@ try:
 except ImportError:
   warnings.warn(
       "brax.io.torch requires PyTorch. Please run `pip install torch` to use "
-      "functions from this module.")
+      "functions from this module."
+  )
   raise
 
 Device = Union[str, torch.device]
@@ -57,7 +59,7 @@ def _tensor_to_jax(value: torch.Tensor) -> jax.Array:
 
 @torch_to_jax.register(abc.Mapping)
 def _torch_dict_to_jax(
-    value: Dict[str, Union[torch.Tensor, Any]]
+    value: Dict[str, Union[torch.Tensor, Any]],
 ) -> Dict[str, Union[jax.Array, Any]]:
   """Converts a dict of PyTorch tensors into a dict of jax.Arrays."""
   return type(value)(**{k: torch_to_jax(v) for k, v in value.items()})  # type: ignore
@@ -94,8 +96,9 @@ def _jaxarray_to_tensor(
 
 @jax_to_torch.register(abc.Mapping)
 def _jax_dict_to_torch(
-    value: Dict[str, Union[jax.Array, Any]],
-    device: Union[Device, None] = None) -> Dict[str, Union[torch.Tensor, Any]]:
+    value: Dict[str, Union[jax.Array, Any]], device: Union[Device, None] = None
+) -> Dict[str, Union[torch.Tensor, Any]]:
   """Converts a dict of jax.Arrays into a dict of PyTorch tensors."""
   return type(value)(
-      **{k: jax_to_torch(v, device=device) for k, v in value.items()})  # type: ignore
+      **{k: jax_to_torch(v, device=device) for k, v in value.items()}
+  )  # type: ignore

@@ -118,8 +118,7 @@ class InvertedDoublePendulum(PipelineEnv):
 
   def __init__(self, backend='generalized', **kwargs):
     path = (
-        epath.resource_path('brax')
-        / 'envs/assets/inverted_double_pendulum.xml'
+        epath.resource_path('brax') / 'envs/assets/inverted_double_pendulum.xml'
     )
     sys = mjcf.load(path)
 
@@ -176,12 +175,10 @@ class InvertedDoublePendulum(PipelineEnv):
 
   def _get_obs(self, pipeline_sate: base.State) -> jax.Array:
     """Observe cartpole body position and velocities."""
-    return jp.concatenate(
-        [
-            pipeline_sate.q[:1],  # cart x pos
-            jp.sin(pipeline_sate.q[1:]),
-            jp.cos(pipeline_sate.q[1:]),
-            jp.clip(pipeline_sate.qd, -10, 10),
-            # qfrc_constraint is not added
-        ]
-    )
+    return jp.concatenate([
+        pipeline_sate.q[:1],  # cart x pos
+        jp.sin(pipeline_sate.q[1:]),
+        jp.cos(pipeline_sate.q[1:]),
+        jp.clip(pipeline_sate.qd, -10, 10),
+        # qfrc_constraint is not added
+    ])

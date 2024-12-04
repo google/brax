@@ -20,6 +20,7 @@ Reference:
     - https://arxiv.org/abs/1802.05957
     - https://github.com/deepmind/dm-haiku/blob/main/haiku/_src/spectral_norm.py
 """
+
 from typing import Any, Callable, Tuple
 
 from brax.training.types import PRNGKey
@@ -46,6 +47,7 @@ def _l2_normalize(x, axis=None, eps=1e-12):
       vectors in a batch. Passing `None` views `t` as a flattened vector when
       calculating the norm (equivalent to Frobenius norm).
     eps: Epsilon to avoid dividing by zero.
+
   Returns:
     An array of the same shape as 'x' L2-normalized along 'axis'.
   """
@@ -70,6 +72,7 @@ class SNDense(linen.Module):
     n_steps: How many steps of power iteration to perform to approximate the
       singular value of the input.
   """
+
   features: int
   use_bias: bool = True
   dtype: Any = jnp.float32
@@ -90,22 +93,24 @@ class SNDense(linen.Module):
       The transformed input.
     """
     inputs = jnp.asarray(inputs, self.dtype)
-    kernel = self.param('kernel',
-                        self.kernel_init,
-                        (inputs.shape[-1], self.features))
+    kernel = self.param(
+        'kernel', self.kernel_init, (inputs.shape[-1], self.features)
+    )
     kernel = jnp.asarray(kernel, self.dtype)
 
     kernel_shape = kernel.shape
     # Handle scalars.
     if kernel.ndim <= 1:
-      raise ValueError('Spectral normalization is not well defined for '
-                       'scalar inputs.')
+      raise ValueError(
+          'Spectral normalization is not well defined for scalar inputs.'
+      )
     # Handle higher-order tensors.
     elif kernel.ndim > 2:
       kernel = jnp.reshape(kernel, [-1, kernel.shape[-1]])
     key = self.make_rng('sing_vec')
-    u0_state = self.variable('sing_vec', 'u0', normal(stddev=1.), key,
-                             (1, kernel.shape[-1]))
+    u0_state = self.variable(
+        'sing_vec', 'u0', normal(stddev=1.0), key, (1, kernel.shape[-1])
+    )
     u0 = u0_state.value
 
     # Power iteration for the weight's singular value.
@@ -123,9 +128,12 @@ class SNDense(linen.Module):
 
     u0_state.value = u0
 
-    y = lax.dot_general(inputs, kernel,
-                        (((inputs.ndim - 1,), (0,)), ((), ())),
-                        precision=self.precision)
+    y = lax.dot_general(
+        inputs,
+        kernel,
+        (((inputs.ndim - 1,), (0,)), ((), ())),
+        precision=self.precision,
+    )
     if self.use_bias:
       bias = self.param('bias', self.bias_init, (self.features,))
       bias = jnp.asarray(bias, self.dtype)

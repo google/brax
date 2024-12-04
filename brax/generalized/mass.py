@@ -39,6 +39,7 @@ def matrix(sys: System, state: State) -> jax.Array:
     a symmetric positive matrix (qd_size, qd_size) representing the generalized
     mass and inertia of the system
   """
+
   # backward scan up tree: accumulate composite link inertias
   def crb_fn(crb_child, crb):
     if crb_child is not None:

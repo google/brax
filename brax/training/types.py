@@ -42,6 +42,7 @@ NetworkType = TypeVar('NetworkType')
 
 class Transition(NamedTuple):
   """Container for a transition."""
+
   observation: NestedArray
   action: NestedArray
   reward: NestedArray
@@ -70,8 +71,9 @@ class PreprocessObservationFn(Protocol):
     pass
 
 
-def identity_observation_preprocessor(observation: Observation,
-                                      preprocessor_params: PreprocessorParams):
+def identity_observation_preprocessor(
+    observation: Observation, preprocessor_params: PreprocessorParams
+):
   del preprocessor_params
   return observation
 
@@ -82,7 +84,6 @@ class NetworkFactory(Protocol[NetworkType]):
       self,
       observation_size: ObservationSize,
       action_size: int,
-      preprocess_observations_fn:
-      PreprocessObservationFn = identity_observation_preprocessor
+      preprocess_observations_fn: PreprocessObservationFn = identity_observation_preprocessor,
   ) -> NetworkType:
     pass

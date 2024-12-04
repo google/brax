@@ -85,7 +85,8 @@ class ParametricDistribution(abc.ABC):
     dist = self.create_dist(parameters)
     entropy = dist.entropy()
     entropy += self._postprocessor.forward_log_det_jacobian(
-        dist.sample(seed=seed))
+        dist.sample(seed=seed)
+    )
     if self._event_ndims == 1:
       entropy = jnp.sum(entropy, axis=-1)
     return entropy
@@ -106,11 +107,11 @@ class NormalDistribution:
 
   def log_prob(self, x):
     log_unnormalized = -0.5 * jnp.square(x / self.scale - self.loc / self.scale)
-    log_normalization = 0.5 * jnp.log(2. * jnp.pi) + jnp.log(self.scale)
+    log_normalization = 0.5 * jnp.log(2.0 * jnp.pi) + jnp.log(self.scale)
     return log_unnormalized - log_normalization
 
   def entropy(self):
-    log_normalization = 0.5 * jnp.log(2. * jnp.pi) + jnp.log(self.scale)
+    log_normalization = 0.5 * jnp.log(2.0 * jnp.pi) + jnp.log(self.scale)
     entropy = 0.5 + log_normalization
     return entropy * jnp.ones_like(self.loc)
 
@@ -125,7 +126,7 @@ class TanhBijector:
     return jnp.arctanh(y)
 
   def forward_log_det_jacobian(self, x):
-    return 2. * (jnp.log(2.) - x - jax.nn.softplus(-2. * x))
+    return 2.0 * (jnp.log(2.0) - x - jax.nn.softplus(-2.0 * x))
 
 
 class NormalTanhDistribution(ParametricDistribution):
@@ -150,7 +151,8 @@ class NormalTanhDistribution(ParametricDistribution):
         param_size=2 * event_size,
         postprocessor=TanhBijector(),
         event_ndims=1,
-        reparametrizable=True)
+        reparametrizable=True,
+    )
     self._min_std = min_std
     self._var_scale = var_scale
 

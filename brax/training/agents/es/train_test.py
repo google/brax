@@ -13,6 +13,7 @@
 # limitations under the License.
 
 """Evolution Strategy training tests."""
+
 import pickle
 
 from absl.testing import absltest
@@ -33,7 +34,8 @@ class ESTest(parameterized.TestCase):
         environment=envs.get_environment('fast'),
         num_timesteps=65536,
         episode_length=128,
-        learning_rate=0.1)
+        learning_rate=0.1,
+    )
     self.assertGreater(metrics['eval/episode_reward'], 140)
 
   @parameterized.parameters(True, False)
@@ -43,12 +45,14 @@ class ESTest(parameterized.TestCase):
         env,
         num_timesteps=128,
         episode_length=128,
-        normalize_observations=normalize_observations)
+        normalize_observations=normalize_observations,
+    )
     normalize_fn = lambda x, y: x
     if normalize_observations:
       normalize_fn = running_statistics.normalize
-    es_network = es_networks.make_es_networks(env.observation_size,
-                                              env.action_size, normalize_fn)
+    es_network = es_networks.make_es_networks(
+        env.observation_size, env.action_size, normalize_fn
+    )
     inference = es_networks.make_inference_fn(es_network)
     byte_encoding = pickle.dumps(params)
     decoded_params = pickle.loads(byte_encoding)

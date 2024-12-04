@@ -20,9 +20,11 @@ import jax
 import optax
 
 
-def loss_and_pgrad(loss_fn: Callable[..., float],
-                   pmap_axis_name: Optional[str],
-                   has_aux: bool = False):
+def loss_and_pgrad(
+    loss_fn: Callable[..., float],
+    pmap_axis_name: Optional[str],
+    has_aux: bool = False,
+):
   g = jax.value_and_grad(loss_fn, has_aux=has_aux)
 
   def h(*args, **kwargs):
@@ -32,10 +34,12 @@ def loss_and_pgrad(loss_fn: Callable[..., float],
   return g if pmap_axis_name is None else h
 
 
-def gradient_update_fn(loss_fn: Callable[..., float],
-                       optimizer: optax.GradientTransformation,
-                       pmap_axis_name: Optional[str],
-                       has_aux: bool = False):
+def gradient_update_fn(
+    loss_fn: Callable[..., float],
+    optimizer: optax.GradientTransformation,
+    pmap_axis_name: Optional[str],
+    has_aux: bool = False,
+):
   """Wrapper of the loss function that apply gradient updates.
 
   Args:
@@ -51,7 +55,8 @@ def gradient_update_fn(loss_fn: Callable[..., float],
     and the new optimizer state.
   """
   loss_and_pgrad_fn = loss_and_pgrad(
-      loss_fn, pmap_axis_name=pmap_axis_name, has_aux=has_aux)
+      loss_fn, pmap_axis_name=pmap_axis_name, has_aux=has_aux
+  )
 
   def f(*args, optimizer_state):
     value, grads = loss_and_pgrad_fn(*args)
