@@ -60,7 +60,6 @@ class Fast(PipelineEnv):
       raise ValueError("asymmetric_obs requires dictionary observations")
 
   def reset(self, rng: jax.Array) -> State:
-    del rng  # Unused.
     self._reset_count += 1
     pipeline_state = base.State(
       q=jp.zeros(1),
@@ -94,6 +93,7 @@ class Fast(PipelineEnv):
     self._step_count += 1
     vel = state.pipeline_state.xd.vel + (action > 0) * self._dt
     pos = state.pipeline_state.x.pos + vel * self._dt
+
     qp = state.pipeline_state.replace(
       x=state.pipeline_state.x.replace(pos=pos),
       xd=state.pipeline_state.xd.replace(vel=vel),
@@ -116,6 +116,7 @@ class Fast(PipelineEnv):
       obs = obs["state"]
 
     reward = pos[0]
+
     return state.replace(pipeline_state=qp, obs=obs, reward=reward)
 
   @property

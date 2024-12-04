@@ -28,14 +28,16 @@ from flax import struct
 import jax
 import numpy as np
 
+Observation = Union[jax.Array, Mapping[str, jax.Array]]
 ObservationSize = Union[int, Mapping[str, Union[Tuple[int, ...], int]]]
+
 
 @struct.dataclass
 class State(base.Base):
   """Environment state for training and inference."""
 
   pipeline_state: Optional[base.State]
-  obs: Union[jax.Array, Mapping[str, jax.Array]]
+  obs: Observation
   reward: jax.Array
   done: jax.Array
   metrics: Dict[str, jax.Array] = struct.field(default_factory=dict)

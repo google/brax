@@ -71,7 +71,8 @@ class PPOTest(parameterized.TestCase):
         normalize_observations=True,
         seed=2,
         reward_scaling=10,
-        normalize_advantage=False)
+        normalize_advantage=False,
+    )
 
   @parameterized.parameters(True, False)
   def testNetworkEncoding(self, normalize_observations):

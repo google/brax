@@ -133,7 +133,7 @@ def train(
 
   obs_size = env.observation_size
   if isinstance(obs_size, Dict):
-    raise NotImplementedError("Dictionary observations not implemented in APG")
+    raise NotImplementedError('Dictionary observations not implemented in APG')
 
   normalize = lambda x, y: x
   if normalize_observations:
