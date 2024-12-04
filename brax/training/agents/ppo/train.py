@@ -73,15 +73,7 @@ def _strip_weak_type(tree):
   return jax.tree_util.tree_map(f, tree)
 
 
-def remove_pixels(obs: Union[jnp.ndarray, Mapping]) -> Union[jnp.ndarray, Mapping]:
-  """Removes pixel observations from the observation dict.
-  FrozenDicts are used to avoid incorrect gradients."""
-  if not isinstance(obs, Mapping):
-    return obs
-  return FrozenDict({k: v for k, v in obs.items() if not k.startswith("pixels/")})
-
-
-def random_translate_pixels(obs: Mapping[str, jax.Array], key: PRNGKey):
+def _random_translate_pixels(obs: Mapping[str, jax.Array], key: PRNGKey):
   """Apply random translations to B x T x ... pixel observations. 
   The same shift is applied across the unroll_length (T) dimension."""
   obs = FrozenDict(obs)
@@ -112,6 +104,14 @@ def random_translate_pixels(obs: Mapping[str, jax.Array], key: PRNGKey):
   keys = jax.random.split(key, bdim)
   obs = rt_all_views(obs, keys)
   return obs
+
+
+def _remove_pixels(obs: Union[jnp.ndarray, Mapping]) -> Union[jnp.ndarray, Mapping]:
+  """Removes pixel observations from the observation dict.
+  FrozenDicts are used to avoid incorrect gradients."""
+  if not isinstance(obs, Mapping):
+    return obs
+  return FrozenDict({k: v for k, v in obs.items() if not k.startswith("pixels/")})
 
 
 def train(
@@ -340,7 +340,7 @@ def train(
 
     if augment_pixels:
       key, key_rt = jax.random.split(key)
-      r_translate = functools.partial(random_translate_pixels, key=key_rt)
+      r_translate = functools.partial(_random_translate_pixels, key=key_rt)
       data = types.Transition(
         observation=r_translate(data.observation),
         action=data.action,
@@ -399,7 +399,7 @@ def train(
     # Update normalization params and normalize observations.
     normalizer_params = running_statistics.update(
         training_state.normalizer_params,
-        remove_pixels(data.observation),
+        _remove_pixels(data.observation),
         pmap_axis_name=_PMAP_AXIS_NAME
     )
 
@@ -463,7 +463,7 @@ def train(
   training_state = TrainingState(  # pytype: disable=wrong-arg-types  # jax-ndarray
       optimizer_state=optimizer.init(init_params),  # pytype: disable=wrong-arg-types  # numpy-scalars
       params=init_params,
-      normalizer_params=running_statistics.init_state(remove_pixels(obs_shape)),
+      normalizer_params=running_statistics.init_state(_remove_pixels(obs_shape)),
       env_steps=0)
 
   if (
