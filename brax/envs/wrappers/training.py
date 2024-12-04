@@ -30,7 +30,7 @@ def wrap(
     action_repeat: int = 1,
     randomization_fn: Optional[
         Callable[[System], Tuple[System, System]]
-    ] = None
+    ] = None,
 ) -> Wrapper:
   """Common wrapper pattern for all training agents.
 

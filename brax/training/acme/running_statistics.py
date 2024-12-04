@@ -125,7 +125,7 @@ def update(state: RunningStatisticsState,
   # batch and state have different order of elements.
   assert jax.tree_util.tree_structure(batch) == jax.tree_util.tree_structure(state.mean)
   batch_leaves = jax.tree_util.tree_leaves(batch)
-  if not batch_leaves: # State and batch are both empty. Nothing to normalize.
+  if not batch_leaves:  # State and batch are both empty. Nothing to normalize.
     return state
   batch_shape = batch_leaves[0].shape
   # We assume the batch dimensions always go first.
@@ -241,4 +241,3 @@ def denormalize(batch: types.NestedArray,
     return data * std + mean
 
   return jax.tree_util.tree_map(denormalize_leaf, batch, mean_std.mean, mean_std.std)
-

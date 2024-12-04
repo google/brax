@@ -9,3 +9,4 @@
 * Merge https://github.com/google/brax/pull/558, adds `mocap_pos` and `mocap_quat` to render function.
 * Merge https://github.com/google/brax/pull/559, allows for dictionary observations environment `State`.
 * Merge https://github.com/google/brax/pull/562, which supports asymmetric actor-critic for PPO.
+* Merge https://github.com/google/brax/pull/560, allows PPO from vision.
