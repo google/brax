@@ -124,7 +124,10 @@ def update(state: RunningStatisticsState,
   # We require exactly the same structure to avoid issues when flattened
   # batch and state have different order of elements.
   assert jax.tree_util.tree_structure(batch) == jax.tree_util.tree_structure(state.mean)
-  batch_shape = jax.tree_util.tree_leaves(batch)[0].shape
+  batch_leaves = jax.tree_util.tree_leaves(batch)
+  if not batch_leaves: # State and batch are both empty. Nothing to normalize.
+    return state
+  batch_shape = batch_leaves[0].shape
   # We assume the batch dimensions always go first.
   batch_dims = batch_shape[:len(batch_shape) -
                            jax.tree_util.tree_leaves(state.mean)[0].ndim]
