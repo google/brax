@@ -16,12 +16,11 @@
 """Saves a system config and trajectory as json."""
 
 import json
-from typing import List, Optional, Text, Tuple
+from typing import List, Text, Tuple
 
 from brax.base import State, System
 from etils import epath
 import jax
-import jax.numpy as jp
 import mujoco
 import numpy as np
 
@@ -128,7 +127,7 @@ def dumps(sys: System, states: List[State]) -> Text:
   for id_ in range(sys.ngeom):
     link_idx = sys.geom_bodyid[id_] - 1
 
-    rgba = sys.mj_model.geom_rgba[id_]
+    rgba = np.array(sys.mj_model.geom_rgba[id_])
     if (rgba == [0.5, 0.5, 0.5, 1.0]).all():
       # convert the default mjcf color to brax default color
       rgba = np.array([0.4, 0.33, 0.26, 1.0])
