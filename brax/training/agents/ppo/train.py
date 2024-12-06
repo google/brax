@@ -89,6 +89,7 @@ def _random_translate_pixels(
   Returns:
     A dictionary of observations with translated pixels
   """
+  obs = core.FrozenDict(obs)
 
   @jax.vmap
   def rt_all_views(

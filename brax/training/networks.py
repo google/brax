@@ -370,6 +370,7 @@ def make_policy_network_vision(
   )
 
   def apply(processor_params, policy_params, obs):
+    obs = core.FrozenDict(obs)
     if state_obs_key:
       state_obs = preprocess_observations_fn(
           obs[state_obs_key], normalizer_select(processor_params, state_obs_key)

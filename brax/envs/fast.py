@@ -74,9 +74,7 @@ class Fast(PipelineEnv):
         'pixels/view_1': jp.zeros((4, 4, 3)),
     }
 
-    if self._obs_mode == ObservationMode.DICT_STATE:
-      obs = obs
-    elif self._obs_mode == ObservationMode.DICT_PIXELS:
+    if self._obs_mode == ObservationMode.DICT_PIXELS:
       obs = pixels
     elif self._obs_mode == ObservationMode.DICT_PIXELS_STATE:
       obs = {**obs, **pixels}
@@ -104,9 +102,7 @@ class Fast(PipelineEnv):
         'pixels/view_1': jp.zeros((4, 4, 3)),
     }
 
-    if self._obs_mode == ObservationMode.DICT_STATE:
-      obs = obs
-    elif self._obs_mode == ObservationMode.DICT_PIXELS:
+    if self._obs_mode == ObservationMode.DICT_PIXELS:
       obs = pixels
     elif self._obs_mode == ObservationMode.DICT_PIXELS_STATE:
       obs = {**obs, **pixels}
