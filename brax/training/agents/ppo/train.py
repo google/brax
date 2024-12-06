@@ -37,7 +37,6 @@ from brax.training.types import PRNGKey
 from brax.v1 import envs as envs_v1
 from etils import epath
 import flax
-from flax import core
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -89,8 +88,6 @@ def _random_translate_pixels(
   Returns:
     A dictionary of observations with translated pixels
   """
-  obs = core.FrozenDict(obs)
-
   @jax.vmap
   def rt_all_views(
       ub_obs: Mapping[str, jax.Array], key: PRNGKey
