@@ -108,6 +108,7 @@ def compute_ppo_loss(
     rng: jnp.ndarray,
     ppo_network: ppo_networks.PPONetworks,
     entropy_cost: float = 1e-4,
+    vf_cost: float = 0.5,
     discounting: float = 0.9,
     reward_scaling: float = 1.0,
     gae_lambda: float = 0.95,
@@ -179,7 +180,7 @@ def compute_ppo_loss(
 
   # Value function loss
   v_error = vs - baseline
-  v_loss = jnp.mean(v_error * v_error) * 0.5 * 0.5
+  v_loss = vf_cost * jnp.mean(v_error * v_error) * 0.5
 
   # Entropy reward
   entropy = jnp.mean(parametric_action_distribution.entropy(policy_logits, rng))
