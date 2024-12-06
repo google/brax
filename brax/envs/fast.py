@@ -19,7 +19,6 @@ import enum
 
 from brax import base
 from brax.envs.base import PipelineEnv, State
-from flax import core
 import jax
 from jax import numpy as jp
 
@@ -76,11 +75,11 @@ class Fast(PipelineEnv):
     }
 
     if self._obs_mode == ObservationMode.DICT_STATE:
-      obs = core.FrozenDict(obs)
+      obs = obs
     elif self._obs_mode == ObservationMode.DICT_PIXELS:
-      obs = core.FrozenDict(pixels)
+      obs = pixels
     elif self._obs_mode == ObservationMode.DICT_PIXELS_STATE:
-      obs = core.FrozenDict({**obs, **pixels})
+      obs = {**obs, **pixels}
     elif self._obs_mode == ObservationMode.NDARRAY:
       obs = obs['state']
 
@@ -106,11 +105,11 @@ class Fast(PipelineEnv):
     }
 
     if self._obs_mode == ObservationMode.DICT_STATE:
-      obs = core.FrozenDict(obs)
+      obs = obs
     elif self._obs_mode == ObservationMode.DICT_PIXELS:
-      obs = core.FrozenDict(pixels)
+      obs = pixels
     elif self._obs_mode == ObservationMode.DICT_PIXELS_STATE:
-      obs = core.FrozenDict({**obs, **pixels})
+      obs = {**obs, **pixels}
     elif self._obs_mode == ObservationMode.NDARRAY:
       obs = obs['state']
 
