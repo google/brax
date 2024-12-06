@@ -89,7 +89,6 @@ def _random_translate_pixels(
   Returns:
     A dictionary of observations with translated pixels
   """
-  obs = core.FrozenDict(obs)
 
   @jax.vmap
   def rt_all_views(
@@ -127,21 +126,10 @@ def _random_translate_pixels(
 def _remove_pixels(
     obs: Union[jnp.ndarray, Mapping[str, jax.Array]],
 ) -> Union[jnp.ndarray, Mapping[str, jax.Array]]:
-  """Removes pixel observations from the observation dict.
-
-  FrozenDicts are used to avoid incorrect gradients.
-
-  Args:
-    obs: a dictionary of observations
-
-  Returns:
-    A dictionary of observations with pixel observations removed
-  """
+  """Removes pixel observations from the observation dict."""
   if not isinstance(obs, Mapping):
     return obs
-  return core.FrozenDict(
-      {k: v for k, v in obs.items() if not k.startswith('pixels/')}
-  )
+  return {k: v for k, v in obs.items() if not k.startswith('pixels/')}
 
 
 def train(
