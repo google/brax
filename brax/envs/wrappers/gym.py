@@ -18,9 +18,11 @@ from typing import ClassVar, Optional
 
 from brax.envs.base import PipelineEnv
 from brax.io import image
-import gym
-from gym import spaces
-from gym.vector import utils
+
+import gymnasium as gym
+from gymnasium import spaces
+from gymnasium.vector import utils
+
 import jax
 import numpy as np
 
@@ -72,7 +74,7 @@ class GymWrapper(gym.Env):
   def step(self, action):
     self._state, obs, reward, done, info = self._step(self._state, action)
     # We return device arrays for pytorch users.
-    return obs, reward, done, info
+    return gym.utils.step_api_compatibility.convert_to_terminated_truncated_step_api((obs, reward, done, info))
 
   def seed(self, seed: int = 0):
     self._key = jax.random.PRNGKey(seed)
@@ -128,7 +130,7 @@ class VectorGymWrapper(gym.vector.VectorEnv):
     def step(state, action):
       state = self._env.step(state, action)
       info = {**state.metrics, **state.info}
-      return state, state.obs, state.reward, state.done, info
+      return gym.utils.step_api_compatibility.convert_to_terminated_truncated_step_api((state, state.obs, state.reward, state.done, info), is_vector_env=True)
 
     self._step = jax.jit(step, backend=self.backend)
 
