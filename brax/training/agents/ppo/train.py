@@ -19,7 +19,7 @@ See: https://arxiv.org/pdf/1707.06347.pdf
 
 import functools
 import time
-from typing import Callable, Mapping, Optional, Tuple, Union
+from typing import Any, Callable, Mapping, Optional, Tuple, Union
 
 from absl import logging
 from brax import base
@@ -135,6 +135,7 @@ def train(
     num_timesteps: int,
     episode_length: int,
     wrap_env: bool = True,
+    wrap_env_fn: Optional[Callable[[Any], Any]] = None,
     action_repeat: int = 1,
     num_envs: int = 1,
     max_devices_per_host: Optional[int] = None,
@@ -177,6 +178,9 @@ def train(
     episode_length: the length of an environment episode
     wrap_env: If True, wrap the environment for training. Otherwise use the
       environment as is.
+    wrap_env_fn: a custom function that wraps the environment for training.
+      If not specified, the environment is wrapped with the default training
+      wrapper.
     action_repeat: the number of timesteps to repeat an action
     num_envs: the number of parallel environments to use for rollouts
       NOTE: `num_envs` must be divisible by the total number of chips since each
@@ -296,7 +300,9 @@ def train(
       v_randomization_fn = functools.partial(
           randomization_fn, rng=randomization_rng
       )
-    if isinstance(environment, envs.Env):
+    if wrap_env_fn is not None:
+      wrap_for_training = wrap_env_fn
+    elif isinstance(environment, envs.Env):
       wrap_for_training = envs.training.wrap
     else:
       wrap_for_training = envs_v1.wrappers.wrap_for_training
@@ -305,7 +311,7 @@ def train(
         episode_length=episode_length,
         action_repeat=action_repeat,
         randomization_fn=v_randomization_fn,
-    )
+    )  # pytype: disable=wrong-keyword-args
 
   reset_fn = jax.jit(jax.vmap(env.reset))
   key_envs = jax.random.split(key_env, num_envs // process_count)
@@ -561,7 +567,7 @@ def train(
         episode_length=episode_length,
         action_repeat=action_repeat,
         randomization_fn=v_randomization_fn,
-    )
+    )  # pytype: disable=wrong-keyword-args
 
   evaluator = acting.Evaluator(
       eval_env,

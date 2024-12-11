@@ -183,16 +183,17 @@ def get_env_factory():
   if _CUSTOM_WRAP_ENV.value:
     pass
   else:
+    wrap_env_fn = None
     get_environment = functools.partial(
         envs.get_environment, backend=_BACKEND.value
     )
-  return get_environment
+  return get_environment, wrap_env_fn
 
 
 def main(unused_argv):
   logdir = _LOGDIR.value
 
-  get_environment = get_env_factory()
+  get_environment, wrap_env_fn = get_env_factory()
   with metrics.Writer(logdir) as writer:
     writer.write_hparams({
         'num_evals': _NUM_EVALS.value,
@@ -207,6 +208,7 @@ def main(unused_argv):
         )
       make_policy, params, _ = sac.train(
           environment=get_environment(_ENV.value),
+          wrap_env_fn=wrap_env_fn,
           num_envs=_NUM_ENVS.value,
           action_repeat=_ACTION_REPEAT.value,
           normalize_observations=_NORMALIZE_OBSERVATIONS.value,
@@ -228,6 +230,7 @@ def main(unused_argv):
     elif _LEARNER.value == 'es':
       make_policy, params, _ = es.train(
           environment=get_environment(_ENV.value),
+          wrap_env_fn=wrap_env_fn,
           num_timesteps=_TOTAL_ENV_STEPS.value,
           fitness_shaping=es.FitnessShaping[_FITNESS_SHAPING.value.upper()],
           population_size=_POPULATION_SIZE.value,
@@ -255,6 +258,7 @@ def main(unused_argv):
         )
       make_policy, params, _ = ppo.train(
           environment=get_environment(_ENV.value),
+          wrap_env_fn=wrap_env_fn,
           num_timesteps=_TOTAL_ENV_STEPS.value,
           episode_length=_EPISODE_LENGTH.value,
           network_factory=network_factory,
@@ -280,6 +284,7 @@ def main(unused_argv):
     elif _LEARNER.value == 'apg':
       make_policy, params, _ = apg.train(
           environment=get_environment(_ENV.value),
+          wrap_env_fn=wrap_env_fn,
           policy_updates=_POLICY_UPDATES.value,
           num_envs=_NUM_ENVS.value,
           action_repeat=_ACTION_REPEAT.value,
@@ -295,6 +300,7 @@ def main(unused_argv):
     elif _LEARNER.value == 'ars':
       make_policy, params, _ = ars.train(
           environment=get_environment(_ENV.value),
+          wrap_env_fn=wrap_env_fn,
           number_of_directions=_NUMBER_OF_DIRECTIONS.value,
           max_devices_per_host=_MAX_DEVICES_PER_HOST.value,
           action_repeat=_ACTION_REPEAT.value,

@@ -116,6 +116,7 @@ def train(
     num_timesteps,
     episode_length: int,
     wrap_env: bool = True,
+    wrap_env_fn: Optional[Callable[[Any], Any]] = None,
     action_repeat: int = 1,
     num_envs: int = 1,
     num_eval_envs: int = 128,
@@ -181,7 +182,9 @@ def train(
   assert num_envs % device_count == 0
   env = environment
   if wrap_env:
-    if isinstance(env, envs.Env):
+    if wrap_env_fn is not None:
+      wrap_for_training = wrap_env_fn
+    elif isinstance(env, envs.Env):
       wrap_for_training = envs.training.wrap
     else:
       wrap_for_training = envs_v1.wrappers.wrap_for_training
@@ -201,7 +204,7 @@ def train(
         episode_length=episode_length,
         action_repeat=action_repeat,
         randomization_fn=v_randomization_fn,
-    )
+    )  # pytype: disable=wrong-keyword-args
 
   obs_size = env.observation_size
   if isinstance(obs_size, Dict):
@@ -508,7 +511,7 @@ def train(
         episode_length=episode_length,
         action_repeat=action_repeat,
         randomization_fn=v_randomization_fn,
-    )
+    )  # pytype: disable=wrong-keyword-args
 
   evaluator = acting.Evaluator(
       eval_env,

@@ -60,6 +60,7 @@ def train(
     episode_length: int,
     policy_updates: int,
     wrap_env: bool = True,
+    wrap_env_fn: Optional[Callable[[Any], Any]] = None,
     horizon_length: int = 32,
     num_envs: int = 1,
     num_evals: int = 1,
@@ -117,7 +118,9 @@ def train(
 
   env = environment
   if wrap_env:
-    if isinstance(env, envs.Env):
+    if wrap_env_fn is not None:
+      wrap_for_training = wrap_env_fn
+    elif isinstance(env, envs.Env):
       wrap_for_training = envs.training.wrap
     else:
       wrap_for_training = envs_v1.wrappers.wrap_for_training
@@ -132,7 +135,7 @@ def train(
         episode_length=episode_length,
         action_repeat=action_repeat,
         randomization_fn=v_randomization_fn,
-    )
+    )  # pytype: disable=wrong-keyword-args
 
   reset_fn = jax.jit(jax.vmap(env.reset))
   step_fn = jax.jit(jax.vmap(env.step))
@@ -326,7 +329,7 @@ def train(
         episode_length=episode_length,
         action_repeat=action_repeat,
         randomization_fn=v_randomization_fn,
-    )
+    )  # pytype: disable=wrong-keyword-args
 
   evaluator = acting.Evaluator(
       eval_env,
