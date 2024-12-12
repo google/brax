@@ -101,7 +101,7 @@ def _init_training_state(
       q_params=q_params,
       target_q_params=q_params,
       gradient_steps=jnp.zeros(()),
-      env_steps=jnp.zeros(()),
+      env_steps=jnp.zeros((), dtype=jnp.int64),
       alpha_optimizer_state=alpha_optimizer_state,
       alpha_params=log_alpha,
       normalizer_params=normalizer_params,
@@ -314,7 +314,7 @@ def train(
         q_params=q_params,
         target_q_params=new_target_q_params,
         gradient_steps=training_state.gradient_steps + 1,
-        env_steps=training_state.env_steps,
+        env_steps=jnp.array(training_state.env_steps, dtype=jnp.int64),
         alpha_optimizer_state=alpha_optimizer_state,
         alpha_params=alpha_params,
         normalizer_params=training_state.normalizer_params,
@@ -367,7 +367,9 @@ def train(
     )
     training_state = training_state.replace(
         normalizer_params=normalizer_params,
-        env_steps=training_state.env_steps + env_steps_per_actor_step,
+        env_steps=jnp.array(
+            training_state.env_steps + env_steps_per_actor_step, dtype=jnp.int64
+        ),
     )
 
     buffer_state, transitions = replay_buffer.sample(buffer_state)
@@ -404,7 +406,10 @@ def train(
       )
       new_training_state = training_state.replace(
           normalizer_params=new_normalizer_params,
-          env_steps=training_state.env_steps + env_steps_per_actor_step,
+          env_steps=jnp.array(
+              training_state.env_steps + env_steps_per_actor_step,
+              dtype=jnp.int64,
+          ),
       )
       return (new_training_state, env_state, buffer_state, new_key), ()
 
