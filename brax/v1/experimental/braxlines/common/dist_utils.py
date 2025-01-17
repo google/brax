@@ -24,12 +24,12 @@ def clipped_onehot_categorical(logits: jnp.ndarray, clip_range: float = 0):
   if clip_range:
     assert clip_range > 0.0, clip_range
     logits -= jnp.max(logits, axis=-1, keepdims=True)
-    logits = jnp.clip(logits, a_min=-clip_range)
+    logits = jnp.clip(logits, min=-clip_range)
   return tfd.OneHotCategorical(logits=logits)
 
 
 def clipped_bernoulli(logits: jnp.ndarray, clip_range: float = 0):
   if clip_range:
     assert clip_range > 0.0, clip_range
-    logits = jnp.clip(logits, a_min=-clip_range, a_max=clip_range)
+    logits = jnp.clip(logits, min=-clip_range, max=clip_range)
   return tfd.Bernoulli(logits=logits)

@@ -463,9 +463,7 @@ def train(
         optimizer_state=optimizer_state,
         params=params,
         normalizer_params=normalizer_params,
-        env_steps=jnp.array(
-            training_state.env_steps + env_step_per_training_step,
-            dtype=jnp.int64),
+        env_steps=training_state.env_steps + env_step_per_training_step,
     )
     return (new_training_state, state, new_key), metrics
 
@@ -525,7 +523,7 @@ def train(
       normalizer_params=running_statistics.init_state(
           _remove_pixels(obs_shape)
       ),
-      env_steps=jnp.array(0, dtype=jnp.int64),
+      env_steps=0,
   )
 
   if (

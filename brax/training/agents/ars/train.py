@@ -47,7 +47,7 @@ class TrainingState:
 
   normalizer_params: running_statistics.RunningStatisticsState
   policy_params: Params
-  num_env_steps: jax.Array
+  num_env_steps: int
 
 
 # TODO: Pass the network as argument.
@@ -289,7 +289,7 @@ def train(
         TrainingState(  # type: ignore  # jnp-type
             normalizer_params=normalizer_params,
             policy_params=policy_params,
-            num_env_steps=jnp.array(num_env_steps, dtype=jnp.int64),
+            num_env_steps=num_env_steps,
         ),
         metrics,
     )
@@ -323,7 +323,7 @@ def train(
   training_state = TrainingState(
       normalizer_params=normalizer_params,
       policy_params=policy_params,
-      num_env_steps=jnp.array(0, dtype=jnp.int64),
+      num_env_steps=0,
   )
 
   if not eval_env:

@@ -45,7 +45,7 @@ def visualize_disc(
   distgrid = disc.dist(
       datagrid[..., :len(disc.obs_indices)], params=params['extra'])
   probsgrid = jax.nn.sigmoid(distgrid.logits)
-  colors = jnp.clip(jnp.array([[-2, 0, 2]]) * (probsgrid - 0.5), a_min=0)
+  colors = jnp.clip(jnp.array([[-2, 0, 2]]) * (probsgrid - 0.5), min=0)
   if fig is None or axs is None:
     fig, ax = plt.subplots(ncols=1, figsize=figsize)
     axs = [ax]

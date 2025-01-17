@@ -129,7 +129,7 @@ def direction_reward(action: jnp.ndarray,
       agent_sign, lambda x: lax.cond(x, lambda y: jnp.sum(vel0 * y, axis=-1),
                                      lambda y: jnp.zeros_like(x), vel1),
       jnp.zeros_like, opp_sign)
-  return jnp.clip(inner_product, a_min=0.0), jnp.zeros_like(inner_product)
+  return jnp.clip(inner_product, min=0.0), jnp.zeros_like(inner_product)
 
 
 def norm_reward(action: jnp.ndarray, obs_dict: Dict[str, jnp.ndarray],
@@ -166,7 +166,7 @@ def distance_reward(action: jnp.ndarray,
   delta = obs1 - obs2
   dist = jnp.linalg.norm(delta, axis=-1, **norm_kwargs)
   # instead of clipping, terminate
-  # dist = jnp.clip(dist, a_min=min_dist, a_max=max_dist)
+  # dist = jnp.clip(dist, min=min_dist, max=max_dist)
   done = jnp.zeros_like(dist)
   done = jnp.where(dist < min_dist, jnp.ones_like(done), done)
   done = jnp.where(dist > max_dist, jnp.ones_like(done), done)

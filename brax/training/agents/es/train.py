@@ -49,7 +49,7 @@ class TrainingState:
   normalizer_params: running_statistics.RunningStatisticsState
   optimizer_state: optax.OptState
   policy_params: Params
-  num_env_steps: jax.Array
+  num_env_steps: int
 
 
 # Centered rank from: https://arxiv.org/pdf/1703.03864.pdf
@@ -336,7 +336,7 @@ def train(
 
     num_env_steps = (
         training_state.num_env_steps
-        + jnp.sum(obs_weights, dtype=jnp.int64) * action_repeat
+        + jnp.sum(obs_weights, dtype=jnp.int32) * action_repeat
     )
 
     metrics = {
@@ -350,7 +350,7 @@ def train(
             normalizer_params=normalizer_params,
             optimizer_state=optimizer_state,
             policy_params=policy_params,
-            num_env_steps=jnp.array(num_env_steps, dtype=jnp.int64),
+            num_env_steps=num_env_steps,
         ),
         metrics,
     )
@@ -386,7 +386,7 @@ def train(
       normalizer_params=normalizer_params,
       optimizer_state=optimizer_state,
       policy_params=policy_params,
-      num_env_steps=jnp.array(0, dtype=jnp.int64),
+      num_env_steps=0,
   )
 
   if not eval_env:

@@ -152,6 +152,15 @@ _NUM_RESETS_PER_EVAL = flags.DEFINE_integer(
 _PPO_POLICY_HIDDEN_LAYER_SIZES = flags.DEFINE_string(
     'ppo_policy_hidden_layer_sizes', None, 'PPO policy hidden layer sizes.'
 )
+_PPO_VALUE_HIDDEN_LAYER_SIZES = flags.DEFINE_string(
+    'ppo_value_hidden_layer_sizes', None, 'PPO value hidden layer sizes.'
+)
+_PPO_POLICY_OBS_KEY = flags.DEFINE_string(
+    'ppo_policy_obs_key', None, 'PPO policy obs key.'
+)
+_PPO_VALUE_OBS_KEY = flags.DEFINE_string(
+    'ppo_value_obs_key', None, 'PPO value obs key.'
+)
 # ARS hps.
 _NUMBER_OF_DIRECTIONS = flags.DEFINE_integer(
     'number_of_directions',
@@ -178,22 +187,23 @@ _CUSTOM_WRAP_ENV = flags.DEFINE_bool(
 )
 
 
-def get_env_factory():
+def get_env_factory(env_name: str):
   """Returns a function that creates an environment."""
+  wrap_fn = None
+  randomizer_fn = None
   if _CUSTOM_WRAP_ENV.value:
     pass
   else:
-    wrap_env_fn = None
     get_environment = functools.partial(
         envs.get_environment, backend=_BACKEND.value
     )
-  return get_environment, wrap_env_fn
+  return get_environment, wrap_fn, randomizer_fn
 
 
 def main(unused_argv):
   logdir = _LOGDIR.value
 
-  get_environment, wrap_env_fn = get_env_factory()
+  get_environment, wrap_fn, randomizer_fn = get_env_factory(_ENV.value)
   with metrics.Writer(logdir) as writer:
     writer.write_hparams({
         'num_evals': _NUM_EVALS.value,
@@ -208,7 +218,9 @@ def main(unused_argv):
         )
       make_policy, params, _ = sac.train(
           environment=get_environment(_ENV.value),
-          wrap_env_fn=wrap_env_fn,
+          eval_env=get_environment(_ENV.value),
+          wrap_env_fn=wrap_fn,
+          randomization_fn=randomizer_fn,
           num_envs=_NUM_ENVS.value,
           action_repeat=_ACTION_REPEAT.value,
           normalize_observations=_NORMALIZE_OBSERVATIONS.value,
@@ -230,7 +242,9 @@ def main(unused_argv):
     elif _LEARNER.value == 'es':
       make_policy, params, _ = es.train(
           environment=get_environment(_ENV.value),
-          wrap_env_fn=wrap_env_fn,
+          eval_env=get_environment(_ENV.value),
+          wrap_env_fn=wrap_fn,
+          randomization_fn=randomizer_fn,
           num_timesteps=_TOTAL_ENV_STEPS.value,
           fitness_shaping=es.FitnessShaping[_FITNESS_SHAPING.value.upper()],
           population_size=_POPULATION_SIZE.value,
@@ -253,12 +267,32 @@ def main(unused_argv):
             int(x) for x in _PPO_POLICY_HIDDEN_LAYER_SIZES.value.split(',')
         ]
         network_factory = functools.partial(
-            ppo_networks.make_ppo_networks,
+            network_factory,
             policy_hidden_layer_sizes=policy_hidden_layer_sizes,
+        )
+      if _PPO_VALUE_HIDDEN_LAYER_SIZES.value is not None:
+        value_hidden_layer_sizes = [
+            int(x) for x in _PPO_VALUE_HIDDEN_LAYER_SIZES.value.split(',')
+        ]
+        network_factory = functools.partial(
+            network_factory,
+            value_hidden_layer_sizes=value_hidden_layer_sizes,
+        )
+      if _PPO_POLICY_OBS_KEY.value is not None:
+        network_factory = functools.partial(
+            network_factory,
+            policy_obs_key=_PPO_POLICY_OBS_KEY.value,
+        )
+      if _PPO_VALUE_OBS_KEY.value is not None:
+        network_factory = functools.partial(
+            network_factory,
+            value_obs_key=_PPO_VALUE_OBS_KEY.value,
         )
       make_policy, params, _ = ppo.train(
           environment=get_environment(_ENV.value),
-          wrap_env_fn=wrap_env_fn,
+          eval_env=get_environment(_ENV.value),
+          wrap_env_fn=wrap_fn,
+          randomization_fn=randomizer_fn,
           num_timesteps=_TOTAL_ENV_STEPS.value,
           episode_length=_EPISODE_LENGTH.value,
           network_factory=network_factory,
@@ -284,7 +318,9 @@ def main(unused_argv):
     elif _LEARNER.value == 'apg':
       make_policy, params, _ = apg.train(
           environment=get_environment(_ENV.value),
-          wrap_env_fn=wrap_env_fn,
+          eval_env=get_environment(_ENV.value),
+          wrap_env_fn=wrap_fn,
+          randomization_fn=randomizer_fn,
           policy_updates=_POLICY_UPDATES.value,
           num_envs=_NUM_ENVS.value,
           action_repeat=_ACTION_REPEAT.value,
@@ -300,7 +336,9 @@ def main(unused_argv):
     elif _LEARNER.value == 'ars':
       make_policy, params, _ = ars.train(
           environment=get_environment(_ENV.value),
-          wrap_env_fn=wrap_env_fn,
+          eval_env=get_environment(_ENV.value),
+          wrap_env_fn=wrap_fn,
+          randomization_fn=randomizer_fn,
           number_of_directions=_NUMBER_OF_DIRECTIONS.value,
           max_devices_per_host=_MAX_DEVICES_PER_HOST.value,
           action_repeat=_ACTION_REPEAT.value,
@@ -324,6 +362,7 @@ def main(unused_argv):
   model.save_params(path, params)
 
   # Output an episode trajectory.
+  get_environment, *_ = get_env_factory(_ENV.value)
   env = get_environment(_ENV.value)
 
   @jax.jit
