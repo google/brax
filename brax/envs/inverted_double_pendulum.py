@@ -162,8 +162,8 @@ class InvertedDoublePendulum(PipelineEnv):
     """Run one timestep of the environment's dynamics."""
     pipeline_state = self.pipeline_step(state.pipeline_state, action)
 
-    tip = base.Transform.create(pos=jp.array([0.0, 0.0, 0.6])).do(
-        pipeline_state.x.take(2)
+    tip = pipeline_state.x.take(2).do(
+      base.Transform.create(pos=jp.array([0.0, 0.0, 0.6]))
     )
     x, _, y = tip.pos
     dist_penalty = 0.01 * x**2 + (y - 2) ** 2
