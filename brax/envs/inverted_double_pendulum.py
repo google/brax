@@ -162,8 +162,8 @@ class InvertedDoublePendulum(PipelineEnv):
     alive_bonus = 10
 
     obs = self._get_obs(pipeline_state)
-    reward = alive_bonus - dist_penalty - vel_penalty
     done = jp.where(y <= 1, jp.float32(1), jp.float32(0))
+    reward = (1 - done) * self._alive_bonus - dist_penalty - vel_penalty
 
     return state.replace(
         pipeline_state=pipeline_state, obs=obs, reward=reward, done=done
