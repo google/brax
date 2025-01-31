@@ -31,18 +31,17 @@ from brax.training import pmap
 from brax.training import types
 from brax.training.acme import running_statistics
 from brax.training.acme import specs
+from brax.training.agents.ppo import checkpoint
 from brax.training.agents.ppo import losses as ppo_losses
 from brax.training.agents.ppo import networks as ppo_networks
 from brax.training.types import Params
 from brax.training.types import PRNGKey
 from brax.v1 import envs as envs_v1
-from etils import epath
 import flax
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
-from orbax import checkpoint as ocp
 
 
 InferenceParams = Tuple[running_statistics.NestedMeanStd, Params]
@@ -241,7 +240,9 @@ def train(
     progress_fn: Callable[[int, Metrics], None] = lambda *args: None,
     policy_params_fn: Callable[..., None] = lambda *args: None,
     # checkpointing
+    save_checkpoint_path: Optional[str] = None,
     restore_checkpoint_path: Optional[str] = None,
+    restore_value_fn: bool = True,
 ):
   """PPO training.
 
@@ -301,8 +302,12 @@ def train(
       training metrics
     progress_fn: a user-defined callback function for reporting/plotting metrics
     policy_params_fn: a user-defined callback function that can be used for
-      saving policy checkpoints
+      saving custom policy checkpoints or creating policy rollouts and videos
+    save_checkpoint_path: the path used to save checkpoints. If None, no
+      checkpoints are saved.
     restore_checkpoint_path: the path used to restore previous model params
+    restore_value_fn: whether to restore the value function from the checkpoint
+      or use a random initialization
 
   Returns:
     Tuple of (make_policy function, network params, metrics)
@@ -311,6 +316,7 @@ def train(
   _validate_madrona_args(
       madrona_backend, num_envs, num_eval_envs, action_repeat, eval_env
   )
+
   xt = time.time()
 
   process_count = jax.process_count()
@@ -414,6 +420,13 @@ def train(
       steps_between_logging=training_metrics_steps
       or env_step_per_training_step,
       progress_fn=progress_fn,
+  )
+
+  ckpt_config = checkpoint.ppo_config(
+      observation_size=obs_shape,
+      action_size=env.action_size,
+      normalize_observations=normalize_observations,
+      network_factory=network_factory,
   )
 
   def minibatch_step(
@@ -596,18 +609,14 @@ def train(
       env_steps=0,
   )
 
-  if (
-      restore_checkpoint_path is not None
-      and epath.Path(restore_checkpoint_path).exists()
-  ):
-    logging.info('restoring from checkpoint %s', restore_checkpoint_path)
-    orbax_checkpointer = ocp.PyTreeCheckpointer()
-    target = training_state.normalizer_params, init_params
-    (normalizer_params, init_params) = orbax_checkpointer.restore(
-        restore_checkpoint_path, item=target
-    )
+  if restore_checkpoint_path is not None:
+    params = checkpoint.load(restore_checkpoint_path)
+    value_params = params[2] if restore_value_fn else init_params.value
     training_state = training_state.replace(
-        normalizer_params=normalizer_params, params=init_params
+        normalizer_params=params[0],
+        params=training_state.params.replace(
+            policy=params[1], value=value_params
+        ),
     )
 
   if num_timesteps == 0:
@@ -680,25 +689,30 @@ def train(
       # TODO: move extra reset logic to the AutoResetWrapper.
       env_state = reset_fn(key_envs) if num_resets_per_eval > 0 else env_state
 
-    if process_id == 0 and num_evals > 0:
-      # Run eval.
+    if process_id != 0:
+      continue
+
+    # Process id == 0.
+    params = _unpmap((
+        training_state.normalizer_params,
+        training_state.params.policy,
+        training_state.params.value,
+    ))
+
+    policy_params_fn(current_step, make_policy, params)
+
+    if save_checkpoint_path is not None:
+      checkpoint.save(
+          save_checkpoint_path, current_step, params, ckpt_config
+      )
+
+    if num_evals > 0:
       metrics = evaluator.run_evaluation(
-          _unpmap((
-              training_state.normalizer_params,
-              training_state.params.policy,
-              training_state.params.value,
-          )),
+          params,
           training_metrics,
       )
       logging.info(metrics)
       progress_fn(current_step, metrics)
-
-    if process_id == 0:
-      # Call policy_params_fn callback.
-      params = _unpmap(
-          (training_state.normalizer_params, training_state.params)
-      )
-      policy_params_fn(current_step, make_policy, params)
 
   total_steps = current_step
   assert total_steps >= num_timesteps

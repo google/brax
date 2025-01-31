@@ -65,7 +65,7 @@ def make_inference_fn(ppo_networks: PPONetworks):
 
 
 def make_ppo_networks(
-    observation_size: int,
+    observation_size: types.ObservationSize,
     action_size: int,
     preprocess_observations_fn: types.PreprocessObservationFn = types.identity_observation_preprocessor,
     policy_hidden_layer_sizes: Sequence[int] = (32,) * 4,

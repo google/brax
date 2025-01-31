@@ -28,7 +28,7 @@ class InvertedDoublePendulum(PipelineEnv):
 
 
   # pyformat: disable
-  """### Description
+  r"""### Description
 
   This environment originates from control theory and builds on the cartpole
   environment based on the work done by Barto, Sutton, and Anderson in
@@ -117,10 +117,10 @@ class InvertedDoublePendulum(PipelineEnv):
 
   ### Episode Termination
 
-  The episode terminates when the  y_coordinate of the tip of the second 
+  The episode terminates when the  y_coordinate of the tip of the second
   pole $\leq 1$.
-  
-  Note: The maximum standing height of the system is 1.2 m when all the parts 
+
+  Note: The maximum standing height of the system is 1.2 m when all the parts
   are perpendicularly vertical on top of each other.
   """
   # pyformat: enable
@@ -144,7 +144,7 @@ class InvertedDoublePendulum(PipelineEnv):
 
   def reset(self, rng: jax.Array) -> State:
     """Resets the environment to an initial state."""
-    rng, rng1, rng2 = jax.random.split(rng, 3)
+    _, rng1, rng2 = jax.random.split(rng, 3)
 
     q = self.sys.init_q + jax.random.uniform(
         rng1, (self.sys.q_size(),), minval=-0.01, maxval=0.01
@@ -163,11 +163,11 @@ class InvertedDoublePendulum(PipelineEnv):
     pipeline_state = self.pipeline_step(state.pipeline_state, action)
 
     tip = pipeline_state.x.take(2).do(
-      base.Transform.create(pos=jp.array([0.0, 0.0, 0.6]))
+        base.Transform.create(pos=jp.array([0.0, 0.0, 0.6]))
     )
     x, _, y = tip.pos
     v1, v2 = pipeline_state.qd[1:]
-    
+
     dist_penalty = 0.01 * x**2 + (y - 2) ** 2
     vel_penalty = 1e-3 * v1**2 + 5e-3 * v2**2
     alive_bonus = 10
