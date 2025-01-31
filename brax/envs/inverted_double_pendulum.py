@@ -166,14 +166,15 @@ class InvertedDoublePendulum(PipelineEnv):
       base.Transform.create(pos=jp.array([0.0, 0.0, 0.6]))
     )
     x, _, y = tip.pos
-    dist_penalty = 0.01 * x**2 + (y - 2) ** 2
     v1, v2 = pipeline_state.qd[1:]
+    
+    dist_penalty = 0.01 * x**2 + (y - 2) ** 2
     vel_penalty = 1e-3 * v1**2 + 5e-3 * v2**2
     alive_bonus = 10
 
     obs = self._get_obs(pipeline_state)
     done = jp.where(y <= 1, jp.float32(1), jp.float32(0))
-    reward = (1 - done) * self._alive_bonus - dist_penalty - vel_penalty
+    reward = (1 - done) * alive_bonus - dist_penalty - vel_penalty
 
     return state.replace(
         pipeline_state=pipeline_state, obs=obs, reward=reward, done=done
