@@ -16,6 +16,7 @@
 
 import functools
 
+from absl import flags
 from absl.testing import absltest
 from brax.training.acme import running_statistics
 from brax.training.agents.ppo import checkpoint
@@ -27,6 +28,10 @@ from jax import numpy as jp
 
 
 class CheckpointTest(absltest.TestCase):
+
+  def setUp(self):
+    super().setUp()
+    flags.FLAGS.mark_as_parsed()
 
   def test_ppo_params_config(self):
     network_factory = functools.partial(
