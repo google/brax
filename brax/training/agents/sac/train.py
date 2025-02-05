@@ -32,6 +32,7 @@ from brax.training import replay_buffers
 from brax.training import types
 from brax.training.acme import running_statistics
 from brax.training.acme import specs
+from brax.training.agents.sac import checkpoint
 from brax.training.agents.sac import losses as sac_losses
 from brax.training.agents.sac import networks as sac_networks
 from brax.training.types import Params
@@ -137,11 +138,12 @@ def train(
         sac_networks.SACNetworks
     ] = sac_networks.make_sac_networks,
     progress_fn: Callable[[int, Metrics], None] = lambda *args: None,
-    checkpoint_logdir: Optional[str] = None,
     eval_env: Optional[envs.Env] = None,
     randomization_fn: Optional[
         Callable[[base.System, jnp.ndarray], Tuple[base.System, base.System]]
     ] = None,
+    checkpoint_logdir: Optional[str] = None,
+    restore_checkpoint_path: Optional[str] = None,
 ):
   """SAC training."""
   process_id = jax.process_index()
@@ -256,6 +258,13 @@ def train(
   )
   actor_update = gradients.gradient_update_fn(  # pytype: disable=wrong-arg-types  # jax-ndarray
       actor_loss, policy_optimizer, pmap_axis_name=_PMAP_AXIS_NAME
+  )
+
+  ckpt_config = checkpoint.network_config(
+      observation_size=obs_size,
+      action_size=env.action_size,
+      normalize_observations=normalize_observations,
+      network_factory=network_factory,
   )
 
   def sgd_step(
@@ -485,6 +494,13 @@ def train(
   )
   del global_key
 
+  if restore_checkpoint_path is not None:
+    params = checkpoint.load(restore_checkpoint_path)
+    training_state = training_state.replace(
+        normalizer_params=params[0],
+        policy_params=params[1],
+    )
+
   local_key, rb_key, env_key, eval_key = jax.random.split(local_key, 4)
 
   # Env init
@@ -566,12 +582,10 @@ def train(
     # Eval and logging
     if process_id == 0:
       if checkpoint_logdir:
-        # Save current policy.
         params = _unpmap(
             (training_state.normalizer_params, training_state.policy_params)
         )
-        path = f'{checkpoint_logdir}_sac_{current_step}.pkl'
-        model.save_params(path, params)
+        checkpoint.save(checkpoint_logdir, current_step, params, ckpt_config)
 
       # Run evals.
       metrics = evaluator.run_evaluation(

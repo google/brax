@@ -12,18 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Checkpointing for PPO."""
+"""Checkpointing for SAC."""
 
 import json
 from typing import Any, Union
 
 from brax.training import checkpoint
 from brax.training import types
-from brax.training.agents.ppo import networks as ppo_networks
+from brax.training.agents.sac import networks as sac_networks
 from etils import epath
 from ml_collections import config_dict
 
-_CONFIG_FNAME = 'ppo_network_config.json'
+_CONFIG_FNAME = 'sac_network_config.json'
 
 
 def save(
@@ -39,7 +39,7 @@ def save(
 def load(
     path: Union[str, epath.Path],
 ):
-  """Loads checkpoint."""
+  """Loads SAC checkpoint."""
   return checkpoint.load(path)
 
 
@@ -47,7 +47,7 @@ def network_config(
     observation_size: types.ObservationSize,
     action_size: int,
     normalize_observations: bool,
-    network_factory: types.NetworkFactory[Union[ppo_networks.PPONetworks]],
+    network_factory: types.NetworkFactory[sac_networks.SACNetworks],
 ) -> config_dict.ConfigDict:
   """Returns a config dict for re-creating a network from a checkpoint."""
   return checkpoint.network_config(
@@ -55,32 +55,32 @@ def network_config(
   )
 
 
-def _get_ppo_network(
+def _get_network(
     config: config_dict.ConfigDict,
-    network_factory: types.NetworkFactory[ppo_networks.PPONetworks],
-) -> ppo_networks.PPONetworks:
-  """Generates a PPO network given config."""
+    network_factory: types.NetworkFactory[sac_networks.SACNetworks],
+) -> sac_networks.SACNetworks:
+  """Generates a SAC network given config."""
   return checkpoint.get_network(config, network_factory)  # pytype: disable=bad-return-type
 
 
 def load_policy(
     path: Union[str, epath.Path],
     network_factory: types.NetworkFactory[
-        ppo_networks.PPONetworks
-    ] = ppo_networks.make_ppo_networks,
+        sac_networks.SACNetworks
+    ] = sac_networks.make_sac_networks,
     deterministic: bool = True,
 ):
-  """Loads policy inference function from PPO checkpoint."""
+  """Loads policy inference function from SAC checkpoint."""
   path = epath.Path(path)
 
   config_path = path.parent / _CONFIG_FNAME
   if not config_path.exists():
-    raise ValueError(f'PPO config file not found at {config_path.as_posix()}')
+    raise ValueError(f'SAC config file not found at {config_path.as_posix()}')
 
   config = config_dict.create(**json.loads(config_path.read_text()))
 
   params = load(path)
-  ppo_network = _get_ppo_network(config, network_factory)
-  make_inference_fn = ppo_networks.make_inference_fn(ppo_network)
+  sac_network = _get_network(config, network_factory)
+  make_inference_fn = sac_networks.make_inference_fn(sac_network)
 
   return make_inference_fn(params, deterministic=deterministic)

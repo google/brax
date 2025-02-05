@@ -19,9 +19,9 @@ import functools
 from absl import flags
 from absl.testing import absltest
 from brax.training.acme import running_statistics
-from brax.training.agents.ppo import checkpoint
-from brax.training.agents.ppo import losses as ppo_losses
-from brax.training.agents.ppo import networks as ppo_networks
+from brax.training.agents.sac import checkpoint
+from brax.training.agents.sac import losses as sac_losses
+from brax.training.agents.sac import networks as sac_networks
 from etils import epath
 import jax
 from jax import numpy as jp
@@ -33,10 +33,10 @@ class CheckpointTest(absltest.TestCase):
     super().setUp()
     flags.FLAGS.mark_as_parsed()
 
-  def test_ppo_params_config(self):
+  def test_sac_params_config(self):
     network_factory = functools.partial(
-        ppo_networks.make_ppo_networks,
-        policy_hidden_layer_sizes=(16, 21, 13),
+        sac_networks.make_sac_networks,
+        hidden_layer_sizes=(16, 21, 13),
     )
     config = checkpoint.network_config(
         action_size=3,
@@ -45,7 +45,7 @@ class CheckpointTest(absltest.TestCase):
         network_factory=network_factory,
     )
     self.assertEqual(
-        config.network_factory_kwargs.to_dict()["policy_hidden_layer_sizes"],
+        config.network_factory_kwargs.to_dict()["hidden_layer_sizes"],
         (16, 21, 13),
     )
     self.assertEqual(config.action_size, 3)
@@ -54,8 +54,8 @@ class CheckpointTest(absltest.TestCase):
   def test_save_and_load_checkpoint(self):
     path = self.create_tempdir("test")
     network_factory = functools.partial(
-        ppo_networks.make_ppo_networks,
-        policy_hidden_layer_sizes=(16, 21, 13),
+        sac_networks.make_sac_networks,
+        hidden_layer_sizes=(16, 21, 13),
     )
     config = checkpoint.network_config(
         observation_size=1,
@@ -68,21 +68,17 @@ class CheckpointTest(absltest.TestCase):
     normalize = lambda x, y: x
     if config.normalize_observations:
       normalize = running_statistics.normalize
-    ppo_network = network_factory(
+    sac_network = network_factory(
         config.observation_size,
         config.action_size,
         preprocess_observations_fn=normalize,
         **config.network_factory_kwargs,
     )
     dummy_key = jax.random.PRNGKey(0)
-    network_params = ppo_losses.PPONetworkParams(
-        policy=ppo_network.policy_network.init(dummy_key),
-        value=ppo_network.value_network.init(dummy_key),
-    )
     normalizer_params = running_statistics.init_state(
         jax.tree_util.tree_map(jp.zeros, config.observation_size)
     )
-    params = (normalizer_params, network_params.policy, network_params.value)
+    params = (normalizer_params, sac_network.policy_network.init(dummy_key))
 
     # Save and load a checkpoint.
     checkpoint.save(

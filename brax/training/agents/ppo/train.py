@@ -242,6 +242,7 @@ def train(
     # checkpointing
     save_checkpoint_path: Optional[str] = None,
     restore_checkpoint_path: Optional[str] = None,
+    restore_params: Optional[Any] = None,
     restore_value_fn: bool = True,
 ):
   """PPO training.
@@ -306,6 +307,9 @@ def train(
     save_checkpoint_path: the path used to save checkpoints. If None, no
       checkpoints are saved.
     restore_checkpoint_path: the path used to restore previous model params
+    restore_params: raw network parameters to restore the TrainingState from.
+      These override `restore_checkpoint_path`. These paramaters can be obtained
+      from the return values of ppo.train().
     restore_value_fn: whether to restore the value function from the checkpoint
       or use a random initialization
 
@@ -422,7 +426,7 @@ def train(
       progress_fn=progress_fn,
   )
 
-  ckpt_config = checkpoint.ppo_config(
+  ckpt_config = checkpoint.network_config(
       observation_size=obs_shape,
       action_size=env.action_size,
       normalize_observations=normalize_observations,
@@ -616,6 +620,16 @@ def train(
         normalizer_params=params[0],
         params=training_state.params.replace(
             policy=params[1], value=value_params
+        ),
+    )
+
+  if restore_params is not None:
+    logging.info('Restoring TrainingState from `restore_params`.')
+    value_params = restore_params[2] if restore_value_fn else init_params.value
+    training_state = training_state.replace(
+        normalizer_params=restore_params[0],
+        params=training_state.params.replace(
+            policy=restore_params[1], value=value_params
         ),
     )
 
