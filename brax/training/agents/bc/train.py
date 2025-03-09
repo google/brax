@@ -15,22 +15,19 @@
 
 import functools
 import time
-from typing import Any, Callable, Dict, Mapping, Optional, Tuple, Union
+from typing import Callable, Optional, Tuple, Union
 
 from absl import logging
 from etils import epath
 import flax
 import jax
 import jax.numpy as jp
-import numpy as np
 import optax
 from orbax import checkpoint as ocp
 
-from brax import base
 from brax import envs
 from brax.training import acting
 from brax.training import gradients
-from brax.training import pmap
 from brax.training import types
 from brax.training.acme import running_statistics
 from brax.training.acme import specs
@@ -337,7 +334,7 @@ def train(
   @jax.jit
   def dagger_iteration(
       carry: Tuple[PRNGKey, envs.State, TrainingState], _
-  ) -> Tuple[Tuple[PRNGKey, TrainingState], Metrics]:
+  ) -> Tuple[Tuple[PRNGKey, envs.State, TrainingState], Metrics]:
     # 1 dagger epoch.
     key, env_state, ts = carry
     key, key_data = jax.random.split(key)

@@ -1,4 +1,4 @@
-# Copyright 2024 The Brax Authors.
+# Copyright 2025 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,19 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""PPO networks."""
+"""BC networks."""
 
 from typing import Callable, Dict, Mapping, Sequence, Tuple
 
 import flax
 from flax import linen
-import jax
 import jax.numpy as jp
 
 from brax.training import distribution
 from brax.training import networks
 from brax.training import types
-from brax.training.types import Params
 from brax.training.types import PRNGKey
 
 
