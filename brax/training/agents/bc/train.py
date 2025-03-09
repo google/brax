@@ -60,15 +60,16 @@ Metrics = types.Metrics
 
 def train(
     demo_length: int,
-    teacher_inference_fn: bc_networks.BCInferenceFn,
+    teacher_inference_fn: Callable[
+        [types.Observation, Optional[PRNGKey]], Tuple[jp.ndarray, types.Extra]
+    ],
     normalize_observations: bool = True,
     epochs: int = 50,
-    num_demos: int = 1024,
     tanh_squash: bool = True,  # Greatly improves training stability.
     env: envs.Env = None,
     num_envs: int = 0,
     num_eval_envs: int = 0,
-    eval_length: int = 80,
+    eval_length: int = None,
     batch_size: int = 256,
     scramble_time: int = 0,  # Maximum time to scramble the envs by.
     network_factory: types.NetworkFactory[
@@ -84,10 +85,11 @@ def train(
     ),
     num_evals=0,
     augment_pixels: bool = False,
+    reset: bool = True,  # Warning: only supported for Mujoco Playground mjx_env
     restore_checkpoint_path: Optional[str] = None,
     policy_params_fn: Callable[..., None] = lambda *args: None,
 ):
-  """Plain old behaviour cloning.
+  """Online dagger behaviour cloning.
   Assumes your env is already wrapped.
   """
   if madrona_backend:
@@ -96,6 +98,8 @@ def train(
     else:
       num_eval_envs = num_envs
 
+  if num_evals > 0:
+    assert eval_length is not None, 'eval_length must be set if num_evals > 0'
   num_evals_after_init = max(num_evals - 1, 1)
   assert (
       dagger_iterations % num_evals_after_init == 0
@@ -112,7 +116,6 @@ def train(
       state.info['_steps'] = jp.array(state.info['steps'])
     return state
 
-  assert num_demos == num_envs, 'Fast mode avoids scanning!'
   # Init the env state early to use for obs size calculations.
   key, key_reset, key_scramble = jax.random.split(key, 3)
   reset_fn = jax.jit(env.reset)
@@ -172,8 +175,6 @@ def train(
       )
   )
 
-  assert num_demos % num_envs == 0
-
   def collect_unroll(
       env_state: envs.State,
       key: PRNGKey,
@@ -189,7 +190,7 @@ def train(
       teachers_turn = jax.random.bernoulli(key_turn, beta, shape=(num_envs, 1))
       actions = jp.where(
           teachers_turn,
-          teacher_inference_fn(env_state.obs, None)[0],  # E x 14
+          teacher_inference_fn(env_state.obs, None)[0],  # E x action_size
           student_inference_fn(env_state.obs, None)[0],
       )
       nstate = env.step(env_state, actions)
@@ -219,8 +220,8 @@ def train(
     )  # Tree(E x T x ...)
 
     for k in all_obs.keys():
-      assert all_obs[k].shape[:2] == (num_demos, demo_length), (
-          f'Expected shape {(num_demos, demo_length)} but got'
+      assert all_obs[k].shape[:2] == (num_envs, demo_length), (
+          f'Expected shape {(num_envs, demo_length)} but got'
           f' {all_obs[k].shape[:2]}'
       )
 
@@ -236,9 +237,9 @@ def train(
     )
 
   assert (
-      int(num_demos * demo_length) % batch_size == 0
+      int(num_envs * demo_length) % batch_size == 0
   ), 'Demo trajectories must be evenly divisible into batches'
-  num_minibatches = int(num_demos * demo_length / batch_size)
+  num_minibatches = int(num_envs * demo_length / batch_size)
 
   @jax.vmap
   def random_crop(key, img):
@@ -255,10 +256,6 @@ def train(
     return jax.lax.dynamic_slice(padded_img, crop_from, img.shape)
 
   def fit_student(ts: TrainingState, X, key) -> Tuple[TrainingState, Metrics]:
-    assert X['has_switched'].shape == (num_envs * demo_length, 1), (
-        f'Expected shape {(num_envs * demo_length, 1)} but got'
-        f' {X["has_switched"].shape}'
-    )
     # Fixed through fitting process.
     normalizer_params = ts.normalizer_params
 
@@ -285,25 +282,8 @@ def train(
       X_shuffled = jax.tree_util.tree_map(
           convert_data, shifted
       )  # num_minibatches, minibatch_size, ...
-      assert X_shuffled['has_switched'].shape == (
-          num_minibatches,
-          int(num_demos * demo_length / num_minibatches),
-          1,
-      ), (
-          'Expected shape'
-          f' {(num_minibatches, int(num_demos * demo_length / num_minibatches), 1)} but'
-          f' got {X_shuffled["has_switched"].shape}'
-      )
 
       def minibatch_step(carry, X_batch):
-        assert X_batch['has_switched'].shape == (
-            int(num_demos * demo_length / num_minibatches),
-            1,
-        ), (
-            'Expected shape'
-            f' {(int(num_demos * demo_length / num_minibatches), 1)} but got'
-            f' {X_batch["has_switched"].shape}'
-        )
         params, optimizer_state = carry
         t_act, t_act_extras = teacher_inference_fn(X_batch, None)
         data = {
@@ -350,10 +330,6 @@ def train(
     )
 
     X_cur = combine_batch_axes(raw_data)
-    assert X_cur['has_switched'].shape == (num_demos * demo_length, 1), (
-        f'Expected shape {(num_demos * demo_length, 1)} but got'
-        f' {X_cur["has_switched"].shape}'
-    )
     ts = ts.replace(
         normalizer_params=running_statistics.update(
             ts.normalizer_params,
@@ -383,7 +359,7 @@ def train(
     key, eval_key = jax.random.split(key)
     evaluator = Evaluator(
         eval_env,
-        functools.partial(make_policy),
+        make_policy,
         num_eval_envs=num_eval_envs,
         episode_length=eval_length,
         action_repeat=1,
@@ -394,7 +370,7 @@ def train(
   wall_time = 0
   key, key_dagger = jax.random.split(key)
   for i_eval in range(num_evals_after_init):
-    if i_eval != 0:
+    if i_eval != 0 and reset:
       # Seed new randomness to be gradually phased in.
       key_reset, key = jax.random.split(key)
       _state = reset_fn(jax.random.split(key_reset, num_envs))
@@ -410,10 +386,14 @@ def train(
     )
     jax.tree_util.tree_map(lambda x: x.block_until_ready(), b_metrics)
     t1 = time.monotonic()
-    d_length = int(num_demos * demo_length)
+    d_length = int(num_envs * demo_length)
     b_metrics['SPS'] = d_length * epochs / (t1 - t0)
     wall_time += t1 - t0
     b_metrics['walltime'] = wall_time
     evaluate(training_state, b_metrics)
 
-  return (training_state.normalizer_params, training_state.params)
+  return (
+      make_policy,
+      (training_state.normalizer_params, training_state.params),
+      b_metrics,
+  )
