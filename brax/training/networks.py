@@ -19,13 +19,13 @@ import functools
 from typing import Any, Callable, Mapping, Sequence, Tuple
 import warnings
 
-from brax.training import types
-from brax.training.acme import running_statistics
-from brax.training.spectral_norm import SNDense
 from flax import linen
 import jax
 import jax.numpy as jnp
 
+from brax.training import types
+from brax.training.acme import running_statistics
+from brax.training.spectral_norm import SNDense
 
 ActivationFn = Callable[[jnp.ndarray], jnp.ndarray]
 Initializer = Callable[..., Any]
@@ -35,6 +35,42 @@ Initializer = Callable[..., Any]
 class FeedForwardNetwork:
   init: Callable[..., Any]
   apply: Callable[..., Any]
+
+
+class MLPLatents(linen.Module):
+  """MLP module that separates out latents for pre-processing.
+  For an example usage, see the Aloha sim2real code on
+  https://github.com/google-deepmind/mujoco_playground."""
+
+  layer_sizes: Sequence[int]
+  activation: ActivationFn = linen.relu
+  kernel_init: Initializer = jax.nn.initializers.lecun_uniform()
+  activate_final: bool = False
+  bias: bool = True
+  layer_norm: bool = False
+  state_key: str = 'proprio'
+
+  @linen.compact
+  def __call__(self, data: jnp.ndarray):
+    latents = []
+    # Find all keys that match the pattern pixels/latent_{i} and sort them
+    latent_keys = sorted(
+        [k for k in data.keys() if k.startswith('pixels/latent_')],
+        key=lambda x: int(x.split('_')[-1]),
+    )
+    for key in latent_keys:
+      latents.append(data[key])
+    hidden = [self.activation(linen.Dense(64)(latent)) for latent in latents]
+    proprio = data[self.state_key]
+    hidden.append(proprio)
+    hidden = jnp.concatenate(hidden, axis=-1)
+    return MLP(
+        layer_sizes=self.layer_sizes,
+        activation=self.activation,
+        kernel_init=self.kernel_init,
+        activate_final=self.activate_final,
+        layer_norm=self.layer_norm,
+    )(hidden)
 
 
 class MLP(linen.Module):
@@ -129,6 +165,7 @@ class VisionMLP(linen.Module):
   layer_norm: bool = False
   normalise_channels: bool = False
   state_obs_key: str = ''
+  policy_head: bool = True  # = False is useful for frozen encoders.
 
   @linen.compact
   def __call__(self, data: dict):
@@ -160,6 +197,8 @@ class VisionMLP(linen.Module):
     )
     cnn_outs = [natureCNN()(pixels_hidden[key]) for key in pixels_hidden]
     cnn_outs = [jnp.mean(cnn_out, axis=(-2, -3)) for cnn_out in cnn_outs]
+    if not self.policy_head:
+      return jnp.concatenate(cnn_outs, axis=-1)
     if self.state_obs_key:
       cnn_outs.append(
           data[self.state_obs_key]
@@ -199,8 +238,12 @@ def make_policy_network(
   )
 
   def apply(processor_params, policy_params, obs):
-    obs = preprocess_observations_fn(obs, processor_params)
-    obs = obs if isinstance(obs, jax.Array) else obs[obs_key]
+    if isinstance(obs, Mapping):
+      obs = preprocess_observations_fn(
+          obs[obs_key], normalizer_select(processor_params, obs_key)
+      )
+    else:
+      obs = preprocess_observations_fn(obs, processor_params)
     return policy_module.apply(policy_params, obs)
 
   obs_size = _get_obs_state_size(obs_size, obs_key)
@@ -225,8 +268,12 @@ def make_value_network(
   )
 
   def apply(processor_params, value_params, obs):
-    obs = preprocess_observations_fn(obs, processor_params)
-    obs = obs if isinstance(obs, jax.Array) else obs[obs_key]
+    if isinstance(obs, Mapping):
+      obs = preprocess_observations_fn(
+          obs[obs_key], normalizer_select(processor_params, obs_key)
+      )
+    else:
+      obs = preprocess_observations_fn(obs, processor_params)
     return jnp.squeeze(value_module.apply(value_params, obs), axis=-1)
 
   obs_size = _get_obs_state_size(obs_size, obs_key)
@@ -415,4 +462,40 @@ def make_value_network_vision(
   }
   return FeedForwardNetwork(
       init=lambda key: value_module.init(key, dummy_obs), apply=apply
+  )
+
+
+def make_policy_network_latents(
+    param_size: int,
+    observation_size: types.ObservationSize,
+    preprocess_observations_fn: types.PreprocessObservationFn = types.identity_observation_preprocessor,
+    hidden_layer_sizes: Sequence[int] = (256, 256),
+    activation: ActivationFn = linen.relu,
+    kernel_init: Initializer = jax.nn.initializers.lecun_uniform(),
+    layer_norm: bool = False,
+    obs_key: str = 'state',
+) -> FeedForwardNetwork:
+  """Creates a policy network. Wraps MLPLatents. Has same API as make_policy_network.
+  Used when the env observation has image latents rather than pixels."""
+  module = MLPLatents(
+      layer_sizes=list(hidden_layer_sizes) + [param_size],
+      activation=activation,
+      kernel_init=kernel_init,
+      layer_norm=layer_norm,
+      state_key=obs_key,
+  )
+
+  def apply(processor_params, policy_params, obs):
+    if obs_key:
+      state_obs = preprocess_observations_fn(
+          obs[obs_key], normalizer_select(processor_params, obs_key)
+      )
+      obs = {**obs, obs_key: state_obs}
+    return module.apply(policy_params, obs)
+
+  dummy_obs = {
+      key: jnp.zeros((1,) + shape) for key, shape in observation_size.items()
+  }
+  return FeedForwardNetwork(
+      init=lambda key: module.init(key, dummy_obs), apply=apply
   )
