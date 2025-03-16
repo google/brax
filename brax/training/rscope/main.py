@@ -1,48 +1,68 @@
-import time
-from pathlib import Path
+# Copyright 2025 The Brax Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
+"""Rscope main script."""
+
+from pathlib import Path
+import time
+
+import glfw
 import mujoco
 import mujoco.viewer as mujoco_viewer
-import glfw
-
-from config import BASE_PATH
-from model_loader import load_model_and_data
-import rollout
-from event_handler import MjUnrollHandler
-import viewer_utils as vu
-from image_processing import process_img
 from watchdog.observers import Observer
-from state import ViewerState
+
+import brax.training.rscope.config as config
+import brax.training.rscope.event_handler as event_handler
+import brax.training.rscope.image_processing as image_processing
+import brax.training.rscope.model_loader as model_loader
+import brax.training.rscope.rollout as rollout
+from brax.training.rscope.state import ViewerState
+import brax.training.rscope.viewer_utils as vu
 
 # Create an instance of ViewerState to encapsulate state.
 viewer_state = ViewerState()
 
 
 # Load the Mujoco model and data.
-mj_model, mj_data, meta = load_model_and_data()
+mj_model, mj_data, meta = model_loader.load_model_and_data()
+
 
 # Load initial unroll files.
 def load_initial_unrolls():
-    unroll_files = rollout.find_unrolls(BASE_PATH)
-    while not unroll_files:
-        print(f"No unrolls found in {BASE_PATH}, waiting...")
-        time.sleep(4)
-        unroll_files = rollout.find_unrolls(BASE_PATH)
-    unroll_files = sorted(unroll_files)
-    for f in unroll_files:
-        rollout.append_unroll(Path(BASE_PATH) / f)
-    print(f"main.py Env dt: {rollout.env_ctrl_dt}")
+  unroll_files = rollout.find_unrolls(config.BASE_PATH)
+  while not unroll_files:
+    print(f"No unrolls found in {config.BASE_PATH}, waiting...")
+    time.sleep(4)
+    unroll_files = rollout.find_unrolls(config.BASE_PATH)
+  unroll_files = sorted(unroll_files)
+  for f in unroll_files:
+    rollout.append_unroll(Path(config.BASE_PATH) / f)
+  print(f"main.py Env dt: {rollout.env_ctrl_dt}")
+
 
 load_initial_unrolls()
 
 # Setup file system observer.
-event_handler = MjUnrollHandler()
+event_handler_instance = event_handler.MjUnrollHandler()
 observer = Observer()
-observer.schedule(event_handler, str(BASE_PATH), recursive=False)
+observer.schedule(
+    event_handler_instance, str(config.BASE_PATH), recursive=False
+)
 try:
-    observer.start()
+  observer.start()
 except Exception as e:
-    print(f"Error starting observer: {e}")
+  print(f"Error starting observer: {e}")
 
 # Initialize figures using metrics keys from the first rollout.
 metrics_keys = list(rollout.rollouts[0].metrics.keys())
@@ -52,94 +72,121 @@ vu.reset_figures(metrics_keys)
 replay_len = rollout.rollouts[0].qpos.shape[0]
 
 with mujoco_viewer.launch_passive(
-        mj_model, mj_data,
-        show_left_ui=False, show_right_ui=False,
-        key_callback=viewer_state.key_callback) as viewer:
-    
-    while viewer.is_running():
-        step_start = time.time()
-        
-        # Trajectory selection: if a new rollout is requested.
-        if viewer_state.change_rollout:
-            vu.reset_figures(metrics_keys)
-            viewer_state.change_rollout = False
-            full_rollout = rollout.rollouts[viewer_state.cur_eval]
-            if isinstance(full_rollout.obs, dict):
-                obs = rollout.dict_obs_pixels_env_select(full_rollout.obs, viewer_state.cur_env)
-            else:
-                obs = full_rollout.obs[:, viewer_state.cur_env]
-            cur_rollout = full_rollout._replace(
-                qpos=full_rollout.qpos[:, viewer_state.cur_env],
-                qvel=full_rollout.qvel[:, viewer_state.cur_env],
-                mocap_pos=full_rollout.mocap_pos[:, viewer_state.cur_env],
-                mocap_quat=full_rollout.mocap_quat[:, viewer_state.cur_env],
-                obs=obs,
-                reward=full_rollout.reward[:, viewer_state.cur_env],
-                time=full_rollout.time[:, viewer_state.cur_env],
-                metrics=rollout.metrics_env_select(full_rollout.metrics, viewer_state.cur_env)
-            )
-            replay_index = 0
-            replay_len = cur_rollout.qpos.shape[0]
-        
-        with viewer.lock():
-            # Overlay text.
-            text_1 = "Eval\nEnv\nStep\nStatus"
-            text_2 = (f"{viewer_state.cur_eval+1}/{rollout.num_evals}\n"
-                     f"{viewer_state.cur_env+1}/{rollout.num_envs}\n"
-                     f"{replay_index}")
-            text_2 += "\nPause" if viewer_state.pause else "\nPlay"
-            overlays = [
-                (mujoco.mjtFontScale.mjFONTSCALE_150,
-                 mujoco.mjtGridPos.mjGRID_TOPLEFT, text_1, text_2)
-            ]
-            if viewer_state.show_help:
-                menu_text_1, menu_text_2 = vu.get_menu_text()
-                overlays.append(
-                    (mujoco.mjtFontScale.mjFONTSCALE_150,
-                     mujoco.mjtGridPos.mjGRID_BOTTOMLEFT, menu_text_1, menu_text_2)
-                )
-            viewer.overlay_text(overlays)
-            
-            # Render figures (metrics).
-            if viewer_state.show_metrics:
-                if not viewer_state.pause:
-                    cur_metrics = {key: metrics[replay_index] for key, metrics in cur_rollout.metrics.items()}
-                    for key in cur_metrics:
-                        vu.add_data_to_fig(key, cur_metrics[key])
-                viewports = vu.get_viewports(len(cur_rollout.metrics), viewer.viewport)
-                viewport_figures = list(zip(viewports, list(vu.figures.values())))
-                viewer.set_figures(viewport_figures)
-            else:
-                viewer.clear_figures()
-            
-            # Render pixel observations if available.
-            from collections.abc import Mapping
-            if isinstance(cur_rollout.obs, Mapping):
-                if any(key.startswith('pixels/') for key in cur_rollout.obs.keys()):
-                    if viewer_state.show_pixel_obs:
-                        cur_obs = rollout.dict_obs_t_select(cur_rollout.obs, replay_index)
-                        viewports = vu.get_viewports(len(cur_obs), viewer.viewport)
-                        processed_obs = {key: process_img(cur_obs[key]) for key in cur_obs.keys()}
-                        viewer.set_images(list(zip(viewports, list(processed_obs.values()))))
-                    else:
-                        viewer.clear_images()
-        
-        # Advance simulation: update the state.
-        def advance_rollout(mj_model, mj_data, idx):
-            mj_data.qpos, mj_data.qvel = cur_rollout.qpos[idx], cur_rollout.qvel[idx]
-            if cur_rollout.mocap_pos.size:
-                mj_data.mocap_pos, mj_data.mocap_quat = cur_rollout.mocap_pos[idx], cur_rollout.mocap_quat[idx]
-            mj_data.time = cur_rollout.time[idx]
-            mujoco.mj_forward(mj_model, mj_data)
-        
-        advance_rollout(mj_model, mj_data, replay_index)
+    mj_model,
+    mj_data,
+    show_left_ui=False,
+    show_right_ui=False,
+    key_callback=viewer_state.key_callback,
+) as viewer:
+
+  while viewer.is_running():
+    step_start = time.time()
+
+    # Trajectory selection: if a new rollout is requested.
+    if viewer_state.change_rollout:
+      vu.reset_figures(metrics_keys)
+      viewer_state.change_rollout = False
+      full_rollout = rollout.rollouts[viewer_state.cur_eval]
+      if isinstance(full_rollout.obs, dict):
+        obs = rollout.dict_obs_pixels_env_select(
+            full_rollout.obs, viewer_state.cur_env
+        )
+      else:
+        obs = full_rollout.obs[:, viewer_state.cur_env]
+      cur_rollout = full_rollout._replace(
+          qpos=full_rollout.qpos[:, viewer_state.cur_env],
+          qvel=full_rollout.qvel[:, viewer_state.cur_env],
+          mocap_pos=full_rollout.mocap_pos[:, viewer_state.cur_env],
+          mocap_quat=full_rollout.mocap_quat[:, viewer_state.cur_env],
+          obs=obs,
+          reward=full_rollout.reward[:, viewer_state.cur_env],
+          time=full_rollout.time[:, viewer_state.cur_env],
+          metrics=rollout.metrics_env_select(
+              full_rollout.metrics, viewer_state.cur_env
+          ),
+      )
+      replay_index = 0
+      replay_len = cur_rollout.qpos.shape[0]
+
+    with viewer.lock():
+      # Overlay text.
+      text_1 = "Eval\nEnv\nStep\nStatus"
+      text_2 = (
+          f"{viewer_state.cur_eval+1}/{rollout.num_evals}\n"
+          f"{viewer_state.cur_env+1}/{rollout.num_envs}\n"
+          f"{replay_index}"
+      )
+      text_2 += "\nPause" if viewer_state.pause else "\nPlay"
+      overlays = [(
+          mujoco.mjtFontScale.mjFONTSCALE_150,
+          mujoco.mjtGridPos.mjGRID_TOPLEFT,
+          text_1,
+          text_2,
+      )]
+      if viewer_state.show_help:
+        menu_text_1, menu_text_2 = vu.get_menu_text()
+        overlays.append((
+            mujoco.mjtFontScale.mjFONTSCALE_150,
+            mujoco.mjtGridPos.mjGRID_BOTTOMLEFT,
+            menu_text_1,
+            menu_text_2,
+        ))
+      viewer.overlay_text(overlays)
+
+      # Render figures (metrics).
+      if viewer_state.show_metrics:
         if not viewer_state.pause:
-            replay_index = (replay_index + 1) % replay_len
-            viewer.sync()
-        
-        time_until_next_step = float(rollout.env_ctrl_dt) - (time.time() - step_start)
-        if time_until_next_step > 0:
-            time.sleep(time_until_next_step)
+          cur_metrics = {
+              key: metrics[replay_index]
+              for key, metrics in cur_rollout.metrics.items()
+          }
+          for key in cur_metrics:
+            vu.add_data_to_fig(key, cur_metrics[key])
+        viewports = vu.get_viewports(len(cur_rollout.metrics), viewer.viewport)
+        viewport_figures = list(zip(viewports, list(vu.figures.values())))
+        viewer.set_figures(viewport_figures)
+      else:
+        viewer.clear_figures()
+
+      # Render pixel observations if available.
+      from collections.abc import Mapping
+
+      if isinstance(cur_rollout.obs, Mapping):
+        if any(key.startswith("pixels/") for key in cur_rollout.obs.keys()):
+          if viewer_state.show_pixel_obs:
+            cur_obs = rollout.dict_obs_t_select(cur_rollout.obs, replay_index)
+            viewports = vu.get_viewports(len(cur_obs), viewer.viewport)
+            processed_obs = {
+                key: image_processing.process_img(cur_obs[key])
+                for key in cur_obs.keys()
+            }
+            viewer.set_images(
+                list(zip(viewports, list(processed_obs.values())))
+            )
+          else:
+            viewer.clear_images()
+
+    # Advance simulation: update the state.
+    def advance_rollout(mj_model, mj_data, idx):
+      mj_data.qpos, mj_data.qvel = cur_rollout.qpos[idx], cur_rollout.qvel[idx]
+      if cur_rollout.mocap_pos.size:
+        mj_data.mocap_pos, mj_data.mocap_quat = (
+            cur_rollout.mocap_pos[idx],
+            cur_rollout.mocap_quat[idx],
+        )
+      mj_data.time = cur_rollout.time[idx]
+      mujoco.mj_forward(mj_model, mj_data)
+
+    advance_rollout(mj_model, mj_data, replay_index)
+    if not viewer_state.pause:
+      replay_index = (replay_index + 1) % replay_len
+      viewer.sync()
+
+    time_until_next_step = float(rollout.env_ctrl_dt) - (
+        time.time() - step_start
+    )
+    if time_until_next_step > 0:
+      time.sleep(time_until_next_step)
 
 observer.stop()
 observer.join()
