@@ -82,6 +82,14 @@ To train a model:
 learn
 ```
 
+To interactively visualize trajectories from the current training run using the Mujoco viewer:
+
+```
+python -m brax.rscope
+```
+
+See [here](https://github.com/google/brax/tree/main/brax/training/rscope/README.md) for how to configure this feature.
+
 Training on NVidia GPU is supported, but you must first install
 [CUDA, CuDNN, and JAX with GPU support](https://github.com/google/jax#installation).
 

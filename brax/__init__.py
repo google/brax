@@ -20,3 +20,4 @@ from brax.base import Motion
 from brax.base import State
 from brax.base import System
 from brax.base import Transform
+from brax.training.rscope import main as rscope

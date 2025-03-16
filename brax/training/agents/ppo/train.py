@@ -244,6 +244,7 @@ def train(
     restore_checkpoint_path: Optional[str] = None,
     restore_params: Optional[Any] = None,
     restore_value_fn: bool = True,
+    rscope_envs: Optional[int] = None,
 ):
   """PPO training.
 
@@ -312,6 +313,8 @@ def train(
       from the return values of ppo.train().
     restore_value_fn: whether to restore the value function from the checkpoint
       or use a random initialization
+    rscope_envs: the number of eval trajectories to save. If None, no rscope
+      trajectories are saved.
 
   Returns:
     Tuple of (make_policy function, network params, metrics)
@@ -666,6 +669,7 @@ def train(
       episode_length=episode_length,
       action_repeat=action_repeat,
       key=eval_key,
+      rscope_envs=rscope_envs
   )
 
   # Run initial eval
