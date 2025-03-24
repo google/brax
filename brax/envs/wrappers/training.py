@@ -250,3 +250,100 @@ class DomainRandomizationVmapWrapper(Wrapper):
         self._sys_v, state, action
     )
     return res
+
+
+class RunningMeanStd:
+    """Computes and updates running mean and variance for online normalization."""
+
+    def __init__(self, shape: Tuple[int], epsilon: float = 1e-8):
+        self.mean = jp.zeros(shape)
+        self.var = jp.ones(shape)
+        self.count = 0.0
+        self.epsilon = epsilon
+
+    def update(self, x: jp.ndarray):
+        batch_mean = jp.mean(x, axis=0)
+        batch_var = jp.var(x, axis=0)
+        batch_count = x.shape[0] if len(x.shape) > 0 else 1.0
+
+        delta = batch_mean - self.mean
+        tot_count = self.count + batch_count
+        new_mean = self.mean + delta * batch_count / tot_count
+
+        m_a = self.var * self.count
+        m_b = batch_var * batch_count
+        M2 = m_a + m_b + (delta**2) * self.count * batch_count / tot_count
+        new_var = M2 / tot_count
+
+        self.mean = new_mean
+        self.var = new_var
+        self.count = tot_count
+
+
+class ClipVecAction(Wrapper):
+    """Wrapper that clips continuous actions to be within the environment's valid range."""
+
+    def __init__(self, env: Env, low: float = -10.0, high: float = 10.0):
+        super().__init__(env)
+        self.low = jp.array(low)
+        self.high = jp.array(high)
+
+    def reset(self, rng: jax.Array) -> State:
+        return self.env.reset(rng)
+
+    def step(self, state: State, action: jax.Array) -> State:
+        clipped_action = jp.clip(action, self.low, self.high)
+        return self.env.step(state, clipped_action)
+
+
+class NormalizeVecObservation(Wrapper):
+    """Wrapper that normalizes observations using a running mean and standard deviation."""
+
+    def __init__(self, env: Env, epsilon: float = 1e-8):
+        super().__init__(env)
+        self.epsilon = epsilon
+        self.obs_rms = RunningMeanStd(shape=self.env.observation_size, epsilon=epsilon)
+        self.update_running_mean = True
+
+    def _normalize(self, obs: jp.ndarray) -> jp.ndarray:
+        return (obs - self.obs_rms.mean) / jp.sqrt(self.obs_rms.var + self.epsilon)
+
+    def reset(self, rng: jax.Array) -> State:
+        state = self.env.reset(rng)
+        if self.update_running_mean:
+            self.obs_rms.update(state.obs)
+        normalized_obs = self._normalize(state.obs)
+        return state.replace(obs=normalized_obs)
+
+    def step(self, state: State, action: jax.Array) -> State:
+        state = self.env.step(state, action)
+        if self.update_running_mean:
+            self.obs_rms.update(state.obs)
+        normalized_obs = self._normalize(state.obs)
+        return state.replace(obs=normalized_obs)
+
+
+class NormalizeVecReward(Wrapper):
+    """Wrapper that normalizes rewards using a running mean and standard deviation of the accumulated (discounted) rewards."""
+    
+    def __init__(self, env: Env, gamma: float = 0.99, epsilon: float = 1e-8):
+        super().__init__(env)
+        self.gamma = gamma
+        self.epsilon = epsilon
+        self.return_rms = RunningMeanStd(shape=(), epsilon=epsilon)
+        self.accumulated_reward = None
+        self.update_running_mean = True
+
+    def reset(self, rng: jax.Array) -> State:
+        state = self.env.reset(rng)
+        self.accumulated_reward = jp.zeros_like(state.reward)
+        return state
+
+    def step(self, state: State, action: jax.Array) -> State:
+        state = self.env.step(state, action)
+        done_float = state.done.astype(jp.float32)
+        self.accumulated_reward = self.accumulated_reward * self.gamma * (1 - done_float) + state.reward
+        if self.update_running_mean:
+            self.return_rms.update(self.accumulated_reward[jp.newaxis])
+        normalized_reward = state.reward / jp.sqrt(self.return_rms.var + self.epsilon)
+        return state.replace(reward=normalized_reward)
