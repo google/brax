@@ -73,7 +73,7 @@ def load_policy(
   """Loads policy inference function from SAC checkpoint."""
   path = epath.Path(path)
 
-  config_path = path.parent / _CONFIG_FNAME
+  config_path = path / _CONFIG_FNAME
   if not config_path.exists():
     raise ValueError(f'SAC config file not found at {config_path.as_posix()}')
 

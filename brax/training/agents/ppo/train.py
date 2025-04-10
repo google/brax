@@ -36,7 +36,6 @@ from brax.training.agents.ppo import losses as ppo_losses
 from brax.training.agents.ppo import networks as ppo_networks
 from brax.training.types import Params
 from brax.training.types import PRNGKey
-from brax.v1 import envs as envs_v1
 import flax
 import jax
 import jax.numpy as jnp
@@ -57,7 +56,7 @@ class TrainingState:
   optimizer_state: optax.OptState
   params: ppo_losses.PPONetworkParams
   normalizer_params: running_statistics.RunningStatisticsState
-  env_steps: jnp.ndarray
+  env_steps: types.UInt64
 
 
 def _unpmap(v):
@@ -95,7 +94,7 @@ def _validate_madrona_args(
 
 
 def _maybe_wrap_env(
-    env: Union[envs_v1.Env, envs.Env],
+    env: envs.Env,
     wrap_env: bool,
     num_envs: int,
     episode_length: Optional[int],
@@ -122,10 +121,8 @@ def _maybe_wrap_env(
     )
   if wrap_env_fn is not None:
     wrap_for_training = wrap_env_fn
-  elif isinstance(env, envs.Env):
-    wrap_for_training = envs.training.wrap
   else:
-    wrap_for_training = envs_v1.wrappers.wrap_for_training
+    wrap_for_training = envs.training.wrap
   env = wrap_for_training(
       env,
       episode_length=episode_length,
@@ -194,7 +191,7 @@ def _remove_pixels(
 
 
 def train(
-    environment: Union[envs_v1.Env, envs.Env],
+    environment: envs.Env,
     num_timesteps: int,
     max_devices_per_host: Optional[int] = None,
     # high-level control flow
@@ -610,7 +607,7 @@ def train(
       normalizer_params=running_statistics.init_state(
           _remove_pixels(obs_shape)
       ),
-      env_steps=0,
+      env_steps=types.UInt64(hi=0, lo=0),
   )
 
   if restore_checkpoint_path is not None:
@@ -729,7 +726,11 @@ def train(
       progress_fn(current_step, metrics)
 
   total_steps = current_step
-  assert total_steps >= num_timesteps
+  if not total_steps >= num_timesteps:
+    raise AssertionError(
+        f'Total steps {total_steps} is less than `num_timesteps`='
+        f' {num_timesteps}.'
+    )
 
   # If there was no mistakes the training_state should still be identical on all
   # devices.

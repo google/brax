@@ -19,7 +19,7 @@ See: https://arxiv.org/pdf/1803.07055.pdf
 
 import functools
 import time
-from typing import Any, Callable, Dict, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from absl import logging
 from brax import base
@@ -31,7 +31,6 @@ from brax.training.acme import specs
 from brax.training.agents.ars import networks as ars_networks
 from brax.training.types import Params
 from brax.training.types import PRNGKey
-from brax.v1 import envs as envs_v1
 import flax
 import jax
 import jax.numpy as jnp
@@ -47,12 +46,12 @@ class TrainingState:
 
   normalizer_params: running_statistics.RunningStatisticsState
   policy_params: Params
-  num_env_steps: int
+  num_env_steps: types.UInt64
 
 
 # TODO: Pass the network as argument.
 def train(
-    environment: Union[envs_v1.Env, envs.Env],
+    environment: envs.Env,
     wrap_env: bool = True,
     wrap_env_fn: Optional[Callable[[Any], Any]] = None,
     num_timesteps: int = 100,
@@ -323,7 +322,7 @@ def train(
   training_state = TrainingState(
       normalizer_params=normalizer_params,
       policy_params=policy_params,
-      num_env_steps=0,
+      num_env_steps=types.UInt64(hi=0, lo=0),
   )
 
   if not eval_env:
@@ -350,14 +349,14 @@ def train(
       key=eval_key,
   )
 
-  while training_state.num_env_steps < num_timesteps:
+  while int(training_state.num_env_steps) < num_timesteps:
     # optimization
     key, epoch_key = jax.random.split(key)
     training_state, training_metrics = training_epoch_with_timing(
         training_state, epoch_key
     )
 
-    if training_state.num_env_steps >= next_eval_step:
+    if int(training_state.num_env_steps) >= next_eval_step:
       # Run evals.
       metrics = evaluator.run_evaluation(
           (training_state.normalizer_params, training_state.policy_params),
@@ -367,8 +366,12 @@ def train(
       progress_fn(int(training_state.num_env_steps), metrics)
       next_eval_step += num_env_steps_between_evals
 
-  total_steps = training_state.num_env_steps
-  assert total_steps >= num_timesteps
+  total_steps = int(training_state.num_env_steps)
+  if not total_steps >= num_timesteps:
+    raise AssertionError(
+        f'Total steps {total_steps} is less than `num_timesteps`='
+        f' {num_timesteps}.'
+    )
 
   logging.info('total steps: %s', total_steps)
   params = training_state.normalizer_params, training_state.policy_params

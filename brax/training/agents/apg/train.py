@@ -30,7 +30,6 @@ from brax.training.acme import specs
 from brax.training.agents.apg import networks as apg_networks
 from brax.training.types import Params
 from brax.training.types import PRNGKey
-from brax.v1 import envs as envs_v1
 import flax
 import jax
 import jax.numpy as jnp
@@ -56,7 +55,7 @@ def _unpmap(v):
 
 
 def train(
-    environment: Union[envs_v1.Env, envs.Env],
+    environment: envs.Env,
     episode_length: int,
     policy_updates: int,
     wrap_env: bool = True,
@@ -120,10 +119,8 @@ def train(
   if wrap_env:
     if wrap_env_fn is not None:
       wrap_for_training = wrap_env_fn
-    elif isinstance(env, envs.Env):
-      wrap_for_training = envs.training.wrap
     else:
-      wrap_for_training = envs_v1.wrappers.wrap_for_training
+      wrap_for_training = envs.training.wrap
 
     v_randomization_fn = None
     if randomization_fn is not None:
@@ -176,7 +173,7 @@ def train(
     return state
 
   def env_step(
-      carry: Tuple[Union[envs.State, envs_v1.State], PRNGKey],
+      carry: Tuple[envs.State, PRNGKey],
       step_index: int,
       policy: types.Policy,
   ):
@@ -239,7 +236,7 @@ def train(
 
   def training_epoch(
       training_state: TrainingState,
-      env_state: Union[envs.State, envs_v1.State],
+      env_state: envs.State,
       key: PRNGKey,
   ):
 
@@ -279,9 +276,9 @@ def train(
   # Note that this is NOT a pure jittable method.
   def training_epoch_with_timing(
       training_state: TrainingState,
-      env_state: Union[envs.State, envs_v1.State],
+      env_state: envs.State,
       key: PRNGKey,
-  ) -> Tuple[TrainingState, Union[envs.State, envs_v1.State], Metrics, PRNGKey]:
+  ) -> Tuple[TrainingState, envs.State, Metrics, PRNGKey]:
     nonlocal training_walltime
     t = time.time()
     (training_state, env_state, metrics, key) = training_epoch(
