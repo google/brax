@@ -10,6 +10,8 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # Needed to create releases
 
     steps:
       - uses: actions/checkout@v2
