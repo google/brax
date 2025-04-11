@@ -1,3 +1,77 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "brax"
+version = "0.12.3"
+description = "A differentiable physics engine written in JAX."
+authors = [
+    { name = "Brax Authors", email = "no-reply@google.com" },
+]
+readme = { file = "README.md", content-type = "text/markdown" }
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+keywords = [
+    "JAX",
+    "reinforcement learning",
+    "rigidbody",
+    "physics",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "absl-py",
+    "dataclasses; python_version < '3.7'",
+    # TODO: remove dm_env after dropping legacy v1 code
+    "dm_env",
+    "etils",
+    "flask",
+    "flask_cors",
+    "flax",
+    # TODO: remove grpcio and gym after dropping legacy v1 code
+    "grpcio",
+    "gym",
+    "jax>=0.4.6",
+    "jaxlib>=0.4.6",
+    "jaxopt",
+    "jinja2",
+    "ml_collections",
+    "mujoco",
+    "mujoco-mjx",
+    "numpy",
+    "optax",
+    "orbax-checkpoint",
+    # TODO: remove pytinyrenderer after dropping legacy v1 code
+    "Pillow",
+    "pytinyrenderer",
+    "scipy",
+    "tensorboardX",
+    "trimesh",
+    "typing-extensions",
+]
+
+[project.optional-dependencies]
+develop = [
+    "pytest",
+    "transforms3d",
+]
+
+[project.urls]
+Homepage = "http://github.com/google/brax"
+
+[tool.hatch.build.targets.wheel]
+packages = ["brax"]
+
 [tool.isort]
 force_single_line = true
 force_sort_within_sections = true
