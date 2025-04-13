@@ -37,8 +37,8 @@ class FeedForwardNetwork:
   apply: Callable[..., Any]
 
 
-class MLPLatents(linen.Module):
-  """MLP module that separates out latents for pre-processing.
+class MLPHead(linen.Module):
+  """MLP over pre-processed latent vectors.
   For an example usage, see the Aloha sim2real code on
   https://github.com/google-deepmind/mujoco_playground."""
 
@@ -49,20 +49,21 @@ class MLPLatents(linen.Module):
   bias: bool = True
   layer_norm: bool = False
   state_key: str = 'proprio'
+  latent_key_prefix: str = 'latent_' # Assume followed by integer index.
+  latent_head_size: int = 64
 
   @linen.compact
   def __call__(self, data: jnp.ndarray):
     latents = []
-    # Find all keys that match the pattern pixels/latent_{i} and sort them
     latent_keys = sorted(
-        [k for k in data.keys() if k.startswith('pixels/latent_')],
+        [k for k in data.keys() if k.startswith(self.latent_key_prefix)],
         key=lambda x: int(x.split('_')[-1]),
     )
     for key in latent_keys:
       latents.append(data[key])
-    hidden = [self.activation(linen.Dense(64)(latent)) for latent in latents]
-    proprio = data[self.state_key]
-    hidden.append(proprio)
+    hidden = [self.activation(linen.Dense(self.latent_head_size)(latent)) for latent in latents]
+    if self.state_key:
+      hidden.append(data[self.state_key])
     hidden = jnp.concatenate(hidden, axis=-1)
     return MLP(
         layer_sizes=self.layer_sizes,
@@ -477,7 +478,7 @@ def make_policy_network_latents(
 ) -> FeedForwardNetwork:
   """Creates a policy network. Wraps MLPLatents. Has same API as make_policy_network.
   Used when the env observation has image latents rather than pixels."""
-  module = MLPLatents(
+  module = MLPHead(
       layer_sizes=list(hidden_layer_sizes) + [param_size],
       activation=activation,
       kernel_init=kernel_init,
