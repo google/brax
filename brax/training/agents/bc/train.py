@@ -15,7 +15,7 @@
 
 import functools
 import time
-from typing import Callable, Optional, Tuple
+from typing import Any, Callable, Optional, Tuple
 
 from absl import logging
 from etils import epath
@@ -101,9 +101,42 @@ def train(
     augment_pixels: bool = False,
     reset: bool = True,
     restore_checkpoint_path: Optional[str] = None,
+    restore_params: Optional[Any] = None,
     policy_params_fn: Callable[..., None] = lambda *args: None,
 ):
-  """Online dagger behaviour cloning.
+  """Online DAgger behavior cloning training.
+
+  Args:
+    demo_length: the length of demonstration trajectories
+    teacher_inference_fn: function that generates teacher actions
+    normalize_observations: whether to normalize observations
+    epochs: number of supervised training epochs per DAgger iteration
+    tanh_squash: whether to apply tanh squashing to actions.
+      Improves training stability.
+    env: the environment to train in
+    num_envs: the number of parallel environments to use for rollouts
+    num_eval_envs: the number of envs to use for evaluation
+    eval_length: the length of an evaluation episode
+    batch_size: the batch size for each training step
+    scramble_time: stagger intial times to encourage a stationary distribution.
+      This smoothes loss curves
+    network_factory: function that generates networks for policy
+    progress_fn: a user-defined callback function for reporting/plotting metrics
+    madrona_backend: whether to use Madrona backend for training
+    seed: random seed
+    learning_rate: learning rate for optimizer
+    dagger_steps: number of DAgger iterations to perform
+    dagger_beta_fn: function that determines probability of using teacher actions
+    num_evals: the number of evals to run during the entire training run.
+      Increasing the number of evals increases total training time
+    augment_pixels: whether to add image augmentation to pixel inputs
+    reset: whether to periodically use true resets for additional randomness
+    restore_checkpoint_path: the path used to restore previous model params
+    restore_params: raw network parameters to restore the TrainingState from.
+      These override `restore_checkpoint_path`. These paramaters can be obtained
+      from the return values of bc.train().
+    policy_params_fn: a user-defined callback function for saving policy checkpoints
+
   Assumes your env is already wrapped.
   """
   if madrona_backend:
