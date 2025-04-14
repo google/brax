@@ -260,13 +260,6 @@ def train(
       actor_loss, policy_optimizer, pmap_axis_name=_PMAP_AXIS_NAME
   )
 
-  ckpt_config = checkpoint.network_config(
-      observation_size=obs_size,
-      action_size=env.action_size,
-      normalize_observations=normalize_observations,
-      network_factory=network_factory,
-  )
-
   def sgd_step(
       carry: Tuple[TrainingState, PRNGKey], transitions: Transition
   ) -> Tuple[Tuple[TrainingState, PRNGKey], Metrics]:
@@ -584,6 +577,12 @@ def train(
       if checkpoint_logdir:
         params = _unpmap(
             (training_state.normalizer_params, training_state.policy_params)
+        )
+        ckpt_config = checkpoint.network_config(
+            observation_size=obs_size,
+            action_size=env.action_size,
+            normalize_observations=normalize_observations,
+            network_factory=network_factory,
         )
         checkpoint.save(checkpoint_logdir, current_step, params, ckpt_config)
 

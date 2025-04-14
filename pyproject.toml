@@ -71,6 +71,23 @@ Homepage = "http://github.com/google/brax"
 
 [tool.hatch.build.targets.wheel]
 packages = ["brax"]
+exclude = [
+  "/datasets",
+  "/docs",
+  "/notebooks",
+  "/tests",
+  "brax/experimental/barkour/assets",
+  "brax/experimental/barkour/data",
+]
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "/datasets",
+    "/docs",
+    "/notebooks",
+    "brax/experimental/barkour/assets",
+    "brax/experimental/barkour/data",
+]
 
 [tool.isort]
 force_single_line = true

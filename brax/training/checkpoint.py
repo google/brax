@@ -71,6 +71,7 @@ def network_config(
       )
     del kwargs['preprocess_observations_fn']
   if 'activation' in kwargs:
+    # TODO: Add other activations.
     if kwargs['activation'] != defaults['activation']:
       raise ValueError('checkpointing only supports default activation')
     del kwargs['activation']

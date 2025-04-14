@@ -423,13 +423,6 @@ def train(
       progress_fn=progress_fn,
   )
 
-  ckpt_config = checkpoint.network_config(
-      observation_size=obs_shape,
-      action_size=env.action_size,
-      normalize_observations=normalize_observations,
-      network_factory=network_factory,
-  )
-
   def minibatch_step(
       carry,
       data: types.Transition,
@@ -713,6 +706,12 @@ def train(
     policy_params_fn(current_step, make_policy, params)
 
     if save_checkpoint_path is not None:
+      ckpt_config = checkpoint.network_config(
+          observation_size=obs_shape,
+          action_size=env.action_size,
+          normalize_observations=normalize_observations,
+          network_factory=network_factory,
+      )
       checkpoint.save(
           save_checkpoint_path, current_step, params, ckpt_config
       )
