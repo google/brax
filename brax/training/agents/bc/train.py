@@ -18,12 +18,10 @@ import time
 from typing import Any, Callable, Optional, Tuple
 
 from absl import logging
-from etils import epath
 import flax
 import jax
 import jax.numpy as jp
 import optax
-from orbax import checkpoint as ocp
 
 from brax import envs
 from brax.training import acting
@@ -31,6 +29,7 @@ from brax.training import gradients
 from brax.training import types
 from brax.training.acme import running_statistics
 from brax.training.acme import specs
+from brax.training.agents.bc import checkpoint
 from brax.training.agents.bc import losses as bc_losses
 from brax.training.agents.bc import networks as bc_networks
 from brax.training.agents.ppo import train as ppo_train
@@ -79,13 +78,13 @@ def train(
     ],
     normalize_observations: bool = True,
     epochs: int = 50,
-    tanh_squash: bool = True,  # Greatly improves training stability.
+    tanh_squash: bool = True,
     env: envs.Env = None,
     num_envs: int = 0,
     num_eval_envs: int = 0,
     eval_length: int = None,
     batch_size: int = 256,
-    scramble_time: int = 0,  # Maximum time to scramble the envs by.
+    scramble_time: int = 0,
     network_factory: types.NetworkFactory[
         bc_networks.BCNetworks
     ] = bc_networks.make_bc_networks,
@@ -100,9 +99,9 @@ def train(
     num_evals=0,
     augment_pixels: bool = False,
     reset: bool = True,
+    save_checkpoint_path: Optional[str] = None,
     restore_checkpoint_path: Optional[str] = None,
     restore_params: Optional[Any] = None,
-    policy_params_fn: Callable[..., None] = lambda *args: None,
 ):
   """Online DAgger behavior cloning training.
 
@@ -118,8 +117,9 @@ def train(
     num_eval_envs: the number of envs to use for evaluation
     eval_length: the length of an evaluation episode
     batch_size: the batch size for each training step
-    scramble_time: stagger intial times to encourage a stationary distribution.
-      This smoothes loss curves
+    scramble_time: Maximum time to scramble the envs by.
+      Staggering initial times encourages a stationary distribution.
+      This smoothes loss curves.
     network_factory: function that generates networks for policy
     progress_fn: a user-defined callback function for reporting/plotting metrics
     madrona_backend: whether to use Madrona backend for training
@@ -131,11 +131,12 @@ def train(
       Increasing the number of evals increases total training time
     augment_pixels: whether to add image augmentation to pixel inputs
     reset: whether to periodically use true resets for additional randomness
+    save_checkpoint_path: the path used to save checkpoints. If None, no
+      checkpoints are saved.
     restore_checkpoint_path: the path used to restore previous model params
     restore_params: raw network parameters to restore the TrainingState from.
       These override `restore_checkpoint_path`. These paramaters can be obtained
       from the return values of bc.train().
-    policy_params_fn: a user-defined callback function for saving policy checkpoints
 
   Assumes your env is already wrapped.
   """
@@ -200,18 +201,31 @@ def train(
       dagger_step=jp.array(0, dtype=int),
   )
 
-  if (
-      restore_checkpoint_path is not None
-      and epath.Path(restore_checkpoint_path).exists()
-  ):
-    logging.info('restoring from checkpoint %s', restore_checkpoint_path)
-    orbax_checkpointer = ocp.PyTreeCheckpointer()
-    target = training_state.normalizer_params, init_params
-    (normalizer_params, init_params) = orbax_checkpointer.restore(
-        restore_checkpoint_path, item=target
-    )
+  # if (
+  #     restore_checkpoint_path is not None
+  #     and epath.Path(restore_checkpoint_path).exists()
+  # ):
+  #   logging.info('restoring from checkpoint %s', restore_checkpoint_path)
+  #   orbax_checkpointer = ocp.PyTreeCheckpointer()
+  #   target = training_state.normalizer_params, init_params
+  #   (normalizer_params, init_params) = orbax_checkpointer.restore(
+  #       restore_checkpoint_path, item=target
+  #   )
+  #   training_state = training_state.replace(
+  #       normalizer_params=normalizer_params, params=init_params
+  #   )
+  if restore_checkpoint_path is not None:
+    params = checkpoint.load(restore_checkpoint_path)
     training_state = training_state.replace(
-        normalizer_params=normalizer_params, params=init_params
+        normalizer_params=params[0],
+        params=params[1],
+    )
+  
+  if restore_params is not None:
+    logging.info('Restoring TrainingState from `restore_params`.')
+    training_state = training_state.replace(
+        normalizer_params=restore_params[0],
+        params=restore_params[1],
     )
 
   loss_fn = functools.partial(bc_losses.bc_loss, make_policy=make_policy)
@@ -220,6 +234,13 @@ def train(
       gradients.gradient_update_fn(
           loss_fn, optimizer, pmap_axis_name=None, has_aux=True
       )
+  )
+
+  ckpt_config = checkpoint.network_config(
+      observation_size=obs_shape,
+      action_size=env.action_size,
+      normalize_observations=normalize_observations,
+      network_factory=network_factory,
   )
 
   def collect_unroll(
@@ -382,7 +403,12 @@ def train(
           training_metrics={},
       )
       other_metrics.update(eval_metrics)
-    policy_params_fn(training_state.dagger_step, make_policy, inference_params)
+    
+    if save_checkpoint_path is not None:
+      checkpoint.save(
+          save_checkpoint_path, training_state.dagger_step, inference_params, ckpt_config
+      )
+
     progress_fn(training_state.dagger_step, other_metrics)
 
   if num_evals:

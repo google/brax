@@ -20,6 +20,7 @@ from typing import Any, Dict, Tuple, Union
 
 from brax.training import types
 from brax.training.acme import running_statistics
+from brax.training.agents.bc import networks as bc_networks
 from brax.training.agents.ppo import networks as ppo_networks
 from brax.training.agents.sac import networks as sac_networks
 from etils import epath
@@ -50,7 +51,8 @@ def network_config(
     action_size: int,
     normalize_observations: bool,
     network_factory: types.NetworkFactory[
-        Union[ppo_networks.PPONetworks, sac_networks.SACNetworks]
+        Union[bc_networks.BCNetworks, ppo_networks.PPONetworks, 
+              sac_networks.SACNetworks]
     ],
 ) -> config_dict.ConfigDict:
   """Returns a config dict for re-creating a network from a checkpoint."""
@@ -83,9 +85,11 @@ def network_config(
 def get_network(
     config: config_dict.ConfigDict,
     network_factory: types.NetworkFactory[
-        Union[ppo_networks.PPONetworks, sac_networks.SACNetworks]
+        Union[bc_networks.BCNetworks, ppo_networks.PPONetworks, 
+              sac_networks.SACNetworks]
     ],
-) -> Union[ppo_networks.PPONetworks, sac_networks.SACNetworks]:
+) -> Union[bc_networks.BCNetworks, ppo_networks.PPONetworks, 
+           sac_networks.SACNetworks]:
   """Generates a network given config."""
   normalize = lambda x, y: x
   if config.normalize_observations:
