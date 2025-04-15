@@ -59,6 +59,7 @@ class MLPHead(linen.Module):
         [k for k in data.keys() if k.startswith(self.latent_key_prefix)],
         key=lambda x: int(x.split('_')[-1]),
     )
+    assert len(latent_keys) > 0, "No latent keys found"
     for key in latent_keys:
       latents.append(data[key])
     hidden = [self.activation(linen.Dense(self.latent_head_size)(latent)) for latent in latents]
