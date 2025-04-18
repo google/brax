@@ -166,7 +166,7 @@ def train(
         leading dimension of `batch_size`
     num_eval_envs: the number of envs to use for evluation. Each env will run 1
       episode, and all envs run in parallel during eval.
-    learning_rate: learning rate for ppo loss
+    learning_rate: learning rate for SAC loss
     discounting: discounting rate
     seed: random seed
     batch_size: the batch size for each minibatch SGD step
