@@ -78,10 +78,11 @@ def _init_training_state(
     alpha_optimizer: optax.GradientTransformation,
     policy_optimizer: optax.GradientTransformation,
     q_optimizer: optax.GradientTransformation,
+    initial_alpha: float = 0.0,
 ) -> TrainingState:
   """Inits the training state and replicates it over devices."""
   key_policy, key_q = jax.random.split(key)
-  log_alpha = jnp.asarray(0.0, dtype=jnp.float32)
+  log_alpha = jnp.asarray(initial_alpha, dtype=jnp.float32)
   alpha_optimizer_state = alpha_optimizer.init(log_alpha)
 
   policy_params = sac_network.policy_network.init(key_policy)
@@ -128,6 +129,7 @@ def train(
     max_devices_per_host: Optional[int] = None,
     reward_scaling: float = 1.0,
     tau: float = 0.005,
+    initial_alpha: float = 0.0,
     min_replay_size: int = 0,
     max_replay_size: Optional[int] = None,
     grad_updates_per_step: int = 1,
@@ -482,6 +484,7 @@ def train(
       alpha_optimizer=alpha_optimizer,
       policy_optimizer=policy_optimizer,
       q_optimizer=q_optimizer,
+      initial_alpha=initial_alpha,
   )
   del global_key
 
