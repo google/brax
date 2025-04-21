@@ -99,7 +99,7 @@ def _maybe_wrap_env(
     num_envs: int,
     episode_length: Optional[int],
     action_repeat: int,
-    local_device_count: int,
+    device_count: int,
     key_env: PRNGKey,
     wrap_env_fn: Optional[Callable[[Any], Any]] = None,
     randomization_fn: Optional[
@@ -113,7 +113,7 @@ def _maybe_wrap_env(
     raise ValueError('episode_length must be specified in ppo.train')
   v_randomization_fn = None
   if randomization_fn is not None:
-    randomization_batch_size = num_envs // local_device_count
+    randomization_batch_size = num_envs // device_count
     # all devices gets the same randomization rng
     randomization_rng = jax.random.split(key_env, randomization_batch_size)
     v_randomization_fn = functools.partial(
@@ -372,7 +372,7 @@ def train(
       num_envs,
       episode_length,
       action_repeat,
-      local_device_count,
+      device_count,
       key_env,
       wrap_env_fn,
       randomization_fn,
@@ -644,7 +644,7 @@ def train(
       num_eval_envs,
       episode_length,
       action_repeat,
-      local_device_count=1,  # eval on the host only
+      device_count=1,  # eval on the host only
       key_env=eval_key,
       wrap_env_fn=wrap_env_fn,
       randomization_fn=randomization_fn,
