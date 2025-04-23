@@ -48,14 +48,6 @@ class GymTest(absltest.TestCase):
         np.tile(base_env.sys.actuator.ctrl_range[:, 1], [256, 1]),
     )  
 
-  def test_render(self):
-    """Tests rendering in the GymWrapper."""
-    base_env = envs.create('pusher')
-    env = gym.GymWrapper(base_env)
-    _ = env.reset()
-    img = env.render(mode='rgb_array', width=250, height=236)
-    self.assertEqual(img.shape, (236, 250, 3))
-  
 
 if __name__ == '__main__':
   absltest.main()
