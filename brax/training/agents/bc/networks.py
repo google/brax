@@ -78,18 +78,21 @@ def make_bc_networks(
     policy_hidden_layer_sizes: Sequence[int] = (32,) * 4,
     activation: networks.ActivationFn = linen.swish,
     policy_obs_key: str = '',
-    vision: bool = False
+    vision: bool = False,
+    latent_vision: bool = False,
 ) -> BCNetworks:
   """Make BC networks with preprocessor.
   Note that vision = True assumes Frozen Encoder."""
   parametric_action_distribution = distribution.NormalTanhDistribution(
       event_size=action_size
   )
-  make_policy_network = (
-      networks.make_policy_network_latents
-      if vision
-      else networks.make_policy_network
-  )
+
+  if latent_vision:
+    make_policy_network = networks.make_policy_network_latents
+  elif vision:
+    make_policy_network = networks.make_policy_network_vision
+  else:
+    make_policy_network = networks.make_policy_network
 
   policy_network = make_policy_network(
       parametric_action_distribution.param_size,

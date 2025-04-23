@@ -31,12 +31,14 @@ class ObservationMode(enum.Enum):
     DICT_STATE: Dictionary of state info.
     DICT_PIXELS: Dictionary of pixel observations.
     DICT_PIXELS_STATE: Dictionary of both state and pixel info.
+    DICT_LATENT_STATE: Dictionary with latent pixel and state info.
   """
 
   NDARRAY = 'ndarray'
   DICT_STATE = 'dict_state'
   DICT_PIXELS = 'dict_pixels'
   DICT_PIXELS_STATE = 'dict_pixels_state'
+  DICT_LATENT_STATE = 'dict_latent_state'
 
 
 class Fast(PipelineEnv):
@@ -73,11 +75,17 @@ class Fast(PipelineEnv):
         'pixels/view_0': jp.zeros((4, 4, 3)),
         'pixels/view_1': jp.zeros((4, 4, 3)),
     }
+    latent_pixels = {
+        'latent_pixels/view_0': jp.zeros(12),
+        'latent_pixels/view_1': jp.zeros(12),
+    }
 
     if self._obs_mode == ObservationMode.DICT_PIXELS:
       obs = pixels
     elif self._obs_mode == ObservationMode.DICT_PIXELS_STATE:
       obs = {**obs, **pixels}
+    elif self._obs_mode == ObservationMode.DICT_LATENT_STATE:
+      obs = {**obs, **latent_pixels}
     elif self._obs_mode == ObservationMode.NDARRAY:
       obs = obs['state']
 
@@ -101,11 +109,17 @@ class Fast(PipelineEnv):
         'pixels/view_0': jp.zeros((4, 4, 3)),
         'pixels/view_1': jp.zeros((4, 4, 3)),
     }
+    latent_pixels = {
+        'latent_pixels/view_0': jp.zeros(12),
+        'latent_pixels/view_1': jp.zeros(12),
+    }
 
     if self._obs_mode == ObservationMode.DICT_PIXELS:
       obs = pixels
     elif self._obs_mode == ObservationMode.DICT_PIXELS_STATE:
       obs = {**obs, **pixels}
+    elif self._obs_mode == ObservationMode.DICT_LATENT_STATE:
+      obs = {**obs, **latent_pixels}
     elif self._obs_mode == ObservationMode.NDARRAY:
       obs = obs['state']
 
