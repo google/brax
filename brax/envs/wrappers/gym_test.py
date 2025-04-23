@@ -46,7 +46,7 @@ class GymTest(absltest.TestCase):
     np.testing.assert_array_equal(
         env.action_space.high,
         np.tile(base_env.sys.actuator.ctrl_range[:, 1], [256, 1]),
-    )
+    )  
 
 
 if __name__ == '__main__':
