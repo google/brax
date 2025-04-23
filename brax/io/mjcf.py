@@ -38,8 +38,10 @@ import numpy as np
 
 
 def _transform_do(
-    parent_pos: np.ndarray, parent_quat: np.ndarray, pos: np.ndarray,
-    quat: np.ndarray
+    parent_pos: np.ndarray,
+    parent_quat: np.ndarray,
+    pos: np.ndarray,
+    quat: np.ndarray,
 ) -> Tuple[np.ndarray, np.ndarray]:
   pos = parent_pos + math.rotate_np(pos, parent_quat)
   rot = math.quat_mul_np(parent_quat, quat)
@@ -47,7 +49,8 @@ def _transform_do(
 
 
 def _offset(
-    elem: ElementTree.Element, parent_pos: np.ndarray, parent_quat: np.ndarray):
+    elem: ElementTree.Element, parent_pos: np.ndarray, parent_quat: np.ndarray
+):
   """Offsets an element."""
   pos = elem.attrib.get('pos', '0 0 0')
   quat = elem.attrib.get('quat', '1 0 0 0')
@@ -264,7 +267,8 @@ def validate_model(mj: mujoco.MjModel) -> None:
   non_free = np.concatenate([[j != 0] * q_width[j] for j in mj.jnt_type])
   if mj.qpos0[non_free].any():
     raise NotImplementedError(
-        'The `ref` attribute on joint types is not supported.')
+        'The `ref` attribute on joint types is not supported.'
+    )
 
   for _, group in itertools.groupby(
       zip(mj.jnt_bodyid, mj.jnt_pos), key=lambda x: x[0]
@@ -276,9 +280,7 @@ def validate_model(mj: mujoco.MjModel) -> None:
   # check dofs
   jnt_range = mj.jnt_range.copy()
   jnt_range[~(mj.jnt_limited == 1), :] = np.array([-np.inf, np.inf])
-  for typ, limit, stiffness in zip(
-      mj.jnt_type, jnt_range, mj.jnt_stiffness
-  ):
+  for typ, limit, stiffness in zip(mj.jnt_type, jnt_range, mj.jnt_stiffness):
     if typ == 0:
       if stiffness > 0:
         raise RuntimeError('brax does not support stiffness for free joints')
@@ -414,9 +416,7 @@ def load_model(mj: mujoco.MjModel) -> System:
   act_kwargs = jax.tree.map(lambda x: x[act_mask], act_kwargs)
 
   actuator = Actuator(  # pytype: disable=wrong-arg-types
-      q_id=q_id,
-      qd_id=qd_id,
-      **act_kwargs
+      q_id=q_id, qd_id=qd_id, **act_kwargs
   )
 
   # create non-pytree params.  these do not live on device directly, and they

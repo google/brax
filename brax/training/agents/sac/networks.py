@@ -34,16 +34,22 @@ class SACNetworks:
 def make_inference_fn(sac_networks: SACNetworks):
   """Creates params and inference function for the SAC agent."""
 
-  def make_policy(params: types.PolicyParams,
-                  deterministic: bool = False) -> types.Policy:
+  def make_policy(
+      params: types.PolicyParams, deterministic: bool = False
+  ) -> types.Policy:
 
-    def policy(observations: types.Observation,
-               key_sample: PRNGKey) -> Tuple[types.Action, types.Extra]:
+    def policy(
+        observations: types.Observation, key_sample: PRNGKey
+    ) -> Tuple[types.Action, types.Extra]:
       logits = sac_networks.policy_network.apply(*params, observations)
       if deterministic:
         return sac_networks.parametric_action_distribution.mode(logits), {}
-      return sac_networks.parametric_action_distribution.sample(
-          logits, key_sample), {}
+      return (
+          sac_networks.parametric_action_distribution.sample(
+              logits, key_sample
+          ),
+          {},
+      )
 
     return policy
 
@@ -53,30 +59,34 @@ def make_inference_fn(sac_networks: SACNetworks):
 def make_sac_networks(
     observation_size: int,
     action_size: int,
-    preprocess_observations_fn: types.PreprocessObservationFn = types
-    .identity_observation_preprocessor,
+    preprocess_observations_fn: types.PreprocessObservationFn = types.identity_observation_preprocessor,
     hidden_layer_sizes: Sequence[int] = (256, 256),
     activation: networks.ActivationFn = linen.relu,
     policy_network_layer_norm: bool = False,
-    q_network_layer_norm: bool = False) -> SACNetworks:
+    q_network_layer_norm: bool = False,
+) -> SACNetworks:
   """Make SAC networks."""
   parametric_action_distribution = distribution.NormalTanhDistribution(
-      event_size=action_size)
+      event_size=action_size
+  )
   policy_network = networks.make_policy_network(
       parametric_action_distribution.param_size,
       observation_size,
       preprocess_observations_fn=preprocess_observations_fn,
       hidden_layer_sizes=hidden_layer_sizes,
       activation=activation,
-      layer_norm=policy_network_layer_norm)
+      layer_norm=policy_network_layer_norm,
+  )
   q_network = networks.make_q_network(
       observation_size,
       action_size,
       preprocess_observations_fn=preprocess_observations_fn,
       hidden_layer_sizes=hidden_layer_sizes,
       activation=activation,
-      layer_norm=q_network_layer_norm)
+      layer_norm=q_network_layer_norm,
+  )
   return SACNetworks(
       policy_network=policy_network,
       q_network=q_network,
-      parametric_action_distribution=parametric_action_distribution)
+      parametric_action_distribution=parametric_action_distribution,
+  )

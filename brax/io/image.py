@@ -38,6 +38,8 @@ def render_array(
   def get_image(state: base.State):
     d = mujoco.MjData(sys.mj_model)
     d.qpos, d.qvel = state.q, state.qd
+    if hasattr(state, 'mocap_pos') and hasattr(state, 'mocap_quat'):
+      d.mocap_pos, d.mocap_quat = state.mocap_pos, state.mocap_quat
     mujoco.mj_forward(sys.mj_model, d)
     renderer.update_scene(d, camera=camera)
     return renderer.render()

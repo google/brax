@@ -13,12 +13,13 @@
 # limitations under the License.
 
 """Functions to resolve collisions."""
+
 # pylint:disable=g-multiple-import
 from typing import Optional, Tuple
 
 from brax import com
 from brax import math
-from brax.base import Contact, Motion, System, Transform, Force
+from brax.base import Contact, Force, Motion, System, Transform
 from brax.positional.base import State
 import jax
 from jax import numpy as jp

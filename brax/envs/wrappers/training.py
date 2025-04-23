@@ -46,11 +46,11 @@ def wrap(
     environment did not already have batch dimensions, it is additional Vmap
     wrapped.
   """
-  env = EpisodeWrapper(env, episode_length, action_repeat)
   if randomization_fn is None:
     env = VmapWrapper(env)
   else:
     env = DomainRandomizationVmapWrapper(env, randomization_fn)
+  env = EpisodeWrapper(env, episode_length, action_repeat)
   env = AutoResetWrapper(env)
   return env
 
@@ -83,6 +83,15 @@ class EpisodeWrapper(Wrapper):
     state = self.env.reset(rng)
     state.info['steps'] = jp.zeros(rng.shape[:-1])
     state.info['truncation'] = jp.zeros(rng.shape[:-1])
+    # Keep separate record of episode done as state.info['done'] can be erased
+    # by AutoResetWrapper
+    state.info['episode_done'] = jp.zeros(rng.shape[:-1])
+    episode_metrics = dict()
+    episode_metrics['sum_reward'] = jp.zeros(rng.shape[:-1])
+    episode_metrics['length'] = jp.zeros(rng.shape[:-1])
+    for metric_name in state.metrics.keys():
+      episode_metrics[metric_name] = jp.zeros(rng.shape[:-1])
+    state.info['episode_metrics'] = episode_metrics
     return state
 
   def step(self, state: State, action: jax.Array) -> State:
@@ -101,6 +110,18 @@ class EpisodeWrapper(Wrapper):
         steps >= episode_length, 1 - state.done, zero
     )
     state.info['steps'] = steps
+
+    # Aggregate state metrics into episode metrics
+    prev_done = state.info['episode_done']
+    state.info['episode_metrics']['sum_reward'] += jp.sum(rewards, axis=0)
+    state.info['episode_metrics']['sum_reward'] *= (1 - prev_done)
+    state.info['episode_metrics']['length'] += self.action_repeat
+    state.info['episode_metrics']['length'] *= (1 - prev_done)
+    for metric_name in state.metrics.keys():
+      if metric_name != 'reward':
+        state.info['episode_metrics'][metric_name] += state.metrics[metric_name]
+        state.info['episode_metrics'][metric_name] *= (1 - prev_done)
+    state.info['episode_done'] = done
     return state.replace(done=done)
 
 
@@ -130,7 +151,7 @@ class AutoResetWrapper(Wrapper):
     pipeline_state = jax.tree.map(
         where_done, state.info['first_pipeline_state'], state.pipeline_state
     )
-    obs = where_done(state.info['first_obs'], state.obs)
+    obs = jax.tree.map(where_done, state.info['first_obs'], state.obs)
     return state.replace(pipeline_state=pipeline_state, obs=obs)
 
 

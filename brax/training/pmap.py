@@ -53,9 +53,9 @@ def is_replicated(x: Any, axis_name: str) -> jnp.ndarray:
     boolean whether x is replicated.
   """
   fp = _fingerprint(x)
-  return jax.lax.pmin(
-      fp, axis_name=axis_name) == jax.lax.pmax(
-          fp, axis_name=axis_name)
+  return jax.lax.pmin(fp, axis_name=axis_name) == jax.lax.pmax(
+      fp, axis_name=axis_name
+  )
 
 
 def assert_is_replicated(x: Any, debug: Any = None):

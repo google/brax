@@ -13,6 +13,7 @@
 # limitations under the License.
 
 """Augmented Random Search training tests."""
+
 import pickle
 
 from absl.testing import absltest
@@ -34,13 +35,14 @@ class ARSTest(parameterized.TestCase):
         env,
         num_timesteps=128,
         episode_length=128,
-        normalize_observations=normalize_observations)
+        normalize_observations=normalize_observations,
+    )
     normalize_fn = lambda x, y: x
     if normalize_observations:
       normalize_fn = running_statistics.normalize
-    ars_network = ars_networks.make_policy_network(env.observation_size,
-                                                   env.action_size,
-                                                   normalize_fn)
+    ars_network = ars_networks.make_policy_network(
+        env.observation_size, env.action_size, normalize_fn
+    )
     inference = ars_networks.make_inference_fn(ars_network)
     byte_encoding = pickle.dumps(params)
     decoded_params = pickle.loads(byte_encoding)

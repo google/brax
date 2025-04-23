@@ -107,13 +107,15 @@ class Swimmer(PipelineEnv):
   # pyformat: enable
 
 
-  def __init__(self,
-               forward_reward_weight=1.0,
-               ctrl_cost_weight=1e-4,
-               reset_noise_scale=0.1,
-               exclude_current_positions_from_observation=True,
-               backend='generalized',
-               **kwargs):
+  def __init__(
+      self,
+      forward_reward_weight=1.0,
+      ctrl_cost_weight=1e-4,
+      reset_noise_scale=0.1,
+      exclude_current_positions_from_observation=True,
+      backend='generalized',
+      **kwargs,
+  ):
     path = epath.resource_path('brax') / 'envs/assets/swimmer.xml'
     sys = mjcf.load(path)
 
@@ -130,7 +132,8 @@ class Swimmer(PipelineEnv):
     self._ctrl_cost_weight = ctrl_cost_weight
     self._reset_noise_scale = reset_noise_scale
     self._exclude_current_positions_from_observation = (
-        exclude_current_positions_from_observation)
+        exclude_current_positions_from_observation
+    )
 
   def reset(self, rng: jax.Array) -> State:
     rng, rng1, rng2 = jax.random.split(rng, 3)
@@ -157,7 +160,8 @@ class Swimmer(PipelineEnv):
 
     if pipeline_state0 is None:
       raise AssertionError(
-          'Cannot compute rewards with pipeline_state0 as Nonetype.')
+          'Cannot compute rewards with pipeline_state0 as Nonetype.'
+      )
 
     xy_position = pipeline_state.q[:2]
 

@@ -27,8 +27,7 @@ ARSNetwork = networks.FeedForwardNetwork
 def make_policy_network(
     observation_size: int,
     action_size: int,
-    preprocess_observations_fn: types.PreprocessObservationFn = types
-    .identity_observation_preprocessor,
+    preprocess_observations_fn: types.PreprocessObservationFn = types.identity_observation_preprocessor,
 ) -> ARSNetwork:
   """Creates a policy network."""
 
@@ -37,7 +36,8 @@ def make_policy_network(
     return jnp.matmul(obs, policy_params)
 
   return ARSNetwork(
-      init=lambda _: jnp.zeros((observation_size, action_size)), apply=apply)
+      init=lambda _: jnp.zeros((observation_size, action_size)), apply=apply
+  )
 
 
 def make_inference_fn(policy_network: ARSNetwork):
@@ -45,8 +45,9 @@ def make_inference_fn(policy_network: ARSNetwork):
 
   def make_policy(params: types.PolicyParams) -> types.Policy:
 
-    def policy(observations: types.Observation,
-               unused_key_sample: PRNGKey) -> Tuple[types.Action, types.Extra]:
+    def policy(
+        observations: types.Observation, unused_key_sample: PRNGKey
+    ) -> Tuple[types.Action, types.Extra]:
       return policy_network.apply(*params, observations), {}
 
     return policy

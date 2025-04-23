@@ -16,7 +16,7 @@
 """Functions for forward and inverse kinematics."""
 
 import functools
-from typing import Tuple, Any
+from typing import Any, Tuple
 
 from brax import base
 from brax import math
@@ -160,8 +160,9 @@ def link_to_joint_frame(motion: Motion) -> Tuple[Motion, float]:
   joint might not be aligned with the rotational components of the joint.
   """
   if motion.ang.shape[0] > 3 or motion.ang.shape[0] == 0:
-    raise AssertionError('Motion shape must be in (0, 3], '
-                         f'got {motion.ang.shape[0]}')
+    raise AssertionError(
+        f'Motion shape must be in (0, 3], got {motion.ang.shape[0]}'
+    )
 
   # 1-dof
   if motion.ang.shape[0] == 1:
@@ -372,6 +373,7 @@ def inverse(
     return jp.array(q).reshape(-1), jp.array(qd).reshape(-1)
 
   parent_idx = jp.array(sys.link_parents)
-  q, qd = scan.link_types(sys, q_fn, 'llld', 'qd', j, jd, parent_idx,
-                          sys.dof.motion)
+  q, qd = scan.link_types(
+      sys, q_fn, 'llld', 'qd', j, jd, parent_idx, sys.dof.motion
+  )
   return q, qd

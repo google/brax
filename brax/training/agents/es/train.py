@@ -20,7 +20,7 @@ See: https://arxiv.org/pdf/1703.03864.pdf
 import enum
 import functools
 import time
-from typing import Any, Callable, Dict, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from absl import logging
 from brax import base
@@ -32,7 +32,6 @@ from brax.training.acme import specs
 from brax.training.agents.es import networks as es_networks
 from brax.training.types import Params
 from brax.training.types import PRNGKey
-from brax.v1 import envs as envs_v1
 import flax
 import jax
 import jax.numpy as jnp
@@ -45,17 +44,18 @@ InferenceParams = Tuple[running_statistics.NestedMeanStd, Params]
 @flax.struct.dataclass
 class TrainingState:
   """Contains training state for the learner."""
+
   normalizer_params: running_statistics.RunningStatisticsState
   optimizer_state: optax.OptState
   policy_params: Params
-  num_env_steps: int
+  num_env_steps: types.UInt64
 
 
 # Centered rank from: https://arxiv.org/pdf/1703.03864.pdf
 def centered_rank(x: jnp.ndarray) -> jnp.ndarray:
   x = jnp.argsort(jnp.argsort(x))
-  x /= (len(x) - 1)
-  return x - .5
+  x /= len(x) - 1
+  return x - 0.5
 
 
 # Shaping from
@@ -74,8 +74,9 @@ class FitnessShaping(enum.Enum):
 
 # TODO: Pass the network as argument.
 def train(
-    environment: Union[envs_v1.Env, envs.Env],
+    environment: envs.Env,
     wrap_env: bool = True,
+    wrap_env_fn: Optional[Callable[[Any], Any]] = None,
     num_timesteps: int = 100,
     episode_length: int = 1000,
     action_repeat: int = 1,
@@ -105,21 +106,26 @@ def train(
 
   process_count = jax.process_count()
   if process_count > 1:
-    raise ValueError('ES is not compatible with multiple hosts, '
-                     'please use a single host device.')
+    raise ValueError(
+        'ES is not compatible with multiple hosts, '
+        'please use a single host device.'
+    )
   local_device_count = jax.local_device_count()
   local_devices_to_use = local_device_count
   if max_devices_per_host:
     local_devices_to_use = min(local_devices_to_use, max_devices_per_host)
-  logging.info('Local device count: %d, '
-               'devices to be used count: %d', local_device_count,
-               local_devices_to_use)
+  logging.info(
+      'Local device count: %d, devices to be used count: %d',
+      local_device_count,
+      local_devices_to_use,
+  )
 
   num_evals_after_init = max(num_evals - 1, 1)
 
   num_env_steps_between_evals = num_timesteps // num_evals_after_init
-  next_eval_step = num_timesteps - (num_evals_after_init -
-                                    1) * num_env_steps_between_evals
+  next_eval_step = (
+      num_timesteps - (num_evals_after_init - 1) * num_env_steps_between_evals
+  )
 
   key = jax.random.PRNGKey(seed)
   key, network_key, eval_key, rng_key = jax.random.split(key, 4)
@@ -127,10 +133,10 @@ def train(
   assert num_envs % local_devices_to_use == 0
   env = environment
   if wrap_env:
-    if isinstance(env, envs.Env):
-      wrap_for_training = envs.training.wrap
+    if wrap_env_fn is not None:
+      wrap_for_training = wrap_env_fn
     else:
-      wrap_for_training = envs_v1.wrappers.wrap_for_training
+      wrap_for_training = envs.training.wrap
 
     v_randomization_fn = None
     if randomization_fn is not None:
@@ -143,9 +149,11 @@ def train(
         episode_length=episode_length,
         action_repeat=action_repeat,
         randomization_fn=v_randomization_fn,
-    )
+    )  # pytype: disable=wrong-keyword-args
 
   obs_size = env.observation_size
+  if isinstance(obs_size, Dict):
+    raise NotImplementedError('Dictionary observations not implemented in ES')
 
   normalize_fn = lambda x, y: x
   if normalize_observations:
@@ -153,39 +161,66 @@ def train(
   es_network = network_factory(
       observation_size=obs_size,
       action_size=env.action_size,
-      preprocess_observations_fn=normalize_fn)
+      preprocess_observations_fn=normalize_fn,
+  )
   make_policy = es_networks.make_inference_fn(es_network)
 
   optimizer = optax.adam(learning_rate=learning_rate)
 
   vmapped_policy = jax.vmap(
-      es_network.policy_network.apply, in_axes=(None, 0, 0))
+      es_network.policy_network.apply, in_axes=(None, 0, 0)
+  )
 
   def run_step(carry, unused_target_t):
-    (env_state, policy_params, key, cumulative_reward, active_episode,
-     normalizer_params) = carry
+    (
+        env_state,
+        policy_params,
+        key,
+        cumulative_reward,
+        active_episode,
+        normalizer_params,
+    ) = carry
     key, key_sample = jax.random.split(key)
     obs = env_state.obs
     logits = vmapped_policy(normalizer_params, policy_params, obs)
     actions = es_network.parametric_action_distribution.sample(
-        logits, key_sample)
+        logits, key_sample
+    )
     nstate = env.step(env_state, actions)
     cumulative_reward = cumulative_reward + nstate.reward * active_episode
     new_active_episode = active_episode * (1 - nstate.done)
-    return (nstate, policy_params, key, cumulative_reward, new_active_episode,
-            normalizer_params), (env_state.obs, active_episode)
+    return (
+        nstate,
+        policy_params,
+        key,
+        cumulative_reward,
+        new_active_episode,
+        normalizer_params,
+    ), (env_state.obs, active_episode)
 
-  def run_episode(normalizer_params: running_statistics.NestedMeanStd,
-                  params: Params, key: PRNGKey):
+  def run_episode(
+      normalizer_params: running_statistics.NestedMeanStd,
+      params: Params,
+      key: PRNGKey,
+  ):
     key_scan, key_reset = jax.random.split(key)
     reset_keys = jax.random.split(key_reset, num_envs // local_devices_to_use)
     first_env_states = env.reset(reset_keys)
     cumulative_reward = first_env_states.reward
     active_episode = jnp.ones_like(cumulative_reward)
     (_, _, key, cumulative_reward, _, _), (obs, obs_weights) = jax.lax.scan(
-        run_step, (first_env_states, params, key_scan, cumulative_reward,
-                   active_episode, normalizer_params), (),
-        length=episode_length // action_repeat)
+        run_step,
+        (
+            first_env_states,
+            params,
+            key_scan,
+            cumulative_reward,
+            active_episode,
+            normalizer_params,
+        ),
+        (),
+        length=episode_length // action_repeat,
+    )
     return cumulative_reward, obs, obs_weights
 
   def add_noise(params: Params, key: PRNGKey) -> Tuple[Params, Params, Params]:
@@ -193,12 +228,16 @@ def train(
     treedef = jax.tree_util.tree_structure(params)
     all_keys = jax.random.split(key, num=num_vars)
     noise = jax.tree_util.tree_map(
-        lambda g, k: jax.random.normal(k, shape=g.shape, dtype=g.dtype), params,
-        jax.tree_util.tree_unflatten(treedef, all_keys))
-    params_with_noise = jax.tree_util.tree_map(lambda g, n: g + n * perturbation_std,
-                                     params, noise)
-    params_with_anti_noise = jax.tree_util.tree_map(lambda g, n: g - n * perturbation_std,
-                                          params, noise)
+        lambda g, k: jax.random.normal(k, shape=g.shape, dtype=g.dtype),
+        params,
+        jax.tree_util.tree_unflatten(treedef, all_keys),
+    )
+    params_with_noise = jax.tree_util.tree_map(
+        lambda g, n: g + n * perturbation_std, params, noise
+    )
+    params_with_anti_noise = jax.tree_util.tree_map(
+        lambda g, n: g - n * perturbation_std, params, noise
+    )
     return params_with_noise, params_with_anti_noise, noise
 
   prun_episode = jax.pmap(run_episode, in_axes=(None, 0, 0))
@@ -218,7 +257,6 @@ def train(
       weights: Fitness weights, vector of length population_size.
 
     Returns:
-
     """
     # NOTE: The trick "len(weights) -> len(weights) * perturbation_std" is
     # equivalent to tuning the l2_coef.
@@ -232,55 +270,71 @@ def train(
     return -delta
 
   @jax.jit
-  def training_epoch(training_state: TrainingState,
-                     key: PRNGKey) -> Tuple[TrainingState, Metrics]:
+  def training_epoch(
+      training_state: TrainingState, key: PRNGKey
+  ) -> Tuple[TrainingState, Metrics]:
     params = jax.tree_util.tree_map(
         lambda x: jnp.repeat(
-            jnp.expand_dims(x, axis=0), population_size, axis=0),
-        training_state.policy_params)
+            jnp.expand_dims(x, axis=0), population_size, axis=0
+        ),
+        training_state.policy_params,
+    )
     key, key_noise, key_es_eval = jax.random.split(key, 3)
     # generate perturbations
     params_with_noise, params_with_anti_noise, noise = add_noise(
-        params, key_noise)
+        params, key_noise
+    )
 
-    pparams = jax.tree_util.tree_map(lambda a, b: jnp.concatenate([a, b], axis=0),
-                           params_with_noise, params_with_anti_noise)
+    pparams = jax.tree_util.tree_map(
+        lambda a, b: jnp.concatenate([a, b], axis=0),
+        params_with_noise,
+        params_with_anti_noise,
+    )
 
     pparams = jax.tree_util.tree_map(
         lambda x: jnp.reshape(x, (local_devices_to_use, -1) + x.shape[1:]),
-        pparams)
+        pparams,
+    )
 
     key_es_eval = jax.random.split(key_es_eval, local_devices_to_use)
     eval_scores, obs, obs_weights = prun_episode(
-        training_state.normalizer_params, pparams, key_es_eval)
+        training_state.normalizer_params, pparams, key_es_eval
+    )
 
     obs = jnp.reshape(obs, (-1,) + obs.shape[2:])
     obs_weights = jnp.reshape(obs_weights, (-1,) + obs_weights.shape[2:])
 
     normalizer_params = running_statistics.update(
-        training_state.normalizer_params, obs, weights=obs_weights)
+        training_state.normalizer_params, obs, weights=obs_weights
+    )
 
     weights = jnp.reshape(eval_scores, [-1])
 
     weights = fitness_shaping.value(weights)
 
     if center_fitness:
-      weights = (weights - jnp.mean(weights)) / (1E-6 + jnp.std(weights))
+      weights = (weights - jnp.mean(weights)) / (1e-6 + jnp.std(weights))
 
     weights1, weights2 = jnp.split(weights, 2)
     weights = weights1 - weights2
 
     delta = jax.tree_util.tree_map(
         functools.partial(compute_delta, weights=weights),
-        training_state.policy_params, noise)
+        training_state.policy_params,
+        noise,
+    )
 
     params_update, optimizer_state = optimizer.update(
-        delta, training_state.optimizer_state)
-    policy_params = optax.apply_updates(training_state.policy_params,
-                                        params_update)
+        delta, training_state.optimizer_state
+    )
+    policy_params = optax.apply_updates(
+        training_state.policy_params, params_update
+    )
 
-    num_env_steps = training_state.num_env_steps + jnp.sum(
-        obs_weights, dtype=jnp.int32) * action_repeat
+    num_env_steps = (
+        training_state.num_env_steps
+        + jnp.sum(obs_weights, dtype=jnp.int32) * action_repeat
+    )
 
     metrics = {
         'params_norm': optax.global_norm(policy_params),
@@ -288,17 +342,22 @@ def train(
         'eval_scores_std': jnp.std(eval_scores),
         'weights': jnp.mean(weights),
     }
-    return (TrainingState(  # type: ignore  # jnp-type
-        normalizer_params=normalizer_params,
-        optimizer_state=optimizer_state,
-        policy_params=policy_params,
-        num_env_steps=num_env_steps), metrics)
+    return (
+        TrainingState(  # type: ignore  # jnp-type
+            normalizer_params=normalizer_params,
+            optimizer_state=optimizer_state,
+            policy_params=policy_params,
+            num_env_steps=num_env_steps,
+        ),
+        metrics,
+    )
 
-  training_walltime = 0.
+  training_walltime = 0.0
 
   # Note that this is NOT a pure jittable method.
-  def training_epoch_with_timing(training_state: TrainingState,
-                                 key: PRNGKey) -> Tuple[TrainingState, Metrics]:
+  def training_epoch_with_timing(
+      training_state: TrainingState, key: PRNGKey
+  ) -> Tuple[TrainingState, Metrics]:
     nonlocal training_walltime
     t = time.time()
     (training_state, metrics) = training_epoch(training_state, key)
@@ -311,19 +370,21 @@ def train(
     metrics = {
         'training/sps': sps,
         'training/walltime': training_walltime,
-        **{f'training/{name}': value for name, value in metrics.items()}
+        **{f'training/{name}': value for name, value in metrics.items()},
     }
     return training_state, metrics  # pytype: disable=bad-return-type  # py311-upgrade
 
   normalizer_params = running_statistics.init_state(
-      specs.Array((obs_size,), jnp.dtype('float32')))
+      specs.Array((obs_size,), jnp.dtype('float32'))
+  )
   policy_params = es_network.policy_network.init(network_key)
   optimizer_state = optimizer.init(policy_params)
   training_state = TrainingState(
       normalizer_params=normalizer_params,
       optimizer_state=optimizer_state,
       policy_params=policy_params,
-      num_env_steps=0)
+      num_env_steps=types.UInt64(hi=0, lo=0),
+  )
 
   if not eval_env:
     eval_env = environment
@@ -337,7 +398,7 @@ def train(
         episode_length=episode_length,
         action_repeat=action_repeat,
         randomization_fn=v_randomization_fn,
-    )
+    )  # pytype: disable=wrong-keyword-args
 
   # Evaluator function
   evaluator = acting.Evaluator(
@@ -346,32 +407,40 @@ def train(
       num_eval_envs=num_eval_envs,
       episode_length=episode_length,
       action_repeat=action_repeat,
-      key=eval_key)
+      key=eval_key,
+  )
 
   if num_evals > 1:
     metrics = evaluator.run_evaluation(
         (training_state.normalizer_params, training_state.policy_params),
-        training_metrics={})
+        training_metrics={},
+    )
     logging.info(metrics)
     progress_fn(0, metrics)
 
-  while training_state.num_env_steps < num_timesteps:
+  while int(training_state.num_env_steps) < num_timesteps:
     # optimization
     key, epoch_key = jax.random.split(key)
     training_state, training_metrics = training_epoch_with_timing(
-        training_state, epoch_key)
+        training_state, epoch_key
+    )
 
-    if training_state.num_env_steps >= next_eval_step:
+    if int(training_state.num_env_steps) >= next_eval_step:
       # Run evals.
       metrics = evaluator.run_evaluation(
           (training_state.normalizer_params, training_state.policy_params),
-          training_metrics)
+          training_metrics,
+      )
       logging.info(metrics)
       progress_fn(int(training_state.num_env_steps), metrics)
       next_eval_step += num_env_steps_between_evals
 
-  total_steps = training_state.num_env_steps
-  assert total_steps >= num_timesteps
+  total_steps = int(training_state.num_env_steps)
+  if not total_steps >= num_timesteps:
+    raise AssertionError(
+        f'Total steps {total_steps} is less than `num_timesteps`='
+        f' {num_timesteps}.'
+    )
 
   logging.info('total steps: %s', total_steps)
   params = training_state.normalizer_params, training_state.policy_params

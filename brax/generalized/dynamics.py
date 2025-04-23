@@ -44,12 +44,10 @@ def transform_com(sys: System, state: State) -> State:
   cinr = x_i.replace(pos=x_i.pos - root_com).vmap().do(sys.link.inertia)
 
   # motion dofs to global frame centered at subtree-CoM
-  parent_idx = jp.array(
-      [
-          i if t == 'f' else p
-          for i, (t, p) in enumerate(zip(sys.link_types, sys.link_parents))
-      ]
-  )
+  parent_idx = jp.array([
+      i if t == 'f' else p
+      for i, (t, p) in enumerate(zip(sys.link_types, sys.link_parents))
+  ])
   parent = state.x.concatenate(Transform.zero(shape=(1,))).take(parent_idx)
   j = parent.vmap().do(sys.link.transform).vmap().do(sys.link.joint)
 
@@ -150,6 +148,7 @@ def inverse(sys: System, state: State) -> jax.Array:
   Returns:
     tau: generalized forces resulting from joint positions and velocities
   """
+
   # forward scan over tree: accumulate link center of mass acceleration
   def cdd_fn(cdd_parent, cdofd, qd, dof_idx):
     if cdd_parent is None:
@@ -187,6 +186,7 @@ def inverse(sys: System, state: State) -> jax.Array:
 
 def _passive(sys: System, state: State) -> jax.Array:
   """Calculates the system's passive forces given input motion and position."""
+
   def stiffness_fn(typ, q, dof):
     if typ in 'fb':
       return jp.zeros_like(dof.stiffness)

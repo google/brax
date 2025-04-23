@@ -13,6 +13,7 @@
 # limitations under the License.
 
 """Function to resolve collisions."""
+
 # pylint:disable=g-multiple-import
 from brax import contact
 from brax import math

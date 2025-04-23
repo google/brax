@@ -41,20 +41,23 @@ class KinematicsTest(parameterized.TestCase):
     sys = test_utils.load_fixture(xml_file)
 
     for mj_prev, mj_next in test_utils.sample_mujoco_states(
-        xml_file, random_init=True, vel_to_local=False):
+        xml_file, random_init=True, vel_to_local=False
+    ):
       x, xd = jax.jit(kinematics.forward)(sys, mj_prev.qpos, mj_prev.qvel)
 
       np.testing.assert_almost_equal(x.pos, mj_next.xpos[1:], 3)
       # handle quat rotations +/- 2pi
       quat_sign = np.allclose(
-          np.sum(mj_next.xquat[1:]) - np.sum(x.rot), 0, atol=1e-2)
+          np.sum(mj_next.xquat[1:]) - np.sum(x.rot), 0, atol=1e-2
+      )
       quat_sign = 1 if quat_sign else -1
       x = x.replace(rot=x.rot * quat_sign)
       np.testing.assert_almost_equal(x.rot, mj_next.xquat[1:], 3)
 
       # xd vel/ang were added to linvel/angmom in `sample_mujoco_states`
       xd_mj = Motion(
-          vel=mj_next.subtree_linvel[1:], ang=mj_next.subtree_angmom[1:])
+          vel=mj_next.subtree_linvel[1:], ang=mj_next.subtree_angmom[1:]
+      )
 
       if xml_file == 'humanoid.xml':
         # TODO: get forward to match MJ for stacked/offset joints

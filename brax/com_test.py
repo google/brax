@@ -13,6 +13,7 @@
 # limitations under the License.
 
 """Tests for com."""
+
 # pylint:disable=g-multiple-import
 from absl.testing import absltest
 from brax import com

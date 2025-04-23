@@ -79,10 +79,9 @@ class ConstraintTest(parameterized.TestCase):
       efc_jt = np.reshape(mj_next.efc_J, (-1, sys.qd_size())).T
       # recover con_frc by backing it out from qf_constraint
       con_frc = np.linalg.lstsq(efc_jt, state.qf_constraint, None)[0]
-      err += np.sum((mj_next.efc_AR @ con_frc + mj_next.efc_b) ** 2)
-      mj_err += np.sum(
-          (mj_next.efc_AR @ mj_next.efc_force + mj_next.efc_b) ** 2
-      )
+      ar = mj_next.efc_AR.reshape((con_frc.shape[0], con_frc.shape[0]))
+      err += np.sum((ar @ con_frc + mj_next.efc_b) ** 2)
+      mj_err += np.sum((ar @ mj_next.efc_force + mj_next.efc_b) ** 2)
 
     self.assertLessEqual(err, mj_err + 0.01)
 

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 """Joint definition and apply functions."""
+
 # pylint:disable=g-multiple-import
 from brax import kinematics
 from brax import math
@@ -54,9 +55,7 @@ def _one_dof(
   is_rotational = dof.motion.ang.any()
   vel = (
       vel
-      - jp.dot(joint_frame.vel[0], vel)
-      * joint_frame.vel[0]
-      * is_translational
+      - jp.dot(joint_frame.vel[0], vel) * joint_frame.vel[0] * is_translational
   )
 
   # add in force
@@ -66,9 +65,7 @@ def _one_dof(
   # if prismatic, don't damp along free axis
   vel += (
       damp
-      - jp.dot(joint_frame.vel[0], damp)
-      * joint_frame.vel[0]
-      * is_translational
+      - jp.dot(joint_frame.vel[0], damp) * joint_frame.vel[0] * is_translational
   )
 
   axis_c_x = math.rotate(joint_frame.ang[0], j.rot)

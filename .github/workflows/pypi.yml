@@ -6,10 +6,13 @@ name: pypi
 on:
   push:
     tags: "v*"
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # Needed to create releases
 
     steps:
       - uses: actions/checkout@v2
@@ -31,12 +34,13 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install setuptools wheel twine
+          pip install uv
+          uv pip install --system -e ".[dev]"
+          uv pip install --system build twine
       - name: Build and publish
         env:
           TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
-          python setup.py sdist bdist_wheel
+          python -m build
           twine upload dist/*

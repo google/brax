@@ -261,7 +261,8 @@ class HumanoidStandup(PipelineEnv):
     com_velocity = jp.hstack([com_vel, com_ang])
 
     qfrc_actuator = actuator.to_tau(
-        self.sys, action, pipeline_state.q, pipeline_state.qd)
+        self.sys, action, pipeline_state.q, pipeline_state.qd
+    )
 
     # external_contact_forces are excluded
     return jp.concatenate([

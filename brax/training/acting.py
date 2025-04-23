@@ -15,7 +15,7 @@
 """Brax training acting functions."""
 
 import time
-from typing import Callable, Sequence, Tuple, Union
+from typing import Callable, Sequence, Tuple
 
 from brax import envs
 from brax.training.types import Metrics
@@ -23,12 +23,11 @@ from brax.training.types import Policy
 from brax.training.types import PolicyParams
 from brax.training.types import PRNGKey
 from brax.training.types import Transition
-from brax.v1 import envs as envs_v1
 import jax
 import numpy as np
 
-State = Union[envs.State, envs_v1.State]
-Env = Union[envs.Env, envs_v1.Env, envs_v1.Wrapper]
+State = envs.State
+Env = envs.Env
 
 
 def actor_step(
@@ -36,7 +35,7 @@ def actor_step(
     env_state: State,
     policy: Policy,
     key: PRNGKey,
-    extra_fields: Sequence[str] = ()
+    extra_fields: Sequence[str] = (),
 ) -> Tuple[State, Transition]:
   """Collect data."""
   actions, policy_extras = policy(env_state.obs, key)
@@ -48,10 +47,8 @@ def actor_step(
       reward=nstate.reward,
       discount=1 - nstate.done,
       next_observation=nstate.obs,
-      extras={
-          'policy_extras': policy_extras,
-          'state_extras': state_extras
-      })
+      extras={'policy_extras': policy_extras, 'state_extras': state_extras},
+  )
 
 
 def generate_unroll(
@@ -60,7 +57,7 @@ def generate_unroll(
     policy: Policy,
     key: PRNGKey,
     unroll_length: int,
-    extra_fields: Sequence[str] = ()
+    extra_fields: Sequence[str] = (),
 ) -> Tuple[State, Transition]:
   """Collect trajectories of given unroll_length."""
 
@@ -69,11 +66,13 @@ def generate_unroll(
     state, current_key = carry
     current_key, next_key = jax.random.split(current_key)
     nstate, transition = actor_step(
-        env, state, policy, current_key, extra_fields=extra_fields)
+        env, state, policy, current_key, extra_fields=extra_fields
+    )
     return (nstate, next_key), transition
 
   (final_state, _), data = jax.lax.scan(
-      f, (env_state, key), (), length=unroll_length)
+      f, (env_state, key), (), length=unroll_length
+  )
   return final_state, data
 
 
@@ -81,10 +80,15 @@ def generate_unroll(
 class Evaluator:
   """Class to run evaluations."""
 
-  def __init__(self, eval_env: envs.Env,
-               eval_policy_fn: Callable[[PolicyParams],
-                                        Policy], num_eval_envs: int,
-               episode_length: int, action_repeat: int, key: PRNGKey):
+  def __init__(
+      self,
+      eval_env: envs.Env,
+      eval_policy_fn: Callable[[PolicyParams], Policy],
+      num_eval_envs: int,
+      episode_length: int,
+      action_repeat: int,
+      key: PRNGKey,
+  ):
     """Init.
 
     Args:
@@ -96,12 +100,13 @@ class Evaluator:
       key: RNG key.
     """
     self._key = key
-    self._eval_walltime = 0.
+    self._eval_walltime = 0.0
 
     eval_env = envs.training.EvalWrapper(eval_env)
 
-    def generate_eval_unroll(policy_params: PolicyParams,
-                             key: PRNGKey) -> State:
+    def generate_eval_unroll(
+        policy_params: PolicyParams, key: PRNGKey
+    ) -> State:
       reset_keys = jax.random.split(key, num_eval_envs)
       eval_first_state = eval_env.reset(reset_keys)
       return generate_unroll(
@@ -109,15 +114,18 @@ class Evaluator:
           eval_first_state,
           eval_policy_fn(policy_params),
           key,
-          unroll_length=episode_length // action_repeat)[0]
+          unroll_length=episode_length // action_repeat,
+      )[0]
 
     self._generate_eval_unroll = jax.jit(generate_eval_unroll)
     self._steps_per_unroll = episode_length * num_eval_envs
 
-  def run_evaluation(self,
-                     policy_params: PolicyParams,
-                     training_metrics: Metrics,
-                     aggregate_episodes: bool = True) -> Metrics:
+  def run_evaluation(
+      self,
+      policy_params: PolicyParams,
+      training_metrics: Metrics,
+      aggregate_episodes: bool = True,
+  ) -> Metrics:
     """Run one epoch of evaluation."""
     self._key, unroll_key = jax.random.split(self._key)
 
@@ -129,22 +137,21 @@ class Evaluator:
     metrics = {}
     for fn in [np.mean, np.std]:
       suffix = '_std' if fn == np.std else ''
-      metrics.update(
-          {
-              f'eval/episode_{name}{suffix}': (
-                  fn(value) if aggregate_episodes else value
-              )
-              for name, value in eval_metrics.episode_metrics.items()
-          }
-      )
+      metrics.update({
+          f'eval/episode_{name}{suffix}': (
+              fn(value) if aggregate_episodes else value
+          )
+          for name, value in eval_metrics.episode_metrics.items()
+      })
     metrics['eval/avg_episode_length'] = np.mean(eval_metrics.episode_steps)
+    metrics['eval/std_episode_length'] = np.std(eval_metrics.episode_steps)
     metrics['eval/epoch_eval_time'] = epoch_eval_time
     metrics['eval/sps'] = self._steps_per_unroll / epoch_eval_time
     self._eval_walltime = self._eval_walltime + epoch_eval_time
     metrics = {
         'eval/walltime': self._eval_walltime,
         **training_metrics,
-        **metrics
+        **metrics,
     }
 
     return metrics  # pytype: disable=bad-return-type  # jax-ndarray

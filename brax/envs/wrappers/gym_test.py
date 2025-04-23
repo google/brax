@@ -28,9 +28,11 @@ class GymTest(absltest.TestCase):
     base_env = envs.create('pusher')
     env = gym.GymWrapper(base_env)
     np.testing.assert_array_equal(
-        env.action_space.low, base_env.sys.actuator.ctrl_range[:, 0])
+        env.action_space.low, base_env.sys.actuator.ctrl_range[:, 0]
+    )
     np.testing.assert_array_equal(
-        env.action_space.high, base_env.sys.actuator.ctrl_range[:, 1])
+        env.action_space.high, base_env.sys.actuator.ctrl_range[:, 1]
+    )
 
 
   def test_vector_action_space(self):
@@ -39,11 +41,13 @@ class GymTest(absltest.TestCase):
     env = gym.VectorGymWrapper(training.VmapWrapper(base_env, batch_size=256))
     np.testing.assert_array_equal(
         env.action_space.low,
-        np.tile(base_env.sys.actuator.ctrl_range[:, 0], [256, 1]))
+        np.tile(base_env.sys.actuator.ctrl_range[:, 0], [256, 1]),
+    )
     np.testing.assert_array_equal(
         env.action_space.high,
-        np.tile(base_env.sys.actuator.ctrl_range[:, 1], [256, 1]))
-  
+        np.tile(base_env.sys.actuator.ctrl_range[:, 1], [256, 1]),
+    )  
+
   def test_render(self):
     """Tests rendering in the GymWrapper."""
     base_env = envs.create('pusher')
@@ -59,6 +63,7 @@ class GymTest(absltest.TestCase):
     _ = env.reset()
     img = env.render(mode='rgb_array', width=128, height=128)
     self.assertEqual(img.shape, (2, 128, 128, 3))
+
 
 if __name__ == '__main__':
   absltest.main()

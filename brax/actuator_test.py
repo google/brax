@@ -32,6 +32,7 @@ assert_almost_equal = np.testing.assert_almost_equal
 
 def _actuator_step(pipeline, sys, q, qd, act, dt, n):
   sys = sys.tree_replace({'opt.timestep': dt})
+
   def f(state, _):
     return jax.jit(pipeline.step)(sys, state, act), None
 

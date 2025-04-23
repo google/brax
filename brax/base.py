@@ -284,8 +284,8 @@ class Inertia(Base):
   """Angular inertia, mass, and center of mass location.
 
   Attributes:
-    transform: transform for the inertial frame relative to the link frame
-      (i.e. center of mass position and orientation)
+    transform: transform for the inertial frame relative to the link frame (i.e.
+      center of mass position and orientation)
     i: (3, 3) inertia matrix about a point P
     mass: scalar mass
   """

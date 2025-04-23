@@ -13,6 +13,7 @@
 # limitations under the License.
 
 """Helper functions for physics calculations in maximal coordinates."""
+
 # pylint:disable=g-multiple-import
 from typing import Tuple
 

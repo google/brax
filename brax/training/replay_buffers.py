@@ -234,7 +234,9 @@ class Queue(QueueBase[Sample], Generic[Sample]):
 
     # Note that this may be out of bound, but the operations below would still
     # work fine as they take this number modulo the buffer size.
-    idx = (jnp.arange(self._sample_batch_size) + buffer_state.sample_position) % buffer_state.insert_position
+    idx = (
+        jnp.arange(self._sample_batch_size) + buffer_state.sample_position
+    ) % buffer_state.insert_position
 
     flat_batch = jnp.take(buffer_state.data, idx, axis=0, mode='wrap')
 
@@ -404,7 +406,9 @@ class PjitWrapper(ReplayBuffer[State, Sample]):
     def size(buffer_state: State) -> int:
       return jnp.sum(jax.vmap(self._buffer.size)(buffer_state))  # pytype: disable=bad-return-type  # jnp-type
 
-    partition_spec = jax.sharding.PartitionSpec((axis_names),)
+    partition_spec = jax.sharding.PartitionSpec(
+        (axis_names),
+    )
     self._partitioned_init = pjit.pjit(init, out_shardings=partition_spec)
     self._partitioned_insert = pjit.pjit(
         insert,

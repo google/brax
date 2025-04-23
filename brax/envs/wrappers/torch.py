@@ -16,6 +16,7 @@
 
 This conversion happens directly on-device, without moving values to the CPU.
 """
+
 from typing import Optional
 
 # NOTE: The following line will emit a warning and raise ImportError if `torch`

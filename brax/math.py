@@ -14,7 +14,7 @@
 
 """Some useful math functions."""
 
-from typing import Tuple, Optional, Union
+from typing import Optional, Tuple, Union
 
 import jax
 from jax import custom_jvp
@@ -255,8 +255,7 @@ def orthogonals(a: jax.Array) -> Tuple[jax.Array, jax.Array]:
 
 
 def solve_pgs(a: jax.Array, b: jax.Array, num_iters: int) -> jax.Array:
-  """Projected Gauss-Seidel solver for a MLCP defined by matrix A and vector b.
-  """
+  """Projected Gauss-Seidel solver for a MLCP defined by matrix A and vector b."""
   num_rows = b.shape[0]
   x = jp.zeros((num_rows,))
 
