@@ -1,4 +1,4 @@
-# Copyright 2025 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,17 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""BC training."""
 
 import functools
 import time
 from typing import Any, Callable, Optional, Tuple
 
 from absl import logging
-import flax
-import jax
-import jax.numpy as jp
-import optax
-
 from brax import envs
 from brax.training import acting
 from brax.training import gradients
@@ -35,13 +31,21 @@ from brax.training.agents.bc import networks as bc_networks
 from brax.training.agents.ppo import train as ppo_train
 from brax.training.types import Params
 from brax.training.types import PRNGKey
+import flax
+import jax
+import jax.numpy as jp
+import optax
 
 
 @jax.vmap
 def _random_crop(key, img):
   """Expects H W C image.
+
   Adapted from
   https://github.com/ikostrikov/jaxrl/blob/main/jaxrl/agents/drq/augmentations.py
+
+  Returns:
+    cropped image with shape [H, W, C]
   """
   padding = 2 if img.shape[-2] == 32 else 4
   crop_from = jax.random.randint(key, (2,), 0, 2 * padding + 1)
@@ -56,12 +60,9 @@ def _random_crop(key, img):
 class TrainingState:
   """Contains training state for the learner."""
 
-  """ 
-  Optimisations:
-  1) No scanning over trajectory collection. Just have a lot of parallel envs.
-  2) Data never leaves the GPU. Only parameters flow in and out of it.
-  """
-
+  # Optimisations:
+  # 1) No scanning over trajectory collection. Just have a lot of parallel envs.
+  # 2) Data never leaves the GPU. Only parameters flow in and out of it.
   optimizer_state: optax.OptState
   params: Params
   normalizer_params: running_statistics.RunningStatisticsState
@@ -79,10 +80,10 @@ def train(
     normalize_observations: bool = True,
     epochs: int = 50,
     tanh_squash: bool = True,
-    env: envs.Env = None,
+    env: Optional[envs.Env] = None,
     num_envs: int = 0,
     num_eval_envs: int = 0,
-    eval_length: int = None,
+    eval_length: Optional[int] = None,
     batch_size: int = 256,
     scramble_time: int = 0,
     network_factory: types.NetworkFactory[
@@ -110,23 +111,23 @@ def train(
     teacher_inference_fn: function that generates teacher actions
     normalize_observations: whether to normalize observations
     epochs: number of supervised training epochs per DAgger iteration
-    tanh_squash: whether to apply tanh squashing to actions.
-      Improves training stability.
+    tanh_squash: whether to apply tanh squashing to actions. Improves training
+      stability.
     env: the environment to train in
     num_envs: the number of parallel environments to use for rollouts
     num_eval_envs: the number of envs to use for evaluation
     eval_length: the length of an evaluation episode
     batch_size: the batch size for each training step
-    scramble_time: Maximum time to scramble the envs by.
-      Staggering initial times encourages a stationary distribution.
-      This smoothes loss curves.
+    scramble_time: Maximum time to scramble the envs by. Staggering initial
+      times encourages a stationary distribution. This smoothes loss curves.
     network_factory: function that generates networks for policy
     progress_fn: a user-defined callback function for reporting/plotting metrics
     madrona_backend: whether to use Madrona backend for training
     seed: random seed
     learning_rate: learning rate for optimizer
     dagger_steps: number of DAgger iterations to perform
-    dagger_beta_fn: function that determines probability of using teacher actions
+    dagger_beta_fn: function that determines probability of using teacher
+      actions
     num_evals: the number of evals to run during the entire training run.
       Increasing the number of evals increases total training time
     augment_pixels: whether to add image augmentation to pixel inputs
@@ -139,7 +140,13 @@ def train(
       from the return values of bc.train().
 
   Assumes your env is already wrapped.
+
+  Returns:
+    A tuple of (make_policy, training_state, metrics).
   """
+  if env is None:
+    raise ValueError('env must be set')
+
   if madrona_backend:
     if num_eval_envs and num_eval_envs != num_envs:
       raise ValueError('Madrona-MJX requires a fixed batch size')
@@ -207,7 +214,7 @@ def train(
         normalizer_params=params[0],
         params=params[1],
     )
-  
+
   if restore_params is not None:
     logging.info('Restoring TrainingState from `restore_params`.')
     training_state = training_state.replace(
@@ -235,7 +242,7 @@ def train(
       key: PRNGKey,
       params: Tuple[Params, Params],
       beta: float,
-  ) -> types.Observation:
+  ):
     """Collect demo trajectory of fixed length."""
 
     def env_step(carry: Tuple[PRNGKey, envs.State], _):
@@ -246,7 +253,7 @@ def train(
       actions = jp.where(
           teachers_turn,
           teacher_inference_fn(env_state.obs, None)[0],  # E x action_size
-          student_inference_fn(env_state.obs, None)[0],
+          student_inference_fn(env_state.obs, None)[0],  # pytype: disable=wrong-arg-types
       )
       nstate = env.step(env_state, actions)
       return (key, nstate), (env_state.obs, env_state.reward)  # E x ...
@@ -265,9 +272,11 @@ def train(
       key: PRNGKey,
       params: Tuple[Params, Params],
       beta: float,
-  ) -> types.Observation:
+  ):
     """Collect a dataset for behavioural cloning.
-    beta = probability of taking teacher action."""
+
+    beta = probability of taking teacher action.
+    """
     key, key_unroll = jax.random.split(key)
     env_state, all_obs, all_rewards = collect_unroll(
         env_state, key_unroll, params, beta
@@ -362,7 +371,7 @@ def train(
         env_state,
         key_data,
         (ts.normalizer_params, ts.params),
-        dagger_beta_fn(ts.dagger_step),
+        dagger_beta_fn(ts.dagger_step),  # pytype: disable=wrong-arg-types
     )
     assert data_metrics['reward_mean'].shape == (demo_length,), (
         f'Expected shape {(demo_length,)} but got'
@@ -389,14 +398,17 @@ def train(
           inference_params,
           training_metrics={},
       )
-      other_metrics.update(eval_metrics)
-    
+      other_metrics.update(eval_metrics)  # pytype: disable=attribute-error
+
     if save_checkpoint_path is not None:
-      checkpoint.save(
-          save_checkpoint_path, training_state.dagger_step, inference_params, ckpt_config
+      checkpoint.save(  # pytype: disable=wrong-arg-types
+          save_checkpoint_path,
+          training_state.dagger_step,
+          inference_params,
+          ckpt_config,
       )
 
-    progress_fn(training_state.dagger_step, other_metrics)
+    progress_fn(training_state.dagger_step, other_metrics)  # pytype: disable=wrong-arg-types
 
   if num_evals:
     eval_env = env

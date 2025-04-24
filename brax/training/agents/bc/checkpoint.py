@@ -1,4 +1,4 @@
-# Copyright 2025 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -68,9 +68,8 @@ def load_policy(
     network_factory: types.NetworkFactory[bc_networks.BCNetworks],
     deterministic: bool = True,
 ):
-  """
-  Loads policy inference function from BC checkpoint.
-  
+  """Loads policy inference function from BC checkpoint.
+
   The policy is always deterministic.
   """
   path = epath.Path(path)

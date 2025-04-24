@@ -1,4 +1,4 @@
-# Copyright 2025 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,12 +19,11 @@ import pickle
 
 from absl.testing import absltest
 from absl.testing import parameterized
-import jax
-
 from brax import envs
 from brax.training.acme import running_statistics
 from brax.training.agents.bc import networks as bc_networks
 from brax.training.agents.bc import train as bc
+import jax
 
 
 class BCTest(parameterized.TestCase):

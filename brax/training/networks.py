@@ -1,4 +1,4 @@
-# Copyright 2025 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,13 +19,12 @@ import functools
 from typing import Any, Callable, Mapping, Sequence, Tuple
 import warnings
 
-from flax import linen
-import jax
-import jax.numpy as jnp
-
 from brax.training import types
 from brax.training.acme import running_statistics
 from brax.training.spectral_norm import SNDense
+from flax import linen
+import jax
+import jax.numpy as jnp
 
 ActivationFn = Callable[[jnp.ndarray], jnp.ndarray]
 Initializer = Callable[..., Any]
@@ -39,8 +38,10 @@ class FeedForwardNetwork:
 
 class MLPHead(linen.Module):
   """MLP over pre-processed latent vectors.
+
   For an example usage, see the Aloha sim2real code on
-  https://github.com/google-deepmind/mujoco_playground."""
+  https://github.com/google-deepmind/mujoco_playground.
+  """
 
   layer_sizes: Sequence[int]
   activation: ActivationFn = linen.relu
@@ -49,20 +50,23 @@ class MLPHead(linen.Module):
   bias: bool = True
   layer_norm: bool = False
   state_key: str = 'proprio'
-  latent_key_prefix: str = 'latent_' # Assume followed by integer index.
+  latent_key_prefix: str = 'latent_'  # Assume followed by integer index.
   latent_head_size: int = 64
 
   @linen.compact
-  def __call__(self, data: jnp.ndarray):
+  def __call__(self, data: Mapping[str, jax.Array]):
     latents = []
     latent_keys = sorted(
         [k for k in data.keys() if k.startswith(self.latent_key_prefix)],
         key=lambda x: int(x.split('_')[-1]),
     )
-    assert len(latent_keys) > 0, "No latent keys found"
+    assert len(latent_keys) > 0, 'No latent keys found'
     for key in latent_keys:
       latents.append(data[key])
-    hidden = [self.activation(linen.Dense(self.latent_head_size)(latent)) for latent in latents]
+    hidden = [
+        self.activation(linen.Dense(self.latent_head_size)(latent))
+        for latent in latents
+    ]
     if self.state_key:
       hidden.append(data[self.state_key])
     hidden = jnp.concatenate(hidden, axis=-1)
@@ -477,8 +481,15 @@ def make_policy_network_latents(
     layer_norm: bool = False,
     obs_key: str = 'state',
 ) -> FeedForwardNetwork:
-  """Creates a policy network. Wraps MLPLatents. Has same API as make_policy_network.
-  Used when the env observation has image latents rather than pixels."""
+  """Creates a policy network. Wraps MLPLatents.
+
+  Has same API as make_policy_network. Used when the env observation has image
+  latents rather than pixels.
+
+  Returns:
+    A FeedForwardNetwork that takes observations and returns policy
+    parameters.
+  """
   module = MLPHead(
       layer_sizes=list(hidden_layer_sizes) + [param_size],
       activation=activation,
@@ -494,6 +505,12 @@ def make_policy_network_latents(
       )
       obs = {**obs, obs_key: state_obs}
     return module.apply(policy_params, obs)
+
+  if not isinstance(observation_size, Mapping):
+    raise NotImplementedError(
+        'make_policy_network_latents only implemented for dictionary'
+        ' observations'
+    )
 
   dummy_obs = {
       key: jnp.zeros((1,) + shape) for key, shape in observation_size.items()

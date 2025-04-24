@@ -53,8 +53,11 @@ def network_config(
     action_size: int,
     normalize_observations: bool,
     network_factory: types.NetworkFactory[
-        Union[bc_networks.BCNetworks, ppo_networks.PPONetworks, 
-              sac_networks.SACNetworks]
+        Union[
+            bc_networks.BCNetworks,
+            ppo_networks.PPONetworks,
+            sac_networks.SACNetworks,
+        ]
     ],
 ) -> config_dict.ConfigDict:
   """Returns a config dict for re-creating a network from a checkpoint."""
@@ -88,11 +91,15 @@ def network_config(
 def get_network(
     config: config_dict.ConfigDict,
     network_factory: types.NetworkFactory[
-        Union[bc_networks.BCNetworks, ppo_networks.PPONetworks, 
-              sac_networks.SACNetworks]
+        Union[
+            bc_networks.BCNetworks,
+            ppo_networks.PPONetworks,
+            sac_networks.SACNetworks,
+        ]
     ],
-) -> Union[bc_networks.BCNetworks, ppo_networks.PPONetworks, 
-           sac_networks.SACNetworks]:
+) -> Union[
+    bc_networks.BCNetworks, ppo_networks.PPONetworks, sac_networks.SACNetworks
+]:
   """Generates a network given config."""
   normalize = lambda x, y: x
   if config.normalize_observations:

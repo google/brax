@@ -1,4 +1,4 @@
-# Copyright 2025 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,24 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Callable, Tuple
+"""Losses for BC."""
 
-import jax.numpy as jp
+from typing import Any, Callable, Dict, Tuple
 
-from brax.training import types
 from brax.training.agents.bc import networks
 from brax.training.types import Params
+import jax.numpy as jp
 
 
 # Vanilla L2 with postprocessing
 def bc_loss(
     params: Params,
     normalizer_params: Any,
-    data: types.Transition,
+    data: Dict,
     make_policy: Callable[[Tuple[Any, Params]], networks.BCInferenceFn],
 ):
   policy = make_policy((normalizer_params, params))
-  _, action_extras = policy(data['observations'], key_sample=None)
+  _, action_extras = policy(data['observations'], key_sample=None)  # pytype: disable=wrong-keyword-args
   actor_loss = (
       (
           (

@@ -1,4 +1,4 @@
-# Copyright 2025 The Brax Authors.
+# Copyright 2024 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,16 +14,15 @@
 
 """BC networks."""
 
-from typing import Callable, Dict, Mapping, Sequence, Tuple
-
-import flax
-from flax import linen
-import jax.numpy as jp
+from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
 
 from brax.training import distribution
 from brax.training import networks
 from brax.training import types
 from brax.training.types import PRNGKey
+import flax
+from flax import linen
+import jax.numpy as jp
 
 
 @flax.struct.dataclass
@@ -32,7 +31,9 @@ class BCNetworks:
   parametric_action_distribution: distribution.ParametricDistribution
 
 
-BCInferenceFn = Callable[[types.Observation, PRNGKey], Tuple[jp.ndarray, Dict]]
+BCInferenceFn = Callable[
+    [types.Observation, PRNGKey], Tuple[jp.ndarray, Mapping[str, Any]]
+]
 
 
 def make_inference_fn(bc_networks: BCNetworks):
@@ -42,17 +43,17 @@ def make_inference_fn(bc_networks: BCNetworks):
       params: types.Params,
       *,
       deterministic: bool = True,
-      tanh_squash: bool = False
+      tanh_squash: bool = False,
   ) -> BCInferenceFn:
-    """
-    Keeping unused deterministic and key_sample for API compatibility.
+    """Keeping unused deterministic and key_sample for API compatibility.
+
     (BC inference is always deterministic)
     """
     policy_network = bc_networks.policy_network
     parametric_action_distribution = bc_networks.parametric_action_distribution
 
     def policy(
-        observations: types.Observation, key_sample: PRNGKey
+        observations: types.Observation, key_sample: Optional[PRNGKey]
     ) -> Tuple[types.Action, types.Extra]:
       param_subset = (params[0], params[1])  # normalizer and policy params
       logits = policy_network.apply(*param_subset, observations)
@@ -82,7 +83,9 @@ def make_bc_networks(
     latent_vision: bool = False,
 ) -> BCNetworks:
   """Make BC networks with preprocessor.
-  Note that vision = True assumes Frozen Encoder."""
+
+  Note that vision = True assumes Frozen Encoder.
+  """
   parametric_action_distribution = distribution.NormalTanhDistribution(
       event_size=action_size
   )
