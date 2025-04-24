@@ -127,13 +127,13 @@ class BCTest(parameterized.TestCase):
   def testPixelsBC(self):
     """Test BC with pixel observations."""
     teacher_policy = self._create_teacher_policy(num_envs=50)
-    fast = envs.get_environment('fast', obs_mode='dict_pixels_state')
+    fast = envs.get_environment('fast', obs_mode='dict_latent_state')
     fast = envs.training.wrap(fast, episode_length=128, action_repeat=1)
     network_factory = functools.partial(
         bc_networks.make_bc_networks,
         policy_hidden_layer_sizes=(32,),
         policy_obs_key='state',
-        vision=True,
+        latent_vision=True,
     )
     _, _, metrics = bc.train(
         env=fast,
