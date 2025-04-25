@@ -109,7 +109,7 @@ class UInt64:
     """Convert UInt64 to numpy uint64."""
     hi_np = np.array(self.hi, dtype=np.uint64)
     lo_np = np.array(self.lo, dtype=np.uint64)
-    return (hi_np << 32) | lo_np
+    return (hi_np << np.uint64(32)) | lo_np
 
   def __post_init__(self):
     """Cast post init."""
