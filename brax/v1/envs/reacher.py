@@ -162,7 +162,7 @@ class Reacher(env.Env):
 
     qp = self.sys.default_qp(joint_angle=qpos, joint_velocity=qvel)
     _, target = self._random_target(rng)
-    pos = jp.index_update(qp.pos, self._target_idx, target)
+    pos = jp.index_update(qp.pos, self._target_idx, target)  # pytype: disable=wrong-arg-types
 
     qp = qp.replace(pos=pos)
     obs = self._get_obs(qp, self.sys.info(qp))

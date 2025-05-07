@@ -377,7 +377,10 @@ def train(
       wrap_env_fn,
       randomization_fn,
   )
-  reset_fn = jax.jit(jax.vmap(env.reset))
+  if local_devices_to_use > 1:
+    reset_fn = jax.pmap(env.reset, axis_name=_PMAP_AXIS_NAME)
+  else:
+    reset_fn = jax.jit(jax.vmap(env.reset))
   key_envs = jax.random.split(key_env, num_envs // process_count)
   key_envs = jnp.reshape(
       key_envs, (local_devices_to_use, -1) + key_envs.shape[1:]

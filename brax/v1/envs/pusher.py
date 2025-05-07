@@ -199,9 +199,9 @@ class Pusher(env.Env):
     qp = self.sys.default_qp(joint_angle=qpos, joint_velocity=qvel)
 
     # position cylinder and goal
-    pos = jp.index_update(qp.pos, self._goal_idx, self._goal_pos)
-    pos = jp.index_update(pos, self._object_idx, cylinder_pos)
-    pos = jp.index_update(pos, self._table_idx, jp.zeros(3))
+    pos = jp.index_update(qp.pos, self._goal_idx, self._goal_pos)  # pytype: disable=wrong-arg-types
+    pos = jp.index_update(pos, self._object_idx, cylinder_pos)  # pytype: disable=wrong-arg-types
+    pos = jp.index_update(pos, self._table_idx, jp.zeros(3))  # pytype: disable=wrong-arg-types
 
     qp = qp.replace(pos=pos)
 

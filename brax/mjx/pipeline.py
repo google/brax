@@ -21,23 +21,19 @@ from brax.mjx.base import State
 import jax
 from jax import numpy as jp
 from mujoco import mjx
+from mujoco.mjx._src.types import Contact as MJXContact
 
 
-def _reformat_contact(sys: System, data: State) -> State:
+def _reformat_contact(sys: System, contact: MJXContact) -> Contact:
   """Reformats the mjx.Contact into a brax.base.Contact."""
-  if data.contact is None:
-    return data
+  if contact is None:
+    return
 
-  elasticity = jp.zeros(data.contact.pos.shape[0])
-  body1 = jp.array(sys.geom_bodyid)[data.contact.geom1] - 1
-  body2 = jp.array(sys.geom_bodyid)[data.contact.geom2] - 1
+  elasticity = jp.zeros(contact.pos.shape[0])
+  body1 = jp.array(sys.geom_bodyid)[contact.geom1] - 1
+  body2 = jp.array(sys.geom_bodyid)[contact.geom2] - 1
   link_idx = (body1, body2)
-  data = data.replace(
-      contact=Contact(
-          link_idx=link_idx, elasticity=elasticity, **data.contact.__dict__
-      )
-  )
-  return data
+  return Contact(link_idx=link_idx, elasticity=elasticity, **contact.__dict__)
 
 
 def init(
@@ -78,8 +74,11 @@ def init(
   offset = Transform.create(pos=offset)
   xd = offset.vmap().do(cvel)
 
-  data = _reformat_contact(sys, data)
-  return State(q=q, qd=qd, x=x, xd=xd, **data.__dict__)
+  brax_contact = _reformat_contact(sys, data.contact)
+  data_args = data.__dict__
+  data_args['contact'] = brax_contact
+
+  return State(q=q, qd=qd, x=x, xd=xd, **data_args)
 
 
 def step(
@@ -111,5 +110,7 @@ def step(
   xd = offset.vmap().do(cvel)
 
   if data.ncon > 0:
-    data = _reformat_contact(sys, data)
+    mjx_contact = data._impl.contact if hasattr(data, '_impl') else data.contact
+    data = data.replace(contact=_reformat_contact(sys, mjx_contact))
+
   return data.replace(q=q, qd=qd, x=x, xd=xd)

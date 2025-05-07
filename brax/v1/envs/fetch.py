@@ -36,7 +36,7 @@ class Fetch(env.Env):
   def reset(self, rng: jp.ndarray) -> env.State:
     qp = self.sys.default_qp()
     rng, target = self._random_target(rng)
-    pos = jp.index_update(qp.pos, self.target_idx, target)
+    pos = jp.index_update(qp.pos, self.target_idx, target)  # pytype: disable=wrong-arg-types
     qp = qp.replace(pos=pos)
     info = self.sys.info(qp)
     obs = self._get_obs(qp, info)
@@ -90,7 +90,7 @@ class Fetch(env.Env):
     # teleport any hit targets
     rng, target = self._random_target(state.info['rng'])
     target = jp.where(target_hit, target, qp.pos[self.target_idx])
-    pos = jp.index_update(qp.pos, self.target_idx, target)
+    pos = jp.index_update(qp.pos, self.target_idx, target)  # pytype: disable=wrong-arg-types
     qp = qp.replace(pos=pos)
     state.info.update(rng=rng)
     return state.replace(qp=qp, obs=obs, reward=reward)

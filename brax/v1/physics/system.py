@@ -122,11 +122,11 @@ class System:
       default = self.config.defaults[default_index]
       for dqp in default.qps:
         body_i = self.body.index[dqp.name]
-        pos = jp.index_update(qp.pos, body_i, vec_to_arr(dqp.pos))
-        rot = jp.index_update(qp.rot, body_i,
+        pos = jp.index_update(qp.pos, body_i, vec_to_arr(dqp.pos))  # pytype: disable=wrong-arg-types
+        rot = jp.index_update(qp.rot, body_i,  # pytype: disable=wrong-arg-types
                               math.euler_to_quat(vec_to_arr(dqp.rot)))
-        vel = jp.index_update(qp.vel, body_i, vec_to_arr(dqp.vel))
-        ang = jp.index_update(qp.ang, body_i, vec_to_arr(dqp.ang))
+        vel = jp.index_update(qp.vel, body_i, vec_to_arr(dqp.vel))  # pytype: disable=wrong-arg-types
+        ang = jp.index_update(qp.ang, body_i, vec_to_arr(dqp.ang))  # pytype: disable=wrong-arg-types
         qp = qp.replace(pos=pos, rot=rot, vel=vel, ang=ang)
 
     # build joints and joint -> array lookup, and order by depth

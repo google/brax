@@ -48,7 +48,7 @@ class ReacherAngle(env.Env):
     qvel = jp.random_uniform(rng2, (self.sys.num_joint_dof,), -.005, .005)
     qp = self.sys.default_qp(joint_angle=qpos, joint_velocity=qvel)
     rng, target = self._random_target(rng)
-    pos = jp.index_update(qp.pos, self.target_idx, target)
+    pos = jp.index_update(qp.pos, self.target_idx, target)  # pytype: disable=wrong-arg-types
     qp = qp.replace(pos=pos)
     info = self.sys.info(qp)
     obs = self._get_obs(qp, info)

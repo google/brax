@@ -80,7 +80,7 @@ class Grasp(env.Env):
     scale = jp.where(norm > 2.0, 2. / norm, 1.0)  # pytype: disable=wrong-arg-types  # jax-ndarray
     palm_pos = palm_pos + scale * (target_pos - palm_pos) * .15
     pos = state.qp.pos
-    pos = jp.index_update(pos, self.palm_idx, palm_pos)
+    pos = jp.index_update(pos, self.palm_idx, palm_pos)  # pytype: disable=wrong-arg-types
     qp = state.qp.replace(pos=pos)
 
     # do the rest of the physics update
@@ -130,7 +130,7 @@ class Grasp(env.Env):
     # teleport any hit targets
     rng, target = self._random_target(state.info['rng'])
     target = jp.where(target_hit, target, qp.pos[self.target_idx])
-    pos = jp.index_update(qp.pos, self.target_idx, target)
+    pos = jp.index_update(qp.pos, self.target_idx, target)  # pytype: disable=wrong-arg-types
     qp = qp.replace(pos=pos)
     state.info.update(rng=rng)
     return state.replace(qp=qp, obs=obs, reward=reward)
