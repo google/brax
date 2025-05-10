@@ -30,7 +30,7 @@ def visualize_disc(
     num_grid=25,
     fig=None,
     axs=None,
-    figsize: Tuple[float] = (3.5, 3),
+    figsize: Tuple[float, float] = (3.5, 3),
     output_path: str = None,
     output_name: str = 'smm',
 ):
@@ -72,7 +72,7 @@ def estimate_energy_distance_metric(
     time_last_n: int = 500,
     seed: int = 0,
     visualize: bool = False,
-    figsize: Tuple[float] = (3.5, 3),
+    figsize: Tuple[float, float] = (3.5, 3),
     output_path: str = None,
     output_name: str = 'smm_dist',
 ):
