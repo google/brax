@@ -17,8 +17,8 @@
 
 import itertools
 from typing import Dict, Optional, Tuple, Union
+import warnings
 from xml.etree import ElementTree
-
 from brax import math
 from brax.base import (
     Actuator,
@@ -476,6 +476,15 @@ def load_model(mj: mujoco.MjModel) -> System:
   )
 
   sys = jax.tree.map(jp.array, sys)
+
+  warnings.warn(
+      'Brax System, piplines and environments are not actively being'
+      ' maintained. Please see MJX for a well maintained JAX-based physics'
+      ' engine: https://github.com/google-deepmind/mujoco/tree/main/mjx. For a'
+      ' host of environments that use MJX, see:'
+      ' https://github.com/google-deepmind/mujoco_playground.',
+      UserWarning,
+  )
 
   return sys
 
