@@ -46,6 +46,7 @@ dependencies = [
     "numpy",
     "optax",
     "orbax-checkpoint",
+    "Pillow",
     "scipy",
     "tensorboardX",
     "trimesh",
