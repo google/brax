@@ -24,7 +24,6 @@ from typing import Any, Callable, Dict, Optional, Tuple, Union
 from absl import logging
 from brax import base
 from brax import envs
-from brax.io import model
 from brax.training import acting
 from brax.training import gradients
 from brax.training import pmap
@@ -37,7 +36,6 @@ from brax.training.agents.sac import losses as sac_losses
 from brax.training.agents.sac import networks as sac_networks
 from brax.training.types import Params
 from brax.training.types import PRNGKey
-from brax.v1 import envs as envs_v1
 import flax
 import jax
 import jax.numpy as jnp
@@ -113,7 +111,7 @@ def _init_training_state(
 
 
 def train(
-    environment: Union[envs_v1.Env, envs.Env],
+    environment: envs.Env,
     num_timesteps,
     episode_length: int,
     wrap_env: bool = True,
@@ -189,7 +187,7 @@ def train(
     elif isinstance(env, envs.Env):
       wrap_for_training = envs.training.wrap
     else:
-      wrap_for_training = envs_v1.wrappers.wrap_for_training
+      raise ValueError('Unsupported environment type: %s' % type(env))
 
     rng = jax.random.PRNGKey(seed)
     rng, key = jax.random.split(rng)
@@ -326,12 +324,12 @@ def train(
   def get_experience(
       normalizer_params: running_statistics.RunningStatisticsState,
       policy_params: Params,
-      env_state: Union[envs.State, envs_v1.State],
+      env_state: envs.State,
       buffer_state: ReplayBufferState,
       key: PRNGKey,
   ) -> Tuple[
       running_statistics.RunningStatisticsState,
-      Union[envs.State, envs_v1.State],
+      envs.State,
       ReplayBufferState,
   ]:
     policy = make_policy((normalizer_params, policy_params))
@@ -355,7 +353,7 @@ def train(
       key: PRNGKey,
   ) -> Tuple[
       TrainingState,
-      Union[envs.State, envs_v1.State],
+      envs.State,
       ReplayBufferState,
       Metrics,
   ]:

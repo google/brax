@@ -15,6 +15,7 @@
 """Checkpointing functions."""
 
 import inspect
+import json
 import logging
 from typing import Any, Dict, Tuple, Union
 
@@ -156,3 +157,13 @@ def load(
   target[0] = running_statistics.RunningStatisticsState(**target[0])
 
   return target
+
+
+def load_config(
+    config_path: Union[str, epath.Path],
+) -> config_dict.ConfigDict:
+  """Loads config from config path."""
+  config_path = epath.Path(config_path)
+  if not config_path.exists():
+    raise ValueError(f'Config file not found at {config_path.as_posix()}')
+  return config_dict.create(**json.loads(config_path.read_text()))

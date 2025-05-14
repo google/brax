@@ -14,7 +14,6 @@
 
 """Checkpointing for SAC."""
 
-import json
 from typing import Any, Union
 
 from brax.training import checkpoint
@@ -63,6 +62,15 @@ def _get_network(
   return checkpoint.get_network(config, network_factory)  # pytype: disable=bad-return-type
 
 
+def load_config(
+    path: Union[str, epath.Path],
+) -> config_dict.ConfigDict:
+  """Loads SAC config from checkpoint."""
+  path = epath.Path(path)
+  config_path = path / _CONFIG_FNAME
+  return checkpoint.load_config(config_path)
+
+
 def load_policy(
     path: Union[str, epath.Path],
     network_factory: types.NetworkFactory[
@@ -72,13 +80,7 @@ def load_policy(
 ):
   """Loads policy inference function from SAC checkpoint."""
   path = epath.Path(path)
-
-  config_path = path / _CONFIG_FNAME
-  if not config_path.exists():
-    raise ValueError(f'SAC config file not found at {config_path.as_posix()}')
-
-  config = config_dict.create(**json.loads(config_path.read_text()))
-
+  config = load_config(path)
   params = load(path)
   sac_network = _get_network(config, network_factory)
   make_inference_fn = sac_networks.make_inference_fn(sac_network)

@@ -110,7 +110,7 @@ def train(
     elif isinstance(env, envs.Env):
       wrap_for_training = envs.training.wrap
     else:
-      wrap_for_training = envs_v1.wrappers.wrap_for_training
+      raise ValueError('Unsupported environment type: %s' % type(env))
 
     v_randomization_fn = None
     if randomization_fn is not None:
