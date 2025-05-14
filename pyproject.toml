@@ -57,10 +57,8 @@ dependencies = [
 develop = [
     "pytest",
     "transforms3d",
-]
-wrappers = [
-  "gym",
-  "dm_env",
+    "gym",
+    "dm_env",
 ]
 
 [project.urls]
