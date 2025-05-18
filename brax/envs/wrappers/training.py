@@ -217,6 +217,29 @@ class EvalWrapper(Wrapper):
     return nstate
 
 
+class TraceEvalWrapper(Wrapper):
+  """Saves full trajectories in state.info for rendering."""
+  def reset(self, rng: jax.Array) -> State:
+    state = self.env.reset(rng)
+    self._store(state)
+    return state
+
+  def step(self, state: State, action: jax.Array) -> State:
+      state = self.env.step(state, action)
+      self._store(state)
+      return state
+
+  def _store(self, state: State):
+    state.info['trace'] = {
+        'qpos': state.data.qpos,
+        'qvel': state.data.qvel,
+        'time': state.data.time,
+        'metrics': state.metrics}
+    if hasattr(state.data, 'mocap_pos') and hasattr(state.data, 'mocap_quat'):
+        state.info['trace']['mocap_pos'] = state.data.mocap_pos
+        state.info['trace']['mocap_quat'] = state.data.mocap_quat
+
+
 class DomainRandomizationVmapWrapper(Wrapper):
   """Wrapper for domain randomization."""
 

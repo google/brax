@@ -241,6 +241,7 @@ def train(
     restore_checkpoint_path: Optional[str] = None,
     restore_params: Optional[Any] = None,
     restore_value_fn: bool = True,
+    num_traced_envs: Optional[int] = None,
 ):
   """PPO training.
 
@@ -309,7 +310,8 @@ def train(
       from the return values of ppo.train().
     restore_value_fn: whether to restore the value function from the checkpoint
       or use a random initialization
-
+    num_traced_envs: the number of envs whose trajectories will be traced during evaluation.
+      Does not noticeably affect evaluation time.
   Returns:
     Tuple of (make_policy function, network params, metrics)
   """
@@ -659,6 +661,7 @@ def train(
       episode_length=episode_length,
       action_repeat=action_repeat,
       key=eval_key,
+      num_traced_envs=num_traced_envs,
   )
 
   # Run initial eval

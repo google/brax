@@ -15,7 +15,7 @@
 """Brax training acting functions."""
 
 import time
-from typing import Callable, Sequence, Tuple
+from typing import Callable, Sequence, Tuple, Optional
 
 from brax import envs
 from brax.training.types import Metrics
@@ -58,6 +58,7 @@ def generate_unroll(
     key: PRNGKey,
     unroll_length: int,
     extra_fields: Sequence[str] = (),
+    num_traced_envs: Optional[int] = None
 ) -> Tuple[State, Transition]:
   """Collect trajectories of given unroll_length."""
 
@@ -68,6 +69,9 @@ def generate_unroll(
     nstate, transition = actor_step(
         env, state, policy, current_key, extra_fields=extra_fields
     )
+    if num_traced_envs:
+      # (E, ...) -> (num_traced_envs, ...)
+      transition = jax.tree.map(lambda x: x[:num_traced_envs], transition)
     return (nstate, next_key), transition
 
   (final_state, _), data = jax.lax.scan(
@@ -88,6 +92,7 @@ class Evaluator:
       episode_length: int,
       action_repeat: int,
       key: PRNGKey,
+      num_traced_envs: Optional[int] = None
   ):
     """Init.
 
@@ -103,22 +108,29 @@ class Evaluator:
     self._eval_walltime = 0.0
 
     eval_env = envs.training.EvalWrapper(eval_env)
-
+    if num_traced_envs:
+      eval_env = envs.training.TraceEvalWrapper(eval_env)
     def generate_eval_unroll(
         policy_params: PolicyParams, key: PRNGKey
     ) -> State:
       reset_keys = jax.random.split(key, num_eval_envs)
       eval_first_state = eval_env.reset(reset_keys)
-      return generate_unroll(
+      final_state, data = generate_unroll(
           eval_env,
           eval_first_state,
           eval_policy_fn(policy_params),
           key,
           unroll_length=episode_length // action_repeat,
-      )[0]
+          extra_fields = ('trace',) if num_traced_envs else (),
+          num_traced_envs=num_traced_envs,
+      )
+      if num_traced_envs:
+        return final_state, data
+      return final_state
 
     self._generate_eval_unroll = jax.jit(generate_eval_unroll)
     self._steps_per_unroll = episode_length * num_eval_envs
+    self._num_traced_envs = num_traced_envs
 
   def run_evaluation(
       self,
@@ -131,6 +143,8 @@ class Evaluator:
 
     t = time.time()
     eval_state = self._generate_eval_unroll(policy_params, unroll_key)
+    if self._num_traced_envs:
+      eval_state, eval_data = eval_state
     eval_metrics = eval_state.info['eval_metrics']
     eval_metrics.active_episodes.block_until_ready()
     epoch_eval_time = time.time() - t
@@ -153,5 +167,6 @@ class Evaluator:
         **training_metrics,
         **metrics,
     }
-
+    if self._num_traced_envs:
+      metrics['eval/data'] = eval_data
     return metrics  # pytype: disable=bad-return-type  # jax-ndarray
