@@ -312,6 +312,7 @@ def train(
       or use a random initialization
     num_traced_envs: the number of envs whose trajectories will be traced during evaluation.
       Does not noticeably affect evaluation time.
+
   Returns:
     Tuple of (make_policy function, network params, metrics)
   """
