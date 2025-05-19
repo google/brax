@@ -1,0 +1,42 @@
+<mujoco>  
+  <size njmax="3000" nconmax="1000"/>  
+  <option timestep="0.002"/>  
+  <statistic meansize="0.23" extent="3.96"/>  
+  <default>  
+    <geom condim="6" density="1"/>  
+    <joint damping=".001"/>  
+    <motor ctrlrange="-1 1" ctrllimited="true" forcerange="-.05 .05" forcelimited="true"/>  
+    <velocity ctrlrange="-1 1" ctrllimited="true" forcerange="-.05 .05" forcelimited="true"/>  
+    <site size="0.032" type="sphere"/>  
+  </default>  
+  <worldbody>  
+    <geom name="floor" size="5 5 0.1" type="plane" condim="6"/>  
+    <body name="agent" pos="0 0 .1">  
+      <camera name="vision" pos="0 0 .15" xyaxes="0 -1 0 .4 0 1" fovy="90"/>  
+      <camera name="vision_back" pos="0 0 .15" xyaxes="0 1 0 0 0 1" fovy="90"/>  
+      <!-- <geom name="camera" pos="-.2 0 0" type="sphere" size=".05"/> -->  
+      <joint type="slide" axis="1 0 0" name="x" damping="0.01"/>  
+      <joint type="slide" axis="0 1 0" name="y" damping="0.01"/>  
+      <joint type="hinge" axis="0 0 1" name="z" damping="0.005"/>  
+      <geom name="agent" type="sphere" size=".1" friction="1 0.01 0.01" rgba="0.7412 0.0431 0.1843 1"/>  
+      <geom name="pointarrow" pos="0.1 0 0" size="0.05 0.05 0.05" type="box" rgba="0.0039 0.1529 0.3961 1"/>  
+      <site name="agent" rgba="1 0 0 .1"/>  
+    </body>  
+  </worldbody>  
+  <sensor>  
+    <!-- Used for observation -->  
+    <accelerometer site="agent" name="accelerometer"/>  
+    <velocimeter site="agent" name="velocimeter"/>  
+    <gyro site="agent" name="gyro"/>  
+    <magnetometer site="agent" name="magnetometer"/>  
+  
+    <!-- Used for intrinsic constraints -->  
+    <subtreecom body="agent" name="subtreecom"/>  
+    <subtreelinvel body="agent" name="subtreelinvel"/>  
+    <subtreeangmom body="agent" name="subtreeangmom"/>  
+  </sensor>  
+  <actuator>  
+    <motor gear="0.3 0 0 0 0 0" site="agent" name="x"/>  
+    <velocity gear="0.3" jointinparent="z" name="z"/>  
+  </actuator>  
+</mujoco>

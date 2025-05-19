@@ -1,0 +1,32 @@
+<mujoco model="point_hazard_goal">
+  <include file="point.xml"/>
+  
+  <asset>
+    <material name="hazard" rgba="0.9 0.3 0.3 1"/>
+    <material name="goal" rgba="0.3 0.9 0.3 1"/>
+  </asset>
+  
+  <worldbody>
+      <!-- Goal (green box) -->
+      <body name="goal" pos="2 2 0.09" mocap="true">
+        <geom type="box" name="goal" size="0.5 0.5 0.6" condim="3"
+       friction="1 .03 .003" rgba="0 1 0 1" contype="2" conaffinity="1" solref="0.01 1"/>
+      </body>
+
+      <!-- Hazards (red boxes) -->
+      <body name="hazard1" pos="-2 2 0.09" mocap="true">
+        <geom type="box" name="hazard1" size="0.5 0.5 0.6" condim="3"
+       friction="1 .03 .003" rgba="1 0 0 1" contype="2" conaffinity="1" solref="0.01 1"/>
+      </body>
+
+      <body name="hazard2" pos="2 -2 0.09" mocap="true">
+        <geom type="box" name="hazard2" size="0.5 0.5 0.6" condim="3"
+       friction="1 .03 .003" rgba="1 0 0 1" contype="2" conaffinity="1" solref="0.01 1"/>
+      </body>
+
+      <body name="hazard3" pos="-2 -2 0.09" mocap="true">
+        <geom type="box" name="hazard3" size="0.5 0.5 0.6" condim="3"
+       friction="1 .03 .003" rgba="1 0 0 1" contype="2" conaffinity="1" solref="0.01 1"/>
+      </body>
+   </worldbody>
+</mujoco> 
