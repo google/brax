@@ -241,7 +241,7 @@ def train(
     restore_checkpoint_path: Optional[str] = None,
     restore_params: Optional[Any] = None,
     restore_value_fn: bool = True,
-    legacy_evals: bool = True,
+    run_evals: bool = True,
 ):
   """PPO training.
 
@@ -310,7 +310,7 @@ def train(
       from the return values of ppo.train().
     restore_value_fn: whether to restore the value function from the checkpoint
       or use a random initialization
-    legacy_evals: if True, use the evaluator num_eval times to collect distinct
+    run_evals: if True, use the evaluator num_eval times to collect distinct
       eval rollouts. If False, num_eval_envs and eval_env are ignored. progress_fn
       is then expected to use training_metrics.
 
@@ -672,7 +672,7 @@ def train(
   # Run initial eval
   metrics = {}
   if process_id == 0 and num_evals > 1:
-    if legacy_evals:
+    if run_evals:
       metrics = evaluator.run_evaluation(
           _unpmap((
               training_state.normalizer_params,
@@ -735,7 +735,7 @@ def train(
       )
 
     if num_evals > 0:
-      if legacy_evals:
+      if run_evals:
         metrics = evaluator.run_evaluation(
             params,
             training_metrics,
