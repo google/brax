@@ -313,6 +313,7 @@ def train(
     legacy_evals: if True, use the evaluator num_eval times to collect distinct
       eval rollouts. If False, num_eval_envs and eval_env are ignored. progress_fn
       is then expected to use training_metrics.
+
   Returns:
     Tuple of (make_policy function, network params, metrics)
   """
