@@ -133,7 +133,7 @@ def save(
   orbax_checkpointer.save(ckpt_path, params, force=True, save_args=save_args)
 
   config_path = ckpt_path / config_fname
-  config_path.write_text(config.to_json())
+  config_path.write_text(config.to_json_best_effort())
 
 
 def load(
