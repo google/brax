@@ -241,6 +241,7 @@ def train(
     restore_checkpoint_path: Optional[str] = None,
     restore_params: Optional[Any] = None,
     restore_value_fn: bool = True,
+    run_evals: bool = True,
 ):
   """PPO training.
 
@@ -309,6 +310,9 @@ def train(
       from the return values of ppo.train().
     restore_value_fn: whether to restore the value function from the checkpoint
       or use a random initialization
+    run_evals: if True, use the evaluator num_eval times to collect distinct
+      eval rollouts. If False, num_eval_envs and eval_env are ignored.
+      progress_fn is then expected to use training_metrics.
 
   Returns:
     Tuple of (make_policy function, network params, metrics)
@@ -661,9 +665,13 @@ def train(
       key=eval_key,
   )
 
+  training_metrics = {}
+  training_walltime = 0
+  current_step = 0
+
   # Run initial eval
   metrics = {}
-  if process_id == 0 and num_evals > 1:
+  if process_id == 0 and num_evals > 1 and run_evals:
     metrics = evaluator.run_evaluation(
         _unpmap((
             training_state.normalizer_params,
@@ -675,9 +683,14 @@ def train(
     logging.info(metrics)
     progress_fn(0, metrics)
 
-  training_metrics = {}
-  training_walltime = 0
-  current_step = 0
+  # Run initial policy_params_fn.
+  params = _unpmap((
+      training_state.normalizer_params,
+      training_state.params.policy,
+      training_state.params.value,
+  ))
+  policy_params_fn(current_step, make_policy, params)
+
   for it in range(num_evals_after_init):
     logging.info('starting iteration %s %s', it, time.time() - xt)
 
@@ -720,10 +733,12 @@ def train(
       )
 
     if num_evals > 0:
-      metrics = evaluator.run_evaluation(
-          params,
-          training_metrics,
-      )
+      metrics = training_metrics
+      if run_evals:
+        metrics = evaluator.run_evaluation(
+            params,
+            training_metrics,
+        )
       logging.info(metrics)
       progress_fn(current_step, metrics)
 
