@@ -1,4 +1,4 @@
-# Copyright 2024 The Brax Authors.
+# Copyright 2025 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -133,7 +133,7 @@ def save(
   orbax_checkpointer.save(ckpt_path, params, force=True, save_args=save_args)
 
   config_path = ckpt_path / config_fname
-  config_path.write_text(config.to_json_best_effort())
+  config_path.write_text(config.to_json())
 
 
 def load(

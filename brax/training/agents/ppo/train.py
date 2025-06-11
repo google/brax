@@ -1,4 +1,4 @@
-# Copyright 2024 The Brax Authors.
+# Copyright 2025 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 """Proximal policy optimization training.
 
 See: https://arxiv.org/pdf/1707.06347.pdf
@@ -33,8 +34,8 @@ from brax.training.acme import specs
 from brax.training.agents.ppo import checkpoint
 from brax.training.agents.ppo import losses as ppo_losses
 from brax.training.agents.ppo import networks as ppo_networks
-from brax.training.types import Params  # pylint: disable=g-importing-member
-from brax.training.types import PRNGKey  # pylint: disable=g-importing-member
+from brax.training.types import Params
+from brax.training.types import PRNGKey
 import flax
 import jax
 import jax.numpy as jnp
@@ -116,7 +117,7 @@ def _maybe_wrap_env(
     # all devices gets the same randomization rng
     randomization_rng = jax.random.split(key_env, randomization_batch_size)
     v_randomization_fn = functools.partial(
-        randomization_fn, rng=randomization_rng  # pylint: disable=unexpected-keyword-arg
+        randomization_fn, rng=randomization_rng
     )
   if wrap_env_fn is not None:
     wrap_for_training = wrap_env_fn
@@ -156,7 +157,7 @@ def _random_translate_pixels(
     ) -> jax.Array:  # TxHxWxC
       # Randomly translates a set of pixel inputs.
       # Adapted from
-      # https://github.com/ikostrikov/jaxrl/blob/main/jaxrl/agents/drq/augmentations.py  # pylint: disable=line-too-long
+      # https://github.com/ikostrikov/jaxrl/blob/main/jaxrl/agents/drq/augmentations.py
       crop_from = jax.random.randint(key, (2,), 0, 2 * padding + 1)
       zero = jnp.zeros((1,), dtype=jnp.int32)
       crop_from = jnp.concatenate([zero, crop_from, zero])
@@ -402,7 +403,7 @@ def train(
 
   optimizer = optax.adam(learning_rate=learning_rate)
   if max_grad_norm is not None:
-    # TODO(btaba): Move gradient clipping to `training/gradients.py`.
+    # TODO: Move gradient clipping to `training/gradients.py`.
     optimizer = optax.chain(
         optax.clip_by_global_norm(max_grad_norm),
         optax.adam(learning_rate=learning_rate),
@@ -705,7 +706,7 @@ def train(
       key_envs = jax.vmap(
           lambda x, s: jax.random.split(x[0], s), in_axes=(0, None)
       )(key_envs, key_envs.shape[1])
-      # TODO(brax-team): move extra reset logic to the AutoResetWrapper.
+      # TODO: move extra reset logic to the AutoResetWrapper.
       env_state = reset_fn(key_envs) if num_resets_per_eval > 0 else env_state
 
     if process_id != 0:
