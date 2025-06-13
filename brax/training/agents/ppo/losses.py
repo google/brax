@@ -74,7 +74,6 @@ def compute_gae(
   deltas *= truncation_mask
 
   acc = jnp.zeros_like(bootstrap_value)
-  vs_minus_v_xs = []
 
   def compute_vs_minus_v_xs(carry, target_t):
     lambda_, acc = carry
