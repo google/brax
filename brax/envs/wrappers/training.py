@@ -15,7 +15,8 @@
 # pylint:disable=g-multiple-import, g-importing-member
 """Wrappers to support Brax training."""
 
-from typing import Callable, Dict, Optional, Tuple
+from contextlib import contextmanager
+from typing import Callable, Dict, Optional, Tuple, ContextManager
 
 from brax.base import System
 from brax.envs.base import Env, State, Wrapper
@@ -228,23 +229,30 @@ class DomainRandomizationVmapWrapper(Wrapper):
     super().__init__(env)
     self._sys_v, self._in_axes = randomization_fn(self.sys)
 
-  def _env_fn(self, sys: System) -> Env:
-    env = self.env
-    env.unwrapped.sys = sys
-    return env
+  @contextmanager
+  def _swap_sys(self, new_sys)-> ContextManager[None]:
+    env = self.env.unwrapped
+    old_sys = env.sys
+    env.sys = new_sys
+    try:
+      yield
+    finally:
+      env.sys = old_sys
 
   def reset(self, rng: jax.Array) -> State:
     def reset(sys, rng):
-      env = self._env_fn(sys=sys)
-      return env.reset(rng)
+      with self._swap_sys(sys):
+        out = self.env.reset(rng)
+      return out
 
     state = jax.vmap(reset, in_axes=[self._in_axes, 0])(self._sys_v, rng)
     return state
 
   def step(self, state: State, action: jax.Array) -> State:
     def step(sys, s, a):
-      env = self._env_fn(sys=sys)
-      return env.step(s, a)
+      with self._swap_sys(sys):
+        out = self.env.step(s, a)
+      return out
 
     res = jax.vmap(step, in_axes=[self._in_axes, 0, 0])(
         self._sys_v, state, action
