@@ -246,7 +246,7 @@ def train(
         policy_params,
         key,
         state_h,
-    ), metrics = jax.lax.scan(
+    ), metrics = jax.lax.scan(  # pytype: disable=wrong-arg-types  # lax-types
         minibatch_step,
         (
             training_state.optimizer_state,

@@ -381,7 +381,7 @@ def train(
         sgd_step, (training_state, training_key), transitions
     )
 
-    metrics['buffer_current_size'] = replay_buffer.size(buffer_state)
+    metrics['buffer_current_size'] = replay_buffer.size(buffer_state)  # pytype: disable=unsupported-operands  # lax-types
     return training_state, env_state, buffer_state, metrics
 
   def prefill_replay_buffer(
