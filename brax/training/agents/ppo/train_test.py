@@ -56,12 +56,23 @@ class PPOTest(parameterized.TestCase):
     self.assertEqual(fast.reset_count, 2)  # type: ignore
     self.assertEqual(fast.step_count, 2)  # type: ignore
 
-  def testTrainV2(self):
-    """Test PPO with a v2 env."""
+  @parameterized.parameters(
+      ('normal', 'scalar'),
+      ('normal', 'log'),
+      ('tanh_normal', 'log'),
+  )
+  def testTrainWithNetworkParams(self, distribution_type, noise_std_type):
+    """Test PPO runs with different network params."""
+    network_factory = functools.partial(
+        ppo_networks.make_ppo_networks,
+        distribution_type=distribution_type,
+        noise_std_type=noise_std_type,
+    )
+
     _, _, _ = ppo.train(
         envs.get_environment('inverted_pendulum', backend='spring'),
-        num_timesteps=2**15,
-        episode_length=1000,
+        num_timesteps=2**13,
+        episode_length=50,
         num_envs=64,
         learning_rate=3e-4,
         entropy_cost=1e-2,
@@ -74,6 +85,7 @@ class PPOTest(parameterized.TestCase):
         seed=2,
         reward_scaling=10,
         normalize_advantage=False,
+        network_factory=network_factory,
     )
 
   def testTrainAsymmetricActorCritic(self):

@@ -14,7 +14,7 @@
 
 """SAC networks."""
 
-from typing import Sequence, Tuple
+from typing import Literal, Sequence, Tuple
 
 from brax.training import distribution
 from brax.training import networks
@@ -64,11 +64,26 @@ def make_sac_networks(
     activation: networks.ActivationFn = linen.relu,
     policy_network_layer_norm: bool = False,
     q_network_layer_norm: bool = False,
+    distribution_type: Literal['normal', 'tanh_normal'] = 'tanh_normal',
+    noise_std_type: Literal['scalar', 'log'] = 'scalar',
+    init_noise_std: float = 1.0,
+    state_dependent_std: bool = False,
 ) -> SACNetworks:
   """Make SAC networks."""
-  parametric_action_distribution = distribution.NormalTanhDistribution(
-      event_size=action_size
-  )
+  parametric_action_distribution: distribution.ParametricDistribution
+  if distribution_type == 'normal':
+    parametric_action_distribution = distribution.NormalDistribution(
+        event_size=action_size
+    )
+  elif distribution_type == 'tanh_normal':
+    parametric_action_distribution = distribution.NormalTanhDistribution(
+        event_size=action_size
+    )
+  else:
+    raise ValueError(
+        f'Unsupported distribution type: {distribution_type}. Must be one'
+        ' of "normal" or "tanh_normal".'
+    )
   policy_network = networks.make_policy_network(
       parametric_action_distribution.param_size,
       observation_size,
@@ -76,6 +91,10 @@ def make_sac_networks(
       hidden_layer_sizes=hidden_layer_sizes,
       activation=activation,
       layer_norm=policy_network_layer_norm,
+      distribution_type=distribution_type,
+      noise_std_type=noise_std_type,
+      init_noise_std=init_noise_std,
+      state_dependent_std=state_dependent_std,
   )
   q_network = networks.make_q_network(
       observation_size,

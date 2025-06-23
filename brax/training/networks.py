@@ -16,7 +16,7 @@
 
 import dataclasses
 import functools
-from typing import Any, Callable, Mapping, Sequence, Tuple
+from typing import Any, Callable, Literal, Mapping, Sequence, Tuple
 import warnings
 
 from brax.training import types
@@ -225,6 +225,89 @@ def _get_obs_state_size(obs_size: types.ObservationSize, obs_key: str) -> int:
   return jax.tree_util.tree_flatten(obs_size)[0][-1]
 
 
+class Param(linen.Module):
+  """Scalar parameter module."""
+
+  init_value: float = 0.0
+  size: int = 1
+
+  @linen.compact
+  def __call__(self):
+    return self.param(
+        'value', init_fn=lambda keys: jnp.full((self.size,), self.init_value)
+    )
+
+
+class LogParam(linen.Module):
+  """Scalar parameter module with log scale."""
+
+  init_value: float = 1.0
+  size: int = 1
+
+  @linen.compact
+  def __call__(self):
+    log_value = self.param(
+        'log_value',
+        init_fn=lambda key: jnp.full((self.size,), jnp.log(self.init_value)),
+    )
+    return jnp.exp(log_value)
+
+
+class PolicyModuleWithStd(linen.Module):
+  """Policy module with learnable mean and standard deviation."""
+
+  param_size: int
+  hidden_layer_sizes: Sequence[int]
+  activation: ActivationFn
+  kernel_init: jax.nn.initializers.Initializer
+  layer_norm: bool
+  noise_std_type: Literal['scalar', 'log']
+  init_noise_std: float
+  state_dependent_std: bool = False
+
+  @linen.compact
+  def __call__(self, obs):
+    if self.noise_std_type not in ['scalar', 'log']:
+      raise ValueError(
+          f'Unsupported noise std type: {self.noise_std_type}. Must be one of'
+          ' "scalar" or "log".'
+      )
+
+    outputs = MLP(
+        layer_sizes=list(self.hidden_layer_sizes),
+        activation=self.activation,
+        kernel_init=self.kernel_init,
+        layer_norm=self.layer_norm,
+        activate_final=True,
+    )(obs)
+
+    mean_params = linen.Dense(
+        self.param_size, kernel_init=self.kernel_init
+    )(outputs)
+
+    if self.state_dependent_std:
+      log_std_output = linen.Dense(
+          self.param_size, kernel_init=self.kernel_init
+      )(outputs)
+      if self.noise_std_type == 'log':
+        std_params = jnp.exp(log_std_output)
+      else:
+        std_params = log_std_output
+
+    else:
+      if self.noise_std_type == 'scalar':
+        std_module = Param(
+            self.init_noise_std, size=self.param_size, name='std_param'
+        )
+      else:
+        std_module = LogParam(
+            self.init_noise_std, size=self.param_size, name='std_logparam'
+        )
+      std_params = std_module()
+
+    return mean_params, std_params
+
+
 def make_policy_network(
     param_size: int,
     obs_size: types.ObservationSize,
@@ -234,14 +317,35 @@ def make_policy_network(
     kernel_init: Initializer = jax.nn.initializers.lecun_uniform(),
     layer_norm: bool = False,
     obs_key: str = 'state',
+    distribution_type: Literal['normal', 'tanh_normal'] = 'tanh_normal',
+    noise_std_type: Literal['scalar', 'log'] = 'scalar',
+    init_noise_std: float = 1.0,
+    state_dependent_std: bool = False,
 ) -> FeedForwardNetwork:
   """Creates a policy network."""
-  policy_module = MLP(
-      layer_sizes=list(hidden_layer_sizes) + [param_size],
-      activation=activation,
-      kernel_init=kernel_init,
-      layer_norm=layer_norm,
-  )
+  if distribution_type == 'tanh_normal':
+    policy_module = MLP(
+        layer_sizes=list(hidden_layer_sizes) + [param_size],
+        activation=activation,
+        kernel_init=kernel_init,
+        layer_norm=layer_norm,
+    )
+  elif distribution_type == 'normal':
+    policy_module = PolicyModuleWithStd(
+        param_size=param_size,
+        hidden_layer_sizes=hidden_layer_sizes,
+        activation=activation,
+        kernel_init=kernel_init,
+        layer_norm=layer_norm,
+        noise_std_type=noise_std_type,
+        init_noise_std=init_noise_std,
+        state_dependent_std=state_dependent_std,
+    )
+  else:
+    raise ValueError(
+        f'Unsupported distribution type: {distribution_type}. Must be one'
+        ' of "normal" or "tanh_normal".'
+    )
 
   def apply(processor_params, policy_params, obs):
     if isinstance(obs, Mapping):
@@ -254,9 +358,12 @@ def make_policy_network(
 
   obs_size = _get_obs_state_size(obs_size, obs_key)
   dummy_obs = jnp.zeros((1, obs_size))
-  return FeedForwardNetwork(
-      init=lambda key: policy_module.init(key, dummy_obs), apply=apply
-  )
+
+  def init(key):
+    policy_module_params = policy_module.init(key, dummy_obs)
+    return policy_module_params
+
+  return FeedForwardNetwork(init=init, apply=apply)
 
 
 def make_value_network(

@@ -92,7 +92,7 @@ class ParametricDistribution(abc.ABC):
     return entropy
 
 
-class NormalDistribution:
+class _NormalDistribution:
   """Normal distribution."""
 
   def __init__(self, loc, scale):
@@ -159,4 +159,37 @@ class NormalTanhDistribution(ParametricDistribution):
   def create_dist(self, parameters):
     loc, scale = jnp.split(parameters, 2, axis=-1)
     scale = (jax.nn.softplus(scale) + self._min_std) * self._var_scale
-    return NormalDistribution(loc=loc, scale=scale)
+    return _NormalDistribution(loc=loc, scale=scale)
+
+
+class IdentityPostprocessor:
+  """Identity postprocessor."""
+
+  def forward(self, x):
+    return x
+
+  def inverse(self, x):
+    return x
+
+  def forward_log_det_jacobian(self, x):
+    return jnp.zeros_like(x)
+
+
+class NormalDistribution(ParametricDistribution):
+  """Normal distribution."""
+
+  def __init__(self, event_size: int) -> None:
+    """Initialize the distribution.
+
+    Args:
+      event_size: the size of events (i.e. actions).
+    """
+    super().__init__(
+        param_size=event_size,
+        postprocessor=IdentityPostprocessor(),
+        event_ndims=1,
+        reparametrizable=True,
+    )
+
+  def create_dist(self, parameters):
+    return _NormalDistribution(*parameters)
