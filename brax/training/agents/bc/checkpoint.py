@@ -67,7 +67,10 @@ def load_config(
 ) -> config_dict.ConfigDict:
   """Loads BC config from checkpoint."""
   path = epath.Path(path)
-  config_path = path / _CONFIG_FNAME
+  # Load the first file that ends with "_config.json".
+  # This allows loading a BC inference function from, e.g., a PPO checkpoint.
+  config_fname = next(path.glob('*_config.json'))
+  config_path = path / config_fname
   return checkpoint.load_config(config_path)
 
 
