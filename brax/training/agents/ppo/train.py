@@ -68,7 +68,7 @@ def _strip_weak_type(tree):
   # avoid extra jit recompilations we strip all weak types from user input
   def f(leaf):
     leaf = jnp.asarray(leaf)
-    return leaf.astype(leaf.dtype)
+    return jnp.astype(leaf, leaf.dtype)
 
   return jax.tree_util.tree_map(f, tree)
 
