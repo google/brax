@@ -393,6 +393,25 @@ def train(
   # Discard the batch axes over devices and envs.
   obs_shape = jax.tree_util.tree_map(lambda x: x.shape[2:], env_state.obs)
 
+  # Inject env_id into the state info. This allows the viewer to distinguish
+  # between different parallel environments.
+  if num_envs > 1 and wrap_env:
+      # Create a range of IDs for all environments.
+      env_ids = jnp.arange(num_envs)
+      # Reshape IDs to match the sharded state shape: (devices, envs_per_device).
+      sharded_env_ids = jnp.reshape(env_ids, (local_devices_to_use, -1))
+      
+      # Create a function to add IDs to a state.
+      def add_env_id(state, id):
+          info = state.info.copy()
+          info['env_id'] = id
+          return state.replace(info=info)
+
+      # vmap over the environments on a single device, then pmap over all devices.
+      # This is a standard and robust JAX pattern for this operation.
+      env_state = jax.pmap(jax.vmap(add_env_id))(env_state, sharded_env_ids)
+
+
   normalize = lambda x, y: x
   if normalize_observations:
     normalize = running_statistics.normalize
