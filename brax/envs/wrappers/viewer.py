@@ -1,5 +1,6 @@
 import jax
 import jax.numpy as jnp
+from jax.experimental import io_callback
 from brax.envs.base import Wrapper, State, Env
 from typing import Optional
 
@@ -31,7 +32,8 @@ class ViewerWrapper(Wrapper):
         state = self.env.reset(rng)
 
         if self.viewer is not None:
-            jax.debug.callback(self.viewer.send_frame, state)
+            # The check for rendering enabled is now inside the viewer's send_frame
+            io_callback(self.viewer.send_frame, None, state)
 
         return state
 
@@ -48,17 +50,7 @@ class ViewerWrapper(Wrapper):
         next_state = self.env.step(state, action)
 
         if self.viewer is not None:
-            def _send_frame(s):
-                jax.debug.callback(self.viewer.send_frame, s)
-
-            def _do_nothing(s):
-                pass
-
-            jax.lax.cond(
-                self.viewer.rendering_enabled,
-                _send_frame,
-                _do_nothing,
-                operand=state  # Matches behavior in acting.py
-            )
+            # The check for rendering enabled is now inside the viewer's send_frame
+            io_callback(self.viewer.send_frame, None, next_state)
 
         return next_state
