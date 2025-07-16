@@ -23,6 +23,7 @@ from brax.training.types import Policy
 from brax.training.types import PolicyParams
 from brax.training.types import PRNGKey
 from brax.training.types import Transition
+from jax.experimental import io_callback
 import jax
 import numpy as np
 
@@ -42,7 +43,6 @@ def actor_step(
   actions, policy_extras = policy(env_state.obs, key)
   nstate = env.step(env_state, actions)
   if render_fn is not None:
-    from jax.experimental import io_callback
     io_callback(render_fn, None, nstate)
   state_extras = {x: nstate.info[x] for x in extra_fields}
   return nstate, Transition(  # pytype: disable=wrong-arg-types  # jax-ndarray
@@ -77,8 +77,6 @@ def generate_unroll(
     )
     return (nstate, next_key), transition
 
-  # Pass should_render and render_fn as static arguments to scan
-  # This ensures they are treated as constants and don't interfere with JIT
   (final_state, _), data = jax.lax.scan(
       f, (env_state, key), (), length=unroll_length
   )
