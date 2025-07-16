@@ -25,11 +25,21 @@ from brax.training.types import PRNGKey
 from brax.training.types import Transition
 from jax.experimental import io_callback
 import jax
+import jax.numpy as jnp
 import numpy as np
 
 State = envs.State
 Env = envs.Env
 
+
+# Define render callback outside of JIT-compiled functions
+def _do_render(state, render_fn):
+  if render_fn is not None:
+    io_callback(render_fn, None, state)
+  return None
+
+def _do_nothing(state):
+  return None
 
 def actor_step(
     env: Env,
@@ -37,13 +47,10 @@ def actor_step(
     policy: Policy,
     key: PRNGKey,
     extra_fields: Sequence[str] = (),
-    render_fn: Optional[Callable[[State], None]] = None,
 ) -> Tuple[State, Transition]:
   """Collect data."""
   actions, policy_extras = policy(env_state.obs, key)
   nstate = env.step(env_state, actions)
-  if render_fn is not None:
-    io_callback(render_fn, None, nstate)
   state_extras = {x: nstate.info[x] for x in extra_fields}
   return nstate, Transition(  # pytype: disable=wrong-arg-types  # jax-ndarray
       observation=env_state.obs,
@@ -63,6 +70,7 @@ def generate_unroll(
     unroll_length: int,
     extra_fields: Sequence[str] = (),
     render_fn: Optional[Callable[[State], None]] = None,
+    should_render: jax.Array = jnp.array(True, dtype=jnp.bool_),
 ) -> Tuple[State, Transition]:
   """Collect trajectories of given unroll_length."""
 
@@ -72,9 +80,18 @@ def generate_unroll(
     current_key, next_key = jax.random.split(current_key)
     nstate, transition = actor_step(
         env, state, policy, current_key, 
-        extra_fields=extra_fields,
-        render_fn=render_fn
+        extra_fields=extra_fields
     )
+    
+    # Use jax.lax.cond to avoid io_callback when should_render=False
+    # Only render if should_render is True (render_fn is checked outside JIT)
+    jax.lax.cond(
+        should_render,
+        lambda s: _do_render(s, render_fn),
+        lambda s: _do_nothing(s),
+        operand=nstate
+    )
+    
     return (nstate, next_key), transition
 
   (final_state, _), data = jax.lax.scan(
@@ -122,6 +139,7 @@ class Evaluator:
           eval_policy_fn(policy_params),
           key,
           unroll_length=episode_length // action_repeat,
+          should_render=jnp.array(False, dtype=jnp.bool_),  # No rendering during eval
       )[0]
 
     self._generate_eval_unroll = jax.jit(generate_eval_unroll)

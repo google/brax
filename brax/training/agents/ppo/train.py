@@ -238,6 +238,7 @@ def train(
     policy_params_fn: Callable[..., None] = lambda *args: None,
     # rendering
     render_fn: Optional[Callable[[envs.State], None]] = None,
+    should_render: jax.Array = jnp.array(True, dtype=jnp.bool_),
     # checkpointing
     save_checkpoint_path: Optional[str] = None,
     restore_checkpoint_path: Optional[str] = None,
@@ -522,6 +523,7 @@ def train(
           unroll_length,
           extra_fields=('truncation', 'episode_metrics', 'episode_done'),
           render_fn=render_fn,
+          should_render=should_render,
       )
       return (next_state, next_key), data
 
