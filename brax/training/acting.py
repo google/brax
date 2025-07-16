@@ -15,7 +15,7 @@
 """Brax training acting functions."""
 
 import time
-from typing import Callable, Sequence, Tuple
+from typing import Callable, Optional, Sequence, Tuple
 
 from brax import envs
 from brax.training.types import Metrics
@@ -36,10 +36,14 @@ def actor_step(
     policy: Policy,
     key: PRNGKey,
     extra_fields: Sequence[str] = (),
+    render_fn: Optional[Callable[[State], None]] = None,
 ) -> Tuple[State, Transition]:
   """Collect data."""
   actions, policy_extras = policy(env_state.obs, key)
   nstate = env.step(env_state, actions)
+  if render_fn is not None:
+    from jax.experimental import io_callback
+    io_callback(render_fn, None, nstate)
   state_extras = {x: nstate.info[x] for x in extra_fields}
   return nstate, Transition(  # pytype: disable=wrong-arg-types  # jax-ndarray
       observation=env_state.obs,
@@ -58,6 +62,7 @@ def generate_unroll(
     key: PRNGKey,
     unroll_length: int,
     extra_fields: Sequence[str] = (),
+    render_fn: Optional[Callable[[State], None]] = None,
 ) -> Tuple[State, Transition]:
   """Collect trajectories of given unroll_length."""
 
@@ -66,10 +71,14 @@ def generate_unroll(
     state, current_key = carry
     current_key, next_key = jax.random.split(current_key)
     nstate, transition = actor_step(
-        env, state, policy, current_key, extra_fields=extra_fields
+        env, state, policy, current_key, 
+        extra_fields=extra_fields,
+        render_fn=render_fn
     )
     return (nstate, next_key), transition
 
+  # Pass should_render and render_fn as static arguments to scan
+  # This ensures they are treated as constants and don't interfere with JIT
   (final_state, _), data = jax.lax.scan(
       f, (env_state, key), (), length=unroll_length
   )

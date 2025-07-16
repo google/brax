@@ -236,6 +236,8 @@ def train(
     # callbacks
     progress_fn: Callable[[int, Metrics], None] = lambda *args: None,
     policy_params_fn: Callable[..., None] = lambda *args: None,
+    # rendering
+    render_fn: Optional[Callable[[envs.State], None]] = None,
     # checkpointing
     save_checkpoint_path: Optional[str] = None,
     restore_checkpoint_path: Optional[str] = None,
@@ -523,6 +525,7 @@ def train(
           current_key,
           unroll_length,
           extra_fields=('truncation', 'episode_metrics', 'episode_done'),
+          render_fn=render_fn,
       )
       return (next_state, next_key), data
 
