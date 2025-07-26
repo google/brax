@@ -320,6 +320,11 @@ def train(
   Returns:
     Tuple of (make_policy function, network params, metrics)
   """
+  # If the environment is wrapped with ViewerWrapper, use its rendering functions.
+  if hasattr(environment, 'render_fn'):
+      render_fn = environment.render_fn
+      should_render = environment.should_render
+
   assert batch_size * num_minibatches % num_envs == 0
   _validate_madrona_args(
       madrona_backend, num_envs, num_eval_envs, action_repeat, eval_env
