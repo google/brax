@@ -1,16 +1,29 @@
 from brax.envs import Env, State, Wrapper
+from typing import Protocol
 import jax
 import jax.numpy as jnp
+
+
+class IsViewer(Protocol):
+  """A protocol for viewers that can be used with ViewerWrapper."""
+
+  @property
+  def rendering_enabled(self) -> bool:
+    ...
+
+  def send_frame(self, state: State):
+    ...
+
 
 class ViewerWrapper(Wrapper):
     """A wrapper that provides rendering functionality for a Brax viewer."""
 
-    def __init__(self, env: Env, viewer):
+    def __init__(self, env: Env, viewer: IsViewer):
         """Initializes the ViewerWrapper.
 
         Args:
             env: The environment to wrap.
-            viewer: An instance of a viewer (e.g., WebViewerBatched) that has a
+            viewer: An instance of a viewer (e.g., WebViewer or WebViewerParallel) that has a
                 `send_frame` method and a `rendering_enabled` property.
         """
         super().__init__(env)
