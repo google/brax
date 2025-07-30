@@ -717,8 +717,8 @@ def train(
     for _ in range(max(num_resets_per_eval, 1)):
       # check for rendering dynamically
       should_render_py = False
-      if hasattr(environment, 'viewer'):
-          should_render_py = environment.viewer.rendering_enabled
+      if hasattr(environment, 'sender'):
+          should_render_py = environment.sender.rendering_enabled
 
       should_render_jax = jnp.array(should_render_py, dtype=jnp.bool_)
       should_render_replicated = jax.device_put_replicated(
