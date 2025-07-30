@@ -42,6 +42,7 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
+
 InferenceParams = Tuple[running_statistics.NestedMeanStd, Params]
 Metrics = types.Metrics
 
