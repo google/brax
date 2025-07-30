@@ -564,11 +564,11 @@ def train(
   def training_epoch(
       training_state: TrainingState, state: envs.State, key: PRNGKey, should_render: jax.Array,
   ) -> Tuple[TrainingState, envs.State, Metrics]:
-    training_step = functools.partial(
+    training_step_partial = functools.partial(
         training_step, should_render=should_render
     )
     (training_state, state, _), loss_metrics = jax.lax.scan(
-        training_step,
+        training_step_partial,
         (training_state, state, key),
         (),
         length=num_training_steps_per_epoch,
