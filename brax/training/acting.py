@@ -167,4 +167,3 @@ class Evaluator:
     }
 
     return metrics  # pytype: disable=bad-return-type  # jax-ndarray
-  
