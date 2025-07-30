@@ -31,16 +31,6 @@ import numpy as np
 State = envs.State
 Env = envs.Env
 
-
-# Define render callback outside of JIT-compiled functions
-def _do_render(state, render_fn):
-  if render_fn is not None:
-    io_callback(render_fn, None, state)
-  return None
-
-def _do_nothing(state):
-  return None
-
 def actor_step(
     env: Env,
     env_state: State,
