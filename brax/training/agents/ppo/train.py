@@ -42,7 +42,6 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
-
 InferenceParams = Tuple[running_statistics.NestedMeanStd, Params]
 Metrics = types.Metrics
 
@@ -321,9 +320,9 @@ def train(
     Tuple of (make_policy function, network params, metrics)
   """
   # If the environment is wrapped with ViewerWrapper, use its rendering functions.
+  render_fn = None
   if hasattr(environment, 'render_fn'):
       render_fn = environment.render_fn
-      should_render = environment.should_render
 
   assert batch_size * num_minibatches % num_envs == 0
   _validate_madrona_args(
@@ -400,21 +399,6 @@ def train(
   env_state = reset_fn(key_envs)
   # Discard the batch axes over devices and envs.
   obs_shape = jax.tree_util.tree_map(lambda x: x.shape[2:], env_state.obs)
-
-  if num_envs > 1 and wrap_env:
-      # Create a range of IDs for all environments.
-      env_ids = jnp.arange(num_envs)
-      # Reshape IDs to match the sharded state shape: (devices, envs_per_device).
-      sharded_env_ids = jnp.reshape(env_ids, (local_devices_to_use, -1))
-      
-      # Create a function to add IDs to a state.
-      def add_env_id(state, id):
-          info = state.info.copy()
-          info['env_id'] = id
-          return state.replace(info=info)
-
-      env_state = jax.pmap(jax.vmap(add_env_id))(env_state, sharded_env_ids)
-
 
   normalize = lambda x, y: x
   if normalize_observations:
@@ -506,7 +490,9 @@ def train(
     return (optimizer_state, params, key), metrics
 
   def training_step(
-      carry: Tuple[TrainingState, envs.State, PRNGKey], unused_t
+      carry: Tuple[TrainingState, envs.State, PRNGKey],
+      unused_t,
+      should_render: jax.Array,
   ) -> Tuple[Tuple[TrainingState, envs.State, PRNGKey], Metrics]:
     training_state, state, key = carry
     key_sgd, key_generate_unroll, new_key = jax.random.split(key, 3)
@@ -577,10 +563,16 @@ def train(
     return (new_training_state, state, new_key), metrics
 
   def training_epoch(
-      training_state: TrainingState, state: envs.State, key: PRNGKey
+      training_state: TrainingState,
+      state: envs.State,
+      key: PRNGKey,
+      should_render: jax.Array,
   ) -> Tuple[TrainingState, envs.State, Metrics]:
+    partial_training_step = functools.partial(
+        training_step, should_render=should_render
+    )
     (training_state, state, _), loss_metrics = jax.lax.scan(
-        training_step,
+        partial_training_step,
         (training_state, state, key),
         (),
         length=num_training_steps_per_epoch,
@@ -592,12 +584,15 @@ def train(
 
   # Note that this is NOT a pure jittable method.
   def training_epoch_with_timing(
-      training_state: TrainingState, env_state: envs.State, key: PRNGKey
+      training_state: TrainingState,
+      env_state: envs.State,
+      key: PRNGKey,
+      should_render: jax.Array,
   ) -> Tuple[TrainingState, envs.State, Metrics]:
     nonlocal training_walltime
     t = time.time()
     training_state, env_state = _strip_weak_type((training_state, env_state))
-    result = training_epoch(training_state, env_state, key)
+    result = training_epoch(training_state, env_state, key, should_render)
     training_state, env_state, metrics = _strip_weak_type(result)
 
     metrics = jax.tree_util.tree_map(jnp.mean, metrics)
@@ -720,11 +715,22 @@ def train(
     logging.info('starting iteration %s %s', it, time.time() - xt)
 
     for _ in range(max(num_resets_per_eval, 1)):
-      # optimization
+      # check for rendering dynamically
+      should_render_py = False
+      if hasattr(environment, 'viewer'):
+          should_render_py = environment.viewer.rendering_enabled
+
+      should_render_jax = jnp.array(should_render_py, dtype=jnp.bool_)
+      should_render_replicated = jax.device_put_replicated(
+          should_render_jax, jax.local_devices()[:local_devices_to_use]
+      )
+      
       epoch_key, local_key = jax.random.split(local_key)
       epoch_keys = jax.random.split(epoch_key, local_devices_to_use)
       (training_state, env_state, training_metrics) = (
-          training_epoch_with_timing(training_state, env_state, epoch_keys)
+          training_epoch_with_timing(
+              training_state, env_state, epoch_keys, should_render_replicated
+          )
       )
       current_step = int(_unpmap(training_state.env_steps))
 

@@ -52,7 +52,7 @@ def actor_step(
   actions, policy_extras = policy(env_state.obs, key)
   nstate = env.step(env_state, actions)
   state_extras = {x: nstate.info[x] for x in extra_fields}
-  return nstate, Transition(  # pytype: disable=wrong-arg-types  # jax-ndarray
+  return nstate, Transition(
       observation=env_state.obs,
       action=actions,
       reward=nstate.reward,
@@ -70,7 +70,7 @@ def generate_unroll(
     unroll_length: int,
     extra_fields: Sequence[str] = (),
     render_fn: Optional[Callable[[State], None]] = None,
-    should_render: jax.Array = jnp.array(True, dtype=jnp.bool_),
+    should_render: jax.Array = jnp.array(False, dtype=jnp.bool_),
 ) -> Tuple[State, Transition]:
   """Collect trajectories of given unroll_length."""
 
@@ -79,19 +79,15 @@ def generate_unroll(
     state, current_key = carry
     current_key, next_key = jax.random.split(current_key)
     nstate, transition = actor_step(
-        env, state, policy, current_key, 
-        extra_fields=extra_fields
+        env, state, policy, current_key, extra_fields=extra_fields
     )
-    
-    # Use jax.lax.cond to avoid io_callback when should_render=False
-    # Only render if should_render is True (render_fn is checked outside JIT)
-    jax.lax.cond(
-        should_render,
-        lambda s: _do_render(s, render_fn),
-        lambda s: _do_nothing(s),
-        operand=nstate
-    )
-    
+
+    def render(state: State):
+      if render_fn is None:
+        return
+      io_callback(render_fn, None, state)
+
+    jax.lax.cond(should_render, render, lambda s: None, nstate)
     return (nstate, next_key), transition
 
   (final_state, _), data = jax.lax.scan(

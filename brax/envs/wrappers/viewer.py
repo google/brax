@@ -11,7 +11,7 @@ class IsViewer(Protocol):
   def rendering_enabled(self) -> bool:
     ...
 
-  def send_frame(self, state: State):
+  def send_frame(self, state: State, env_id: int = 0):
     ...
 
 
@@ -38,17 +38,18 @@ class ViewerWrapper(Wrapper):
         """The function to be called for rendering a state.
 
         This function is designed to be used with `jax.experimental.io_callback`.
-        It sends a single, unbatched state to the viewer.
+        When called within the callback, the batched state is a concrete value.
         """
         if not self.viewer.rendering_enabled:
             return
 
-        # If the state is batched, iterate and send each frame.
         if state.pipeline_state.q.ndim > 1:
+            # The state is batched, so we iterate through it in plain Python.
             num_envs = state.pipeline_state.q.shape[0]
             for i in range(num_envs):
+                # Extract the state for a single environment.
                 single_state = jax.tree_util.tree_map(lambda x: x[i], state)
-                self.viewer.send_frame(single_state)
+                self.viewer.send_frame(single_state, env_id=i)
         else:
-            # If the state is not batched, send it directly.
-            self.viewer.send_frame(state)
+            # The state is not batched, send it directly.
+            self.viewer.send_frame(state, env_id=0)
