@@ -568,11 +568,11 @@ def train(
       key: PRNGKey,
       should_render: jax.Array,
   ) -> Tuple[TrainingState, envs.State, Metrics]:
-    partial_training_step = functools.partial(
+    training_step = functools.partial(
         training_step, should_render=should_render
     )
     (training_state, state, _), loss_metrics = jax.lax.scan(
-        partial_training_step,
+        training_step,
         (training_state, state, key),
         (),
         length=num_training_steps_per_epoch,
@@ -715,6 +715,8 @@ def train(
     logging.info('starting iteration %s %s', it, time.time() - xt)
 
     for _ in range(max(num_resets_per_eval, 1)):
+      # optimization
+
       # check for rendering dynamically
       should_render_py = False
       if hasattr(environment, 'sender'):
