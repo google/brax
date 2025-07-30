@@ -490,10 +490,7 @@ def train(
     )
     return (optimizer_state, params, key), metrics
 
-  def training_step(
-      carry: Tuple[TrainingState, envs.State, PRNGKey],
-      unused_t,
-      should_render: jax.Array,
+  def training_step(carry: Tuple[TrainingState, envs.State, PRNGKey], unused_t, should_render: jax.Array,
   ) -> Tuple[Tuple[TrainingState, envs.State, PRNGKey], Metrics]:
     training_state, state, key = carry
     key_sgd, key_generate_unroll, new_key = jax.random.split(key, 3)
@@ -564,10 +561,7 @@ def train(
     return (new_training_state, state, new_key), metrics
 
   def training_epoch(
-      training_state: TrainingState,
-      state: envs.State,
-      key: PRNGKey,
-      should_render: jax.Array,
+      training_state: TrainingState, state: envs.State, key: PRNGKey, should_render: jax.Array,
   ) -> Tuple[TrainingState, envs.State, Metrics]:
     training_step = functools.partial(
         training_step, should_render=should_render
@@ -584,11 +578,7 @@ def train(
   training_epoch = jax.pmap(training_epoch, axis_name=_PMAP_AXIS_NAME)
 
   # Note that this is NOT a pure jittable method.
-  def training_epoch_with_timing(
-      training_state: TrainingState,
-      env_state: envs.State,
-      key: PRNGKey,
-      should_render: jax.Array,
+  def training_epoch_with_timing(training_state: TrainingState, env_state: envs.State, key: PRNGKey, should_render: jax.Array,
   ) -> Tuple[TrainingState, envs.State, Metrics]:
     nonlocal training_walltime
     t = time.time()
@@ -731,9 +721,7 @@ def train(
       epoch_key, local_key = jax.random.split(local_key)
       epoch_keys = jax.random.split(epoch_key, local_devices_to_use)
       (training_state, env_state, training_metrics) = (
-          training_epoch_with_timing(
-              training_state, env_state, epoch_keys, should_render_replicated
-          )
+          training_epoch_with_timing(training_state, env_state, epoch_keys, should_render_replicated)
       )
       current_step = int(_unpmap(training_state.env_steps))
 
