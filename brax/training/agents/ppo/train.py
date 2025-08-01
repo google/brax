@@ -225,6 +225,7 @@ def train(
         ppo_networks.PPONetworks
     ] = ppo_networks.make_ppo_networks,
     seed: int = 0,
+    use_pmap_on_reset: bool = True,
     # eval
     num_evals: int = 1,
     eval_env: Optional[envs.Env] = None,
@@ -313,6 +314,8 @@ def train(
     run_evals: if True, use the evaluator num_eval times to collect distinct
       eval rollouts. If False, num_eval_envs and eval_env are ignored.
       progress_fn is then expected to use training_metrics.
+    use_pmap_on_reset: default to True. if True, use pmap instead of vmap for
+      env.reset across devices.
 
   Returns:
     Tuple of (make_policy function, network params, metrics)
@@ -381,10 +384,12 @@ def train(
       wrap_env_fn,
       randomization_fn,
   )
-  if local_devices_to_use > 1:
+
+  if local_devices_to_use > 1 or use_pmap_on_reset:
     reset_fn = jax.pmap(env.reset, axis_name=_PMAP_AXIS_NAME)
   else:
     reset_fn = jax.jit(jax.vmap(env.reset))
+
   key_envs = jax.random.split(key_env, num_envs // process_count)
   key_envs = jnp.reshape(
       key_envs, (local_devices_to_use, -1) + key_envs.shape[1:]

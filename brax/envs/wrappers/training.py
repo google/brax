@@ -144,6 +144,8 @@ class AutoResetWrapper(Wrapper):
 
     def where_done(x, y):
       done = state.done
+      if done.shape and done.shape[0] != x.shape[0]:
+        return y
       if done.shape:
         done = jp.reshape(done, [x.shape[0]] + [1] * (len(x.shape) - 1))  # type: ignore
       return jp.where(done, x, y)
