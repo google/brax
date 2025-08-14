@@ -106,7 +106,7 @@ class PipelineTest(absltest.TestCase):
     state = pipeline.init(sys, init_q, init_qd)
     # the qd calculation for pbd/spring doesn't match generalized, so we get xd
     # from generalized and plug it back into pbd
-    # TODO: remove this xd override once kinematics.forward is fixed
+    # TODO(brax-team): remove this xd override once kinematics.forward is fixed
     state_g = g_pipeline.init(sys, init_q, init_qd)
     off = state_g.x.pos - state_g.root_com
     xd = Transform.create(pos=off).vmap().do(state_g.cd)

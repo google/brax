@@ -408,7 +408,7 @@ def train(
 
   optimizer = optax.adam(learning_rate=learning_rate)
   if max_grad_norm is not None:
-    # TODO: Move gradient clipping to `training/gradients.py`.
+    # TODO(btaba): Move gradient clipping to `training/gradients.py`.
     optimizer = optax.chain(
         optax.clip_by_global_norm(max_grad_norm),
         optax.adam(learning_rate=learning_rate),
@@ -711,7 +711,7 @@ def train(
       key_envs = jax.vmap(
           lambda x, s: jax.random.split(x[0], s), in_axes=(0, None)
       )(key_envs, key_envs.shape[1])
-      # TODO: move extra reset logic to the AutoResetWrapper.
+      # TODO(brax-team): move extra reset logic to the AutoResetWrapper.
       env_state = reset_fn(key_envs) if num_resets_per_eval > 0 else env_state
 
     if process_id != 0:

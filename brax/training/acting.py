@@ -76,7 +76,7 @@ def generate_unroll(
   return final_state, data
 
 
-# TODO: Consider moving this to its own file.
+# TODO(eorsini): Consider moving this to its own file.
 class Evaluator:
   """Class to run evaluations."""
 

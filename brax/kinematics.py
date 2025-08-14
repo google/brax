@@ -70,7 +70,7 @@ def forward(
       for i in range(1, num_dofs):
         j_i, jd_i = j_stack.take(i, axis=1), jd_stack.take(i, axis=1)
         j = j.vmap().do(j_i)
-        # TODO: fix qd->jd calculation for stacked/offset joints
+        # TODO(brax-team): fix qd->jd calculation for stacked/offset joints
         jd = jd + Motion(
             ang=jax.vmap(math.rotate)(jd_i.ang, j_i.rot),
             vel=jax.vmap(math.rotate)(
@@ -345,7 +345,7 @@ def inverse(
     axis, angles, _ = axis_angle_ang(j, joint_frame, parity)
     angle_vels = jax.tree.map(lambda x: jp.dot(x, jd.ang), axis)
     _, slides, slide_vels = axis_slide_vel(j, jd, motion)
-    # TODO: investigate removing this `where`
+    # TODO(cdfreeman): investigate removing this `where`
     q = jp.where(
         motion.ang.any(axis=1), jp.array(angles[:x]), jp.array(slides[:x])
     )

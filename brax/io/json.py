@@ -116,7 +116,7 @@ def dumps(sys: System, states: List[State]) -> Text:
 
   d = _to_dict(sys)
 
-  # TODO: move the manipulations below to javascript
+  # TODO(brax-team): move the manipulations below to javascript
 
   # fill in empty link names
   link_names = [n or f'link {i}' for i, n in enumerate(sys.link_names)]

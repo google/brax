@@ -355,7 +355,7 @@ def train(
       init_key, (local_devices_to_use, num_envs // process_count)
   )
   env_state = reset_fn(init_key)
-  # TODO: this may be better off as an env wrapper
+  # TODO(brax-team): this may be better off as an env wrapper
   env_state = scramble_times(env_state, scramble_key)
   env_state = step_fn(
       env_state,

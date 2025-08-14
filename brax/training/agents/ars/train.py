@@ -49,7 +49,7 @@ class TrainingState:
   num_env_steps: types.UInt64
 
 
-# TODO: Pass the network as argument.
+# TODO(eorsini): Pass the network as argument.
 def train(
     environment: envs.Env,
     wrap_env: bool = True,

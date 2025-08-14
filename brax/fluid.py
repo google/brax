@@ -61,12 +61,12 @@ def force(
   """Returns force due to motion through a fluid."""
   # get the velocity at the com position/orientation
   x_i = x.vmap().do(sys.link.inertia.transform)
-  # TODO: remove root_com when xd is fixed for stacked joints
+  # TODO(brax-team): remove root_com when xd is fixed for stacked joints
   offset = x_i.pos - x.pos if root_com is None else x_i.pos - root_com
   xd_i = x_i.replace(pos=offset).vmap().do(xd)
 
-  # TODO: add ellipsoid fluid model from mujoco
-  # TODO: consider adding wind from mj.opt.wind
+  # TODO(brax-team): add ellipsoid fluid model from mujoco
+  # TODO(brax-team): consider adding wind from mj.opt.wind
   diag_inertia = jax.vmap(jp.diag)(inertia)
   diag_inertia_v = jp.repeat(diag_inertia, 3, axis=-2).reshape((-1, 3, 3))
   diag_inertia_v *= jp.ones((3, 3)) - 2 * jp.eye(3)
