@@ -24,7 +24,6 @@ from absl import app
 from absl import flags
 from absl import logging
 from brax import envs
-from brax.io import html
 from brax.io import metrics
 from brax.io import model
 from brax.training.agents.apg import train as apg
@@ -37,6 +36,15 @@ from brax.training.agents.sac import train as sac
 from etils import epath
 import jax
 import mediapy as media
+try:
+  import mujoco_playground as mjp
+except ImportError as e:
+  print(
+      'MuJoCo Playground is not available. Install it via `pip install'
+      ' playground`.\n'
+      + str(e)
+  )
+  mjp = None
 
 FLAGS = flags.FLAGS
 _LEARNER = flags.DEFINE_enum(
@@ -178,9 +186,22 @@ _REWARD_SHIFT = flags.DEFINE_float(
 _POLICY_UPDATES = flags.DEFINE_integer(
     'policy_updates', None, 'Number of policy updates in APG.'
 )
-# Wrap.
-_CUSTOM_WRAP_ENV = flags.DEFINE_bool(
-    'custom_wrap_env', False, 'Wrap the environment with a custom wrapper.'
+# MuJoCo Playground.
+_PLAYGROUND_DM_CONTROL_SUITE = flags.DEFINE_bool(
+    'playground_dm_control_suite', False, 'Use the playground dm control suite.'
+)
+_PLAYGROUND_LOCOMOTION_SUITE = flags.DEFINE_bool(
+    'playground_locomotion_suite', False, 'Use the playground locomotion suite.'
+)
+_PLAYGROUND_MANIPULATION_SUITE = flags.DEFINE_bool(
+    'playground_manipulation_suite',
+    False,
+    'Use the playground manipulation suite.',
+)
+_PLAYGROUND_CONFIG_OVERRIDES = flags.DEFINE_string(
+    'playground_config_overrides',
+    None,
+    'Overrides for the playground env config.',
 )
 
 
@@ -188,8 +209,28 @@ def get_env_factory(env_name: str):
   """Returns a function that creates an environment."""
   wrap_fn = None
   randomizer_fn = None
-  if _CUSTOM_WRAP_ENV.value:
-    pass
+  if mjp:  # MuJoCo Playground environments.
+    overrides = {}
+    randomizer_fn = None
+    if _PLAYGROUND_CONFIG_OVERRIDES.value is not None:
+      overrides = json.loads(_PLAYGROUND_CONFIG_OVERRIDES.value)
+    if _PLAYGROUND_DM_CONTROL_SUITE.value:
+      get_environment = lambda *args, **kwargs: mjp.dm_control_suite.load(  # pytype: disable=attribute-error
+          *args, **kwargs, config_overrides=overrides
+      )
+    elif _PLAYGROUND_LOCOMOTION_SUITE.value:
+      get_environment = lambda *args, **kwargs: mjp.locomotion.load(  # pytype: disable=attribute-error
+          *args, **kwargs, config_overrides=overrides
+      )
+      randomizer_fn = mjp.locomotion.get_domain_randomizer(env_name)
+    elif _PLAYGROUND_MANIPULATION_SUITE.value:
+      get_environment = lambda *args, **kwargs: mjp.manipulation.load(  # pytype: disable=attribute-error
+          *args, **kwargs, config_overrides=overrides
+      )
+      randomizer_fn = mjp.manipulation.get_domain_randomizer(env_name)
+    else:
+      raise ValueError('No playground suite selected.')
+    wrap_fn = mjp.wrapper.wrap_for_brax_training
   else:
     get_environment = functools.partial(
         envs.get_environment, backend=_BACKEND.value
