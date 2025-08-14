@@ -14,7 +14,7 @@
 
 """Checkpointing for BC."""
 
-from typing import Any, Union
+from typing import Any, Optional, Union
 
 from brax.training import checkpoint
 from brax.training import types
@@ -64,10 +64,11 @@ def _get_bc_network(
 
 def load_config(
     path: Union[str, epath.Path],
+    config_fname: str = _CONFIG_FNAME
 ) -> config_dict.ConfigDict:
   """Loads BC config from checkpoint."""
   path = epath.Path(path)
-  config_path = path / _CONFIG_FNAME
+  config_path = path / config_fname
   return checkpoint.load_config(config_path)
 
 
@@ -75,13 +76,14 @@ def load_policy(
     path: Union[str, epath.Path],
     network_factory: types.NetworkFactory[bc_networks.BCNetworks],
     deterministic: bool = True,
+    config_fname: Optional[Union[str, epath.Path]] = _CONFIG_FNAME,
 ):
   """Loads policy inference function from BC checkpoint.
 
   The policy is always deterministic.
   """
   path = epath.Path(path)
-  config = load_config(path.parent)
+  config = load_config(path, config_fname=config_fname)
   params = load(path)
   bc_network = _get_bc_network(config, network_factory)
   make_inference_fn = bc_networks.make_inference_fn(bc_network)
