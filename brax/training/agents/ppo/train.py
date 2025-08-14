@@ -236,6 +236,9 @@ def train(
     # callbacks
     progress_fn: Callable[[int, Metrics], None] = lambda *args: None,
     policy_params_fn: Callable[..., None] = lambda *args: None,
+    # rendering
+    render_fn: Optional[Callable[[envs.State], None]] = None,
+    should_render: jax.Array = jnp.array(True, dtype=jnp.bool_),
     # checkpointing
     save_checkpoint_path: Optional[str] = None,
     restore_checkpoint_path: Optional[str] = None,
@@ -317,6 +320,11 @@ def train(
   Returns:
     Tuple of (make_policy function, network params, metrics)
   """
+  # If the environment is wrapped with ViewerWrapper, use its rendering functions.
+  render_fn = None
+  if hasattr(environment, 'render_fn'):
+      render_fn = environment.render_fn
+
   assert batch_size * num_minibatches % num_envs == 0
   _validate_madrona_args(
       madrona_backend, num_envs, num_eval_envs, action_repeat, eval_env
@@ -483,7 +491,7 @@ def train(
     return (optimizer_state, params, key), metrics
 
   def training_step(
-      carry: Tuple[TrainingState, envs.State, PRNGKey], unused_t
+      carry: Tuple[TrainingState, envs.State, PRNGKey], unused_t, should_render: jax.Array,
   ) -> Tuple[Tuple[TrainingState, envs.State, PRNGKey], Metrics]:
     training_state, state, key = carry
     key_sgd, key_generate_unroll, new_key = jax.random.split(key, 3)
@@ -504,6 +512,8 @@ def train(
           current_key,
           unroll_length,
           extra_fields=('truncation', 'episode_metrics', 'episode_done'),
+          render_fn=render_fn,
+          should_render=should_render,
       )
       return (next_state, next_key), data
 
@@ -552,10 +562,13 @@ def train(
     return (new_training_state, state, new_key), metrics
 
   def training_epoch(
-      training_state: TrainingState, state: envs.State, key: PRNGKey
+      training_state: TrainingState, state: envs.State, key: PRNGKey, should_render: jax.Array,
   ) -> Tuple[TrainingState, envs.State, Metrics]:
+    training_step_partial = functools.partial(
+        training_step, should_render=should_render
+    )
     (training_state, state, _), loss_metrics = jax.lax.scan(
-        training_step,
+        training_step_partial,
         (training_state, state, key),
         (),
         length=num_training_steps_per_epoch,
@@ -567,12 +580,12 @@ def train(
 
   # Note that this is NOT a pure jittable method.
   def training_epoch_with_timing(
-      training_state: TrainingState, env_state: envs.State, key: PRNGKey
+      training_state: TrainingState, env_state: envs.State, key: PRNGKey, should_render: jax.Array,
   ) -> Tuple[TrainingState, envs.State, Metrics]:
     nonlocal training_walltime
     t = time.time()
     training_state, env_state = _strip_weak_type((training_state, env_state))
-    result = training_epoch(training_state, env_state, key)
+    result = training_epoch(training_state, env_state, key, should_render)
     training_state, env_state, metrics = _strip_weak_type(result)
 
     metrics = jax.tree_util.tree_map(jnp.mean, metrics)
@@ -696,10 +709,21 @@ def train(
 
     for _ in range(max(num_resets_per_eval, 1)):
       # optimization
+
+      # check for rendering dynamically
+      should_render_py = False
+      if hasattr(environment, 'sender'):
+          should_render_py = environment.sender.rendering_enabled
+
+      should_render_jax = jnp.array(should_render_py, dtype=jnp.bool_)
+      should_render_replicated = jax.device_put_replicated(
+          should_render_jax, jax.local_devices()[:local_devices_to_use]
+      )
+      
       epoch_key, local_key = jax.random.split(local_key)
       epoch_keys = jax.random.split(epoch_key, local_devices_to_use)
       (training_state, env_state, training_metrics) = (
-          training_epoch_with_timing(training_state, env_state, epoch_keys)
+          training_epoch_with_timing(training_state, env_state, epoch_keys, should_render_replicated)
       )
       current_step = int(_unpmap(training_state.env_steps))
 
