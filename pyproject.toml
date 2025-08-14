@@ -45,7 +45,7 @@ dependencies = [
     "mujoco-mjx",
     "numpy",
     "optax",
-    "orbax-checkpoint",
+    "orbax-checkpoint>=0.11.22",
     "Pillow",
     "scipy",
     "tensorboardX",
