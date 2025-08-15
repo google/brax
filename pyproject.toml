@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "brax"
-version = "0.12.5"
+version = "0.13.0"
 description = "A differentiable physics engine written in JAX."
 authors = [
     { name = "Brax Authors", email = "no-reply@google.com" },
