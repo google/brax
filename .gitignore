@@ -10,6 +10,9 @@ __pycache__
 .idea/
 *.egg-info
 
+**/.venv/
+**/env_screenshots
+
 ####### UNITY STUFF
 
 */[Ll]ibrary/

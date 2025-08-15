@@ -1,0 +1,32 @@
+{
+  "env": "point_resetting_goal_random_hazard_lidar_sensor_obs",
+  "alg": "ppo",
+  "out_dir": "runs/metrics",
+  "num_envs_list": [512, 1024, 2048],
+  "warmup_timesteps": 200000,
+  "measure_timesteps": 400000,
+  "episode_length": 2000,
+  "action_repeat": 1,
+  "unroll_length": 8,
+  "batch_size": 1024,
+  "num_minibatches": 32,
+  "num_updates_per_batch": 6,
+  "learning_rate": 0.0005,
+  "entropy_cost": 0.005,
+  "discounting": 0.99,
+  "reward_scaling": 0.1,
+  "gae_lambda": 0.95,
+  "clipping_epsilon": 0.3,
+  "normalize_observations": true,
+  "seed": 0,
+  "env_kwargs": {
+    "config_overrides": {
+      "ctrl_cost_weight": 0.001,
+      "goal_size": 0.7,
+      "reward_goal": 10.0,
+      "reward_distance": 3,
+      "reward_orientation": false,
+      "reward_orientation_scale": 0.002
+    }
+  }
+}

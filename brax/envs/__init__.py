@@ -19,10 +19,12 @@ import functools
 from typing import Optional, Type
 
 from brax.envs import ant
+from brax.envs import ant_velocity_constrained
 from brax.envs import fast
 from brax.envs import half_cheetah
 from brax.envs import hopper
 from brax.envs import humanoid
+from brax.envs import humanoid_height_constrained
 from brax.envs import humanoidstandup
 from brax.envs import inverted_double_pendulum
 from brax.envs import inverted_pendulum
@@ -31,15 +33,18 @@ from brax.envs import reacher
 from brax.envs import swimmer
 from brax.envs import walker2d
 from brax.envs.PointResettingGoalRandomHazardSensorObs import PointResettingGoalRandomHazardSensorObs
+from brax.envs.PointResettingGoalRandomHazardLidarSensorObs import PointResettingGoalRandomHazardLidarSensorObs
 from brax.envs.base import Env, PipelineEnv, State, Wrapper
 from brax.envs.wrappers import training
 
 _envs = {
     'ant': ant.Ant,
+    'ant_velocity_constrained': ant_velocity_constrained.AntVelocityConstrained,
     'fast': fast.Fast,
     'halfcheetah': half_cheetah.Halfcheetah,
     'hopper': hopper.Hopper,
     'humanoid': humanoid.Humanoid,
+    'humanoid_height_constrained': humanoid_height_constrained.HumanoidHeightConstrained,
     'humanoidstandup': humanoidstandup.HumanoidStandup,
     'inverted_pendulum': inverted_pendulum.InvertedPendulum,
     'inverted_double_pendulum': inverted_double_pendulum.InvertedDoublePendulum,
@@ -48,6 +53,7 @@ _envs = {
     'swimmer': swimmer.Swimmer,
     'walker2d': walker2d.Walker2d,
     'point_resetting_goal_random_hazard_sensor_obs': PointResettingGoalRandomHazardSensorObs,
+    'point_resetting_goal_random_hazard_lidar_sensor_obs': PointResettingGoalRandomHazardLidarSensorObs,
 }
 
 
