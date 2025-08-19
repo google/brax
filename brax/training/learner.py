@@ -91,6 +91,7 @@ _MAX_GRADIENT_NORM = flags.DEFINE_float(
     'max_gradient_norm', 1e9, 'Maximal norm of a gradient update.'
 )
 _LOGDIR = flags.DEFINE_string('logdir', '', 'Logdir.')
+_RESTOREDIR = flags.DEFINE_string('restoredir', None, 'Restoredir.')
 _NORMALIZE_OBSERVATIONS = flags.DEFINE_bool(
     'normalize_observations',
     True,
@@ -355,6 +356,7 @@ def main(unused_argv):
           num_resets_per_eval=_NUM_RESETS_PER_EVAL.value,
           progress_fn=writer.write_scalars,
           save_checkpoint_path=ckpt_dir.as_posix(),
+          restore_checkpoint_path=_RESTOREDIR.value,
       )
     elif _LEARNER.value == 'apg':
       make_policy, params, _ = apg.train(
