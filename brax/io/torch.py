@@ -52,9 +52,7 @@ def torch_to_jax(value: Any) -> Any:
 @torch_to_jax.register(torch.Tensor)
 def _tensor_to_jax(value: torch.Tensor) -> jax.Array:
   """Converts a PyTorch Tensor into a jax.Array."""
-  tensor = torch_dlpack.to_dlpack(value)
-  tensor = jax_dlpack.from_dlpack(tensor)
-  return tensor
+  return jax_dlpack.from_dlpack(value)
 
 
 @torch_to_jax.register(abc.Mapping)
