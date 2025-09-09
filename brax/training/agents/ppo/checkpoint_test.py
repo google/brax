@@ -23,6 +23,7 @@ from brax.training.agents.ppo import checkpoint
 from brax.training.agents.ppo import losses as ppo_losses
 from brax.training.agents.ppo import networks as ppo_networks
 from etils import epath
+import flax
 import jax
 from jax import numpy as jp
 
@@ -56,6 +57,7 @@ class CheckpointTest(absltest.TestCase):
     network_factory = functools.partial(
         ppo_networks.make_ppo_networks,
         policy_hidden_layer_sizes=(16, 21, 13),
+        activation=flax.linen.relu,
     )
     config = checkpoint.network_config(
         observation_size=1,

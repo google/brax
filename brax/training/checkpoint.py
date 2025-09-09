@@ -25,11 +25,24 @@ from brax.training.agents.bc import networks as bc_networks
 from brax.training.agents.ppo import networks as ppo_networks
 from brax.training.agents.sac import networks as sac_networks
 from etils import epath
+from flax import linen as nn
 from flax.training import orbax_utils
 import jax
 from ml_collections import config_dict
 import numpy as np
 from orbax import checkpoint as ocp
+
+
+_ACTIVATION_REGISTRY = {
+    'relu': nn.relu,
+    'tanh': nn.tanh,
+    'silu': nn.silu,
+    'swish': nn.swish,
+    'gelu': nn.gelu,
+    'sigmoid': nn.sigmoid,
+    'softplus': nn.softplus,
+    'linear': lambda x: x,
+}
 
 
 def _get_function_kwargs(func: Any) -> Dict[str, Any]:
@@ -76,11 +89,6 @@ def network_config(
           ' preprocess_observations_fn'
       )
     del kwargs['preprocess_observations_fn']
-  if 'activation' in kwargs:
-    # TODO: Add other activations.
-    if kwargs['activation'] != defaults['activation']:
-      raise ValueError('checkpointing only supports default activation')
-    del kwargs['activation']
 
   config.network_factory_kwargs = kwargs
   config.normalize_observations = normalize_observations
@@ -166,4 +174,15 @@ def load_config(
   config_path = epath.Path(config_path)
   if not config_path.exists():
     raise ValueError(f'Config file not found at {config_path.as_posix()}')
-  return config_dict.create(**json.loads(config_path.read_text()))
+
+  loaded_dict = json.loads(config_path.read_text())
+
+  if 'activation' in loaded_dict['network_factory_kwargs']:
+    activation_name = loaded_dict['network_factory_kwargs']['activation'][
+        '__name__'
+    ]
+    loaded_dict['network_factory_kwargs']['activation'] = _ACTIVATION_REGISTRY[
+        activation_name
+    ]
+
+  return config_dict.create(**loaded_dict)
