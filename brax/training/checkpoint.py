@@ -136,10 +136,25 @@ def save(
   if not ckpt_path.exists():
     ckpt_path.mkdir(parents=True)
 
+  # Save the network params.
   orbax_checkpointer = ocp.PyTreeCheckpointer()
   save_args = orbax_utils.save_args_from_target(params)
   orbax_checkpointer.save(ckpt_path, params, force=True, save_args=save_args)
 
+  # Convert activation functions to registered names.
+  config_cp_dict = config.to_dict()
+  if 'activation' in config_cp_dict['network_factory_kwargs'] and callable(
+      config_cp_dict['network_factory_kwargs']['activation']
+  ):
+    name_ = config_cp_dict['network_factory_kwargs']['activation'].__name__
+    if name_ not in _ACTIVATION_REGISTRY:
+      raise ValueError(
+          f'Activation function {name_} not registered for checkpointing.'
+      )
+    config_cp_dict['network_factory_kwargs']['activation'] = name_
+  config = config_dict.ConfigDict(config_cp_dict)
+
+  # Save the config.
   config_path = ckpt_path / config_fname
   config_path.write_text(config.to_json_best_effort())
 
@@ -178,9 +193,7 @@ def load_config(
   loaded_dict = json.loads(config_path.read_text())
 
   if 'activation' in loaded_dict['network_factory_kwargs']:
-    activation_name = loaded_dict['network_factory_kwargs']['activation'][
-        '__name__'
-    ]
+    activation_name = loaded_dict['network_factory_kwargs']['activation']
     loaded_dict['network_factory_kwargs']['activation'] = _ACTIVATION_REGISTRY[
         activation_name
     ]
