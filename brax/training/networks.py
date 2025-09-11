@@ -372,12 +372,13 @@ def make_value_network(
     hidden_layer_sizes: Sequence[int] = (256, 256),
     activation: ActivationFn = linen.relu,
     obs_key: str = 'state',
+    kernel_init: Initializer = jax.nn.initializers.lecun_uniform(),
 ) -> FeedForwardNetwork:
   """Creates a value network."""
   value_module = MLP(
       layer_sizes=list(hidden_layer_sizes) + [1],
       activation=activation,
-      kernel_init=jax.nn.initializers.lecun_uniform(),
+      kernel_init=kernel_init,
   )
 
   def apply(processor_params, value_params, obs):
@@ -404,6 +405,7 @@ def make_q_network(
     activation: ActivationFn = linen.relu,
     n_critics: int = 2,
     layer_norm: bool = False,
+    kernel_init: Initializer = jax.nn.initializers.lecun_uniform(),
 ) -> FeedForwardNetwork:
   """Creates a value network."""
 
@@ -420,7 +422,7 @@ def make_q_network(
         q = MLP(
             layer_sizes=list(hidden_layer_sizes) + [1],
             activation=activation,
-            kernel_init=jax.nn.initializers.lecun_uniform(),
+            kernel_init=kernel_init,
             layer_norm=layer_norm,
         )(hidden)
         res.append(q)

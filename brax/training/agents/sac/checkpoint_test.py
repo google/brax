@@ -37,6 +37,8 @@ class CheckpointTest(absltest.TestCase):
     network_factory = functools.partial(
         sac_networks.make_sac_networks,
         hidden_layer_sizes=(16, 21, 13),
+        q_network_kernel_init_fn=jax.nn.initializers.orthogonal,
+        q_network_kernel_init_kwargs={"scale": jp.sqrt(2.0)},
     )
     config = checkpoint.network_config(
         action_size=3,

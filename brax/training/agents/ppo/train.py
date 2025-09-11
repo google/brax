@@ -221,6 +221,7 @@ def train(
     gae_lambda: float = 0.95,
     max_grad_norm: Optional[float] = None,
     normalize_advantage: bool = True,
+    vf_loss_coefficient: float = 0.5,
     network_factory: types.NetworkFactory[
         ppo_networks.PPONetworks
     ] = ppo_networks.make_ppo_networks,
@@ -287,6 +288,7 @@ def train(
     gae_lambda: General advantage estimation lambda
     max_grad_norm: gradient clipping norm value. If None, no clipping is done
     normalize_advantage: whether to normalize advantage estimate
+    vf_loss_coefficient: Coefficient for value function loss.
     network_factory: function that generates networks for policy and value
       functions
     seed: random seed
@@ -423,6 +425,7 @@ def train(
       gae_lambda=gae_lambda,
       clipping_epsilon=clipping_epsilon,
       normalize_advantage=normalize_advantage,
+      vf_coefficient=vf_loss_coefficient,
   )
 
   gradient_update_fn = gradients.gradient_update_fn(

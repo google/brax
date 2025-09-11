@@ -58,6 +58,9 @@ class CheckpointTest(absltest.TestCase):
         ppo_networks.make_ppo_networks,
         policy_hidden_layer_sizes=(16, 21, 13),
         activation=flax.linen.relu,
+        policy_network_kernel_init_fn=jax.nn.initializers.orthogonal,
+        policy_network_kernel_init_kwargs={"scale": jp.sqrt(2.0)},
+        value_network_kernel_init_fn=jax.nn.initializers.glorot_uniform,
     )
     config = checkpoint.network_config(
         observation_size=1,

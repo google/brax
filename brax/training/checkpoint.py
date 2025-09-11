@@ -28,21 +28,67 @@ from etils import epath
 from flax import linen as nn
 from flax.training import orbax_utils
 import jax
+from jax import numpy as jp
 from ml_collections import config_dict
 import numpy as np
 from orbax import checkpoint as ocp
 
 
 _ACTIVATION_REGISTRY = {
-    'relu': nn.relu,
-    'tanh': nn.tanh,
-    'silu': nn.silu,
-    'swish': nn.swish,
-    'gelu': nn.gelu,
-    'sigmoid': nn.sigmoid,
-    'softplus': nn.softplus,
+    'celu': nn.activation.celu,
+    'compact': nn.activation.compact,
+    'elu': nn.activation.elu,
+    'gelu': nn.activation.gelu,
+    'glu': nn.activation.glu,
+    'hard_sigmoid': nn.activation.hard_sigmoid,
+    'hard_silu': nn.activation.hard_silu,
+    'hard_swish': nn.activation.hard_swish,
+    'hard_tanh': nn.activation.hard_tanh,
+    'leaky_relu': nn.activation.leaky_relu,
     'linear': lambda x: x,
+    'log_sigmoid': nn.activation.log_sigmoid,
+    'log_softmax': nn.activation.log_softmax,
+    'logsumexp': nn.activation.logsumexp,
+    'normalize': nn.activation.normalize,
+    'one_hot': nn.activation.one_hot,
+    'relu': nn.activation.relu,
+    'relu6': nn.activation.relu6,
+    'selu': nn.activation.selu,
+    'sigmoid': nn.activation.sigmoid,
+    'silu': nn.activation.silu,
+    'soft_sign': nn.activation.soft_sign,
+    'softmax': nn.activation.softmax,
+    'softplus': nn.activation.softplus,
+    'standardize': nn.activation.standardize,
+    'swish': nn.activation.swish,
+    'tanh': nn.activation.tanh,
 }
+_KERNEL_INIT_REGISTRY = {
+    'constant': jax.nn.initializers.constant,
+    'delta_orthogonal': jax.nn.initializers.delta_orthogonal,
+    'glorot_normal': jax.nn.initializers.glorot_normal,
+    'glorot_uniform': jax.nn.initializers.glorot_uniform,
+    'he_normal': jax.nn.initializers.he_normal,
+    'he_uniform': jax.nn.initializers.he_uniform,
+    'kaiming_normal': jax.nn.initializers.kaiming_normal,
+    'kaiming_uniform': jax.nn.initializers.kaiming_uniform,
+    'lecun_normal': jax.nn.initializers.lecun_normal,
+    'lecun_uniform': jax.nn.initializers.lecun_uniform,
+    'normal': jax.nn.initializers.normal,
+    'ones': jax.nn.initializers.ones,
+    'orthogonal': jax.nn.initializers.orthogonal,
+    'truncated_normal': jax.nn.initializers.truncated_normal,
+    'uniform': jax.nn.initializers.uniform,
+    'variance_scaling': jax.nn.initializers.variance_scaling,
+    'xavier_normal': jax.nn.initializers.xavier_normal,
+    'xavier_uniform': jax.nn.initializers.xavier_uniform,
+    'zeros': jax.nn.initializers.zeros,
+}
+_KERNEL_INIT_FN_KEYWORDS = (
+    'policy_network_kernel_init_fn',
+    'value_network_kernel_init_fn',
+    'q_network_kernel_init_fn',
+)
 
 
 def _get_function_kwargs(func: Any) -> Dict[str, Any]:
@@ -60,6 +106,16 @@ def _get_function_defaults(func: Any) -> Dict[str, Any]:
   if hasattr(func, 'func'):
     kwargs.update(_get_function_defaults(func.func))
   return kwargs
+
+
+def _np_jp_to_python_types(data: Any) -> Any:
+  if isinstance(data, (np.ndarray, jp.ndarray)):
+    return data.item() if data.ndim == 0 else data.tolist()
+  if isinstance(data, dict):
+    return {key: _np_jp_to_python_types(value) for key, value in data.items()}
+  if isinstance(data, (list, tuple)):
+    return type(data)(_np_jp_to_python_types(item) for item in data)
+  return data
 
 
 def network_config(
@@ -141,8 +197,8 @@ def save(
   save_args = orbax_utils.save_args_from_target(params)
   orbax_checkpointer.save(ckpt_path, params, force=True, save_args=save_args)
 
-  # Convert activation functions to registered names.
   config_cp_dict = config.to_dict()
+  # Convert activation functions to registered names.
   if 'activation' in config_cp_dict['network_factory_kwargs'] and callable(
       config_cp_dict['network_factory_kwargs']['activation']
   ):
@@ -152,6 +208,17 @@ def save(
           f'Activation function {name_} not registered for checkpointing.'
       )
     config_cp_dict['network_factory_kwargs']['activation'] = name_
+  # Convert kernel init functions to registered names.
+  for init_fn_name in _KERNEL_INIT_FN_KEYWORDS:
+    if init_fn_name not in config_cp_dict['network_factory_kwargs']:
+      continue
+    name_ = config_cp_dict['network_factory_kwargs'][init_fn_name].__name__
+    if name_ not in _KERNEL_INIT_REGISTRY:
+      raise ValueError(
+          f'Kernel init function {name_} not registered for checkpointing.'
+      )
+    config_cp_dict['network_factory_kwargs'][init_fn_name] = name_
+  config_cp_dict = _np_jp_to_python_types(config_cp_dict)
   config = config_dict.ConfigDict(config_cp_dict)
 
   # Save the config.
@@ -197,5 +264,12 @@ def load_config(
     loaded_dict['network_factory_kwargs']['activation'] = _ACTIVATION_REGISTRY[
         activation_name
     ]
+  for init_fn_name in _KERNEL_INIT_FN_KEYWORDS:
+    if init_fn_name not in loaded_dict['network_factory_kwargs']:
+      continue
+    init_fn_name_ = loaded_dict['network_factory_kwargs'][init_fn_name]
+    loaded_dict['network_factory_kwargs'][init_fn_name] = (
+        _KERNEL_INIT_REGISTRY[init_fn_name_]
+    )
 
   return config_dict.create(**loaded_dict)
