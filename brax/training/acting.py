@@ -76,6 +76,14 @@ def generate_unroll(
   return final_state, data
 
 
+def _agg_fn(metric, fn, to_aggregate, to_normalize, episode_lengths):
+  if not to_aggregate:
+    return metric
+  if to_normalize:
+    return fn(metric / episode_lengths)
+  return fn(metric)
+
+
 # TODO(eorsini): Consider moving this to its own file.
 class Evaluator:
   """Class to run evaluations."""
@@ -134,15 +142,21 @@ class Evaluator:
     eval_metrics = eval_state.info['eval_metrics']
     eval_metrics.active_episodes.block_until_ready()
     epoch_eval_time = time.time() - t
+    episode_lengths = np.maximum(eval_metrics.episode_steps, 1.0).astype(float)
+
     metrics = {}
     for fn in [np.mean, np.std]:
       suffix = '_std' if fn == np.std else ''
-      metrics.update({
-          f'eval/episode_{name}{suffix}': (
-              fn(value) if aggregate_episodes else value
-          )
-          for name, value in eval_metrics.episode_metrics.items()
-      })
+      for name, value in eval_metrics.episode_metrics.items():
+        metrics[f'eval/episode_{name}{suffix}'] = _agg_fn(
+            value,
+            fn,
+            aggregate_episodes,
+            name.endswith('per_step'),
+            episode_lengths,
+        )
+
+    metrics['eval/avg_episode_length'] = np.mean(eval_metrics.episode_steps)
     metrics['eval/avg_episode_length'] = np.mean(eval_metrics.episode_steps)
     metrics['eval/std_episode_length'] = np.std(eval_metrics.episode_steps)
     metrics['eval/epoch_eval_time'] = epoch_eval_time
