@@ -157,7 +157,6 @@ class Evaluator:
         )
 
     metrics['eval/avg_episode_length'] = np.mean(eval_metrics.episode_steps)
-    metrics['eval/avg_episode_length'] = np.mean(eval_metrics.episode_steps)
     metrics['eval/std_episode_length'] = np.std(eval_metrics.episode_steps)
     metrics['eval/epoch_eval_time'] = epoch_eval_time
     metrics['eval/sps'] = self._steps_per_unroll / epoch_eval_time
