@@ -24,6 +24,7 @@ from brax.training.agents.ppo import networks as ppo_networks
 from brax.training.agents.ppo import networks_vision as ppo_networks_vision
 from brax.training.agents.ppo import train as ppo
 import jax
+from jax import numpy as jnp
 
 
 class PPOTest(parameterized.TestCase):
@@ -67,6 +68,12 @@ class PPOTest(parameterized.TestCase):
         ppo_networks.make_ppo_networks,
         distribution_type=distribution_type,
         noise_std_type=noise_std_type,
+        init_noise_std=0.8,
+        activation=jax.nn.elu,
+        policy_network_kernel_init_fn=jax.nn.initializers.orthogonal,
+        policy_network_kernel_init_kwargs={'scale': jnp.sqrt(2.0)},
+        value_network_kernel_init_fn=jax.nn.initializers.orthogonal,
+        value_network_kernel_init_kwargs={'scale': jnp.sqrt(2.0)},
     )
 
     _, _, _ = ppo.train(
@@ -82,10 +89,12 @@ class PPOTest(parameterized.TestCase):
         num_minibatches=8,
         num_updates_per_batch=4,
         normalize_observations=True,
+        max_grad_norm=1.0,
         seed=2,
         reward_scaling=10,
         normalize_advantage=False,
         network_factory=network_factory,
+        learning_rate_schedule='ADAPTIVE_KL',
     )
 
   def testTrainAsymmetricActorCritic(self):

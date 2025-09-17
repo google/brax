@@ -34,6 +34,7 @@ from brax.training.acme import specs
 from brax.training.agents.ppo import checkpoint
 from brax.training.agents.ppo import losses as ppo_losses
 from brax.training.agents.ppo import networks as ppo_networks
+from brax.training.agents.ppo import optimizer as ppo_optimizer
 from brax.training.types import Params
 from brax.training.types import PRNGKey
 import flax
@@ -41,7 +42,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
-
 
 InferenceParams = Tuple[running_statistics.NestedMeanStd, Params]
 Metrics = types.Metrics
@@ -222,6 +222,10 @@ def train(
     max_grad_norm: Optional[float] = None,
     normalize_advantage: bool = True,
     vf_loss_coefficient: float = 0.5,
+    desired_kl: float = 0.01,
+    learning_rate_schedule: Optional[
+        Union[str, ppo_optimizer.LRSchedule]
+    ] = None,
     network_factory: types.NetworkFactory[
         ppo_networks.PPONetworks
     ] = ppo_networks.make_ppo_networks,
@@ -289,6 +293,9 @@ def train(
     max_grad_norm: gradient clipping norm value. If None, no clipping is done
     normalize_advantage: whether to normalize advantage estimate
     vf_loss_coefficient: Coefficient for value function loss.
+    desired_kl: Desired KL divergence for adaptive KL divergence learning rate
+      schedule.
+    learning_rate_schedule: Learning rate schedule for the optimizer.
     network_factory: function that generates networks for policy and value
       functions
     seed: random seed
@@ -408,13 +415,23 @@ def train(
   )
   make_policy = ppo_networks.make_inference_fn(ppo_network)
 
-  optimizer = optax.adam(learning_rate=learning_rate)
+  # Optimizer.
+  base_optimizer = optax.adam(learning_rate=learning_rate)
+  lr_schedule = learning_rate_schedule or ppo_optimizer.LRSchedule.NONE
+  lr_schedule = ppo_optimizer.LRSchedule(lr_schedule)
+  lr_is_adaptive_kl = lr_schedule == ppo_optimizer.LRSchedule.ADAPTIVE_KL
+  if lr_is_adaptive_kl:
+    base_optimizer = optax.inject_hyperparams(optax.adam)(
+        learning_rate=learning_rate
+    )
   if max_grad_norm is not None:
     # TODO(btaba): Move gradient clipping to `training/gradients.py`.
     optimizer = optax.chain(
         optax.clip_by_global_norm(max_grad_norm),
-        optax.adam(learning_rate=learning_rate),
+        base_optimizer,
     )
+  else:
+    optimizer = base_optimizer
 
   loss_fn = functools.partial(
       ppo_losses.compute_ppo_loss,
@@ -453,6 +470,15 @@ def train(
         optimizer_state=optimizer_state,
     )
 
+    metrics['learning_rate'] = jnp.array(learning_rate, dtype=float)
+    if lr_is_adaptive_kl:
+      kl_mean = metrics['kl_mean']
+      kl_mean = jax.lax.pmean(kl_mean, axis_name=_PMAP_AXIS_NAME)
+      optimizer_state, lr = ppo_optimizer.adaptive_kl_learning_rate(
+          optimizer_state, kl_mean, desired_kl
+      )
+      metrics['learning_rate'] = lr
+
     return (optimizer_state, params, key), metrics
 
   def sgd_step(
@@ -488,6 +514,7 @@ def train(
         shuffled_data,
         length=num_minibatches,
     )
+
     return (optimizer_state, params, key), metrics
 
   def training_step(
@@ -528,19 +555,14 @@ def train(
     )
     assert data.discount.shape[1:] == (unroll_length,)
 
-    if log_training_metrics:  # log unroll metrics
-      jax.debug.callback(
-          metrics_aggregator.update_episode_metrics,
-          data.extras['state_extras']['episode_metrics'],
-          data.extras['state_extras']['episode_done'],
+    normalizer_params = training_state.normalizer_params
+    if not lr_is_adaptive_kl:
+      # Update normalization params before SGD for backwards compatibility.
+      normalizer_params = running_statistics.update(
+          normalizer_params,
+          _remove_pixels(data.observation),
+          pmap_axis_name=_PMAP_AXIS_NAME,
       )
-
-    # Update normalization params and normalize observations.
-    normalizer_params = running_statistics.update(
-        training_state.normalizer_params,
-        _remove_pixels(data.observation),
-        pmap_axis_name=_PMAP_AXIS_NAME,
-    )
 
     (optimizer_state, params, _), metrics = jax.lax.scan(
         functools.partial(
@@ -551,12 +573,30 @@ def train(
         length=num_updates_per_batch,
     )
 
+    if lr_is_adaptive_kl:
+      # For adaptive KL, normalization params should be updated after SGD s.t.
+      # old distribution outputs are valid for KL computation.
+      normalizer_params = running_statistics.update(
+          normalizer_params,
+          _remove_pixels(data.observation),
+          pmap_axis_name=_PMAP_AXIS_NAME,
+      )
+
     new_training_state = TrainingState(
         optimizer_state=optimizer_state,
         params=params,
         normalizer_params=normalizer_params,
         env_steps=training_state.env_steps + env_step_per_training_step,
     )
+
+    if log_training_metrics:  # log unroll metrics
+      jax.debug.callback(
+          metrics_aggregator.update_episode_metrics,
+          data.extras['state_extras']['episode_metrics'],
+          data.extras['state_extras']['episode_done'],
+          metrics,
+      )
+
     return (new_training_state, state, new_key), metrics
 
   def training_epoch(

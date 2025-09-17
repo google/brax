@@ -30,8 +30,10 @@ from brax.training.agents.apg import train as apg
 from brax.training.agents.ars import train as ars
 from brax.training.agents.es import train as es
 from brax.training.agents.ppo import networks as ppo_networks
+from brax.training.agents.ppo import optimizer as ppo_optimizer
 from brax.training.agents.ppo import train as ppo
 from brax.training.agents.sac import networks as sac_networks
+from brax.training import networks as brax_networks
 from brax.training.agents.sac import train as sac
 from etils import epath
 import jax
@@ -167,6 +169,41 @@ _PPO_POLICY_OBS_KEY = flags.DEFINE_string(
 _PPO_VALUE_OBS_KEY = flags.DEFINE_string(
     'ppo_value_obs_key', None, 'PPO value obs key.'
 )
+_PPO_LEARNING_RATE_SCHEDULE = flags.DEFINE_enum_class(
+    'ppo_learning_rate_schedule',
+    ppo_optimizer.LRSchedule.NONE,
+    ppo_optimizer.LRSchedule,
+    'Learning rate schedule for PPO.',
+)
+_PPO_DESIRED_KL = flags.DEFINE_float(
+    'ppo_desired_kl', 0.01, 'Desired KL for PPO.'
+)
+_PPO_DISTRIBUTION_TYPE = flags.DEFINE_enum(
+    'ppo_distribution_type',
+    'tanh_normal',
+    ['normal', 'tanh_normal'],
+    'Distribution type for PPO.',
+)
+_PPO_NOISE_STD_TYPE = flags.DEFINE_enum(
+    'ppo_noise_std_type',
+    'scalar',
+    ['scalar', 'log'],
+    'Noise std type for PPO.',
+)
+_PPO_INIT_NOISE_STD = flags.DEFINE_float(
+    'ppo_init_noise_std', 1.0, 'Initial noise std for PPO.'
+)
+_PPO_ACTIVATION_FN = flags.DEFINE_string(
+    'ppo_activation_fn',
+    'swish',
+    'Activation function for PPO.',
+)
+_PPO_VF_LOSS_COEFFICIENT = flags.DEFINE_float(
+    'ppo_vf_loss_coefficient',
+    0.5,
+    'Value function loss coefficient for PPO.',
+)
+
 # ARS hps.
 _NUMBER_OF_DIRECTIONS = flags.DEFINE_integer(
     'number_of_directions',
@@ -303,6 +340,13 @@ def main(unused_argv):
       )
     elif _LEARNER.value == 'ppo':
       network_factory = ppo_networks.make_ppo_networks
+      network_factory = functools.partial(
+          network_factory,
+          distribution_type=_PPO_DISTRIBUTION_TYPE.value,
+          noise_std_type=_PPO_NOISE_STD_TYPE.value,
+          init_noise_std=_PPO_INIT_NOISE_STD.value,
+          activation=brax_networks.ACTIVATION[_PPO_ACTIVATION_FN.value],
+      )
       if _PPO_POLICY_HIDDEN_LAYER_SIZES.value is not None:
         policy_hidden_layer_sizes = [
             int(x) for x in _PPO_POLICY_HIDDEN_LAYER_SIZES.value.split(',')
@@ -353,10 +397,13 @@ def main(unused_argv):
           reward_scaling=_REWARD_SCALING.value,
           gae_lambda=_GAE_LAMBDA.value,
           clipping_epsilon=_CLIPPING_EPSILON.value,
+          learning_rate_schedule=_PPO_LEARNING_RATE_SCHEDULE.value,
+          desired_kl=_PPO_DESIRED_KL.value,
           num_resets_per_eval=_NUM_RESETS_PER_EVAL.value,
           progress_fn=writer.write_scalars,
           save_checkpoint_path=ckpt_dir.as_posix(),
           restore_checkpoint_path=_RESTOREDIR.value,
+          vf_loss_coefficient=_PPO_VF_LOSS_COEFFICIENT.value,
       )
     elif _LEARNER.value == 'apg':
       make_policy, params, _ = apg.train(

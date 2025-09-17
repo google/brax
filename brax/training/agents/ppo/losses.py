@@ -188,9 +188,21 @@ def compute_ppo_loss(
   entropy_loss = entropy_cost * -entropy
 
   total_loss = policy_loss + v_loss + entropy_loss
+
+  new_dist = parametric_action_distribution.create_dist(policy_logits)
+  if hasattr(new_dist, 'kl_divergence'):
+    old_dist_params = data.extras['policy_extras']['distribution_params']
+    old_dist = parametric_action_distribution.create_dist(old_dist_params)
+    kl = jnp.mean(new_dist.kl_divergence(old_dist))  # pytype: disable=attribute-error
+    policy_dist_mean_std = jnp.mean(new_dist.scale)  # pytype: disable=attribute-error
+  else:
+    kl, policy_dist_mean_std = jnp.array(0.0), jnp.array(0.0)
+
   return total_loss, {
       'total_loss': total_loss,
       'policy_loss': policy_loss,
       'v_loss': v_loss,
       'entropy_loss': entropy_loss,
+      'kl_mean': kl,
+      'policy_dist_mean_std': policy_dist_mean_std,
   }

@@ -115,6 +115,16 @@ class _NormalDistribution:
     entropy = 0.5 + log_normalization
     return entropy * jnp.ones_like(self.loc)
 
+  def kl_divergence(self, old_dist: '_NormalDistribution'):
+    """Computes KL(old_dist || self)."""
+    return jnp.sum(
+        jnp.log(self.scale / old_dist.scale + 1e-5)
+        + (jnp.square(old_dist.scale) + jnp.square(old_dist.loc - self.loc))
+        / (2.0 * jnp.square(self.scale))
+        - 0.5,
+        axis=-1,
+    )
+
 
 class TanhBijector:
   """Tanh Bijector."""

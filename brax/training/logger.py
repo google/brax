@@ -26,7 +26,10 @@ class EpisodeMetricsLogger:
   def __init__(
       self, buffer_size=100, steps_between_logging=1e5, progress_fn=None
   ):
-    self._metrics_buffer = collections.defaultdict(
+    self._ep_metrics_buffer = collections.defaultdict(
+        lambda: collections.deque(maxlen=buffer_size)
+    )
+    self._train_metrics_buffer = collections.defaultdict(
         lambda: collections.deque(maxlen=buffer_size)
     )
     self._buffer_size = buffer_size
@@ -36,12 +39,14 @@ class EpisodeMetricsLogger:
     self._log_count = 0
     self._progress_fn = progress_fn
 
-  def update_episode_metrics(self, metrics, dones):
+  def update_episode_metrics(self, episode_metrics, dones, train_metrics):
     self._num_steps += np.prod(dones.shape)
     if jnp.sum(dones) > 0:
-      for name, metric in metrics.items():
+      for name, metric in episode_metrics.items():
         done_metrics = metric[dones.astype(bool)].flatten().tolist()
-        self._metrics_buffer[name].extend(done_metrics)
+        self._ep_metrics_buffer[name].extend(done_metrics)
+    for name, metric in train_metrics.items():
+      self._train_metrics_buffer[name].extend(metric.flatten().tolist())
     if self._num_steps - self._last_log_steps >= self._steps_between_logging:
       self.log_metrics()
       self._last_log_steps = self._num_steps
@@ -53,11 +58,18 @@ class EpisodeMetricsLogger:
         f"\n{'Steps':>{pad}} Env: {self._num_steps} Log: {self._log_count}\n"
     )
     mean_metrics = {}
-    for metric_name in self._metrics_buffer:
-      mean_metrics[metric_name] = np.mean(self._metrics_buffer[metric_name])
+    for metric_name in self._ep_metrics_buffer:
+      mean_metrics[metric_name] = np.mean(self._ep_metrics_buffer[metric_name])
       log_string += (
           f"{f'Episode {metric_name}:':>{pad}}"
           f" {mean_metrics[metric_name]:.4f}\n"
+      )
+    for metric_name in self._train_metrics_buffer:
+      mean_metrics[metric_name] = np.mean(
+          self._train_metrics_buffer[metric_name]
+      )
+      log_string += (
+          f"{f'Train {metric_name}:':>{pad}} {mean_metrics[metric_name]:.6f}\n"
       )
     logging.info(log_string)
     if self._progress_fn is not None:
