@@ -250,7 +250,7 @@ def train(
     reward_plus, reward_minus = jnp.split(eval_scores, 2, axis=0)
     reward_max = jnp.maximum(reward_plus, reward_minus)
     reward_rank = jnp.argsort(jnp.argsort(-reward_max))
-    reward_weight = jnp.where(reward_rank < top_directions, 1, 0)
+    reward_weight = reward_rank < top_directions
     reward_weight_double = jnp.concatenate(
         [reward_weight, reward_weight], axis=0
     )
