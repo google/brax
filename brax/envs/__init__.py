@@ -32,6 +32,12 @@ from brax.envs import swimmer
 from brax.envs import walker2d
 from brax.envs.base import Env, PipelineEnv, State, Wrapper
 from brax.envs.wrappers import training
+import jax
+
+# NOTE(dsuo): Opt out of using the new `jax.pmap` implementation. The new
+# version is implemented using `jax.jit` and `jax.shard_map` and is causing
+# environment reset counts to be wrong.
+jax.config.update('jax_pmap_shmap_merge', False)
 
 _envs = {
     'ant': ant.Ant,
