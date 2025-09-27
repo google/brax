@@ -34,6 +34,8 @@ from brax.envs import swimmer
 from brax.envs import walker2d
 from brax.envs.PointResettingGoalRandomHazardSensorObs import PointResettingGoalRandomHazardSensorObs
 from brax.envs.PointResettingGoalRandomHazardLidarSensorObs import PointResettingGoalRandomHazardLidarSensorObs
+from brax.envs.SafePointGoal import SafePointGoal
+from brax.envs.SafePointGoalWeighted import SafePointGoalWeighted
 from brax.envs.base import Env, PipelineEnv, State, Wrapper
 from brax.envs.wrappers import training
 
@@ -54,6 +56,8 @@ _envs = {
     'walker2d': walker2d.Walker2d,
     'point_resetting_goal_random_hazard_sensor_obs': PointResettingGoalRandomHazardSensorObs,
     'point_resetting_goal_random_hazard_lidar_sensor_obs': PointResettingGoalRandomHazardLidarSensorObs,
+    'safe_point_goal': SafePointGoal,
+    'safe_point_goal_weighted': SafePointGoalWeighted,
 }
 
 

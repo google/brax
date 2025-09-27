@@ -18,6 +18,5 @@
   "normalize_observations": true,
   "num_evals": 5,
   "num_eval_envs": 128,
-  "deterministic_eval": false,
-  "seed": 0
+  "deterministic_eval": false
 }

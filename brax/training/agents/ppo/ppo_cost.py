@@ -107,6 +107,7 @@ def train_ppo_cost(
     restore_checkpoint_path: Optional[str] = None,
     restore_params: Optional[Any] = None,
     restore_value_fn: bool = True,
+    **kwargs,
 ) -> Tuple[ppo_train.InferenceParams, ppo_train.Metrics]:
   """Runs standard PPO optimizing reward - cost_weight * cost.
 
@@ -114,17 +115,22 @@ def train_ppo_cost(
   Returns the same outputs as `ppo.train`.
   """
 
-  def wrap_env_fn(env: envs.Env) -> envs.Env:
-    return _apply_reward_minus_cost(env, cost_weight=cost_weight)
+  # Pre-wrap the training environment so vectorization happens after this wrapper.
+  env_for_training = _apply_reward_minus_cost(environment, cost_weight=cost_weight) if wrap_env else environment
+
+  # If an eval_env is provided, wrap it similarly so eval metrics reflect shaped reward
+  eval_env = kwargs.pop('eval_env', None)
+  if eval_env is not None and wrap_env:
+    eval_env = _apply_reward_minus_cost(eval_env, cost_weight=cost_weight)
 
   make_policy, params, metrics = ppo_train.train(
-      environment=environment,
+      environment=env_for_training,
       num_timesteps=num_timesteps,
       wrap_env=wrap_env,
       num_envs=num_envs,
       episode_length=episode_length,
       action_repeat=action_repeat,
-      wrap_env_fn=wrap_env_fn,
+      # Do not pass wrap_env_fn; we already applied our wrapper above
       learning_rate=learning_rate,
       entropy_cost=entropy_cost,
       discounting=discounting,
@@ -142,6 +148,8 @@ def train_ppo_cost(
       restore_checkpoint_path=restore_checkpoint_path,
       restore_params=restore_params,
       restore_value_fn=restore_value_fn,
+      eval_env=eval_env,
+      **kwargs,
   )
 
   return make_policy, params, metrics

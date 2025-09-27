@@ -10,7 +10,7 @@
     <site size="0.032" type="sphere"/>  
   </default>  
   <worldbody>  
-    <geom name="floor" size="5 5 0.1" type="plane" condim="6"/>  
+    <geom name="floor" size="10 10 0.1" type="plane" condim="6"/>  
     <body name="agent" pos="0 0 .1">  
       <camera name="vision" pos="0 0 .15" xyaxes="0 -1 0 .4 0 1" fovy="90"/>  
       <camera name="vision_back" pos="0 0 .15" xyaxes="0 1 0 0 0 1" fovy="90"/>  

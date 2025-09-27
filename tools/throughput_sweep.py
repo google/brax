@@ -43,7 +43,17 @@ def sweep_throughput(
 ):
     _ensure_dir(out_dir)
     env = envs.get_environment(env_name)
-    csv_path = os.path.join(out_dir, f"throughput_sweep_{env_name}.csv")
+    # Create organized directory structure for throughput results
+    throughput_dir = os.path.join(out_dir, "throughput", env_name.replace("_", "-"))
+    _ensure_dir(throughput_dir)
+    
+    # Create descriptive filename with algorithm and key parameters
+    filename_parts = ["throughput", env_name, alg]
+    if safety_bound is not None:
+        filename_parts.append(f"bound{safety_bound}")
+    filename_parts.append(f"seed{seed}")
+    
+    csv_path = os.path.join(throughput_dir, f"{'_'.join(filename_parts)}.csv")
 
     def run_short(num_envs: int) -> float:
         sps_values: List[float] = []
@@ -115,7 +125,7 @@ def sweep_throughput(
             writer.writeheader()
         for nenv in num_envs_list:
             sps_mean = run_short(nenv)
-        writer.writerow(
+            writer.writerow(
                 {
                     "num_envs": nenv,
                     "sps_mean": sps_mean,

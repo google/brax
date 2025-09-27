@@ -2,7 +2,7 @@
   "env": "point_resetting_goal_random_hazard_lidar_sensor_obs",
   "alg": "ppo_lagrange",
   "out_dir": "runs/metrics",
-  "num_timesteps": 3000000,
+  "num_timesteps": 30000000,
   "episode_length": 1000,
   "num_envs": 1024,
   "unroll_length": 10,
@@ -19,9 +19,12 @@
   "num_evals": 5,
   "num_eval_envs": 128,
   "deterministic_eval": false,
-  "seed": 0,
   "safety_bound": 0.0,
   "lagrangian_coef_rate": 0.01,
   "initial_lambda_lagr": 0.0,
-  "env_kwargs": { "config_overrides": { "hazard_size": 0.6 } }
+  "env_kwargs": {
+    "config_overrides": {
+      "hazard_size": 0.6
+    }
+  }
 }

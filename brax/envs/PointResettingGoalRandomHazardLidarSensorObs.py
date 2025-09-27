@@ -328,6 +328,7 @@ class PointResettingGoalRandomHazardLidarSensorObs(PipelineEnv):
         'y_velocity': zero,
         'z_alignment': zero, # Z-alignment metric (even if reward disabled)
         'goals_reached_count': 0.0, # Track goals reached
+        'goal_achieved': zero, # Per-step goal achievement
     }
     return State(data, obs, reward, done, metrics, info)
 
@@ -499,6 +500,7 @@ class PointResettingGoalRandomHazardLidarSensorObs(PipelineEnv):
         'y_velocity': velocity[1],
         'z_alignment': z_alignment, # Log z_alignment
         'goals_reached_count': new_goals_reached_count.astype(jp.float32), # Track goals reached, ensure float32
+        'goal_achieved': jp.where(goal_achieved, 1.0, 0.0), # Per-step goal achievement (0 or 1)
     }
 
     # Create fresh State

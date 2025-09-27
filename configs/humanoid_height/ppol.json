@@ -19,7 +19,6 @@
   "num_evals": 5,
   "num_eval_envs": 128,
   "deterministic_eval": false,
-  "seed": 0,
   "safety_bound": 0.1,
   "lagrangian_coef_rate": 0.01,
   "initial_lambda_lagr": 0.0

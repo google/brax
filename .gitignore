@@ -13,6 +13,56 @@ __pycache__
 **/.venv/
 **/env_screenshots
 
+##### Project-specific experiment artifacts #####
+# Training artifacts
+/logs/
+/models/
+/runs/
+/trajectories/
+
+
+
+# Notebook outputs and metrics
+notebooks/metrics/
+notebooks/plots/
+notebooks/*.png
+notebooks/*_checkpoints/
+
+# Generated plots directory
+/plots/
+
+# Weights & Biases local data
+/wandb/
+/wandb_*/*
+
+# Deduped W&B exports
+/wandb_data_*/
+
+# Top-level run logs
+run_*.log
+run_*_log_*.txt
+
+# PID or sentinel files
+.pid_*
+.last_*_pid
+
+# Safety-gymnasium / external subprojects outputs
+Safe-Policy-Optimization/**/runs/
+Safe-Policy-Optimization/**/results/
+
+# Latex/Thesis derived files
+thesis/**/*.aux
+thesis/**/*.bbl
+thesis/**/*.blg
+thesis/**/*.fdb_latexmk
+thesis/**/*.fls
+thesis/**/*.log
+thesis/**/*.out
+thesis/**/*.synctex.gz
+thesis/**/*.toc
+samplemscthesis.*
+texput.log
+
 ####### UNITY STUFF
 
 */[Ll]ibrary/

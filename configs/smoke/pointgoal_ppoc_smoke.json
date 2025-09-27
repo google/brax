@@ -1,0 +1,32 @@
+{
+  "env_name": "safe_point_goal",
+  "alg": "ppo_cost",
+  "out_dir": "runs/smoke",
+  "num_timesteps": 10000,
+  "episode_length": 256,
+  "num_envs": 1,
+  "unroll_length": 8,
+  "batch_size": 512,
+  "num_minibatches": 8,
+  "num_updates_per_batch": 2,
+  "learning_rate": 0.0005,
+  "entropy_cost": 0.005,
+  "discounting": 0.99,
+  "reward_scaling": 0.1,
+  "gae_lambda": 0.95,
+  "clipping_epsilon": 0.3,
+  "normalize_observations": true,
+  "num_evals": 1,
+  "cost_weight": 1.0,
+  "env_kwargs": {
+    "config_overrides": {
+      "ctrl_cost_weight": 0.001,
+      "goal_size": 0.7,
+      "reward_goal": 10.0,
+      "reward_distance": 3,
+      "reward_orientation": false,
+      "reward_orientation_scale": 0.002
+    },
+    "num_hazards": 8
+  }
+}

@@ -16,10 +16,9 @@
   "gae_lambda": 0.95,
   "clipping_epsilon": 0.3,
   "normalize_observations": true,
-  "num_evals": 5,
+  "num_evals": 5  ,
   "num_eval_envs": 128,
   "deterministic_eval": false,
-  "seed": 0,
   "safety_bound": 0.0,
   "lagrangian_coef_rate": 0.01,
   "initial_lambda_lagr": 0.0

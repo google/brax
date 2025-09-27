@@ -31,19 +31,29 @@ class HumanoidHeightConstrained(HumanoidStandup):
 
   def __init__(
       self,
-      max_height: float = 1.3,  # Set below humanoid's natural max height (~2.0) to force crouching
+      min_height: float | None = 1.45,
+      # Backward-compat: if older configs provide max_height, we will treat it as a minimum by
+      # converting to an equivalent min_height. This keeps external configs working.
+      max_height: float | None = None,
+      hinge_margin: float = 0.08,
       height_cost_weight: float = 1.0,
       **kwargs,
   ):
     """Initialize the height-constrained humanoid environment.
     
     Args:
-      max_height: Maximum allowed height (z-coordinate of torso center of mass) in meters.
+      min_height: Minimum required height (z of torso CoM). Being below this incurs cost.
+      max_height: (Deprecated) If set by older configs, interpreted as min_height for compatibility.
+      hinge_margin: Soft hinge width. Violations scale linearly over this margin.
       height_cost_weight: Weight for height constraint violation cost.
       **kwargs: Additional arguments passed to parent Humanoid class.
     """
     super().__init__(**kwargs)
-    self._max_height = max_height
+    # Backward compatibility: treat provided max_height as the desired minimum
+    if min_height is None and max_height is not None:
+      min_height = max_height
+    self._min_height = 1.45 if min_height is None else float(min_height)
+    self._hinge_margin = float(hinge_margin)
     self._height_cost_weight = height_cost_weight
 
   def step(self, state: State, action: jax.Array) -> State:
@@ -55,25 +65,28 @@ class HumanoidHeightConstrained(HumanoidStandup):
 
     pipeline_state = self.pipeline_step(state.pipeline_state, action)
 
-    # Get current height (z coordinate of torso)
-    current_height = pipeline_state.x.pos[0, 2]
-    
-    # Calculate forward movement reward (similar to humanoid, not just upward like humanoidstandup)
+    # Calculate center-of-mass (CoM) before/after step for velocity and height
     pipeline_state0 = state.pipeline_state
     if pipeline_state0 is not None:
         com_before, *_ = self._com(pipeline_state0)
         com_after, *_ = self._com(pipeline_state)
         velocity = (com_after - com_before) / self.dt
         forward_reward = velocity[0]  # Reward forward movement
+        current_height = com_after[2]
     else:
         forward_reward = 0.0
+        # Fall back to root z if previous state not available
+        current_height = pipeline_state.x.pos[0, 2]
     
     # Control cost
     ctrl_cost = 0.01 * jp.sum(jp.square(action))
 
-    # Height constraint cost (this becomes the "safety constraint")
-    height_violation = jp.maximum(0.0, current_height - self._max_height)
-    height_cost = self._height_cost_weight * height_violation
+    # Height constraint cost (safety constraint): require torso height >= min_height
+    # Soft hinge: cost grows linearly when below the threshold within hinge_margin
+    height_deficit = jp.maximum(0.0, self._min_height - current_height)
+    # Normalize by hinge margin to keep cost on [0, ~1] for small deficits
+    normalized_deficit = height_deficit / self._hinge_margin
+    height_cost = self._height_cost_weight * normalized_deficit
 
     obs = self._get_obs(pipeline_state, action)
     
@@ -95,7 +108,7 @@ class HumanoidHeightConstrained(HumanoidStandup):
         x_velocity=velocity[0] if pipeline_state0 is not None else 0.0,
         y_velocity=velocity[1] if pipeline_state0 is not None else 0.0,
         height=jp.broadcast_to(current_height, reward_shape),
-        height_violation=jp.broadcast_to(height_violation, reward_shape),
+        height_violation=jp.broadcast_to(height_deficit, reward_shape),
         height_cost=jp.broadcast_to(height_cost, reward_shape),
         # Cost for PPO Lagrange (constraint violation)
         cost=jp.broadcast_to(height_cost, reward_shape),
@@ -109,9 +122,9 @@ class HumanoidHeightConstrained(HumanoidStandup):
     # Update info dictionary (copy existing and update)
     new_info = current_info.copy() if isinstance(current_info, dict) else {}
     new_info.update({
-        "cost": height_cost,  # Cost for PPO Lagrange v2 (keep as JAX array)
+        "cost": height_cost,
         "height": current_height,
-        "height_violation": height_violation,
+        "height_violation": height_deficit,
         "step_count": step_count,
     })
     
