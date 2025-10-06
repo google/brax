@@ -831,9 +831,9 @@ def create_rollout_plots(rollout_metrics_data: Dict[str, List], env_name: str) -
 
 def record_episode_video(
         env,  # a Brax env (same as for eval)
-        make_inference_fn, params,
-        xml_path: str,  # path to the MJCF used by the env (or equivalent)
-        steps: int = 250,
+        make_inference_fn,
+        params,
+        steps: int = 2500,
         camera: str | int = 0,  # camera name or id
         size: tuple[int, int] = (320, 240),
         fps: int = 30,
@@ -850,7 +850,7 @@ def record_episode_video(
     os.environ.setdefault("MUJOCO_GL", "egl")
 
     # 2) Load MJCF + make a renderer
-    m = mujoco.MjModel.from_xml_path(xml_path)
+    m = env.sys.mj_model
     d = mujoco.MjData(m)
     renderer = mujoco.Renderer(m, *size)
 
@@ -947,8 +947,6 @@ def main():
         },
         # "num_hazards": 8,
     }, help="JSON string or path for env_kwargs")
-    parser.add_argument("--env-xml-path", dest="env_xml_path", type=str,
-                        default=None, help="Path to the MJCF XML used for video rendering")
 
     # --- Algorithm ---
     parser.add_argument("--alg", type=str, default="ppo_lagrange", help="Algorithm name (e.g., ppo, ppo_lagrange)")
@@ -1007,7 +1005,7 @@ def main():
     parser.add_argument("--video_width", type=int, default=320, help="Output video width")
     parser.add_argument("--video_height", type=int, default=240, help="Output video height")
     parser.add_argument("--video_fps", type=int, default=30, help="Output video FPS")
-    parser.add_argument("--video_length", type=int, default=1000, help="Number of frames in the video")
+    parser.add_argument("--video_length", type=int, default=2500, help="Number of frames in the video")
 
     args = parser.parse_args()
 
@@ -1055,7 +1053,6 @@ def main():
                 env=envs.get_environment(config.get('env_name', config.get('env')), **config.get('env_kwargs', {})),
                 make_inference_fn=make_inference_fn,
                 params=params,
-                xml_path=args.env_xml_path,
                 steps=args.video_length,
                 camera=config.get("camera", 0),
                 size=(config.get("video_width", 320), config.get("video_height", 240)),
