@@ -45,11 +45,12 @@ class SACTest(parameterized.TestCase):
         grad_updates_per_step=64,
         num_evals=3,
         seed=0,
+        eval_env=envs.get_environment('fast'),
     )
     self.assertGreater(metrics['eval/episode_reward'], 140 * 0.995)
-    self.assertEqual(fast.reset_count, 3)  # type: ignore
-    # once for prefill, once for train, once for eval
-    self.assertEqual(fast.step_count, 3)  # type: ignore
+    self.assertEqual(fast.reset_count, 2)  # type: ignore
+    # once for prefill, once for train
+    self.assertEqual(fast.step_count, 2)  # type: ignore
 
   @parameterized.parameters(True, False)
   def testNetworkEncoding(self, normalize_observations):

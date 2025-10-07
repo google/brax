@@ -394,16 +394,28 @@ def train(
       randomization_fn,
   )
 
-  if local_devices_to_use > 1 or use_pmap_on_reset:
-    reset_fn = jax.pmap(env.reset, axis_name=_PMAP_AXIS_NAME)
-  else:
-    reset_fn = jax.jit(jax.vmap(env.reset))
+  def reset_fn_donated_env_state(env_state_donated, key_envs):
+    return env.reset(key_envs)
 
   key_envs = jax.random.split(key_env, num_envs // process_count)
   key_envs = jnp.reshape(
       key_envs, (local_devices_to_use, -1) + key_envs.shape[1:]
   )
-  env_state = reset_fn(key_envs)
+  if local_devices_to_use > 1 or use_pmap_on_reset:
+    reset_fn_ = jax.pmap(env.reset, axis_name=_PMAP_AXIS_NAME)
+    env_state = reset_fn_(key_envs)
+    reset_fn = jax.pmap(
+        reset_fn_donated_env_state,
+        axis_name=_PMAP_AXIS_NAME,
+        donate_argnums=(0,),
+    )
+  else:
+    reset_fn_ = jax.jit(jax.vmap(env.reset))
+    env_state = reset_fn_(key_envs)
+    reset_fn = jax.jit(
+        reset_fn_donated_env_state, donate_argnums=(0,), keep_unused=True
+    )
+
   # Discard the batch axes over devices and envs.
   obs_shape = jax.tree_util.tree_map(lambda x: x.shape[2:], env_state.obs)
 
@@ -611,7 +623,14 @@ def train(
     loss_metrics = jax.tree_util.tree_map(jnp.mean, loss_metrics)
     return training_state, state, loss_metrics
 
-  training_epoch = jax.pmap(training_epoch, axis_name=_PMAP_AXIS_NAME)
+  training_epoch = jax.pmap(
+      training_epoch,
+      axis_name=_PMAP_AXIS_NAME,
+      donate_argnums=(
+          0,
+          1,
+      ),
+  )
 
   # Note that this is NOT a pure jittable method.
   def training_epoch_with_timing(
@@ -755,7 +774,8 @@ def train(
           lambda x, s: jax.random.split(x[0], s), in_axes=(0, None)
       )(key_envs, key_envs.shape[1])
       # TODO(brax-team): move extra reset logic to the AutoResetWrapper.
-      env_state = reset_fn(key_envs) if num_resets_per_eval > 0 else env_state
+      if num_resets_per_eval > 0:
+        env_state = reset_fn((training_state, env_state), key_envs)
 
     if process_id != 0:
       continue
