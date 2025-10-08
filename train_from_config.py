@@ -10,13 +10,13 @@ import json
 import os
 import time
 from datetime import datetime
-from typing import Dict, Any, Tuple, List, Optional
+from typing import Dict, Any, List
 
 import imageio.v3 as iio
 import jax
 import jax.numpy as jnp
 import mujoco
-import numpy as np
+from jax import lax
 from matplotlib import pyplot as plt
 
 from brax import envs
@@ -204,14 +204,13 @@ class MetricsBuffer:
 # Global metrics buffer instance
 _metrics_buffer = MetricsBuffer()
 
-
-import re
 import numpy as np
-from typing import Callable, Dict, Optional, Union, Pattern, Tuple, Any
+from typing import Callable, Dict, Optional, Union, Pattern, Any
 
 Reducer = Callable[[np.ndarray], float]
 ReducerSpec = Union[str, Reducer]
 ReducerOverrides = Dict[Union[str, Pattern[str]], ReducerSpec]
+
 
 def _get_named_reducer(name: str) -> Reducer:
     if name == "last":
@@ -225,6 +224,7 @@ def _get_named_reducer(name: str) -> Reducer:
     if name == "min":
         return lambda a: float(a.min())
     raise ValueError(f"Unknown reducer name: {name}")
+
 
 def _resolve_reducer(
         key: str,
@@ -240,6 +240,7 @@ def _resolve_reducer(
             if matched:
                 return spec if callable(spec) else _get_named_reducer(spec)
     return default if callable(default) else _get_named_reducer(default)
+
 
 def reduce_for_logging(
         key: str,
@@ -330,7 +331,8 @@ def custom_progress_fn(num_steps: int, metrics: Dict[str, Any],
     is_eval = any(k.startswith("eval/") for k in wandb_log_data.keys())
     if use_wandb and wandb.run is not None and wandb_log_data:
         if is_eval or _metrics_buffer.should_log_to_wandb(num_steps_int):
-            payload = wandb_log_data if is_eval else {k: v for k, v in _metrics_buffer.metrics_history[-1].items() if k != "step"}
+            payload = wandb_log_data if is_eval else {k: v for k, v in _metrics_buffer.metrics_history[-1].items() if
+                                                      k != "step"}
             wandb.log(payload, step=num_steps_int)
             _metrics_buffer.last_wandb_log_step = num_steps_int
             if len(_metrics_buffer.metrics_history) > 1000:
@@ -884,7 +886,7 @@ def record_episode_video(
         camera: str | int = 0,  # camera name or id
         width: int = 320,
         height: int = 240,
-        fps: int = 30,
+        fps: int = 100,
         out_name: str = "rollout.mp4",
         log_to_wandb: bool = True,
         seed: int = 0,
@@ -899,23 +901,33 @@ def record_episode_video(
 
     # 2) JIT policy
     infer = make_inference_fn(params)
-    infer = jax.jit(infer)
-    reset = jax.jit(env.reset)
-    step = jax.jit(env.step)
 
-    # 3) Rollout
+    @jax.jit
+    def rollout(key):
+        state = env.reset(key)
+
+        def step_fn(carry, _):
+            state, key = carry
+            key, sk = jax.random.split(key)
+            action, _ = infer(state.obs, sk)
+            next_state = env.step(state, action)
+            return (next_state, key), next_state.pipeline_state
+
+        (final_state, _), frames = lax.scan(step_fn, (state, key), xs=None, length=steps)
+        return frames, final_state
+
+    # 3) Run rollout to collect frames
     key = jax.random.PRNGKey(seed)
-    state = reset(key)
-    frames = []
+    frames_batched, _ = rollout(key)  # PyTree with leading T
+    frames_batched = jax.device_get(frames_batched)
 
-    for t in range(steps):
-        key, sk = jax.random.split(key)
-        action, _ = infer(state.obs, sk)
-        state = step(state, action)
-        frames.append(state.pipeline_state)
+    # Unstack to a Python list of per-step pipeline states
+    leaves = jax.tree_util.tree_leaves(frames_batched)
 
-        if getattr(state, "done", False):
-            break
+    def index_t(t):
+        return jax.tree.map(lambda x: x[t], frames_batched)
+
+    frames = [index_t(t) for t in range(int(leaves[0].shape[0]))]
 
     # 4) Render
     rendering = env.render(frames, width=width, height=height, camera=camera)
