@@ -9,8 +9,7 @@ from train_from_config import record_episode_video
 
 
 # --- Dummy circular policy maker ---
-def make_circular_policy(action_dim: int, thrust: float = 1.0, yaw_rate: float = 0.3,
-                         thrust_idx: int = 0, yaw_idx: int = 1):
+def make_circular_policy(action_dim: int, thrust: float, yaw_rate: float, thrust_idx: int, yaw_idx: int):
     """
     Returns a make_inference_fn(params)->inference(obs, rng)->(action, info)
     that always outputs constant [thrust, yaw_rate] (others = 0).
@@ -48,7 +47,8 @@ def test_record_video_circular(out_path):
         params=None,  # policy ignores params
         steps=2500,
         camera="fixedfar",
-        size=(320, 240),
+        width=640,
+        height=480,
         fps=500,
         out_name=str(out_path.name),
         log_to_wandb=False,

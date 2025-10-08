@@ -20,6 +20,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 from brax import envs
+from brax.envs import Env
 from brax.envs.base import State as BraxState, Wrapper
 
 # Import training modules conditionally to handle missing modules gracefully
@@ -338,7 +339,7 @@ def get_algorithm_train_fn(alg_name: str):
 
 
 def train_from_config(config: Dict[str, Any], seed: int,
-                      use_wandb: bool = True, verbose: bool = True) -> tuple[Any, Any, Any, list[Any]]:
+                      use_wandb: bool = True, verbose: bool = True) -> tuple[Any, Any, Any, list[Any], Env]:
     """
     Train an agent using the provided configuration.
 
@@ -517,7 +518,7 @@ def train_from_config(config: Dict[str, Any], seed: int,
                 writer.writerow({k: row.get(k, '') for k in fieldnames})
         print(f"Metrics saved to {metrics_filename}")
 
-    return make_inference_fn, params, final_eval_metrics, metrics_list
+    return make_inference_fn, params, final_eval_metrics, metrics_list, eval_env
 
 
 def collect_rollout_metrics(env_name: str, make_inference_fn, params,
@@ -835,7 +836,8 @@ def record_episode_video(
         params,
         steps: int = 2500,
         camera: str | int = 0,  # camera name or id
-        size: tuple[int, int] = (320, 240),
+        width: int = 320,
+        height: int = 240,
         fps: int = 30,
         out_name: str = "rollout.mp4",
         log_to_wandb: bool = True,
@@ -846,60 +848,36 @@ def record_episode_video(
     We step the *env* for observations/actions, and in parallel step a MuJoCo
     simulator for pretty pixels.
     """
-    # 1) Ensure headless GPU rendering
+    # 1) Ensure headless GPU rendering (you might need to do this before importing mujoco)
     os.environ.setdefault("MUJOCO_GL", "egl")
 
-    # 2) Load MJCF + make a renderer
-    m = env.sys.mj_model
-    d = mujoco.MjData(m)
-    renderer = mujoco.Renderer(m, *size)
-
-    # 3) JIT policy
+    # 2) JIT policy
     infer = make_inference_fn(params)
     infer = jax.jit(infer)
     reset = jax.jit(env.reset)
     step = jax.jit(env.step)
 
-    # 4) Rollout (env for control / mujoco for pixels)
+    # 3) Rollout
     key = jax.random.PRNGKey(seed)
     state = reset(key)
     frames = []
 
-    # initialize mujoco state to env init
-    mujoco.mj_forward(m, d)
-
     for t in range(steps):
         key, sk = jax.random.split(key)
         action, _ = infer(state.obs, sk)
-
-        # step control env
         state = step(state, action)
-
-        # try to map action to MuJoCo ctrl (assumes same action space)
-        # convert JAX -> numpy
-        a_np = np.asarray(action)
-        if a_np.ndim > 1:  # if batched, take first
-            a_np = a_np[0]
-        if d.ctrl.size > 0:
-            d.ctrl[:] = np.asarray(a_np, dtype=np.float64)
-
-        # advance MuJoCo one step
-        mujoco.mj_step(m, d)
-
-        # render frame
-        renderer.update_scene(d, camera=camera)
-        img = renderer.render()
-        frames.append(img)
+        frames.append(state.pipeline_state)
 
         if getattr(state, "done", False):
             break
 
-    renderer.close()
+    # 4) Render
+    rendering = env.render(frames, width=width, height=height, camera=camera)
 
     # 5) Save mp4 (and log)
     os.makedirs("videos", exist_ok=True)
     mp4_path = os.path.join("videos", out_name)
-    iio.imwrite(mp4_path, np.stack(frames), fps=fps)
+    iio.imwrite(mp4_path, np.stack(rendering), fps=fps)
 
     if log_to_wandb and wandb.run is not None:
         wandb.log({"rollout/video": wandb.Video(mp4_path, fps=fps, format="mp4")})
@@ -1026,7 +1004,7 @@ def main():
         print(f"{'=' * 50}\n")
 
         # Train the agent
-        make_inference_fn, params, final_metrics, metrics_list = train_from_config(
+        make_inference_fn, params, final_metrics, metrics_list, eval_env = train_from_config(
             config=config,
             seed=seed,
             use_wandb=not args.no_wandb,
@@ -1050,7 +1028,7 @@ def main():
 
         if not args.skip_video:
             vid = record_episode_video(
-                env=envs.get_environment(config.get('env_name', config.get('env')), **config.get('env_kwargs', {})),
+                env=eval_env,
                 make_inference_fn=make_inference_fn,
                 params=params,
                 steps=args.video_length,

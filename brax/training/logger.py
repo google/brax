@@ -55,10 +55,11 @@ class EpisodeMetricsLogger:
         )
         mean_metrics = {}
         for metric_name in self._metrics_buffer:
-            mean_metrics[metric_name] = np.mean(self._metrics_buffer[metric_name])
+            last_val = self._metrics_buffer[metric_name][-1]
+            mean_metrics[metric_name] = last_val
             log_string += (
                 f"{f'Episode {metric_name}:':>{pad}}"
-                f" {mean_metrics[metric_name]:.4f}\n"
+                f" {last_val:.4f}\n"
             )
         logging.info(log_string)
         if self._progress_fn is not None:
@@ -91,21 +92,23 @@ class TrainingMetricsLogger:
           metrics: Dictionary of training metrics (losses, lambda values, etc.)
           env_steps: Current environment step count
         """
-        self._num_steps = env_steps
+        if hasattr(env_steps, 'hi') and hasattr(env_steps, 'lo'):
+            # 1) Brax types.UInt64 with hi/lo
+            self._num_steps = int((np.uint64(env_steps.hi) << 32) + np.uint64(env_steps.lo))
+        else:
+            # 2) numpy/jax scalar/array
+            arr = np.asarray(env_steps)
+            self._num_steps = 0 if arr.size == 0 else int(arr.reshape(-1)[-1])
 
         # Add metrics to buffer
+        # inside update_training_metrics(...)
         for name, metric in metrics.items():
-            # Convert JAX arrays to Python scalars
-            if hasattr(metric, 'item'):
-                value = metric.item()
-            elif hasattr(metric, '__float__'):
-                value = float(metric)
-            else:
-                value = metric
-
-            # Only add finite values
-            if np.isfinite(value):
-                self._metrics_buffer[name].append(value)
+            arr = np.asarray(metric)  # works for Python scalars, jax arrays, numpy arrays
+            if arr.size == 0 or not np.all(np.isfinite(arr)):
+                continue
+            # pick how to collapse arrays -> scalars
+            value = float(arr.reshape(-1)[-1])   # <-- last element of this training step
+            self._metrics_buffer[name].append(value)
 
         # Log if enough steps have passed
         if self._num_steps - self._last_log_steps >= self._steps_between_logging:
@@ -121,10 +124,11 @@ class TrainingMetricsLogger:
         mean_metrics = {}
         for metric_name in self._metrics_buffer:
             if len(self._metrics_buffer[metric_name]) > 0:
-                mean_metrics[metric_name] = np.mean(self._metrics_buffer[metric_name])
+                last_val = self._metrics_buffer[metric_name][-1]
+                mean_metrics[metric_name] = last_val
                 log_string += (
                     f"{f'Training {metric_name}:':>{pad}}"
-                    f" {mean_metrics[metric_name]:.4f}\n"
+                    f" {last_val:.4f}\n"
                 )
         logging.info(log_string)
         if self._progress_fn is not None and mean_metrics:

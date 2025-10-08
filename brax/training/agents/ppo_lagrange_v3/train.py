@@ -36,9 +36,9 @@ from brax.training import pmap
 from brax.training import types
 from brax.training.acme import running_statistics
 from brax.training.acme import specs
-from brax.training.agents.ppo_lagrange_v2 import checkpoint
-from brax.training.agents.ppo_lagrange_v2 import losses as ppo_losses
-from brax.training.agents.ppo_lagrange_v2 import networks as ppo_networks
+from brax.training.agents.ppo_lagrange_v3 import checkpoint
+from brax.training.agents.ppo_lagrange_v3 import losses as ppo_losses
+from brax.training.agents.ppo_lagrange_v3 import networks as ppo_networks
 from brax.training.types import PRNGKey
 from brax.training.types import Params
 
@@ -230,13 +230,17 @@ def train(
         lagrangian_coef_rate: float = 0.01,
         initial_lambda_lagr: float = 0.0,
         # eval
-        num_evals: int = 1,
+        num_evals: int = 0,
         eval_env: Optional[envs.Env] = None,
         num_eval_envs: int = 128,
         deterministic_eval: bool = False,
         # training metrics
         log_training_metrics: bool = True,
         training_metrics_steps: Optional[int] = None,
+        # logging control
+        log_frequency: str = "end",  # "end", "periodic", or "epoch"
+        log_interval_steps: Optional[int] = None,  # steps between logs when log_frequency="periodic"
+        num_log_points: int = 100,  # number of log points across training when log_frequency="periodic"
         # callbacks
         progress_fn: Callable[[int, Metrics], None] = lambda *args: None,
         policy_params_fn: Callable[..., None] = lambda *args: None,
@@ -296,7 +300,8 @@ def train(
       lagrangian_coef_rate: learning rate for Lagrange multiplier updates
       initial_lambda_lagr: initial value for the Lagrange multiplier
       num_evals: the number of evals to run during the entire training run.
-        Increasing the number of evals increases total training time
+        Set to 0 to disable evaluation (default). Increasing the number of evals 
+        increases total training time
       eval_env: an optional environment for eval only, defaults to `environment`
       num_eval_envs: the number of envs to use for evluation. Each env will run 1
         episode, and all envs run in parallel during eval.
@@ -305,6 +310,12 @@ def train(
         progress_fn
       training_metrics_steps: the number of environment steps between logging
         training metrics
+      log_frequency: when to log metrics. "end" = only at end (fastest), 
+        "periodic" = at regular intervals, "epoch" = after each training epoch
+      log_interval_steps: explicit steps between logs when log_frequency="periodic".
+        If None, automatically calculated based on num_log_points
+      num_log_points: number of log points across training when log_frequency="periodic"
+        (default 100). Ignored if log_interval_steps is specified
       progress_fn: a user-defined callback function for reporting/plotting metrics
       policy_params_fn: a user-defined callback function that can be used for
         saving custom policy checkpoints or creating policy rollouts and videos
@@ -348,18 +359,33 @@ def train(
     env_step_per_training_step = (
             batch_size * unroll_length * num_minibatches * action_repeat
     )
-    num_evals_after_init = max(num_evals - 1, 1)
-    # The number of training_step calls per training_epoch call.
-    # equals to ceil(num_timesteps / (num_evals * env_step_per_training_step *
-    #                                 num_resets_per_eval))
-    num_training_steps_per_epoch = np.ceil(
-        num_timesteps
-        / (
-                num_evals_after_init
-                * env_step_per_training_step
-                * max(num_resets_per_eval, 1)
-        )
-    ).astype(int)
+
+    # Handle optional evaluation
+    if num_evals == 0:
+        # No evaluation - run all training steps in one go
+        num_evals_after_init = 1
+        num_training_steps_per_epoch = np.ceil(
+            num_timesteps / (env_step_per_training_step * max(num_resets_per_eval, 1))
+        ).astype(int)
+    else:
+        # With evaluation - split training across evaluation intervals
+        num_evals_after_init = max(num_evals - 1, 1)
+        num_training_steps_per_epoch = np.ceil(
+            num_timesteps
+            / (
+                    num_evals_after_init
+                    * env_step_per_training_step
+                    * max(num_resets_per_eval, 1)
+            )
+        ).astype(int)
+
+    # Calculate logging interval for periodic logging
+    if log_frequency == "periodic":
+        if log_interval_steps is None:
+            # Automatically calculate interval based on num_log_points
+            log_interval_steps = max(1, num_timesteps // num_log_points)
+        # Ensure log_interval_steps is at least one training step
+        log_interval_steps = max(log_interval_steps, env_step_per_training_step)
 
     key = jax.random.PRNGKey(seed)
     global_key, local_key = jax.random.split(key)
@@ -447,13 +473,17 @@ def train(
         return (loss, metrics), new_params, new_optimizer_state
 
     metrics_aggregator = metric_logger.EpisodeMetricsLogger(
-        steps_between_logging=training_metrics_steps or min(env_step_per_training_step, 10000),
+        buffer_size=1,
+        # steps_between_logging=training_metrics_steps or min(env_step_per_training_step, 10000),
+        steps_between_logging=1,
         progress_fn=progress_fn,
     )
 
     # Create training metrics aggregator for fine-grained training metrics logging
     training_metrics_aggregator = metric_logger.TrainingMetricsLogger(
-        steps_between_logging=training_metrics_steps or min(env_step_per_training_step, 10000),
+        buffer_size=1,
+        # steps_between_logging=training_metrics_steps or min(env_step_per_training_step, 10000),
+        steps_between_logging=1,
         progress_fn=progress_fn,
     )
 
@@ -490,9 +520,8 @@ def train(
             unused_t,
             data: types.Transition,
             normalizer_params: running_statistics.RunningStatisticsState,
-            lambda_lagr: jnp.ndarray,
     ):
-        optimizer_state, params, key = carry
+        optimizer_state, params, key, lambda_lagr = carry
         key, key_perm, key_grad = jax.random.split(key, 3)
 
         if augment_pixels:
@@ -576,9 +605,9 @@ def train(
 
         (optimizer_state, params, _, lambda_after_update), metrics = jax.lax.scan(
             functools.partial(
-                sgd_step, data=data, normalizer_params=normalizer_params, lambda_lagr=training_state.lambda_lagr
+                sgd_step, data=data, normalizer_params=normalizer_params
             ),
-            (training_state.optimizer_state, training_state.params, key_sgd),
+            (training_state.optimizer_state, training_state.params, key_sgd, training_state.lambda_lagr),
             (),
             length=num_updates_per_batch,
         )
@@ -645,9 +674,9 @@ def train(
               ) / epoch_training_time
 
         metrics = {
-            'training/sps': sps,
-            'training/walltime': training_walltime,
-            **{f'training/{name}': value for name, value in metrics.items()},
+            'training_old/sps': sps,
+            'training_old/walltime': training_walltime,
+            **{f'training_old/{name}': value for name, value in metrics.items()},
         }
         return training_state, env_state, metrics  # pytype: disable=bad-return-type  # py311-upgrade
 
@@ -720,29 +749,32 @@ def train(
         training_state, jax.local_devices()[:local_devices_to_use]
     )
 
-    eval_env = _maybe_wrap_env(
-        eval_env or environment,
-        wrap_env,
-        num_eval_envs,
-        episode_length,
-        action_repeat,
-        device_count=1,  # eval on the host only
-        key_env=eval_key,
-        wrap_env_fn=wrap_env_fn,
-        randomization_fn=randomization_fn,
-    )
-    evaluator = acting.Evaluator(
-        eval_env,
-        functools.partial(make_policy, deterministic=deterministic_eval),
-        num_eval_envs=num_eval_envs,
-        episode_length=episode_length,
-        action_repeat=action_repeat,
-        key=eval_key,
-    )
+    # Only create evaluator if evaluation is enabled
+    evaluator = None
+    if num_evals > 0:
+        eval_env = _maybe_wrap_env(
+            eval_env or environment,
+            wrap_env,
+            num_eval_envs,
+            episode_length,
+            action_repeat,
+            device_count=1,  # eval on the host only
+            key_env=eval_key,
+            wrap_env_fn=wrap_env_fn,
+            randomization_fn=randomization_fn,
+        )
+        evaluator = acting.Evaluator(
+            eval_env,
+            functools.partial(make_policy, deterministic=deterministic_eval),
+            num_eval_envs=num_eval_envs,
+            episode_length=episode_length,
+            action_repeat=action_repeat,
+            key=eval_key,
+        )
 
     # Run initial eval
     metrics = {}
-    if process_id == 0 and num_evals > 1:
+    if process_id == 0 and num_evals > 1 and evaluator is not None:
         metrics = evaluator.run_evaluation(
             _unpmap((
                 training_state.normalizer_params,
@@ -757,6 +789,8 @@ def train(
     training_metrics = {}
     training_walltime = 0
     current_step = 0
+    last_log_step = 0
+
     for it in range(num_evals_after_init):
         logging.info('starting iteration %s %s', it, time.time() - xt)
 
@@ -769,9 +803,21 @@ def train(
             )
             current_step = int(_unpmap(training_state.env_steps))
 
-            # Log training metrics after each epoch for more fine-grained logging
+            # Implement different logging frequencies
+            should_log = False
             if process_id == 0 and training_metrics:
-                progress_fn(current_step, training_metrics)
+                if log_frequency == "epoch":
+                    # Log after each epoch
+                    should_log = True
+                elif log_frequency == "periodic":
+                    # Log at specified intervals
+                    if current_step - last_log_step >= log_interval_steps:
+                        should_log = True
+                        last_log_step = current_step
+                # For "end" frequency, we don't log during training
+
+                if should_log:
+                    progress_fn(current_step, training_metrics)
 
             key_envs = jax.vmap(
                 lambda x, s: jax.random.split(x[0], s), in_axes=(0, None)
@@ -805,7 +851,8 @@ def train(
                 save_checkpoint_path, current_step, full_params, ckpt_config
             )
 
-        if num_evals > 0:
+        # Only run evaluation if enabled
+        if num_evals > 0 and evaluator is not None:
             metrics = evaluator.run_evaluation(
                 params,
                 training_metrics,
@@ -829,6 +876,17 @@ def train(
         training_state.params.value,
         training_state.params.cost_value,
     ))
+
+    # Always log final metrics, especially important for "end" frequency mode
+    if process_id == 0 and training_metrics:
+        progress_fn(total_steps, training_metrics)
+
+    # If no evaluation was run, create basic final metrics
+    if not metrics:
+        metrics = {'training/final_step': total_steps}
+        if training_metrics:
+            metrics.update(training_metrics)
+
     logging.info('total steps: %s', total_steps)
     pmap.synchronize_hosts()
     return (make_policy, params, metrics)
