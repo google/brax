@@ -205,11 +205,74 @@ class MetricsBuffer:
 _metrics_buffer = MetricsBuffer()
 
 
+import re
+import numpy as np
+from typing import Callable, Dict, Optional, Union, Pattern, Tuple, Any
+
+Reducer = Callable[[np.ndarray], float]
+ReducerSpec = Union[str, Reducer]
+ReducerOverrides = Dict[Union[str, Pattern[str]], ReducerSpec]
+
+def _get_named_reducer(name: str) -> Reducer:
+    if name == "last":
+        return lambda a: float(a.reshape(-1)[-1])
+    if name == "mean":
+        return lambda a: float(a.mean())
+    if name == "median":
+        return lambda a: float(np.median(a))
+    if name == "max":
+        return lambda a: float(a.max())
+    if name == "min":
+        return lambda a: float(a.min())
+    raise ValueError(f"Unknown reducer name: {name}")
+
+def _resolve_reducer(
+        key: str,
+        overrides: Optional[ReducerOverrides],
+        default: ReducerSpec
+) -> Reducer:
+    if overrides:
+        for patt, spec in overrides.items():
+            if isinstance(patt, str):
+                matched = (patt == key)
+            else:  # compiled regex
+                matched = bool(patt.search(key))
+            if matched:
+                return spec if callable(spec) else _get_named_reducer(spec)
+    return default if callable(default) else _get_named_reducer(default)
+
+def reduce_for_logging(
+        key: str,
+        value: Any,
+        *,
+        default: ReducerSpec = "last",
+        overrides: Optional[ReducerOverrides] = None
+) -> Optional[float]:
+    """
+    Convert any value to a single finite float according to reducer policy.
+    - default: reducer name or callable, used when no override matches.
+    - overrides: { exact_key or regex: reducer_name|callable }
+    Returns None if empty or all non-finite.
+    """
+    arr = np.asarray(value)
+    if arr.size == 0:
+        return None
+    # keep only finite
+    flat = arr.reshape(-1)
+    finite = flat[np.isfinite(flat)]
+    if finite.size == 0:
+        return None
+    reducer = _resolve_reducer(key, overrides, default)
+    return reducer(finite)
+
+
 def custom_progress_fn(num_steps: int, metrics: Dict[str, Any],
                        metrics_list: Optional[List] = None,
                        use_wandb: bool = False,
                        verbose: bool = True,
-                       wandb_log_interval: int = 50000) -> None:
+                       wandb_log_interval: int = 50000,
+                       default_reducer: ReducerSpec = "last",
+                       reducer_overrides: Optional[ReducerOverrides] = None) -> None:
     """
     Progress function to print metrics and log to Weights & Biases.
 
@@ -223,6 +286,12 @@ def custom_progress_fn(num_steps: int, metrics: Dict[str, Any],
     """
     global _metrics_buffer
 
+    # make sure num_steps is a plain int
+    try:
+        num_steps_int = int(np.asarray(num_steps).reshape(()))
+    except Exception:
+        num_steps_int = int(num_steps)
+
     # Update buffer interval if different
     if _metrics_buffer.wandb_log_interval != wandb_log_interval:
         _metrics_buffer.wandb_log_interval = wandb_log_interval
@@ -230,66 +299,40 @@ def custom_progress_fn(num_steps: int, metrics: Dict[str, Any],
     if verbose:
         print(f"Step {num_steps}:")
 
-    # Always collect metrics locally for fine-grained history
     wandb_log_data = {}
     for key, value in metrics.items():
-        log_value = value.item() if hasattr(value, 'item') else value
+        scalar = reduce_for_logging(
+            key, value, default=default_reducer, overrides=reducer_overrides
+        )
+        if scalar is None:
+            continue
 
-        # Print lambda and cost-related metrics for debugging
-        if verbose and ("lambda" in key or "cost" in key or "constraint" in key):
-            print(f"  {key}: {log_value}")
+        if verbose and any(tok in key for tok in ("lambda", "cost", "constraint")):
+            # purely for console visibility; not a policy decision
+            print(f"  {key}: {scalar}")
 
+        # namespacing, unchanged
         if not (key.startswith("episode/") or key.startswith("eval/") or key.startswith("training/")):
-            wandb_log_data[f"training_batch/{key}"] = log_value
+            wandb_log_data[f"training_batch/{key}"] = scalar
         else:
-            wandb_log_data[key] = log_value
+            wandb_log_data[key] = scalar
 
-    # Always store in local metrics list for fine-grained history
     if metrics_list is not None:
-        metrics_data_local = {'step': num_steps}
-        metrics_data_local.update(metrics)
-        metrics_list.append(metrics_data_local)
+        row = {"step": num_steps_int}
+        for k, v in metrics.items():
+            s = reduce_for_logging(k, v, default=default_reducer, overrides=reducer_overrides)
+            if s is not None:
+                row[k] = s
+        metrics_list.append(row)
 
-    # Store in buffer for potential wandb logging
-    _metrics_buffer.metrics_history.append({
-        'step': num_steps,
-        **wandb_log_data
-    })
+    _metrics_buffer.metrics_history.append({"step": num_steps_int, **wandb_log_data})
 
-    # Only log to wandb periodically or for evaluation metrics
-    should_log_wandb = False
-    is_eval_metrics = any(key.startswith("eval/") for key in metrics.keys())
-
-    if use_wandb and wandb.run is not None:
-        if is_eval_metrics:
-            # Always log evaluation metrics immediately (they're infrequent and important)
-            should_log_wandb = True
-        elif _metrics_buffer.should_log_to_wandb(num_steps):
-            # Log training metrics periodically
-            should_log_wandb = True
-
-        if should_log_wandb and wandb_log_data:
-            if is_eval_metrics:
-                # Log eval metrics directly
-                wandb.log(wandb_log_data, step=int(num_steps))
-            else:
-                # For training metrics, get recent metrics since last log
-                recent_metrics = [
-                    m for m in _metrics_buffer.metrics_history 
-                    if m['step'] > _metrics_buffer.last_wandb_log_step
-                ]
-
-                if recent_metrics:
-                    # Use the latest training metrics (to preserve fine-grained info)
-                    # but could also aggregate if preferred
-                    latest_metrics = recent_metrics[-1].copy()
-                    latest_metrics.pop('step', None)  # Remove step from metrics
-                    wandb.log(latest_metrics, step=int(num_steps))
-
-            _metrics_buffer.last_wandb_log_step = num_steps
-
-            # Clean up old metrics to prevent memory growth
-            # Keep only recent history (last 1000 entries)
+    is_eval = any(k.startswith("eval/") for k in wandb_log_data.keys())
+    if use_wandb and wandb.run is not None and wandb_log_data:
+        if is_eval or _metrics_buffer.should_log_to_wandb(num_steps_int):
+            payload = wandb_log_data if is_eval else {k: v for k, v in _metrics_buffer.metrics_history[-1].items() if k != "step"}
+            wandb.log(payload, step=num_steps_int)
+            _metrics_buffer.last_wandb_log_step = num_steps_int
             if len(_metrics_buffer.metrics_history) > 1000:
                 _metrics_buffer.metrics_history = _metrics_buffer.metrics_history[-1000:]
 
