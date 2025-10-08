@@ -525,15 +525,18 @@ def train_from_config(config: Dict[str, Any], seed: int,
         progress_fn=bound_progress_fn
     )
     print("Training finished.")
-    print(f"Final evaluation metrics: {final_eval_metrics}")
+    # print(f"Final evaluation metrics: {final_eval_metrics}")
 
     # Log final metrics to wandb
     if use_wandb and wandb.run is not None and final_eval_metrics:
         final_log_data = {}
         for key, value in final_eval_metrics.items():
-            log_value = value.item() if hasattr(value, 'item') else value
-            final_log_data[key] = log_value
-        wandb.log(final_log_data, step=int(num_timesteps))
+            # average across parallel eval envs (or whatever you prefer)
+            scalar = reduce_for_logging(key, value, default="mean")
+            if scalar is not None:
+                final_log_data[key] = scalar
+        if final_log_data:
+            wandb.log(final_log_data, step=int(float(np.asarray(num_timesteps).reshape(()))))
 
     # Save model
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1076,7 +1079,8 @@ def main():
                 params=params,
                 steps=args.video_length,
                 camera=config.get("camera", 0),
-                size=(config.get("video_width", 320), config.get("video_height", 240)),
+                width=config.get("video_width", 320),
+                height=config.get("video_height", 240),
                 fps=int(config.get("video_fps", 30)),
                 out_name=f"{config.get('env_name', 'env')}_{config.get('alg', 'algo')}_seed{seed}.mp4",
                 log_to_wandb=not args.no_wandb,
