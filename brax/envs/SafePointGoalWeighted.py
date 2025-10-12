@@ -324,12 +324,13 @@ class SafePointGoalWeighted(PipelineEnv):
             "step_count": 0,
             "last_dist_goal": initial_dist_goal,
             "goals_reached_count": 0,
+            "goals_per_episode": 0,
             "cost": 0.0,
         }
 
         obs = self._get_obs(data)
         reward, done = jp.zeros(2)
-        metrics = self._get_metrics(data, reward, 0.0, initial_dist_goal, initial_dist_goal, 0.0, 0.0)
+        metrics = self._get_metrics(data, reward, 0.0, initial_dist_goal, initial_dist_goal, 0.0, 0.0, 0.0, 0.0)
 
         return State(data, obs, reward, done, metrics, info)
 
@@ -390,6 +391,10 @@ class SafePointGoalWeighted(PipelineEnv):
         updated_goals_reached = jp.where(goal_achieved,
                                          state.info['goals_reached_count'] + 1,
                                          state.info['goals_reached_count'])
+        updated_goals_per_episode = jp.where(goal_achieved,
+                                            state.info['goals_per_episode'] + 1,
+                                            state.info['goals_per_episode'])
+        goals_per_step = jp.where(goal_achieved, 1.0, 0.0)  # Binary indicator for this step
 
         if self._goal_mocap_id >= 0:
             data = data.replace(mocap_pos=data.mocap_pos.at[self._goal_mocap_id].set(updated_goal_pos))
@@ -401,7 +406,7 @@ class SafePointGoalWeighted(PipelineEnv):
         )
 
         obs = self._get_obs(data)
-        metrics = self._get_metrics(data, reward, cost, dist_goal, last_dist_goal, ctrl_cost, updated_goals_reached)
+        metrics = self._get_metrics(data, reward, cost, dist_goal, last_dist_goal, ctrl_cost, updated_goals_reached, updated_goals_per_episode, goals_per_step)
 
         new_info = state.info.copy()
         new_info.update({
@@ -409,6 +414,7 @@ class SafePointGoalWeighted(PipelineEnv):
             "step_count": state.info['step_count'] + 1,
             "last_dist_goal": new_last_dist_goal,
             "goals_reached_count": updated_goals_reached,
+            "goals_per_episode": updated_goals_per_episode,
             "cost": cost,
         })
 
@@ -587,7 +593,7 @@ class SafePointGoalWeighted(PipelineEnv):
 
     def _get_metrics(self, data: mjx.Data, reward: jp.ndarray, cost: jp.ndarray,
                     dist_goal: jp.ndarray, last_dist_goal: jp.ndarray, ctrl_cost: jp.ndarray,
-                    goals_reached_count: jp.ndarray) -> Dict:
+                    goals_reached_count: jp.ndarray, goals_per_episode: jp.ndarray, goals_per_step: jp.ndarray) -> Dict:
         agent_pos = data.xpos[self._agent_body]
         return {
             'reward': reward,
@@ -598,13 +604,10 @@ class SafePointGoalWeighted(PipelineEnv):
             'last_dist_goal': last_dist_goal,
             'ctrl_cost': ctrl_cost,
             'goals_reached_count': jp.float32(goals_reached_count),
+            'goals_per_episode': jp.float32(goals_per_episode),
+            'goals_per_step': jp.float32(goals_per_step),
         }
 
     @property
     def observation_size(self) -> int:
         return 12 + self._lidar_num_bins * 2 + 2 + self._num_hazards * 2
-
-
-
-
-

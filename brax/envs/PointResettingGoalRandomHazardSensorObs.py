@@ -64,7 +64,7 @@ class PointResettingGoalRandomHazardSensorObs(PipelineEnv):
         self._agent_body_name = 'agent' # Store name for orientation reward if needed
         self._agent_body = mj_model.body(self._agent_body_name).id
         self._goal_body = mj_model.body('goal').id # Still useful for observation? Or use mocap? Mocap is used later.
-  
+
         # Get hazard body IDs (kept for potential future use, but not reward)
         self._hazard_bodies = []
         for i in range(1, 5):
@@ -82,7 +82,7 @@ class PointResettingGoalRandomHazardSensorObs(PipelineEnv):
         self._hazard_bodies = [3, 4, 5, 6]
 
     sys = mjcf.load_model(mj_model)
-    
+
     # Find the mocap ID for the goal body
     self._goal_mocap_id = None
     self._hazard_mocap_ids = []
@@ -170,11 +170,11 @@ class PointResettingGoalRandomHazardSensorObs(PipelineEnv):
     self._max_velocity = config.max_velocity
     self._debug = config.debug
     self._hazard_size = config.hazard_size
-  
+
   def reset(self, rng: jp.ndarray) -> State:
     """Resets the environment to an initial state with randomized goal."""
     rng, rng1, rng2, rng_goal, rng_hazards = jax.random.split(rng, 5)
-    
+
     # Randomize initial point position with small noise
     low, hi = -self._reset_noise_scale, self._reset_noise_scale
     qpos = self.sys.qpos0 + jax.random.uniform(
@@ -183,7 +183,7 @@ class PointResettingGoalRandomHazardSensorObs(PipelineEnv):
     qvel = jax.random.uniform(
         rng2, (self.sys.nv,), minval=low, maxval=hi
     )
-    
+
     # Ensure qpos has valid quaternion
     if qpos.shape[0] > 6:  # If quaternion exists
       quat_norm = safe_norm(qpos[3:7])
@@ -191,7 +191,7 @@ class PointResettingGoalRandomHazardSensorObs(PipelineEnv):
 
     # Initialize environment
     data = self.pipeline_init(qpos, qvel)
-    
+
     # Randomize goal position (with more moderate bounds)
     # Generate a random goal position
     goal_pos = jax.random.uniform(
@@ -200,7 +200,7 @@ class PointResettingGoalRandomHazardSensorObs(PipelineEnv):
         minval=jp.array([-2.0, -2.0, 0.09]),
         maxval=jp.array([2.0, 2.0, 0.09]),
     )
-    
+
     # Randomize hazard positions
     num_hazards = len(self._hazard_mocap_ids)
     # Create a dummy initial hazard_pos array in case num_hazards is 0
@@ -219,7 +219,7 @@ class PointResettingGoalRandomHazardSensorObs(PipelineEnv):
                 minval=jp.array([-2.0, -2.0, 0.09]),
                 maxval=jp.array([2.0, 2.0, 0.09]),
             )
-            
+
             # Ensure hazard is at least 0.5 distance away from agent start
             dist_to_agent_start = safe_norm(hazard_pos_candidate[:2] - initial_agent_pos_for_hazard_check[:2])
             hazard_pos = jp.where(
@@ -229,10 +229,10 @@ class PointResettingGoalRandomHazardSensorObs(PipelineEnv):
             )
             hazard_pos = jp.array([hazard_pos[0], hazard_pos[1], 0.09])
             hazard_pos_updates.append(hazard_pos)
-        
+
         # Convert list of positions to a JAX array
         hazard_positions = jp.stack(hazard_pos_updates)
-        
+
         # Update mocap positions for hazards
         # Assuming _hazard_mocap_ids are contiguous or handled correctly
         # We need to update multiple mocap positions. data.replace might not be ideal for indexed updates directly.
@@ -243,10 +243,10 @@ class PointResettingGoalRandomHazardSensorObs(PipelineEnv):
 
     # Get agent position (after potential mocap updates)
     agent_pos = data.xpos[self._agent_body]
-    
+
     # Ensure goal is at least 1.0 distance away from agent
     dist_to_agent = safe_norm(goal_pos[:2] - agent_pos[:2])
-    
+
     # If goal is too close, move it away from the agent
     goal_pos = jp.where(
         dist_to_agent < 1.0,
@@ -254,7 +254,7 @@ class PointResettingGoalRandomHazardSensorObs(PipelineEnv):
         agent_pos[:2] + (goal_pos[:2] - agent_pos[:2]) / (dist_to_agent + 1e-8) * 1.2,
         goal_pos[:2]
     )
-    
+
     # Ensure z-coordinate remains the same
     goal_pos = jp.array([goal_pos[0], goal_pos[1], 0.09])
     print(f"Reset method - Goal Position: {goal_pos}")
@@ -270,7 +270,7 @@ class PointResettingGoalRandomHazardSensorObs(PipelineEnv):
 
     # Calculate initial distance to goal for the first step
     initial_dist_goal = safe_norm(agent_pos[:2] - goal_pos[:2])
-    
+
     # Store goal position and initial distance for reward calculation
     info = {
         "goal_pos": goal_pos,
@@ -279,15 +279,16 @@ class PointResettingGoalRandomHazardSensorObs(PipelineEnv):
         "last_obs": None,
         "last_dist_goal": initial_dist_goal, # Initialize last_dist_goal
         "goals_reached_count": 0, # Initialize goal count
+        "goals_per_episode": 0, # Initialize goals per episode count
         "cost": 0.0, # Initialize cost
     }
-    
+
     # Get observation
     obs = self._get_obs(data)
-    
+
     # Store observation in info for stability check
     info["last_obs"] = obs
-    
+
     reward, done, zero = jp.zeros(3)
     metrics = {
         # New reward components
@@ -296,7 +297,7 @@ class PointResettingGoalRandomHazardSensorObs(PipelineEnv):
         'orientation_reward': zero, # Reward for orientation (if enabled)
         'reward': zero,             # Total reward (expected by wrappers)
         'cost': zero,               # Cost metric
-    
+
         # Other potentially useful metrics
         'x_position': jp.array(data.xpos[self._agent_body, 0]),
         'y_position': jp.array(data.xpos[self._agent_body, 1]),
@@ -306,6 +307,8 @@ class PointResettingGoalRandomHazardSensorObs(PipelineEnv):
         'y_velocity': zero,
         'z_alignment': zero, # Z-alignment metric (even if reward disabled)
         'goals_reached_count': 0.0, # Track goals reached
+        'goals_per_episode': 0.0, # Goals reached in current episode
+        'goals_per_step': 0.0, # Binary indicator for goal achieved this step
     }
     return State(data, obs, reward, done, metrics, info)
 
@@ -315,10 +318,11 @@ class PointResettingGoalRandomHazardSensorObs(PipelineEnv):
     last_obs = state.info.get('last_obs', state.obs)
     last_dist_goal = state.info['last_dist_goal']
     goals_reached_count = state.info['goals_reached_count']
-    
+    goals_per_episode = state.info['goals_per_episode']
+
     # Increment step counter
     step_count = state.info.get('step_count', 0) + 1
-    
+
     data0 = state.pipeline_state
     data = self.pipeline_step(data0, action)
 
@@ -326,13 +330,13 @@ class PointResettingGoalRandomHazardSensorObs(PipelineEnv):
     agent_pos = data.xpos[self._agent_body]
     goal_pos = state.info['goal_pos']
     hazard_positions = state.info['hazard_positions']
-    
+
     # --- Calculate Reward Components --- 
 
     # 1. Distance-Based Reward
     dist_goal = safe_norm(agent_pos[:2] - goal_pos[:2])
     dist_reward = (last_dist_goal - dist_goal) * self._reward_distance
-    
+
     # 2. Goal Achievement Reward
     goal_achieved = dist_goal <= self._goal_size
     goal_reward = jp.where(goal_achieved, self._reward_goal, 0.0)
@@ -358,15 +362,17 @@ class PointResettingGoalRandomHazardSensorObs(PipelineEnv):
 
     # Update goal position, count, and mocap if goal achieved
     new_goals_reached_count = jp.where(goal_achieved, goals_reached_count + 1, goals_reached_count)
+    new_goals_per_episode = jp.where(goal_achieved, goals_per_episode + 1, goals_per_episode)
+    goals_per_step = jp.where(goal_achieved, 1.0, 0.0)  # Binary indicator for this step
     updated_goal_pos = jp.where(goal_achieved, new_goal_pos, goal_pos)
-    
+
     # Conditionally compute the new mocap_pos array
     condition = goal_achieved & (self._goal_mocap_id is not None) & (self._goal_mocap_id >= 0)
     new_mocap_pos_if_goal = data.mocap_pos.at[self._goal_mocap_id].set(updated_goal_pos)
     final_mocap_pos = jp.where(condition, new_mocap_pos_if_goal, data.mocap_pos)
     # Create the final data object with the potentially updated mocap_pos
     updated_data = data.replace(mocap_pos=final_mocap_pos)
-    
+
     # Update last_dist_goal based on the potentially new goal position
     new_last_dist_goal = jp.where(
         goal_achieved,
@@ -383,20 +389,20 @@ class PointResettingGoalRandomHazardSensorObs(PipelineEnv):
         # Note: This assumes the agent's quaternion is at the start of qpos after potential exclusion.
         #       Adjust indexing if necessary based on your MJCF structure and observation exclusion.
         quat = data.qpos[3:7] # Assuming standard floating base: [x, y, z, qw, qx, qy, qz, ...] -> qw, qx, qy, qz indices 3-7
-        
+
         # Normalize quaternion
         quat_norm = safe_norm(quat)
         quat = quat / jp.maximum(quat_norm, 1e-8)
-        
+
         # Calculate rotation matrix
         rot_matrix = math.quat_to_rot(quat)
-        
+
         # zalign = R[2, 2]
         z_alignment = rot_matrix[2, 2]
         orientation_reward = self._reward_orientation_scale * z_alignment
-      
+
     ctrl_cost = jp.sum(jp.square(action)) * self._ctrl_cost_weight
-            
+
     # --- Cost Calculation --- 
     cost = 0.0
     if hazard_positions.shape[0] > 0 and self._hazard_size > 0: # Only calculate if hazards exist and size is positive
@@ -405,14 +411,14 @@ class PointResettingGoalRandomHazardSensorObs(PipelineEnv):
         # hazard_positions_xy needs shape (num_hazards, 2)
         agent_pos_xy = agent_pos[:2] 
         hazard_positions_xy = hazard_positions[:, :2] 
-        
+
         # Calculate squared distances first, then take sqrt for efficiency
         dist_sq_to_hazards = jp.sum(jp.square(agent_pos_xy - hazard_positions_xy), axis=1)
         dist_to_hazards = jp.sqrt(dist_sq_to_hazards + 1e-8) # Add epsilon for safety
-        
+
         # Check if agent is inside any hazard zone
         inside_any_hazard = jp.any(dist_to_hazards <= self._hazard_size)
-        
+
         # Cost is 1.0 if inside any hazard, 0.0 otherwise
         cost = jp.where(inside_any_hazard, 1.0, 0.0)
 
@@ -434,16 +440,16 @@ class PointResettingGoalRandomHazardSensorObs(PipelineEnv):
     has_nan_pos = jp.any(jp.isnan(agent_pos))
     has_nan_vel = jp.any(jp.isnan(velocity))
     has_nan_state = jp.logical_or(has_nan_pos, has_nan_vel)
-    
+
     # Terminate if unhealthy (optional), 3 goals reached, or NaN state
     done = jp.logical_or(
         (1.0 - is_healthy) * self._terminate_when_unhealthy,
         has_nan_state
     )
-    
+
     # --- Observation and State Update ---
     obs = self._get_obs(data)
-    
+
     # Handle NaN observation using JAX-compatible operations
     has_nan_obs = jp.any(jp.isnan(obs))
     obs = jp.where(has_nan_obs, last_obs, obs)
@@ -458,6 +464,7 @@ class PointResettingGoalRandomHazardSensorObs(PipelineEnv):
         "last_obs": obs,             # Store current observation for next step's fallback
         "last_dist_goal": new_last_dist_goal, # Store current distance for next step's reward calculation
         "goals_reached_count": new_goals_reached_count,
+        "goals_per_episode": new_goals_per_episode,
         "cost": cost, # Update cost in info
     })
 
@@ -476,6 +483,8 @@ class PointResettingGoalRandomHazardSensorObs(PipelineEnv):
         'y_velocity': velocity[1],
         'z_alignment': z_alignment, # Log z_alignment
         'goals_reached_count': new_goals_reached_count.astype(jp.float32), # Track goals reached, ensure float32
+        'goals_per_episode': new_goals_per_episode.astype(jp.float32), # Goals reached in current episode
+        'goals_per_step': goals_per_step.astype(jp.float32), # Binary indicator for goal achieved this step
     }
 
     # Create fresh State
@@ -484,14 +493,14 @@ class PointResettingGoalRandomHazardSensorObs(PipelineEnv):
   def _get_obs(self, data: mjx.Data) -> jp.ndarray:  
     """Creates an observation that matches Safety-Gymnasium Goal0 format."""  
     agent_pos = data.xpos[self._agent_body]  
-      
+
     # Get goal position from the identified mocap body  
     if self._goal_mocap_id is not None and self._goal_mocap_id >= 0:  
         goal_pos_3d = data.mocap_pos[self._goal_mocap_id]  
     else:  
         # Fallback  
         goal_pos_3d = jp.zeros(3)  
-      
+
     # 1. Agent sensor observations  
     # Access the flat sensordata array
     sensor_data = data.sensordata
@@ -519,7 +528,7 @@ class PointResettingGoalRandomHazardSensorObs(PipelineEnv):
 
     # 2. Calculate relative position to goal (world frame)
     rel_goal_pos_3d_world = goal_pos_3d - agent_pos # World frame
-    
+
     # Ensure rel_goal_pos_3d_world is (3,) before further slicing for Lidar
     rel_goal_pos_3d_world_lidar = rel_goal_pos_3d_world.reshape(3)
 
@@ -545,7 +554,7 @@ class PointResettingGoalRandomHazardSensorObs(PipelineEnv):
     agent_centric_rel_goal_xy = jp.array([agent_centric_dx_goal, agent_centric_dy_goal])
     goal_comp = agent_centric_rel_goal_xy / (safe_norm(agent_centric_rel_goal_xy) + 1e-8)
     # goal_comp = goal_comp.reshape(2) # Should already be (2,) after normalization
-        
+
     # 4. Create Safety-Gymnasium style Lidar with 16 bins
     # Lidar configuration (can be moved to self._config or class attributes later)
     _lidar_num_bins = 16
@@ -555,7 +564,7 @@ class PointResettingGoalRandomHazardSensorObs(PipelineEnv):
 
     # Initialize Lidar observation
     lidar_obs = jp.zeros(_lidar_num_bins)
-    
+
     # For now, Lidar only "sees" the goal.
     # To see multiple objects (e.g., hazards), you would loop here over their positions.
     # Object position for Lidar (goal's XY in world frame, as agent is point and assumed not rotating)
@@ -571,7 +580,7 @@ class PointResettingGoalRandomHazardSensorObs(PipelineEnv):
     # ---- JAX DEBUG PRINT END ----
 
     dist = safe_norm(jp.array([dx, dy]))
-    
+
     # ---- JAX DEBUG PRINT START ----
     # jax.debug.print("OBS dist: {dist}", dist=dist)
     # ---- JAX DEBUG PRINT END ----
@@ -580,7 +589,7 @@ class PointResettingGoalRandomHazardSensorObs(PipelineEnv):
     angle = (angle + 2 * jp.pi) % (2 * jp.pi) # Convert to [0, 2*pi]
 
     bin_size = (2 * jp.pi) / _lidar_num_bins
-    
+
     # Determine which bin the object falls into
     # Subtracting a small epsilon before casting to int to handle edge cases near bin boundaries
     # and ensure angle / bin_size = _lidar_num_bins goes to bin _lidar_num_bins -1
@@ -613,13 +622,13 @@ class PointResettingGoalRandomHazardSensorObs(PipelineEnv):
         # Calculate alias interpolation factor
         # alias_factor is how far into the current bin the angle is (0 to 1)
         alias_factor = bin_idx_float - bin_idx 
-        
+
         # Bin plus one (wraps around)
         bin_plus_idx = (bin_idx + 1) % _lidar_num_bins
         lidar_obs = lidar_obs.at[bin_plus_idx].set(
             jp.maximum(lidar_obs[bin_plus_idx], alias_factor * sensor_val)
         )
-        
+
         # Bin minus one (wraps around)
         # For the "1 - alias_factor" part, it represents how much it belongs to the previous part of the bin,
         # which is equivalent to the "next" bin in the opposite direction of aliasing.
@@ -630,12 +639,12 @@ class PointResettingGoalRandomHazardSensorObs(PipelineEnv):
         # SG: obs[bin_plus] = max(obs[bin_plus], alias * sensor)
         #     obs[bin_minus] = max(obs[bin_minus], (1 - alias) * sensor)
         # This seems to distribute based on the fractional part.
-        
+
         bin_minus_idx = (bin_idx - 1 + _lidar_num_bins) % _lidar_num_bins # Ensure positive index before modulo
         lidar_obs = lidar_obs.at[bin_minus_idx].set(
             jp.maximum(lidar_obs[bin_minus_idx], (1.0 - alias_factor) * sensor_val)
         )
-          
+
     # Build observation matching Goal0 format  
     obs = jp.concatenate([  
         accelerometer,  
@@ -645,5 +654,5 @@ class PointResettingGoalRandomHazardSensorObs(PipelineEnv):
         lidar_obs,  # New Lidar
         goal_comp,  
     ])  
-      
+
     return obs

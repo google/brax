@@ -98,7 +98,7 @@ class SafePointGoal(PipelineEnv):
     - Dual lidar system with separate goal and hazard detection
     - Agent-centric observations for better learning
     - Individual compass observations for goal and each hazard
-    
+
     Observation space (62 dimensions):
     - Sensor data: 12 values (3 each for accel, velocity, gyro, magnetometer)
     - Goal lidar: 16 bins
@@ -116,7 +116,7 @@ class SafePointGoal(PipelineEnv):
         # Use provided config or create default
         if config is None:
             config = default_config(num_hazards)
-        
+
         # Apply optional config overrides passed via env_kwargs without leaking to PipelineEnv
         overrides = kwargs.pop('config_overrides', None)
         if isinstance(overrides, dict):
@@ -357,12 +357,13 @@ class SafePointGoal(PipelineEnv):
             "step_count": 0,
             "last_dist_goal": initial_dist_goal,
             "goals_reached_count": 0,
+            "goals_per_episode": 0,
             "cost": 0.0,
         }
 
         obs = self._get_obs(data)
         reward, done = jp.zeros(2)
-        metrics = self._get_metrics(data, reward, 0.0, initial_dist_goal, initial_dist_goal, 0.0, 0.0)
+        metrics = self._get_metrics(data, reward, 0.0, initial_dist_goal, initial_dist_goal, 0.0, 0.0, 0.0, 0.0)
 
         return State(data, obs, reward, done, metrics, info)
 
@@ -430,6 +431,10 @@ class SafePointGoal(PipelineEnv):
         updated_goals_reached = jp.where(goal_achieved,
                                         state.info['goals_reached_count'] + 1,
                                         state.info['goals_reached_count'])
+        updated_goals_per_episode = jp.where(goal_achieved,
+                                            state.info['goals_per_episode'] + 1,
+                                            state.info['goals_per_episode'])
+        goals_per_step = jp.where(goal_achieved, 1.0, 0.0)  # Binary indicator for this step
 
         # Update goal position in simulation
         if self._goal_mocap_id >= 0:
@@ -444,7 +449,7 @@ class SafePointGoal(PipelineEnv):
 
         # Get observation and metrics
         obs = self._get_obs(data)
-        metrics = self._get_metrics(data, reward, cost, dist_goal, last_dist_goal, ctrl_cost, updated_goals_reached)
+        metrics = self._get_metrics(data, reward, cost, dist_goal, last_dist_goal, ctrl_cost, updated_goals_reached, updated_goals_per_episode, goals_per_step)
 
         # Update info
         new_info = state.info.copy()
@@ -453,6 +458,7 @@ class SafePointGoal(PipelineEnv):
             "step_count": state.info['step_count'] + 1,
             "last_dist_goal": new_last_dist_goal,
             "goals_reached_count": updated_goals_reached,
+            "goals_per_episode": updated_goals_per_episode,
             "cost": cost,
         })
 
@@ -527,7 +533,7 @@ class SafePointGoal(PipelineEnv):
 
     def _get_obs(self, data: mjx.Data) -> jp.ndarray:
         """Creates an observation with separate lidars for goals and hazards.
-        
+
         Observation structure:
         - accelerometer (3 values)
         - velocimeter (3 values)  
@@ -537,7 +543,7 @@ class SafePointGoal(PipelineEnv):
         - hazard_lidar_obs (configurable bins, default 16) - lidar detecting hazards
         - goal_comp (2 values) - compass pointing to goal
         - hazard_comps (2 * num_hazards values) - compass pointing to each hazard
-        
+
         Total: 12 + 2*lidar_num_bins + 2*(num_hazards+1) values
         """
         agent_pos = data.xpos[self._agent_body]
@@ -546,166 +552,166 @@ class SafePointGoal(PipelineEnv):
         # 1. Agent sensor observations
         # Access the flat sensordata array
         sensor_data = data.sensordata
-        
+
         # Extract sensor values using pre-calculated addresses and dimensions
         # Handle potential missing sensors by providing default zero vectors if info not found
         default_val = jp.zeros(3, dtype=sensor_data.dtype)
-        
+
         accel_adr, accel_dim = self._sensor_info.get('accelerometer', (0, 0))
         accelerometer = jax.lax.dynamic_slice(sensor_data, (accel_adr,), (accel_dim,))
         accelerometer = jp.where(accel_dim == 3, accelerometer, default_val)
-        
+
         velo_adr, velo_dim = self._sensor_info.get('velocimeter', (0, 0))
         velocimeter = jax.lax.dynamic_slice(sensor_data, (velo_adr,), (velo_dim,))
         velocimeter = jp.where(velo_dim == 3, velocimeter, default_val)
-        
+
         gyro_adr, gyro_dim = self._sensor_info.get('gyro', (0, 0))
         gyro = jax.lax.dynamic_slice(sensor_data, (gyro_adr,), (gyro_dim,))
         gyro = jp.where(gyro_dim == 3, gyro, default_val)
-        
+
         mag_adr, mag_dim = self._sensor_info.get('magnetometer', (0, 0))
         magnetometer = jax.lax.dynamic_slice(sensor_data, (mag_adr,), (mag_dim,))
         magnetometer = jp.where(mag_dim == 3, magnetometer, default_val)
-        
+
         # 2. Calculate relative position to goal (world frame)
         rel_goal_pos_3d_world = goal_pos - agent_pos
-        
+
         # --- Agent-centric transformation ---
         # Get agent's current Z rotation from qpos
         agent_z_angle = data.qpos[2]  # z_hinge_angle
         cos_a = jp.cos(agent_z_angle)
         sin_a = jp.sin(agent_z_angle)
-        
+
         # World-frame relative XY vector to goal
         world_dx_goal = rel_goal_pos_3d_world[0]
         world_dy_goal = rel_goal_pos_3d_world[1]
-        
+
         # Transform world-frame relative vector to agent's local frame
         agent_centric_dx_goal = world_dx_goal * cos_a + world_dy_goal * sin_a
         agent_centric_dy_goal = -world_dx_goal * sin_a + world_dy_goal * cos_a
-        
+
         # 3. Create compass observation (agent-centric)
         agent_centric_rel_goal_xy = jp.array([agent_centric_dx_goal, agent_centric_dy_goal])
         goal_comp = agent_centric_rel_goal_xy / (safe_norm(agent_centric_rel_goal_xy) + 1e-8)
-        
+
         # 4. Create Safety-Gymnasium style Lidars with configurable bins
         _lidar_num_bins = self._lidar_num_bins
         _lidar_max_dist = self._lidar_max_dist
         _lidar_alias = True  # Enable aliasing for smoother readings
-        
+
         # Initialize separate Lidar observations for goals and hazards
         goal_lidar_obs = jp.zeros(_lidar_num_bins)
         hazard_lidar_obs = jp.zeros(_lidar_num_bins)
-        
+
         # === GOAL LIDAR ===
         # Use the agent-centric dx and dy for goal Lidar angle calculation
         dx_goal = agent_centric_dx_goal
         dy_goal = agent_centric_dy_goal
-        
+
         dist_goal = safe_norm(jp.array([dx_goal, dy_goal]))
-        
+
         angle_goal = jp.arctan2(dy_goal, dx_goal)  # Angle from positive x-axis, range [-pi, pi]
         angle_goal = (angle_goal + 2 * jp.pi) % (2 * jp.pi)  # Convert to [0, 2*pi]
-        
+
         bin_size = (2 * jp.pi) / _lidar_num_bins
-        
+
         # Determine which bin the goal falls into
         bin_idx_float_goal = angle_goal / bin_size
         bin_idx_goal = jp.floor(bin_idx_float_goal)
         bin_idx_goal = jp.minimum(bin_idx_goal, _lidar_num_bins - 1).astype(int)
-        
+
         # Calculate sensor reading for goal (linear decay "closeness")
         sensor_val_goal = jp.maximum(0.0, _lidar_max_dist - dist_goal) / _lidar_max_dist
         sensor_val_goal = jp.where(dist_goal > _lidar_max_dist, 0.0, sensor_val_goal)
-        
+
         # Update the goal Lidar observation for the primary bin
         goal_lidar_obs = goal_lidar_obs.at[bin_idx_goal].set(jp.maximum(goal_lidar_obs[bin_idx_goal], sensor_val_goal))
-        
+
         if _lidar_alias:
             # Calculate alias interpolation factor for goal
             alias_factor_goal = bin_idx_float_goal - bin_idx_goal
-            
+
             # Bin plus one (wraps around)
             bin_plus_idx_goal = (bin_idx_goal + 1) % _lidar_num_bins
             goal_lidar_obs = goal_lidar_obs.at[bin_plus_idx_goal].set(
                 jp.maximum(goal_lidar_obs[bin_plus_idx_goal], alias_factor_goal * sensor_val_goal)
             )
-            
+
             # Bin minus one (wraps around)
             bin_minus_idx_goal = (bin_idx_goal - 1 + _lidar_num_bins) % _lidar_num_bins
             goal_lidar_obs = goal_lidar_obs.at[bin_minus_idx_goal].set(
                 jp.maximum(goal_lidar_obs[bin_minus_idx_goal], (1.0 - alias_factor_goal) * sensor_val_goal)
             )
-        
+
         # === HAZARD LIDAR ===
         # Process hazards for the hazard lidar
         def process_hazard_lidar(carry, hazard_mocap_id):
             """Process a single hazard for the hazard lidar."""
             hazard_lidar, agent_pos, agent_z_angle, cos_a, sin_a = carry
-            
+
             # Get hazard position from mocap if valid ID
             hazard_pos_3d = jp.where(
                 hazard_mocap_id >= 0,
                 data.mocap_pos[hazard_mocap_id],
                 jp.array([0.0, 0.0, 0.0])  # Default position for invalid IDs
             )
-            
+
             # Calculate relative position to hazard (world frame)
             rel_hazard_pos_3d_world = hazard_pos_3d - agent_pos
-            
+
             # Transform world-frame relative vector to agent's local frame
             world_dx_hazard = rel_hazard_pos_3d_world[0]
             world_dy_hazard = rel_hazard_pos_3d_world[1]
-            
+
             agent_centric_dx_hazard = world_dx_hazard * cos_a + world_dy_hazard * sin_a
             agent_centric_dy_hazard = -world_dx_hazard * sin_a + world_dy_hazard * cos_a
-            
+
             # Calculate distance and angle for this hazard
             dist_hazard = safe_norm(jp.array([agent_centric_dx_hazard, agent_centric_dy_hazard]))
             angle_hazard = jp.arctan2(agent_centric_dy_hazard, agent_centric_dx_hazard)
             angle_hazard = (angle_hazard + 2 * jp.pi) % (2 * jp.pi)
-            
+
             # Determine which bin the hazard falls into
             bin_idx_float_hazard = angle_hazard / bin_size
             bin_idx_hazard = jp.floor(bin_idx_float_hazard)
             bin_idx_hazard = jp.minimum(bin_idx_hazard, _lidar_num_bins - 1).astype(int)
-            
+
             # Calculate sensor reading for hazard
             sensor_val_hazard = jp.maximum(0.0, _lidar_max_dist - dist_hazard) / _lidar_max_dist
             sensor_val_hazard = jp.where(dist_hazard > _lidar_max_dist, 0.0, sensor_val_hazard)
-            
+
             # Only process if hazard ID is valid (>= 0)
             sensor_val_hazard = jp.where(hazard_mocap_id >= 0, sensor_val_hazard, 0.0)
-            
+
             # Update the hazard Lidar observation for the primary bin
             hazard_lidar = hazard_lidar.at[bin_idx_hazard].set(
                 jp.maximum(hazard_lidar[bin_idx_hazard], sensor_val_hazard)
             )
-            
+
             if _lidar_alias:
                 # Calculate alias interpolation factor for hazard
                 alias_factor_hazard = bin_idx_float_hazard - bin_idx_hazard
-                
+
                 # Bin plus one (wraps around)
                 bin_plus_idx_hazard = (bin_idx_hazard + 1) % _lidar_num_bins
                 hazard_lidar = hazard_lidar.at[bin_plus_idx_hazard].set(
                     jp.maximum(hazard_lidar[bin_plus_idx_hazard], alias_factor_hazard * sensor_val_hazard)
                 )
-                
+
                 # Bin minus one (wraps around)
                 bin_minus_idx_hazard = (bin_idx_hazard - 1 + _lidar_num_bins) % _lidar_num_bins
                 hazard_lidar = hazard_lidar.at[bin_minus_idx_hazard].set(
                     jp.maximum(hazard_lidar[bin_minus_idx_hazard], (1.0 - alias_factor_hazard) * sensor_val_hazard)
                 )
-            
+
             return (hazard_lidar, agent_pos, agent_z_angle, cos_a, sin_a), None
-        
+
         # Process all hazards using scan to handle variable number of hazards
         # Pad hazard_mocap_ids to ensure we can process them all
         hazard_mocap_ids_array = jp.array(self._hazard_mocap_ids + [-1] * (8 - len(self._hazard_mocap_ids)))[:8]
         init_carry = (hazard_lidar_obs, agent_pos, agent_z_angle, cos_a, sin_a)
         (hazard_lidar_obs, _, _, _, _), _ = jax.lax.scan(process_hazard_lidar, init_carry, hazard_mocap_ids_array)
-        
+
         # === HAZARD COMPASSES ===
         # Create individual compass observations for each hazard
         def compute_compass_for_hazard(mocap_idx):
@@ -716,31 +722,31 @@ class SafePointGoal(PipelineEnv):
                 data.mocap_pos[mocap_idx],
                 jp.array([0.0, 0.0, 0.0])
             )
-            
+
             # Calculate relative position to hazard (world frame)
             rel_hazard_pos_3d_world = hazard_pos_3d - agent_pos
-            
+
             # Transform world-frame relative vector to agent's local frame
             world_dx_hazard = rel_hazard_pos_3d_world[0]
             world_dy_hazard = rel_hazard_pos_3d_world[1]
-            
+
             agent_centric_dx_hazard = world_dx_hazard * cos_a + world_dy_hazard * sin_a
             agent_centric_dy_hazard = -world_dx_hazard * sin_a + world_dy_hazard * cos_a
-            
+
             # Create normalized compass observation (agent-centric)
             rel_vec = jp.array([agent_centric_dx_hazard, agent_centric_dy_hazard])
             compass = rel_vec / (safe_norm(rel_vec) + 1e-8)
-            
+
             # Return zero compass if invalid mocap index
             return jp.where(mocap_idx >= 0, compass, jp.zeros(2))
-        
+
         # Compute compasses for all hazard mocap indices
         hazard_mocap_ids_for_compass = jp.array(self._hazard_mocap_ids + [-1] * (8 - len(self._hazard_mocap_ids)))[:8]
         hazard_compasses = jax.vmap(compute_compass_for_hazard)(hazard_mocap_ids_for_compass)
-        
+
         # Flatten to get (16,) shape for 8 hazards
         hazard_compasses_flat = hazard_compasses.flatten()
-        
+
         # Build observation with separate goal and hazard lidars plus individual hazard compasses
         obs = jp.concatenate([
             accelerometer,         # (3,)
@@ -757,7 +763,7 @@ class SafePointGoal(PipelineEnv):
 
     def _get_metrics(self, data: mjx.Data, reward: jp.ndarray, cost: jp.ndarray,
                     dist_goal: jp.ndarray, last_dist_goal: jp.ndarray, ctrl_cost: jp.ndarray,
-                    goals_reached_count: jp.ndarray) -> Dict:
+                    goals_reached_count: jp.ndarray, goals_per_episode: jp.ndarray, goals_per_step: jp.ndarray) -> Dict:
         """Get metrics dictionary."""
         agent_pos = data.xpos[self._agent_body]
 
@@ -770,6 +776,8 @@ class SafePointGoal(PipelineEnv):
             'last_dist_goal': last_dist_goal,
             'ctrl_cost': ctrl_cost,
             'goals_reached_count': jp.float32(goals_reached_count),
+            'goals_per_episode': jp.float32(goals_per_episode),
+            'goals_per_step': jp.float32(goals_per_step),
         }
 
     @property
