@@ -11,11 +11,13 @@ import os
 import time
 from datetime import datetime
 from typing import Dict, Any, List
+from typing import Optional
 
 import imageio.v3 as iio
 import jax
 import jax.numpy as jnp
 import mujoco
+import numpy as np
 from jax import lax
 from matplotlib import pyplot as plt
 
@@ -156,187 +158,39 @@ def wrap_env_with_cost(env: envs.Env) -> envs.Env:
     return CostExtraWrapper(env)
 
 
-class MetricsBuffer:
-    """Buffer for collecting fine-grained metrics and logging to wandb periodically."""
-
-    def __init__(self, wandb_log_interval: int = 50000):
-        self.wandb_log_interval = wandb_log_interval
-        self.last_wandb_log_step = 0
-        self.metrics_history = []
-
-    def should_log_to_wandb(self, current_step: int) -> bool:
-        """Determine if we should log to wandb based on the interval."""
-        return (current_step - self.last_wandb_log_step) >= self.wandb_log_interval
-
-    def get_aggregated_metrics(self, metrics_since_last_log: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Aggregate metrics collected since last wandb log."""
-        if not metrics_since_last_log:
-            return {}
-
-        aggregated = {}
-
-        # Group metrics by key
-        metric_groups = {}
-        for metric_dict in metrics_since_last_log:
-            for key, value in metric_dict.items():
-                if key == 'step':
-                    continue
-                if key not in metric_groups:
-                    metric_groups[key] = []
-                if isinstance(value, (int, float)) and not np.isnan(value):
-                    metric_groups[key].append(value)
-
-        # Aggregate each metric group
-        for key, values in metric_groups.items():
-            if values:
-                # For most metrics, use the latest value to avoid over-smoothing
-                # For some specific metrics, we might want mean/max/min
-                if any(x in key.lower() for x in ['loss', 'violation', 'lambda']):
-                    # For loss-like metrics, use mean for better stability
-                    aggregated[key] = np.mean(values)
-                else:
-                    # For other metrics (rewards, episode lengths, etc.), use latest
-                    aggregated[key] = values[-1]
-
-        return aggregated
-
-
 # Global metrics buffer instance
-_metrics_buffer = MetricsBuffer()
-
-import numpy as np
-from typing import Callable, Dict, Optional, Union, Pattern, Any
-
-Reducer = Callable[[np.ndarray], float]
-ReducerSpec = Union[str, Reducer]
-ReducerOverrides = Dict[Union[str, Pattern[str]], ReducerSpec]
+metrics_buffer = []
 
 
-def _get_named_reducer(name: str) -> Reducer:
-    if name == "last":
-        return lambda a: float(a.reshape(-1)[-1])
-    if name == "mean":
-        return lambda a: float(a.mean())
-    if name == "median":
-        return lambda a: float(np.median(a))
-    if name == "max":
-        return lambda a: float(a.max())
-    if name == "min":
-        return lambda a: float(a.min())
-    raise ValueError(f"Unknown reducer name: {name}")
-
-
-def _resolve_reducer(
-        key: str,
-        overrides: Optional[ReducerOverrides],
-        default: ReducerSpec
-) -> Reducer:
-    if overrides:
-        for patt, spec in overrides.items():
-            if isinstance(patt, str):
-                matched = (patt == key)
-            else:  # compiled regex
-                matched = bool(patt.search(key))
-            if matched:
-                return spec if callable(spec) else _get_named_reducer(spec)
-    return default if callable(default) else _get_named_reducer(default)
-
-
-def reduce_for_logging(
-        key: str,
-        value: Any,
-        *,
-        default: ReducerSpec = "last",
-        overrides: Optional[ReducerOverrides] = None
-) -> Optional[float]:
-    """
-    Convert any value to a single finite float according to reducer policy.
-    - default: reducer name or callable, used when no override matches.
-    - overrides: { exact_key or regex: reducer_name|callable }
-    Returns None if empty or all non-finite.
-    """
-    arr = np.asarray(value)
-    if arr.size == 0:
-        return None
-    # keep only finite
-    flat = arr.reshape(-1)
-    finite = flat[np.isfinite(flat)]
-    if finite.size == 0:
-        return None
-    reducer = _resolve_reducer(key, overrides, default)
-    return reducer(finite)
-
-
-def custom_progress_fn(num_steps: int, metrics: Dict[str, Any],
-                       metrics_list: Optional[List] = None,
-                       use_wandb: bool = False,
-                       verbose: bool = True,
-                       wandb_log_interval: int = 50000,
-                       default_reducer: ReducerSpec = "last",
-                       reducer_overrides: Optional[ReducerOverrides] = None) -> None:
+def custom_progress_fn(num_steps: int, metrics: Dict[str, Any], use_wandb: bool = False, verbose: bool = True) -> None:
     """
     Progress function to print metrics and log to Weights & Biases.
 
     Args:
         num_steps: Current training step
         metrics: Metrics dictionary
-        metrics_list: List to append metrics to (for local storage)
         use_wandb: Whether to use wandb logging
-        verbose: Whether to print metrics
-        wandb_log_interval: Steps between wandb logs (default 50000)
+        verbose: Whether to print metrics to console
     """
-    global _metrics_buffer
-
-    # make sure num_steps is a plain int
-    try:
-        num_steps_int = int(np.asarray(num_steps).reshape(()))
-    except Exception:
-        num_steps_int = int(num_steps)
-
-    # Update buffer interval if different
-    if _metrics_buffer.wandb_log_interval != wandb_log_interval:
-        _metrics_buffer.wandb_log_interval = wandb_log_interval
+    global metrics_buffer
 
     if verbose:
         print(f"Step {num_steps}:")
 
-    wandb_log_data = {}
+    log_data = {}
     for key, value in metrics.items():
-        scalar = reduce_for_logging(
-            key, value, default=default_reducer, overrides=reducer_overrides
-        )
-        if scalar is None:
-            continue
+        if verbose and any(tok in key for tok in ("lambda", "cost", "constraint", "reward")):
+            print(f"  {key}: {value}")
+        log_data[key] = value
 
-        if verbose and any(tok in key for tok in ("lambda", "cost", "constraint")):
-            # purely for console visibility; not a policy decision
-            print(f"  {key}: {scalar}")
+    metrics_buffer.append({"step": num_steps, **log_data})
 
-        # namespacing, unchanged
-        if not (key.startswith("episode/") or key.startswith("eval/") or key.startswith("training/")):
-            wandb_log_data[f"training_batch/{key}"] = scalar
-        else:
-            wandb_log_data[key] = scalar
+    if use_wandb and wandb.run is not None and log_data:
+        for row in metrics_buffer:
+            wandb.log(log_data, step=row["step"])
 
-    if metrics_list is not None:
-        row = {"step": num_steps_int}
-        for k, v in metrics.items():
-            s = reduce_for_logging(k, v, default=default_reducer, overrides=reducer_overrides)
-            if s is not None:
-                row[k] = s
-        metrics_list.append(row)
-
-    _metrics_buffer.metrics_history.append({"step": num_steps_int, **wandb_log_data})
-
-    is_eval = any(k.startswith("eval/") for k in wandb_log_data.keys())
-    if use_wandb and wandb.run is not None and wandb_log_data:
-        if is_eval or _metrics_buffer.should_log_to_wandb(num_steps_int):
-            payload = wandb_log_data if is_eval else {k: v for k, v in _metrics_buffer.metrics_history[-1].items() if
-                                                      k != "step"}
-            wandb.log(payload, step=num_steps_int)
-            _metrics_buffer.last_wandb_log_step = num_steps_int
-            if len(_metrics_buffer.metrics_history) > 1000:
-                _metrics_buffer.metrics_history = _metrics_buffer.metrics_history[-1000:]
+        # clear the logged history from the buffer
+        metrics_buffer.clear()
 
 
 def load_config(config_path: str) -> Dict[str, Any]:
@@ -383,8 +237,8 @@ def get_algorithm_train_fn(alg_name: str):
     return train_fn
 
 
-def train_from_config(config: Dict[str, Any], seed: int,
-                      use_wandb: bool = True, verbose: bool = True) -> tuple[Any, Any, Any, list[Any], Env]:
+def train_from_config(config: Dict[str, Any], seed: int, use_wandb: bool = True,
+                      verbose: bool = True) -> tuple[Any, Any, Any, Env]:
     """
     Train an agent using the provided configuration.
 
@@ -438,14 +292,10 @@ def train_from_config(config: Dict[str, Any], seed: int,
         )
 
     # Setup metrics collection
-    metrics_list = []
-    wandb_log_interval = int(config.get('wandb_log_interval', 50000))
     bound_progress_fn = functools.partial(
         custom_progress_fn,
-        metrics_list=metrics_list,
         use_wandb=use_wandb,
         verbose=verbose,
-        wandb_log_interval=wandb_log_interval
     )
 
     # Get the appropriate training function
@@ -492,7 +342,7 @@ def train_from_config(config: Dict[str, Any], seed: int,
 
         # training metrics
         'log_training_metrics': True,
-        'training_metrics_steps': int(config.get('training_metrics_steps', 10_000)),
+        'training_metrics_steps': int(config.get('training_metrics_steps', 1_000_000)),
 
         # callbacks
         'progress_fn': bound_progress_fn,
@@ -527,16 +377,13 @@ def train_from_config(config: Dict[str, Any], seed: int,
         progress_fn=bound_progress_fn
     )
     print("Training finished.")
-    # print(f"Final evaluation metrics: {final_eval_metrics}")
 
     # Log final metrics to wandb
     if use_wandb and wandb.run is not None and final_eval_metrics:
         final_log_data = {}
         for key, value in final_eval_metrics.items():
-            # average across parallel eval envs (or whatever you prefer)
-            scalar = reduce_for_logging(key, value, default="mean")
-            if scalar is not None:
-                final_log_data[key] = scalar
+            if value is not None:
+                final_log_data[key] = value
         if final_log_data:
             wandb.log(final_log_data, step=int(float(np.asarray(num_timesteps).reshape(()))))
 
@@ -548,25 +395,7 @@ def train_from_config(config: Dict[str, Any], seed: int,
     brax_model.save_params(model_path, params)
     print(f"Trained model parameters saved to: {model_path}")
 
-    # Save metrics
-    metrics_dir = config.get('out_dir', 'runs/metrics')
-    os.makedirs(metrics_dir, exist_ok=True)
-    metrics_filename = f"{metrics_dir}/training_metrics_{env_name}_{alg_name}_seed{seed}_{timestamp}.csv"
-
-    if metrics_list:
-        # Unify all metric keys across steps to avoid CSV fieldname errors
-        all_keys = set()
-        for row in metrics_list:
-            all_keys.update(row.keys())
-        fieldnames = sorted(all_keys)
-        with open(metrics_filename, 'w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writeheader()
-            for row in metrics_list:
-                writer.writerow({k: row.get(k, '') for k in fieldnames})
-        print(f"Metrics saved to {metrics_filename}")
-
-    return make_inference_fn, params, final_eval_metrics, metrics_list, eval_env
+    return make_inference_fn, params, final_eval_metrics, eval_env
 
 
 def collect_rollout_metrics(env_name: str, make_inference_fn, params,
@@ -1013,7 +842,7 @@ def main():
     parser.add_argument("--num_evals", type=int, default=5, help="Number of eval passes during training")
     parser.add_argument("--num_eval_envs", type=int, default=128, help="Parallel envs during eval")
     parser.add_argument("--deterministic_eval", type=bool, default=False, help="Deterministic eval policy")
-    parser.add_argument("--training_metrics_steps", type=float, default=10_000,
+    parser.add_argument("--training_metrics_steps", type=float, default=1e6,
                         help="Env steps between training metrics logs")
 
     # --- PPO-Lagrange ---
@@ -1062,7 +891,7 @@ def main():
         print(f"{'=' * 50}\n")
 
         # Train the agent
-        make_inference_fn, params, final_metrics, metrics_list, eval_env = train_from_config(
+        make_inference_fn, params, final_metrics, eval_env = train_from_config(
             config=config,
             seed=seed,
             use_wandb=not args.no_wandb,

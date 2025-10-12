@@ -235,12 +235,9 @@ def train(
         num_eval_envs: int = 128,
         deterministic_eval: bool = False,
         # training metrics
+        buffer_size: int = 1000,
         log_training_metrics: bool = True,
         training_metrics_steps: Optional[int] = None,
-        # logging control
-        log_frequency: str = "end",  # "end", "periodic", or "epoch"
-        log_interval_steps: Optional[int] = None,  # steps between logs when log_frequency="periodic"
-        num_log_points: int = 100,  # number of log points across training when log_frequency="periodic"
         # callbacks
         progress_fn: Callable[[int, Metrics], None] = lambda *args: None,
         policy_params_fn: Callable[..., None] = lambda *args: None,
@@ -310,12 +307,6 @@ def train(
         progress_fn
       training_metrics_steps: the number of environment steps between logging
         training metrics
-      log_frequency: when to log metrics. "end" = only at end (fastest), 
-        "periodic" = at regular intervals, "epoch" = after each training epoch
-      log_interval_steps: explicit steps between logs when log_frequency="periodic".
-        If None, automatically calculated based on num_log_points
-      num_log_points: number of log points across training when log_frequency="periodic"
-        (default 100). Ignored if log_interval_steps is specified
       progress_fn: a user-defined callback function for reporting/plotting metrics
       policy_params_fn: a user-defined callback function that can be used for
         saving custom policy checkpoints or creating policy rollouts and videos
@@ -378,14 +369,6 @@ def train(
                     * max(num_resets_per_eval, 1)
             )
         ).astype(int)
-
-    # Calculate logging interval for periodic logging
-    if log_frequency == "periodic":
-        if log_interval_steps is None:
-            # Automatically calculate interval based on num_log_points
-            log_interval_steps = max(1, num_timesteps // num_log_points)
-        # Ensure log_interval_steps is at least one training step
-        log_interval_steps = max(log_interval_steps, env_step_per_training_step)
 
     key = jax.random.PRNGKey(seed)
     global_key, local_key = jax.random.split(key)
@@ -472,18 +455,10 @@ def train(
 
         return (loss, metrics), new_params, new_optimizer_state
 
-    metrics_aggregator = metric_logger.EpisodeMetricsLogger(
-        buffer_size=1,
-        # steps_between_logging=training_metrics_steps or min(env_step_per_training_step, 10000),
-        steps_between_logging=1,
-        progress_fn=progress_fn,
-    )
-
     # Create training metrics aggregator for fine-grained training metrics logging
-    training_metrics_aggregator = metric_logger.TrainingMetricsLogger(
-        buffer_size=1,
-        # steps_between_logging=training_metrics_steps or min(env_step_per_training_step, 10000),
-        steps_between_logging=1,
+    metrics_aggregator = metric_logger.MetricsLogger(
+        buffer_size=buffer_size,
+        steps_between_logging=training_metrics_steps,
         progress_fn=progress_fn,
     )
 
@@ -589,12 +564,12 @@ def train(
         )
         assert data.discount.shape[1:] == (unroll_length,)
 
-        if log_training_metrics:  # log unroll metrics
-            jax.debug.callback(
-                metrics_aggregator.update_episode_metrics,
-                data.extras['state_extras']['episode_metrics'],
-                data.extras['state_extras']['episode_done'],
-            )
+        jax.debug.callback(
+            metrics_aggregator.update_env_metrics,
+            data.extras['state_extras']['episode_metrics'],
+            data.extras['state_extras']['episode_done'],
+            training_state.env_steps,
+        )
 
         # Update normalization params and normalize observations.
         normalizer_params = running_statistics.update(
@@ -627,10 +602,9 @@ def train(
             lambda_lagr=updated_lambda_lagr,
         )
 
-        # Log training metrics at every training step for fine-grained logging
         if log_training_metrics:
             jax.debug.callback(
-                training_metrics_aggregator.update_training_metrics,
+                metrics_aggregator.update_train_metrics,
                 metrics,
                 new_training_state.env_steps,
             )
@@ -646,7 +620,6 @@ def train(
             (),
             length=num_training_steps_per_epoch,
         )
-        # loss_metrics = jax.tree_util.tree_map(jnp.mean, loss_metrics)
         return training_state, state, loss_metrics
 
     training_epoch = jax.pmap(training_epoch, axis_name=_PMAP_AXIS_NAME)
@@ -661,22 +634,18 @@ def train(
         result = training_epoch(training_state, env_state, key)
         training_state, env_state, metrics = _strip_weak_type(result)
 
-        # metrics = jax.tree_util.tree_map(jnp.mean, metrics)
-        # jax.tree_util.tree_map(lambda x: x.block_until_ready(), metrics)
-        metrics = jax.tree_util.tree_map(lambda x: np.array(x), metrics)
-
         epoch_training_time = time.time() - t
         training_walltime += epoch_training_time
-        sps = (
+        fps = (
                       num_training_steps_per_epoch
                       * env_step_per_training_step
                       * max(num_resets_per_eval, 1)
               ) / epoch_training_time
 
         metrics = {
-            'training_old/sps': sps,
-            'training_old/walltime': training_walltime,
-            **{f'training_old/{name}': value for name, value in metrics.items()},
+            'performance/fps': fps,
+            'performance/walltime': training_walltime,
+            **{f'training/{name}': value for name, value in metrics.items()},
         }
         return training_state, env_state, metrics  # pytype: disable=bad-return-type  # py311-upgrade
 
@@ -802,22 +771,7 @@ def train(
                 training_epoch_with_timing(training_state, env_state, epoch_keys)
             )
             current_step = int(_unpmap(training_state.env_steps))
-
-            # Implement different logging frequencies
-            should_log = False
-            if process_id == 0 and training_metrics:
-                if log_frequency == "epoch":
-                    # Log after each epoch
-                    should_log = True
-                elif log_frequency == "periodic":
-                    # Log at specified intervals
-                    if current_step - last_log_step >= log_interval_steps:
-                        should_log = True
-                        last_log_step = current_step
-                # For "end" frequency, we don't log during training
-
-                if should_log:
-                    progress_fn(current_step, training_metrics)
+            progress_fn(current_step, training_metrics)
 
             key_envs = jax.vmap(
                 lambda x, s: jax.random.split(x[0], s), in_axes=(0, None)
