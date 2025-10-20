@@ -67,9 +67,9 @@ def wierstra(x: jnp.ndarray) -> jnp.ndarray:
 
 
 class FitnessShaping(enum.Enum):
-  ORIGINAL = functools.partial(lambda x: x)
-  CENTERED_RANK = functools.partial(centered_rank)
-  WIERSTRA = functools.partial(wierstra)
+  ORIGINAL = enum.member(functools.partial(lambda x: x))
+  CENTERED_RANK = enum.member(functools.partial(centered_rank))
+  WIERSTRA = enum.member(functools.partial(wierstra))
 
 
 # TODO(eorsini): Pass the network as argument.
