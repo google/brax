@@ -775,7 +775,7 @@ def train(
       )(key_envs, key_envs.shape[1])
       # TODO(brax-team): move extra reset logic to the AutoResetWrapper.
       if num_resets_per_eval > 0:
-        env_state = reset_fn((training_state, env_state), key_envs)
+        env_state = reset_fn(env_state, key_envs)
 
     if process_id != 0:
       continue
