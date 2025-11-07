@@ -506,11 +506,11 @@ def train(
       key, key_rt = jax.random.split(key)
       r_translate = functools.partial(_random_translate_pixels, key=key_rt)
       data = types.Transition(
-          observation=r_translate(data.observation),
+          observation=r_translate(data.observation),  # pytype: disable=wrong-arg-types
           action=data.action,
           reward=data.reward,
           discount=data.discount,
-          next_observation=r_translate(data.next_observation),
+          next_observation=r_translate(data.next_observation),  # pytype: disable=wrong-arg-types
           extras=data.extras,
       )
 
