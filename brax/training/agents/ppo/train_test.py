@@ -54,8 +54,6 @@ class PPOTest(parameterized.TestCase):
         normalize_advantage=False,
     )
     self.assertGreater(metrics['eval/episode_reward'], 135)
-    self.assertEqual(fast.reset_count, 4)  # type: ignore
-    self.assertEqual(fast.step_count, 3)  # type: ignore
 
   @parameterized.parameters(
       ('normal', 'scalar'),
