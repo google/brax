@@ -15,7 +15,7 @@
 """Brax training acting functions."""
 
 import time
-from typing import Callable, Sequence, Tuple
+from typing import Callable, Optional, Sequence, Tuple
 
 from brax import envs
 from brax.training.types import Metrics
@@ -23,7 +23,9 @@ from brax.training.types import Policy
 from brax.training.types import PolicyParams
 from brax.training.types import PRNGKey
 from brax.training.types import Transition
+from jax.experimental import io_callback
 import jax
+import jax.numpy as jnp
 import numpy as np
 
 State = envs.State
@@ -58,6 +60,8 @@ def generate_unroll(
     key: PRNGKey,
     unroll_length: int,
     extra_fields: Sequence[str] = (),
+    render_fn: Optional[Callable[[State], None]] = None,
+    should_render: jax.Array = jnp.array(False, dtype=jnp.bool_),
 ) -> Tuple[State, Transition]:
   """Collect trajectories of given unroll_length."""
 
@@ -67,6 +71,13 @@ def generate_unroll(
     nstate, transition = actor_step(
         env, state, policy, current_key, extra_fields=extra_fields
     )
+
+    def render(state: State):
+      if render_fn is None:
+        return
+      io_callback(render_fn, None, state)
+
+    jax.lax.cond(should_render, render, lambda s: None, nstate)
     return (nstate, next_key), transition
 
   f_jit = jax.jit(f, donate_argnums=(0,))
@@ -126,6 +137,7 @@ class Evaluator:
           eval_policy_fn(policy_params),
           key,
           unroll_length=episode_length // action_repeat,
+          should_render=jnp.array(False, dtype=jnp.bool_),  # No rendering during eval
       )[0]
 
     self._generate_eval_unroll = jax.jit(
