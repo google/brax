@@ -14,7 +14,7 @@
 
 """PPO networks."""
 
-from typing import Literal, Sequence, Tuple
+from typing import Any, Literal, Mapping, Sequence, Tuple
 
 from brax.training import distribution
 from brax.training import networks
@@ -22,6 +22,7 @@ from brax.training import types
 from brax.training.types import PRNGKey
 import flax
 from flax import linen
+import jax
 
 
 @flax.struct.dataclass
@@ -57,6 +58,7 @@ def make_inference_fn(ppo_networks: PPONetworks):
       return postprocessed_actions, {
           'log_prob': log_prob,
           'raw_action': raw_actions,
+          'distribution_params': logits,
       }
 
     return policy
@@ -77,8 +79,15 @@ def make_ppo_networks(
     noise_std_type: Literal['scalar', 'log'] = 'scalar',
     init_noise_std: float = 1.0,
     state_dependent_std: bool = False,
+    policy_network_kernel_init_fn: networks.Initializer = jax.nn.initializers.lecun_uniform,
+    policy_network_kernel_init_kwargs: Mapping[str, Any] | None = None,
+    value_network_kernel_init_fn: networks.Initializer = jax.nn.initializers.lecun_uniform,
+    value_network_kernel_init_kwargs: Mapping[str, Any] | None = None,
 ) -> PPONetworks:
   """Make PPO networks with preprocessor."""
+  policy_kernel_init_kwargs = policy_network_kernel_init_kwargs or {}
+  value_kernel_init_kwargs = value_network_kernel_init_kwargs or {}
+
   parametric_action_distribution: distribution.ParametricDistribution
   if distribution_type == 'normal':
     parametric_action_distribution = distribution.NormalDistribution(
@@ -104,6 +113,7 @@ def make_ppo_networks(
       noise_std_type=noise_std_type,
       init_noise_std=init_noise_std,
       state_dependent_std=state_dependent_std,
+      kernel_init=policy_network_kernel_init_fn(**policy_kernel_init_kwargs),
   )
   value_network = networks.make_value_network(
       observation_size,
@@ -111,6 +121,7 @@ def make_ppo_networks(
       hidden_layer_sizes=value_hidden_layer_sizes,
       activation=activation,
       obs_key=value_obs_key,
+      kernel_init=value_network_kernel_init_fn(**value_kernel_init_kwargs),
   )
 
   return PPONetworks(

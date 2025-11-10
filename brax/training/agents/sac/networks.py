@@ -14,7 +14,7 @@
 
 """SAC networks."""
 
-from typing import Literal, Sequence, Tuple
+from typing import Any, Literal, Mapping, Sequence, Tuple
 
 from brax.training import distribution
 from brax.training import networks
@@ -22,6 +22,7 @@ from brax.training import types
 from brax.training.types import PRNGKey
 import flax
 from flax import linen
+import jax
 
 
 @flax.struct.dataclass
@@ -68,8 +69,15 @@ def make_sac_networks(
     noise_std_type: Literal['scalar', 'log'] = 'scalar',
     init_noise_std: float = 1.0,
     state_dependent_std: bool = False,
+    policy_network_kernel_init_fn: networks.Initializer = jax.nn.initializers.lecun_uniform,
+    policy_network_kernel_init_kwargs: Mapping[str, Any] | None = None,
+    q_network_kernel_init_fn: networks.Initializer = jax.nn.initializers.lecun_uniform,
+    q_network_kernel_init_kwargs: Mapping[str, Any] | None = None,
 ) -> SACNetworks:
   """Make SAC networks."""
+  policy_kernel_init_kwargs = policy_network_kernel_init_kwargs or {}
+  q_kernel_init_kwargs = q_network_kernel_init_kwargs or {}
+
   parametric_action_distribution: distribution.ParametricDistribution
   if distribution_type == 'normal':
     parametric_action_distribution = distribution.NormalDistribution(
@@ -95,6 +103,7 @@ def make_sac_networks(
       noise_std_type=noise_std_type,
       init_noise_std=init_noise_std,
       state_dependent_std=state_dependent_std,
+      kernel_init=policy_network_kernel_init_fn(policy_kernel_init_kwargs),
   )
   q_network = networks.make_q_network(
       observation_size,
@@ -103,6 +112,7 @@ def make_sac_networks(
       hidden_layer_sizes=hidden_layer_sizes,
       activation=activation,
       layer_norm=q_network_layer_norm,
+      kernel_init=q_network_kernel_init_fn(**q_kernel_init_kwargs),
   )
   return SACNetworks(
       policy_network=policy_network,

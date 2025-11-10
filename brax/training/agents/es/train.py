@@ -19,6 +19,7 @@ See: https://arxiv.org/pdf/1703.03864.pdf
 
 import enum
 import functools
+import sys
 import time
 from typing import Any, Callable, Dict, Optional, Tuple
 
@@ -39,6 +40,11 @@ import optax
 
 Metrics = types.Metrics
 InferenceParams = Tuple[running_statistics.NestedMeanStd, Params]
+
+if sys.version_info >= (3, 11):
+  from enum import member as enum_member
+else:
+  enum_member = lambda x: x
 
 
 @flax.struct.dataclass
@@ -67,12 +73,12 @@ def wierstra(x: jnp.ndarray) -> jnp.ndarray:
 
 
 class FitnessShaping(enum.Enum):
-  ORIGINAL = functools.partial(lambda x: x)
-  CENTERED_RANK = functools.partial(centered_rank)
-  WIERSTRA = functools.partial(wierstra)
+  ORIGINAL = enum_member(functools.partial(lambda x: x))
+  CENTERED_RANK = enum_member(functools.partial(centered_rank))
+  WIERSTRA = enum_member(functools.partial(wierstra))
 
 
-# TODO: Pass the network as argument.
+# TODO(eorsini): Pass the network as argument.
 def train(
     environment: envs.Env,
     wrap_env: bool = True,

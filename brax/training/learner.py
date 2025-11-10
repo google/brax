@@ -18,23 +18,35 @@ import functools
 import json
 import os
 
+os.environ['XLA_FLAGS'] = '--xla_gpu_graph_min_graph_size=1'
+
 from absl import app
 from absl import flags
 from absl import logging
 from brax import envs
-from brax.io import html
 from brax.io import metrics
 from brax.io import model
 from brax.training.agents.apg import train as apg
 from brax.training.agents.ars import train as ars
 from brax.training.agents.es import train as es
 from brax.training.agents.ppo import networks as ppo_networks
+from brax.training.agents.ppo import optimizer as ppo_optimizer
 from brax.training.agents.ppo import train as ppo
 from brax.training.agents.sac import networks as sac_networks
+from brax.training import networks as brax_networks
 from brax.training.agents.sac import train as sac
 from etils import epath
 import jax
 import mediapy as media
+try:
+  import mujoco_playground as mjp
+except ImportError as e:
+  print(
+      'MuJoCo Playground is not available. Install it via `pip install'
+      ' playground`.\n'
+      + str(e)
+  )
+  mjp = None
 
 FLAGS = flags.FLAGS
 _LEARNER = flags.DEFINE_enum(
@@ -81,6 +93,7 @@ _MAX_GRADIENT_NORM = flags.DEFINE_float(
     'max_gradient_norm', 1e9, 'Maximal norm of a gradient update.'
 )
 _LOGDIR = flags.DEFINE_string('logdir', '', 'Logdir.')
+_RESTOREDIR = flags.DEFINE_string('restoredir', None, 'Restoredir.')
 _NORMALIZE_OBSERVATIONS = flags.DEFINE_bool(
     'normalize_observations',
     True,
@@ -94,11 +107,6 @@ _MAX_DEVICES_PER_HOST = flags.DEFINE_integer(
 )
 _NUM_VIDEOS = flags.DEFINE_integer(
     'num_videos', 1, 'Number of videos to record after training.'
-)
-_NUM_TRAJECTORIES_NPY = flags.DEFINE_integer(
-    'num_trajectories_npy',
-    0,
-    'Number of rollouts to write to disk as raw QP states.',
 )
 # Evolution Strategy related flags
 _POPULATION_SIZE = flags.DEFINE_integer(
@@ -161,6 +169,41 @@ _PPO_POLICY_OBS_KEY = flags.DEFINE_string(
 _PPO_VALUE_OBS_KEY = flags.DEFINE_string(
     'ppo_value_obs_key', None, 'PPO value obs key.'
 )
+_PPO_LEARNING_RATE_SCHEDULE = flags.DEFINE_enum_class(
+    'ppo_learning_rate_schedule',
+    ppo_optimizer.LRSchedule.NONE,
+    ppo_optimizer.LRSchedule,
+    'Learning rate schedule for PPO.',
+)
+_PPO_DESIRED_KL = flags.DEFINE_float(
+    'ppo_desired_kl', 0.01, 'Desired KL for PPO.'
+)
+_PPO_DISTRIBUTION_TYPE = flags.DEFINE_enum(
+    'ppo_distribution_type',
+    'tanh_normal',
+    ['normal', 'tanh_normal'],
+    'Distribution type for PPO.',
+)
+_PPO_NOISE_STD_TYPE = flags.DEFINE_enum(
+    'ppo_noise_std_type',
+    'scalar',
+    ['scalar', 'log'],
+    'Noise std type for PPO.',
+)
+_PPO_INIT_NOISE_STD = flags.DEFINE_float(
+    'ppo_init_noise_std', 1.0, 'Initial noise std for PPO.'
+)
+_PPO_ACTIVATION_FN = flags.DEFINE_string(
+    'ppo_activation_fn',
+    'swish',
+    'Activation function for PPO.',
+)
+_PPO_VF_LOSS_COEFFICIENT = flags.DEFINE_float(
+    'ppo_vf_loss_coefficient',
+    0.5,
+    'Value function loss coefficient for PPO.',
+)
+
 # ARS hps.
 _NUMBER_OF_DIRECTIONS = flags.DEFINE_integer(
     'number_of_directions',
@@ -181,9 +224,22 @@ _REWARD_SHIFT = flags.DEFINE_float(
 _POLICY_UPDATES = flags.DEFINE_integer(
     'policy_updates', None, 'Number of policy updates in APG.'
 )
-# Wrap.
-_CUSTOM_WRAP_ENV = flags.DEFINE_bool(
-    'custom_wrap_env', False, 'Wrap the environment with a custom wrapper.'
+# MuJoCo Playground.
+_PLAYGROUND_DM_CONTROL_SUITE = flags.DEFINE_bool(
+    'playground_dm_control_suite', False, 'Use the playground dm control suite.'
+)
+_PLAYGROUND_LOCOMOTION_SUITE = flags.DEFINE_bool(
+    'playground_locomotion_suite', False, 'Use the playground locomotion suite.'
+)
+_PLAYGROUND_MANIPULATION_SUITE = flags.DEFINE_bool(
+    'playground_manipulation_suite',
+    False,
+    'Use the playground manipulation suite.',
+)
+_PLAYGROUND_CONFIG_OVERRIDES = flags.DEFINE_string(
+    'playground_config_overrides',
+    None,
+    'Overrides for the playground env config.',
 )
 
 
@@ -191,8 +247,28 @@ def get_env_factory(env_name: str):
   """Returns a function that creates an environment."""
   wrap_fn = None
   randomizer_fn = None
-  if _CUSTOM_WRAP_ENV.value:
-    pass
+  if mjp:  # MuJoCo Playground environments.
+    overrides = {}
+    randomizer_fn = None
+    if _PLAYGROUND_CONFIG_OVERRIDES.value is not None:
+      overrides = json.loads(_PLAYGROUND_CONFIG_OVERRIDES.value)
+    if _PLAYGROUND_DM_CONTROL_SUITE.value:
+      get_environment = lambda *args, **kwargs: mjp.dm_control_suite.load(  # pytype: disable=attribute-error
+          *args, **kwargs, config_overrides=overrides
+      )
+    elif _PLAYGROUND_LOCOMOTION_SUITE.value:
+      get_environment = lambda *args, **kwargs: mjp.locomotion.load(  # pytype: disable=attribute-error
+          *args, **kwargs, config_overrides=overrides
+      )
+      randomizer_fn = mjp.locomotion.get_domain_randomizer(env_name)
+    elif _PLAYGROUND_MANIPULATION_SUITE.value:
+      get_environment = lambda *args, **kwargs: mjp.manipulation.load(  # pytype: disable=attribute-error
+          *args, **kwargs, config_overrides=overrides
+      )
+      randomizer_fn = mjp.manipulation.get_domain_randomizer(env_name)
+    else:
+      raise ValueError('No playground suite selected.')
+    wrap_fn = mjp.wrapper.wrap_for_brax_training
   else:
     get_environment = functools.partial(
         envs.get_environment, backend=_BACKEND.value
@@ -203,6 +279,8 @@ def get_env_factory(env_name: str):
 def main(unused_argv):
   logdir = _LOGDIR.value
 
+  ckpt_dir = epath.Path(logdir) / 'checkpoints'
+  ckpt_dir.mkdir(exist_ok=True)
   get_environment, wrap_fn, randomizer_fn = get_env_factory(_ENV.value)
   with metrics.Writer(logdir) as writer:
     writer.write_hparams({
@@ -262,6 +340,13 @@ def main(unused_argv):
       )
     elif _LEARNER.value == 'ppo':
       network_factory = ppo_networks.make_ppo_networks
+      network_factory = functools.partial(
+          network_factory,
+          distribution_type=_PPO_DISTRIBUTION_TYPE.value,
+          noise_std_type=_PPO_NOISE_STD_TYPE.value,
+          init_noise_std=_PPO_INIT_NOISE_STD.value,
+          activation=brax_networks.ACTIVATION[_PPO_ACTIVATION_FN.value],
+      )
       if _PPO_POLICY_HIDDEN_LAYER_SIZES.value is not None:
         policy_hidden_layer_sizes = [
             int(x) for x in _PPO_POLICY_HIDDEN_LAYER_SIZES.value.split(',')
@@ -312,8 +397,13 @@ def main(unused_argv):
           reward_scaling=_REWARD_SCALING.value,
           gae_lambda=_GAE_LAMBDA.value,
           clipping_epsilon=_CLIPPING_EPSILON.value,
+          learning_rate_schedule=_PPO_LEARNING_RATE_SCHEDULE.value,
+          desired_kl=_PPO_DESIRED_KL.value,
           num_resets_per_eval=_NUM_RESETS_PER_EVAL.value,
           progress_fn=writer.write_scalars,
+          save_checkpoint_path=ckpt_dir.as_posix(),
+          restore_checkpoint_path=_RESTOREDIR.value,
+          vf_loss_coefficient=_PPO_VF_LOSS_COEFFICIENT.value,
       )
     elif _LEARNER.value == 'apg':
       make_policy, params, _ = apg.train(
@@ -365,41 +455,62 @@ def main(unused_argv):
   get_environment, *_ = get_env_factory(_ENV.value)
   env = get_environment(_ENV.value)
 
-  @jax.jit
-  def jit_next_state(state, key):
-    new_key, tmp_key = jax.random.split(key)
-    act = make_policy(params)(state.obs, tmp_key)[0]
-    return env.step(state, act), act, new_key
+  def do_rollout(rng, state):
+    data_attr_name = 'pipeline_state' if hasattr(env, 'sys') else 'data'
+    empty_data = getattr(state, data_attr_name).__class__(
+        **{k: None for k in getattr(state, data_attr_name).__annotations__}
+    )  # pytype: disable=attribute-error
+    empty_traj = state.__class__(**{k: None for k in state.__annotations__})  # pytype: disable=attribute-error
+    empty_traj = empty_traj.replace(**{data_attr_name: empty_data})
 
-  def do_rollout(rng):
-    rng, env_key = jax.random.split(rng)
-    state = env.reset(env_key)
-    t, states = 0, []
-    while not state.done and t < _EPISODE_LENGTH.value:
-      states.append(state)
-      state, _, rng = jit_next_state(state, rng)
-      t += 1
-    return states, rng
+    def step(carry, _):
+      state, rng = carry
+      rng, act_key = jax.random.split(rng)
+      act = make_policy(params)(state.obs, act_key)[0]
+      state = env.step(state, act)
+      if hasattr(state, 'data'):
+        # select a sub-set of the data for playground envs
+        traj_data = empty_traj.tree_replace({
+            'data.qpos': state.data.qpos,
+            'data.qvel': state.data.qvel,
+            'data.time': state.data.time,
+            'data.ctrl': state.data.ctrl,
+            'data.mocap_pos': state.data.mocap_pos,
+            'data.mocap_quat': state.data.mocap_quat,
+            'data.xfrc_applied': state.data.xfrc_applied,
+        })
+      elif hasattr(state, 'pipeline_state'):
+        # select the entire state for brax envs
+        traj_data = empty_traj.replace(
+            **{data_attr_name: getattr(state, data_attr_name)}
+        )
+      else:
+        raise ValueError(
+            f'Unknown data attribute name: {data_attr_name} on state: {state}.'
+        )
+      return (state, rng), traj_data
 
-  trajectories = []
-  rng = jax.random.PRNGKey(_SEED.value)
-  for _ in range(max(_NUM_VIDEOS.value, _NUM_TRAJECTORIES_NPY.value)):
-    qps, rng = do_rollout(rng)
-    trajectories.append(qps)
+    _, traj = jax.lax.scan(
+        step, (state, rng), None, length=_EPISODE_LENGTH.value
+    )
+    return traj
+
+  rng = jax.random.split(jax.random.PRNGKey(_SEED.value), _NUM_VIDEOS.value)
+  reset_states = jax.jit(jax.vmap(env.reset))(rng)
+  traj_stacked = jax.jit(jax.vmap(do_rollout))(rng, reset_states)
+  trajectories = [None] * _NUM_VIDEOS.value
+  for i in range(_NUM_VIDEOS.value):
+    t = jax.tree.map(lambda x, i=i: x[i], traj_stacked)
+    trajectories[i] = [
+        jax.tree.map(lambda x, j=j: x[j], t)
+        for j in range(_EPISODE_LENGTH.value)
+    ]
 
   video_path = ''
-  if hasattr(env, 'sys') and hasattr(env.sys, 'link_names'):
-    for i in range(_NUM_VIDEOS.value):
-      video_path = f'{logdir}/saved_videos/trajectory_{i:04d}.html'
-      html.save(
-          video_path,
-          env.sys.tree_replace({'opt.timestep': env.dt}),
-          [t.pipeline_state for t in trajectories[i]],
-      )  # pytype: disable=wrong-arg-types
-  elif hasattr(env, 'render'):
+  if hasattr(env, 'render'):
     for i in range(_NUM_VIDEOS.value):
       path_ = epath.Path(f'{logdir}/saved_videos/trajectory_{i:04d}.mp4')
-      path_.parent.mkdir(parents=True)
+      path_.parent.mkdir(parents=True, exist_ok=True)
       frames = env.render(trajectories[i])
       media.write_video(path_, frames, fps=1.0 / env.dt)
       video_path = path_.as_posix()

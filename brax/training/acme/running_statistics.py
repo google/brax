@@ -210,7 +210,7 @@ def normalize(batch: types.NestedArray,
       return data
     data = (data - mean) / std
     if max_abs_value is not None:
-      # TODO: remove pylint directive
+      # TODO(b/124318564): remove pylint directive
       data = jnp.clip(data, -max_abs_value, +max_abs_value)
     return data
 

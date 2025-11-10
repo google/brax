@@ -19,6 +19,7 @@ import json
 import logging
 from typing import Any, Dict, Tuple, Union
 
+from brax.training import networks
 from brax.training import types
 from brax.training.acme import running_statistics
 from brax.training.agents.bc import networks as bc_networks
@@ -27,9 +28,16 @@ from brax.training.agents.sac import networks as sac_networks
 from etils import epath
 from flax.training import orbax_utils
 import jax
+from jax import numpy as jp
 from ml_collections import config_dict
 import numpy as np
 from orbax import checkpoint as ocp
+
+_KERNEL_INIT_FN_KEYWORDS = (
+    'policy_network_kernel_init_fn',
+    'value_network_kernel_init_fn',
+    'q_network_kernel_init_fn',
+)
 
 
 def _get_function_kwargs(func: Any) -> Dict[str, Any]:
@@ -47,6 +55,16 @@ def _get_function_defaults(func: Any) -> Dict[str, Any]:
   if hasattr(func, 'func'):
     kwargs.update(_get_function_defaults(func.func))
   return kwargs
+
+
+def _np_jp_to_python_types(data: Any) -> Any:
+  if isinstance(data, (np.ndarray, jp.ndarray)):
+    return data.item() if data.ndim == 0 else data.tolist()
+  if isinstance(data, dict):
+    return {key: _np_jp_to_python_types(value) for key, value in data.items()}
+  if isinstance(data, (list, tuple)):
+    return type(data)(_np_jp_to_python_types(item) for item in data)
+  return data
 
 
 def network_config(
@@ -76,11 +94,6 @@ def network_config(
           ' preprocess_observations_fn'
       )
     del kwargs['preprocess_observations_fn']
-  if 'activation' in kwargs:
-    # TODO: Add other activations.
-    if kwargs['activation'] != defaults['activation']:
-      raise ValueError('checkpointing only supports default activation')
-    del kwargs['activation']
 
   config.network_factory_kwargs = kwargs
   config.normalize_observations = normalize_observations
@@ -128,10 +141,36 @@ def save(
   if not ckpt_path.exists():
     ckpt_path.mkdir(parents=True)
 
+  # Save the network params.
   orbax_checkpointer = ocp.PyTreeCheckpointer()
   save_args = orbax_utils.save_args_from_target(params)
   orbax_checkpointer.save(ckpt_path, params, force=True, save_args=save_args)
 
+  config_cp_dict = config.to_dict()
+  # Convert activation functions to registered names.
+  if 'activation' in config_cp_dict['network_factory_kwargs'] and callable(
+      config_cp_dict['network_factory_kwargs']['activation']
+  ):
+    name_ = config_cp_dict['network_factory_kwargs']['activation'].__name__
+    if name_ not in networks.ACTIVATION:
+      raise ValueError(
+          f'Activation function {name_} not registered for checkpointing.'
+      )
+    config_cp_dict['network_factory_kwargs']['activation'] = name_
+  # Convert kernel init functions to registered names.
+  for init_fn_name in _KERNEL_INIT_FN_KEYWORDS:
+    if init_fn_name not in config_cp_dict['network_factory_kwargs']:
+      continue
+    name_ = config_cp_dict['network_factory_kwargs'][init_fn_name].__name__
+    if name_ not in networks.KERNEL_INITIALIZER:
+      raise ValueError(
+          f'Kernel init function {name_} not registered for checkpointing.'
+      )
+    config_cp_dict['network_factory_kwargs'][init_fn_name] = name_
+  config_cp_dict = _np_jp_to_python_types(config_cp_dict)
+  config = config_dict.ConfigDict(config_cp_dict)
+
+  # Save the config.
   config_path = ckpt_path / config_fname
   config_path.write_text(config.to_json_best_effort())
 
@@ -146,7 +185,7 @@ def load(
 
   logging.info('restoring from checkpoint %s', path.as_posix())
 
-  metadata = ocp.PyTreeCheckpointer().metadata(path)
+  metadata = ocp.PyTreeCheckpointer().metadata(path).item_metadata
   restore_args = jax.tree.map(
       lambda _: ocp.RestoreArgs(restore_type=np.ndarray), metadata
   )
@@ -166,4 +205,20 @@ def load_config(
   config_path = epath.Path(config_path)
   if not config_path.exists():
     raise ValueError(f'Config file not found at {config_path.as_posix()}')
-  return config_dict.create(**json.loads(config_path.read_text()))
+
+  loaded_dict = json.loads(config_path.read_text())
+
+  if 'activation' in loaded_dict['network_factory_kwargs']:
+    activation_name = loaded_dict['network_factory_kwargs']['activation']
+    loaded_dict['network_factory_kwargs']['activation'] = networks.ACTIVATION[
+        activation_name
+    ]
+  for init_fn_name in _KERNEL_INIT_FN_KEYWORDS:
+    if init_fn_name not in loaded_dict['network_factory_kwargs']:
+      continue
+    init_fn_name_ = loaded_dict['network_factory_kwargs'][init_fn_name]
+    loaded_dict['network_factory_kwargs'][init_fn_name] = (
+        networks.KERNEL_INITIALIZER[init_fn_name_]
+    )
+
+  return config_dict.create(**loaded_dict)

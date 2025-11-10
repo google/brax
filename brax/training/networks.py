@@ -23,11 +23,66 @@ from brax.training import types
 from brax.training.acme import running_statistics
 from brax.training.spectral_norm import SNDense
 from flax import linen
+from flax import linen as nn
 import jax
 import jax.numpy as jnp
 
+
 ActivationFn = Callable[[jnp.ndarray], jnp.ndarray]
 Initializer = Callable[..., Any]
+
+
+ACTIVATION = {
+    'celu': nn.activation.celu,
+    'compact': nn.activation.compact,
+    'elu': nn.activation.elu,
+    'gelu': nn.activation.gelu,
+    'glu': nn.activation.glu,
+    'hard_sigmoid': nn.activation.hard_sigmoid,
+    'hard_silu': nn.activation.hard_silu,
+    'hard_swish': nn.activation.hard_swish,
+    'hard_tanh': nn.activation.hard_tanh,
+    'leaky_relu': nn.activation.leaky_relu,
+    'linear': lambda x: x,
+    'log_sigmoid': nn.activation.log_sigmoid,
+    'log_softmax': nn.activation.log_softmax,
+    'logsumexp': nn.activation.logsumexp,
+    'mish': jax.nn.mish,
+    'normalize': nn.activation.normalize,
+    'one_hot': nn.activation.one_hot,
+    'relu': nn.activation.relu,
+    'relu6': nn.activation.relu6,
+    'selu': nn.activation.selu,
+    'sigmoid': nn.activation.sigmoid,
+    'silu': nn.activation.silu,
+    'soft_sign': nn.activation.soft_sign,
+    'softmax': nn.activation.softmax,
+    'softplus': nn.activation.softplus,
+    'standardize': nn.activation.standardize,
+    'swish': nn.activation.swish,
+    'tanh': nn.activation.tanh,
+}
+KERNEL_INITIALIZER = {
+    'constant': jax.nn.initializers.constant,
+    'delta_orthogonal': jax.nn.initializers.delta_orthogonal,
+    'glorot_normal': jax.nn.initializers.glorot_normal,
+    'glorot_uniform': jax.nn.initializers.glorot_uniform,
+    'he_normal': jax.nn.initializers.he_normal,
+    'he_uniform': jax.nn.initializers.he_uniform,
+    'kaiming_normal': jax.nn.initializers.kaiming_normal,
+    'kaiming_uniform': jax.nn.initializers.kaiming_uniform,
+    'lecun_normal': jax.nn.initializers.lecun_normal,
+    'lecun_uniform': jax.nn.initializers.lecun_uniform,
+    'normal': jax.nn.initializers.normal,
+    'ones': jax.nn.initializers.ones,
+    'orthogonal': jax.nn.initializers.orthogonal,
+    'truncated_normal': jax.nn.initializers.truncated_normal,
+    'uniform': jax.nn.initializers.uniform,
+    'variance_scaling': jax.nn.initializers.variance_scaling,
+    'xavier_normal': jax.nn.initializers.xavier_normal,
+    'xavier_uniform': jax.nn.initializers.xavier_uniform,
+    'zeros': jax.nn.initializers.zeros,
+}
 
 
 @dataclasses.dataclass
@@ -282,7 +337,8 @@ class PolicyModuleWithStd(linen.Module):
     )(obs)
 
     mean_params = linen.Dense(
-        self.param_size, kernel_init=self.kernel_init
+        self.param_size,
+        kernel_init=self.kernel_init,
     )(outputs)
 
     if self.state_dependent_std:
@@ -293,7 +349,6 @@ class PolicyModuleWithStd(linen.Module):
         std_params = jnp.exp(log_std_output)
       else:
         std_params = log_std_output
-
     else:
       if self.noise_std_type == 'scalar':
         std_module = Param(
@@ -305,7 +360,7 @@ class PolicyModuleWithStd(linen.Module):
         )
       std_params = std_module()
 
-    return mean_params, std_params
+    return mean_params, jnp.broadcast_to(std_params, mean_params.shape)
 
 
 def make_policy_network(
@@ -372,12 +427,13 @@ def make_value_network(
     hidden_layer_sizes: Sequence[int] = (256, 256),
     activation: ActivationFn = linen.relu,
     obs_key: str = 'state',
+    kernel_init: Initializer = jax.nn.initializers.lecun_uniform(),
 ) -> FeedForwardNetwork:
   """Creates a value network."""
   value_module = MLP(
       layer_sizes=list(hidden_layer_sizes) + [1],
       activation=activation,
-      kernel_init=jax.nn.initializers.lecun_uniform(),
+      kernel_init=kernel_init,
   )
 
   def apply(processor_params, value_params, obs):
@@ -404,6 +460,7 @@ def make_q_network(
     activation: ActivationFn = linen.relu,
     n_critics: int = 2,
     layer_norm: bool = False,
+    kernel_init: Initializer = jax.nn.initializers.lecun_uniform(),
 ) -> FeedForwardNetwork:
   """Creates a value network."""
 
@@ -420,7 +477,7 @@ def make_q_network(
         q = MLP(
             layer_sizes=list(hidden_layer_sizes) + [1],
             activation=activation,
-            kernel_init=jax.nn.initializers.lecun_uniform(),
+            kernel_init=kernel_init,
             layer_norm=layer_norm,
         )(hidden)
         res.append(q)

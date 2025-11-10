@@ -60,7 +60,7 @@ class KinematicsTest(parameterized.TestCase):
       )
 
       if xml_file == 'humanoid.xml':
-        # TODO: get forward to match MJ for stacked/offset joints
+        # TODO(brax-team): get forward to match MJ for stacked/offset joints
         return
 
       np.testing.assert_array_almost_equal(xd.ang, xd_mj.ang, 3)

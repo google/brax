@@ -88,7 +88,7 @@ def _fuse_bodies(elem: ElementTree.Element):
     cquat = child.attrib.get('quat', '1 0 0 0')
     cquat = np.fromstring(cquat, sep=' ')
     for grandchild in child:
-      # TODO: might need to offset more than just these tags
+      # TODO(brax-team): might need to offset more than just these tags
       if (
           grandchild.tag in ('body', 'geom', 'site', 'camera')
           and (cpos != 0).any()
@@ -393,7 +393,7 @@ def load_model(mj: mujoco.MjModel) -> System:
   )
 
   # create actuators
-  # TODO: swap brax actuation for mjx actuation model.
+  # TODO(brax-team): swap brax actuation for mjx actuation model.
   ctrl_range = mj.actuator_ctrlrange
   ctrl_range[~(mj.actuator_ctrllimited == 1), :] = np.array([-np.inf, np.inf])
   force_range = mj.actuator_forcerange
@@ -439,7 +439,7 @@ def load_model(mj: mujoco.MjModel) -> System:
   link_parents = tuple(mj.body_parentid - 1)[1:]
 
   # mujoco stores free q in world frame, so clear link transform for free links
-  # TODO: make this work for non-fused mj models
+  # TODO(brax-team): make this work for non-fused mj models
   if 'f' in link_types:
     free_idx = np.array([i for i, typ in enumerate(link_types) if typ == 'f'])
     link.transform.pos[free_idx] = np.zeros(3)

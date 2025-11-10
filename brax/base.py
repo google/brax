@@ -84,7 +84,7 @@ class Base:
   def vmap(self, in_axes=0, out_axes=0):
     """Returns an object that vmaps each follow-on instance method call."""
 
-    # TODO: i think this is kinda handy, but maybe too clever?
+    # TODO(brax-team): i think this is kinda handy, but maybe too clever?
 
     outer_self = self
 

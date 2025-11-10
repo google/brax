@@ -112,6 +112,7 @@ def compute_ppo_loss(
     gae_lambda: float = 0.95,
     clipping_epsilon: float = 0.3,
     normalize_advantage: bool = True,
+    vf_coefficient: float = 0.5,
 ) -> Tuple[jnp.ndarray, types.Metrics]:
   """Computes PPO loss.
 
@@ -129,6 +130,8 @@ def compute_ppo_loss(
     gae_lambda: General advantage estimation lambda.
     clipping_epsilon: Policy loss clipping epsilon
     normalize_advantage: whether to normalize advantage estimate
+    vf_coefficient: Coefficient for value function loss, for RSL-RL parity this
+      should be set to 1.0.
 
   Returns:
     A tuple (loss, metrics)
@@ -178,16 +181,28 @@ def compute_ppo_loss(
 
   # Value function loss
   v_error = vs - baseline
-  v_loss = jnp.mean(v_error * v_error) * 0.5 * 0.5
+  v_loss = jnp.mean(v_error * v_error) * 0.5 * vf_coefficient
 
   # Entropy reward
   entropy = jnp.mean(parametric_action_distribution.entropy(policy_logits, rng))
   entropy_loss = entropy_cost * -entropy
 
   total_loss = policy_loss + v_loss + entropy_loss
+
+  new_dist = parametric_action_distribution.create_dist(policy_logits)
+  if hasattr(new_dist, 'kl_divergence'):
+    old_dist_params = data.extras['policy_extras']['distribution_params']
+    old_dist = parametric_action_distribution.create_dist(old_dist_params)
+    kl = jnp.mean(new_dist.kl_divergence(old_dist))  # pytype: disable=attribute-error
+    policy_dist_mean_std = jnp.mean(new_dist.scale)  # pytype: disable=attribute-error
+  else:
+    kl, policy_dist_mean_std = jnp.array(0.0), jnp.array(0.0)
+
   return total_loss, {
       'total_loss': total_loss,
       'policy_loss': policy_loss,
       'v_loss': v_loss,
       'entropy_loss': entropy_loss,
+      'kl_mean': kl,
+      'policy_dist_mean_std': policy_dist_mean_std,
   }

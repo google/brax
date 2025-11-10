@@ -61,7 +61,7 @@ def resolve_position(
     x = state.x_i.concatenate(Transform.zero((1,))).take(link_idx)
     x_prev = x_i_prev.concatenate(Transform.zero((1,))).take(link_idx)
 
-    # TODO: rewrite these updates to use pbd methods
+    # TODO(cdfreeman): rewrite these updates to use pbd methods
     n = -contact.frame[0]
     c = contact.dist
     pos_p = contact.pos + n * c / 2.0 - x.pos[0]

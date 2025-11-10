@@ -61,7 +61,6 @@ def generate_unroll(
 ) -> Tuple[State, Transition]:
   """Collect trajectories of given unroll_length."""
 
-  @jax.jit
   def f(carry, unused_t):
     state, current_key = carry
     current_key, next_key = jax.random.split(current_key)
@@ -70,13 +69,22 @@ def generate_unroll(
     )
     return (nstate, next_key), transition
 
+  f_jit = jax.jit(f, donate_argnums=(0,))
   (final_state, _), data = jax.lax.scan(
-      f, (env_state, key), (), length=unroll_length
+      f_jit, (env_state, key), (), length=unroll_length
   )
   return final_state, data
 
 
-# TODO: Consider moving this to its own file.
+def _agg_fn(metric, fn, to_aggregate, to_normalize, episode_lengths):
+  if not to_aggregate:
+    return metric
+  if to_normalize:
+    return fn(metric / episode_lengths)
+  return fn(metric)
+
+
+# TODO(eorsini): Consider moving this to its own file.
 class Evaluator:
   """Class to run evaluations."""
 
@@ -103,9 +111,12 @@ class Evaluator:
     self._eval_walltime = 0.0
 
     eval_env = envs.training.EvalWrapper(eval_env)
+    self._eval_state_to_donate = jax.jit(eval_env.reset)(
+        jax.random.split(key, num_eval_envs)
+    )
 
     def generate_eval_unroll(
-        policy_params: PolicyParams, key: PRNGKey
+        eval_env_state_donated: State, policy_params: PolicyParams, key: PRNGKey
     ) -> State:
       reset_keys = jax.random.split(key, num_eval_envs)
       eval_first_state = eval_env.reset(reset_keys)
@@ -117,7 +128,9 @@ class Evaluator:
           unroll_length=episode_length // action_repeat,
       )[0]
 
-    self._generate_eval_unroll = jax.jit(generate_eval_unroll)
+    self._generate_eval_unroll = jax.jit(
+        generate_eval_unroll, donate_argnums=(0,), keep_unused=True
+    )
     self._steps_per_unroll = episode_length * num_eval_envs
 
   def run_evaluation(
@@ -130,19 +143,28 @@ class Evaluator:
     self._key, unroll_key = jax.random.split(self._key)
 
     t = time.time()
-    eval_state = self._generate_eval_unroll(policy_params, unroll_key)
+    eval_state = self._generate_eval_unroll(
+        self._eval_state_to_donate, policy_params, unroll_key
+    )
+    self._eval_state_to_donate = eval_state
+
     eval_metrics = eval_state.info['eval_metrics']
     eval_metrics.active_episodes.block_until_ready()
     epoch_eval_time = time.time() - t
+    episode_lengths = np.maximum(eval_metrics.episode_steps, 1.0).astype(float)
+
     metrics = {}
     for fn in [np.mean, np.std]:
       suffix = '_std' if fn == np.std else ''
-      metrics.update({
-          f'eval/episode_{name}{suffix}': (
-              fn(value) if aggregate_episodes else value
-          )
-          for name, value in eval_metrics.episode_metrics.items()
-      })
+      for name, value in eval_metrics.episode_metrics.items():
+        metrics[f'eval/episode_{name}{suffix}'] = _agg_fn(
+            value,
+            fn,
+            aggregate_episodes,
+            name.endswith('per_step'),
+            episode_lengths,
+        )
+
     metrics['eval/avg_episode_length'] = np.mean(eval_metrics.episode_steps)
     metrics['eval/std_episode_length'] = np.std(eval_metrics.episode_steps)
     metrics['eval/epoch_eval_time'] = epoch_eval_time

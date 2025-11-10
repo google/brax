@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "brax"
-version = "0.12.4"
+version = "0.13.0"
 description = "A differentiable physics engine written in JAX."
 authors = [
     { name = "Brax Authors", email = "no-reply@google.com" },
@@ -45,7 +45,7 @@ dependencies = [
     "mujoco-mjx",
     "numpy",
     "optax",
-    "orbax-checkpoint",
+    "orbax-checkpoint>=0.11.22",
     "Pillow",
     "scipy",
     "tensorboardX",

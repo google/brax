@@ -465,7 +465,8 @@ def train(
     )[0]
 
   prefill_replay_buffer = jax.pmap(
-      prefill_replay_buffer, axis_name=_PMAP_AXIS_NAME
+      prefill_replay_buffer, axis_name=_PMAP_AXIS_NAME,
+      donate_argnums=(0, 1, 2)
   )
 
   def training_epoch(
@@ -490,7 +491,9 @@ def train(
     metrics = jax.tree_util.tree_map(jnp.mean, metrics)
     return training_state, env_state, buffer_state, metrics
 
-  training_epoch = jax.pmap(training_epoch, axis_name=_PMAP_AXIS_NAME)
+  training_epoch = jax.pmap(
+      training_epoch, axis_name=_PMAP_AXIS_NAME, donate_argnums=(0, 1, 2)
+  )
 
   # Note that this is NOT a pure jittable method.
   def training_epoch_with_timing(

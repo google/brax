@@ -268,7 +268,7 @@ def solve_pgs(a: jax.Array, b: jax.Array, num_iters: int) -> jax.Array:
 
     return x, None
 
-  # TODO: turn this into a scan
+  # TODO(brax-team): turn this into a scan
   for _ in range(num_iters):
     x, _ = jax.lax.scan(get_x, x, (jp.arange(num_rows), a, b))
 
@@ -376,7 +376,7 @@ def quat_to_euler(q: jax.Array) -> jax.Array:
       -2 * q[1] * q[2] + 2 * q[0] * q[3],
       q[1] * q[1] + q[0] * q[0] - q[3] * q[3] - q[2] * q[2],
   )
-  # TODO: Investigate why quaternions go so big we need to clip.
+  # TODO(cdfreeman): Investigate why quaternions go so big we need to clip.
   y = safe_arcsin(jp.clip(2 * q[1] * q[3] + 2 * q[0] * q[2], -1.0, 1.0))
   x = jp.arctan2(
       -2 * q[2] * q[3] + 2 * q[0] * q[1],
