@@ -47,6 +47,7 @@ ACTIVATION = {
     'log_sigmoid': nn.activation.log_sigmoid,
     'log_softmax': nn.activation.log_softmax,
     'logsumexp': nn.activation.logsumexp,
+    'mish': jax.nn.mish,
     'normalize': nn.activation.normalize,
     'one_hot': nn.activation.one_hot,
     'relu': nn.activation.relu,
