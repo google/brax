@@ -44,9 +44,12 @@ class EpisodeMetricsLogger:
   def update_episode_metrics(self, episode_metrics, dones, train_metrics):
     self._num_steps += np.prod(dones.shape)
     if jnp.sum(dones) > 0:
+      lengths = episode_metrics['length'][dones.astype(bool)].flatten()
       for name, metric in episode_metrics.items():
-        done_metrics = metric[dones.astype(bool)].flatten().tolist()
-        self._ep_metrics_buffer[name].extend(done_metrics)
+        done_metrics = metric[dones.astype(bool)].flatten()
+        if name.endswith('_per_step'):
+          done_metrics = done_metrics / (lengths + 1e-8)
+        self._ep_metrics_buffer[name].extend(done_metrics.tolist())
     for name, metric in train_metrics.items():
       self._train_metrics_buffer[name].extend(metric.flatten().tolist())
     if self._num_steps - self._last_log_steps >= self._steps_between_logging:
