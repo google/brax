@@ -61,7 +61,7 @@ def generate_unroll(
     unroll_length: int,
     extra_fields: Sequence[str] = (),
     render_fn: Optional[Callable[[State], None]] = None,
-    should_render: jax.Array = jnp.array(False, dtype=jnp.bool_),
+    should_render: jax.Array = jnp.array(False, dtype=bool),
 ) -> Tuple[State, Transition]:
   """Collect trajectories of given unroll_length."""
 
@@ -73,12 +73,13 @@ def generate_unroll(
         env, state, policy, current_key, extra_fields=extra_fields
     )
 
-    def render(state: State):
-      if render_fn is None:
-        return
-      io_callback(render_fn, None, state)
+    if render_fn is not None:
 
-    jax.lax.cond(should_render, render, lambda s: None, nstate)
+      def render(state: State):
+        io_callback(render_fn, None, state)
+
+      jax.lax.cond(should_render, render, lambda s: None, nstate)
+
     return (nstate, next_key), transition
 
   (final_state, _), data = jax.lax.scan(
@@ -126,7 +127,7 @@ class Evaluator:
           eval_policy_fn(policy_params),
           key,
           unroll_length=episode_length // action_repeat,
-          should_render=jnp.array(False, dtype=jnp.bool_),  # No rendering during eval
+          should_render=jnp.array(False, dtype=bool),  # No rendering during eval
       )[0]
 
     self._generate_eval_unroll = jax.jit(generate_eval_unroll)

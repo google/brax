@@ -236,9 +236,6 @@ def train(
     # callbacks
     progress_fn: Callable[[int, Metrics], None] = lambda *args: None,
     policy_params_fn: Callable[..., None] = lambda *args: None,
-    # rendering
-    render_fn: Optional[Callable[[envs.State], None]] = None,
-    should_render: jax.Array = jnp.array(True, dtype=jnp.bool_),
     # checkpointing
     save_checkpoint_path: Optional[str] = None,
     restore_checkpoint_path: Optional[str] = None,
@@ -320,10 +317,10 @@ def train(
   Returns:
     Tuple of (make_policy function, network params, metrics)
   """
-  # If the environment is wrapped with ViewerWrapper, use its rendering functions.
+  # If the environment exposes a `render_fn`, use it for real-time rendering during training.
   render_fn = None
   if hasattr(environment, 'render_fn'):
-      render_fn = environment.render_fn
+    render_fn = environment.render_fn
 
   assert batch_size * num_minibatches % num_envs == 0
   _validate_madrona_args(
@@ -708,14 +705,11 @@ def train(
     logging.info('starting iteration %s %s', it, time.time() - xt)
 
     for _ in range(max(num_resets_per_eval, 1)):
-      # optimization
-
-      # check for rendering dynamically
       should_render_py = False
-      if hasattr(environment, 'sender'):
-          should_render_py = environment.sender.rendering_enabled
+      if hasattr(environment, 'should_render'):
+        should_render_py = bool(environment.should_render)
 
-      should_render_jax = jnp.array(should_render_py, dtype=jnp.bool_)
+      should_render_jax = jnp.array(should_render_py, dtype=bool)
       should_render_replicated = jax.device_put_replicated(
           should_render_jax, jax.local_devices()[:local_devices_to_use]
       )
