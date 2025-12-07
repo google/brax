@@ -216,6 +216,7 @@ def train(
     num_updates_per_batch: int = 2,
     num_resets_per_eval: int = 0,
     normalize_observations: bool = False,
+    normalize_observations_std_eps: float = 0.0,
     reward_scaling: float = 1.0,
     clipping_epsilon: float = 0.3,
     gae_lambda: float = 0.95,
@@ -287,6 +288,8 @@ def train(
     num_resets_per_eval: the number of environment resets to run between each
       eval. The environment resets occur on the host
     normalize_observations: whether to normalize observations
+    normalize_observations_std_eps: small value added to the standard deviation
+      for obs normalization to improve numerical stability
     reward_scaling: float scaling for reward
     clipping_epsilon: clipping epsilon for PPO loss
     gae_lambda: General advantage estimation lambda
@@ -672,7 +675,7 @@ def train(
       optimizer_state=optimizer.init(init_params),  # pytype: disable=wrong-arg-types  # numpy-scalars
       params=init_params,
       normalizer_params=running_statistics.init_state(
-          _remove_pixels(obs_shape)
+          _remove_pixels(obs_shape), std_eps=normalize_observations_std_eps
       ),
       env_steps=types.UInt64(hi=0, lo=0),
   )

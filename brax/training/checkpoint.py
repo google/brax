@@ -193,7 +193,12 @@ def load(
   target = orbax_checkpointer.restore(
       path, ocp.args.PyTreeRestore(restore_args=restore_args), item=None
   )
-  target[0] = running_statistics.RunningStatisticsState(**target[0])
+
+  # Reconstruct UInt64 count if it was saved as dict.
+  state_dict = target[0]
+  if isinstance(state_dict['count'], dict) and 'hi' in state_dict['count']:
+    state_dict['count'] = types.UInt64(**state_dict['count'])
+  target[0] = running_statistics.RunningStatisticsState(**state_dict)
 
   return target
 
