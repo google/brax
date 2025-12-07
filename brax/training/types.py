@@ -113,8 +113,11 @@ class UInt64:
 
   def __post_init__(self):
     """Cast post init."""
-    object.__setattr__(self, "hi", jnp.uint32(self.hi))
-    object.__setattr__(self, "lo", jnp.uint32(self.lo))
+    # Only convert known types - avoids issues with checkpoint serialization.
+    if isinstance(self.hi, (int, np.integer, np.ndarray, jax.Array)):
+      object.__setattr__(self, "hi", jnp.uint32(self.hi))
+    if isinstance(self.lo, (int, np.integer, np.ndarray, jax.Array)):
+      object.__setattr__(self, "lo", jnp.uint32(self.lo))
 
   def __add__(self, other):
     other = _sanitize_uint64_input(other)

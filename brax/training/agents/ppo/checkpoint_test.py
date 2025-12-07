@@ -85,7 +85,8 @@ class CheckpointTest(absltest.TestCase):
         value=ppo_network.value_network.init(dummy_key),
     )
     normalizer_params = running_statistics.init_state(
-        jax.tree_util.tree_map(jp.zeros, config.observation_size)
+        jax.tree_util.tree_map(jp.zeros, config.observation_size),
+        std_eps=0.02,
     )
     params = (normalizer_params, network_params.policy, network_params.value)
 
@@ -102,6 +103,10 @@ class CheckpointTest(absltest.TestCase):
     )
     out = policy_fn(jp.zeros(1), jax.random.PRNGKey(0))
     self.assertEqual(out[0].shape, (3,))
+
+    loaded_params = checkpoint.load(epath.Path(path.full_path) / "000000000001")
+    loaded_normalizer = loaded_params[0]
+    self.assertEqual(loaded_normalizer.std_eps, 0.02)
 
 
 if __name__ == "__main__":
