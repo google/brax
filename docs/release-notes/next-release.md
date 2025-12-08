@@ -7,3 +7,5 @@
 * Add adaptive learning rate to PPO. Desired KL is sensitive to network initialization weights and entropy cost and may require some tuning for your environment.
 * Add loss metrics to the PPO training logger.
 * Add `donate_argnums` to brax PPO to somewhat mitigate repeated graph captures when using MJX-Warp.
+* Add `normalize_observations_mode` to PPO to allow using EMA for running statistics instead of Welford. EMA is more stable for longer training runs.
+* Fix bug in PPO training metric logging frequency for multi-GPU devices.

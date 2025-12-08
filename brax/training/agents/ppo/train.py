@@ -217,6 +217,7 @@ def train(
     num_resets_per_eval: int = 0,
     normalize_observations: bool = False,
     normalize_observations_std_eps: float = 0.0,
+    normalize_observations_mode: str = "welford",
     reward_scaling: float = 1.0,
     clipping_epsilon: float = 0.3,
     gae_lambda: float = 0.95,
@@ -290,6 +291,8 @@ def train(
     normalize_observations: whether to normalize observations
     normalize_observations_std_eps: small value added to the standard deviation
       for obs normalization to improve numerical stability
+    normalize_observations_mode: method to use for running statistics, welford
+      is the default, but ema is more numerically stable for long training runs
     reward_scaling: float scaling for reward
     clipping_epsilon: clipping epsilon for PPO loss
     gae_lambda: General advantage estimation lambda
@@ -464,9 +467,10 @@ def train(
       loss_fn, optimizer, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True
   )
 
+  steps_between_logging = (training_metrics_steps or env_step_per_training_step)
+  steps_between_logging *= local_devices_to_use
   metrics_aggregator = metric_logger.EpisodeMetricsLogger(
-      steps_between_logging=training_metrics_steps
-      or env_step_per_training_step,
+      steps_between_logging=steps_between_logging,
       progress_fn=progress_fn,
   )
 
@@ -675,7 +679,9 @@ def train(
       optimizer_state=optimizer.init(init_params),  # pytype: disable=wrong-arg-types  # numpy-scalars
       params=init_params,
       normalizer_params=running_statistics.init_state(
-          _remove_pixels(obs_shape), std_eps=normalize_observations_std_eps
+          _remove_pixels(obs_shape),
+          std_eps=normalize_observations_std_eps,
+          mode=normalize_observations_mode,
       ),
       env_steps=types.UInt64(hi=0, lo=0),
   )

@@ -19,6 +19,7 @@ This file was taken from acme and modified to simplify dependencies:
 https://github.com/deepmind/acme/blob/master/acme/jax/running_statistics.py
 """
 
+import enum
 from typing import Optional, Tuple, Union
 
 from brax.training import types as training_types
@@ -26,6 +27,20 @@ from brax.training.acme import types
 from flax import struct
 import jax
 import jax.numpy as jnp
+
+
+class NormalizationMode(enum.IntEnum):
+  WELFORD = 0
+  EMA = 1
+
+
+def _mode_from_string(mode: str) -> int:
+  if mode == 'ema':
+    return NormalizationMode.EMA
+  elif mode == 'welford':
+    return NormalizationMode.WELFORD
+  else:
+    raise ValueError(f'Unknown normalization mode: {mode}')
 
 
 def _zeros_like(nest: types.Nest, dtype=None) -> types.Nest:
@@ -49,25 +64,32 @@ class RunningStatisticsState(NestedMeanStd):
   count: Union[jnp.ndarray, training_types.UInt64]
   summed_variance: types.Nest
   std_eps: float = 0.0
+  mode: int = struct.field(pytree_node=False, default=NormalizationMode.WELFORD)
 
 
-def init_state(nest: types.Nest, std_eps: float = 0.0) -> RunningStatisticsState:
+def init_state(
+    nest: types.Nest,
+    std_eps: float = 0.0,
+    mode: str = 'welford',
+) -> RunningStatisticsState:
   """Initializes the running statistics for the given nested structure.
 
   Args:
     nest: Nested structure to initialize statistics for.
     std_eps: Epsilon for numerical stability when getting std.
+    mode: Normalization mode - 'welford' (default) or 'ema'.
   """
   dtype = jnp.float64 if jax.config.jax_enable_x64 else jnp.float32
+  mode_int = _mode_from_string(mode)
 
   return RunningStatisticsState(
       count=training_types.UInt64(hi=0, lo=0),
       mean=_zeros_like(nest, dtype=dtype),
       summed_variance=_zeros_like(nest, dtype=dtype),
-      # Initialize with ones to make sure normalization works correctly
-      # in the initial state.
       std=_ones_like(nest, dtype=dtype),
-      std_eps=std_eps)
+      std_eps=std_eps,
+      mode=mode_int,
+  )
 
 
 def _validate_batch_shapes(batch: types.NestedArray,
@@ -165,6 +187,58 @@ def update(state: RunningStatisticsState,
         raise ValueError(f'{weights.shape} != {batch_dims}')
     _validate_batch_shapes(batch, state.mean, batch_dims)
 
+  if state.mode == NormalizationMode.EMA:
+    # RSL-RL's EmpiricalNormalization algorithm uses
+    # rate = batch_size / total_count instead of fixed alpha.
+    rate = jnp.float32(step_increment) / count_float
+
+    def _compute_ema_statistics(
+        mean: jnp.ndarray,
+        variance: jnp.ndarray,
+        batch: jnp.ndarray,
+    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+      batch_mean = jnp.mean(batch, axis=batch_axis)
+      batch_var = jnp.var(batch, axis=batch_axis)
+      if pmap_axis_name is not None:
+        batch_mean = jax.lax.pmean(batch_mean, axis_name=pmap_axis_name)
+        batch_var = jax.lax.pmean(batch_var, axis_name=pmap_axis_name)
+      delta_mean = batch_mean - mean
+      new_mean = mean + rate * delta_mean
+      new_variance = variance + rate * (
+          batch_var - variance + delta_mean * (batch_mean - new_mean)
+      )
+      return new_mean, new_variance
+
+    updated_stats = jax.tree_util.tree_map(
+        _compute_ema_statistics,
+        state.mean,
+        state.summed_variance,
+        batch,
+    )
+    mean = jax.tree_util.tree_map(lambda _, x: x[0], state.mean, updated_stats)
+    variance = jax.tree_util.tree_map(
+        lambda _, x: x[1], state.mean, updated_stats
+    )
+
+    def compute_ema_std(
+        variance: jnp.ndarray, _std: jnp.ndarray
+    ) -> jnp.ndarray:
+      variance = jnp.maximum(variance, 0)
+      std = jnp.sqrt(variance + state.std_eps)
+      std = jnp.clip(std, std_min_value, std_max_value)
+      return std
+
+    std = jax.tree_util.tree_map(compute_ema_std, variance, state.std)
+
+    return RunningStatisticsState(
+        count=count,
+        mean=mean,
+        summed_variance=variance,
+        std=std,
+        std_eps=state.std_eps,
+        mode=state.mode,
+    )
+
   def _compute_node_statistics(
       mean: jnp.ndarray, summed_variance: jnp.ndarray,
       batch: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
@@ -216,6 +290,7 @@ def update(state: RunningStatisticsState,
       summed_variance=summed_variance,
       std=std,
       std_eps=state.std_eps,
+      mode=state.mode,
   )
 
 
