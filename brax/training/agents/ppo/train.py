@@ -467,8 +467,7 @@ def train(
       loss_fn, optimizer, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True
   )
 
-  steps_between_logging = (training_metrics_steps or env_step_per_training_step)
-  steps_between_logging *= local_devices_to_use
+  steps_between_logging = training_metrics_steps or env_step_per_training_step
   metrics_aggregator = metric_logger.EpisodeMetricsLogger(
       steps_between_logging=steps_between_logging,
       progress_fn=progress_fn,
