@@ -463,8 +463,8 @@ def train(
       vf_coefficient=vf_loss_coefficient,
   )
 
-  gradient_update_fn = gradients.gradient_update_fn(
-      loss_fn, optimizer, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True
+  loss_and_pgrad_fn = gradients.loss_and_pgrad(
+      loss_fn, pmap_axis_name=_PMAP_AXIS_NAME, has_aux=True
   )
 
   steps_between_logging = training_metrics_steps or env_step_per_training_step
@@ -480,22 +480,23 @@ def train(
   ):
     optimizer_state, params, key = carry
     key, key_loss = jax.random.split(key)
-    (_, metrics), params, optimizer_state = gradient_update_fn(
-        params,
-        normalizer_params,
-        data,
-        key_loss,
-        optimizer_state=optimizer_state,
+    (_, metrics), grads = loss_and_pgrad_fn(
+        params, normalizer_params, data, key_loss
     )
 
-    metrics['learning_rate'] = jnp.array(learning_rate, dtype=float)
     if lr_is_adaptive_kl:
       kl_mean = metrics['kl_mean']
       kl_mean = jax.lax.pmean(kl_mean, axis_name=_PMAP_AXIS_NAME)
       optimizer_state, lr = ppo_optimizer.adaptive_kl_learning_rate(
           optimizer_state, kl_mean, desired_kl
       )
-      metrics['learning_rate'] = lr
+    else:
+      lr = jnp.array(learning_rate)
+    metrics['learning_rate'] = lr
+
+    # apply gradients
+    params_update, optimizer_state = optimizer.update(grads, optimizer_state)
+    params = optax.apply_updates(params, params_update)
 
     return (optimizer_state, params, key), metrics
 
