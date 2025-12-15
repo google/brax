@@ -63,10 +63,15 @@ class PPOTest(parameterized.TestCase):
       ),
       normalize_mode=['welford', 'ema'],
       bootstrap_on_timeout=[True, False],
+      clipping_epsilon_value=[None, 0.1],
   )
   def testTrainWithNetworkParams(
-      self, distribution_type, noise_std_type, normalize_mode,
-      bootstrap_on_timeout
+      self,
+      distribution_type,
+      noise_std_type,
+      normalize_mode,
+      bootstrap_on_timeout,
+      clipping_epsilon_value,
   ):
     """Test PPO runs with different network params."""
     network_factory = functools.partial(
@@ -102,6 +107,7 @@ class PPOTest(parameterized.TestCase):
         learning_rate_schedule='ADAPTIVE_KL',
         normalize_observations_mode=normalize_mode,
         bootstrap_on_timeout=bootstrap_on_timeout,
+        clipping_epsilon_value=clipping_epsilon_value,
     )
 
   def testTrainAsymmetricActorCritic(self):

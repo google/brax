@@ -220,6 +220,7 @@ def train(
     normalize_observations_mode: str = "welford",
     reward_scaling: float = 1.0,
     clipping_epsilon: float = 0.3,
+    clipping_epsilon_value: float | None = None,
     gae_lambda: float = 0.95,
     max_grad_norm: Optional[float] = None,
     normalize_advantage: bool = True,
@@ -296,6 +297,7 @@ def train(
       is the default, but ema is more numerically stable for long training runs
     reward_scaling: float scaling for reward
     clipping_epsilon: clipping epsilon for PPO loss
+    clipping_epsilon_value: Value function loss clipping epsilon
     gae_lambda: General advantage estimation lambda
     max_grad_norm: gradient clipping norm value. If None, no clipping is done
     normalize_advantage: whether to normalize advantage estimate
@@ -437,7 +439,8 @@ def train(
       obs_shape, env.action_size, preprocess_observations_fn=normalize
   )
   make_policy = ppo_networks.make_inference_fn(
-      ppo_network, compute_value=bootstrap_on_timeout
+      ppo_network,
+      compute_value=bootstrap_on_timeout or clipping_epsilon_value is not None,
   )
 
   # Optimizer.
@@ -468,6 +471,7 @@ def train(
       clipping_epsilon=clipping_epsilon,
       normalize_advantage=normalize_advantage,
       vf_coefficient=vf_loss_coefficient,
+      clipping_epsilon_value=clipping_epsilon_value,
   )
 
   loss_and_pgrad_fn = gradients.loss_and_pgrad(

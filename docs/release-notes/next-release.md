@@ -10,3 +10,4 @@
 * Add `normalize_observations_mode` to PPO to allow using EMA for running statistics instead of Welford. EMA is more stable for longer training runs.
 * Fix bug in PPO training metric logging frequency for multi-GPU devices.
 * Add value bootstrap on `timeout` for PPO. `reward += gamma * V(s) * time_out` if `bootstrap_on_timeout` is set to True.
+* Add `clipping_epsilon_value` to PPO. If `clipping_epsilon_value` is not None, then we use a clipped value loss: `v_loss = max((vs - V(s))^2, (vs - clip(V(s), V_old(s) - epsilon, V_old(s) + epsilon))^2)`.

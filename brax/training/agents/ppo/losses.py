@@ -113,6 +113,7 @@ def compute_ppo_loss(
     clipping_epsilon: float = 0.3,
     normalize_advantage: bool = True,
     vf_coefficient: float = 0.5,
+    clipping_epsilon_value: float | None = None,
 ) -> Tuple[jnp.ndarray, types.Metrics]:
   """Computes PPO loss.
 
@@ -132,6 +133,7 @@ def compute_ppo_loss(
     normalize_advantage: whether to normalize advantage estimate
     vf_coefficient: Coefficient for value function loss, for RSL-RL parity this
       should be set to 1.0.
+    clipping_epsilon_value: Value function loss clipping epsilon
 
   Returns:
     A tuple (loss, metrics)
@@ -181,7 +183,15 @@ def compute_ppo_loss(
 
   # Value function loss
   v_error = vs - baseline
-  v_loss = jnp.mean(v_error * v_error) * 0.5 * vf_coefficient
+  v_loss = v_error * v_error
+  if clipping_epsilon_value is not None:
+    old_values = data.extras['policy_extras']['value']
+    v_clipped = old_values + jnp.clip(
+        baseline - old_values, -clipping_epsilon_value, clipping_epsilon_value
+    )
+    v_loss_clipped = (vs - v_clipped) ** 2
+    v_loss = jnp.maximum(v_loss, v_loss_clipped)
+  v_loss = jnp.mean(v_loss) * 0.5 * vf_coefficient
 
   # Entropy reward
   entropy = jnp.mean(parametric_action_distribution.entropy(policy_logits, rng))
