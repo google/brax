@@ -224,6 +224,7 @@ def train(
     max_grad_norm: Optional[float] = None,
     normalize_advantage: bool = True,
     vf_loss_coefficient: float = 0.5,
+    bootstrap_on_timeout: bool = False,
     desired_kl: float = 0.01,
     learning_rate_schedule: Optional[
         Union[str, ppo_optimizer.LRSchedule]
@@ -299,6 +300,10 @@ def train(
     max_grad_norm: gradient clipping norm value. If None, no clipping is done
     normalize_advantage: whether to normalize advantage estimate
     vf_loss_coefficient: Coefficient for value function loss.
+    bootstrap_on_timeout: if True, bootstrap value on time_out steps using
+      reward += gamma * V(s) * time_out. Environments should set
+      state.info['time_out'] = 1.0 and done=True for steps where the episode ends
+      due to a time_out.
     desired_kl: Desired KL divergence for adaptive KL divergence learning rate
       schedule.
     learning_rate_schedule: Learning rate schedule for the optimizer.
@@ -431,7 +436,9 @@ def train(
   ppo_network = network_factory(
       obs_shape, env.action_size, preprocess_observations_fn=normalize
   )
-  make_policy = ppo_networks.make_inference_fn(ppo_network)
+  make_policy = ppo_networks.make_inference_fn(
+      ppo_network, compute_value=bootstrap_on_timeout
+  )
 
   # Optimizer.
   base_optimizer = optax.adam(learning_rate=learning_rate)
@@ -551,13 +558,16 @@ def train(
     def f(carry, unused_t):
       current_state, current_key = carry
       current_key, next_key = jax.random.split(current_key)
+      extra_fields = ['truncation', 'episode_metrics', 'episode_done']
+      if bootstrap_on_timeout:
+        extra_fields.append('time_out')
       next_state, data = acting.generate_unroll(
           env,
           current_state,
           policy,
           current_key,
           unroll_length,
-          extra_fields=('truncation', 'episode_metrics', 'episode_done'),
+          extra_fields=tuple(extra_fields),
       )
       return (next_state, next_key), data
 
@@ -573,6 +583,18 @@ def train(
         lambda x: jnp.reshape(x, (-1,) + x.shape[2:]), data
     )
     assert data.discount.shape[1:] == (unroll_length,)
+
+    if bootstrap_on_timeout:  # bootstrap reward on timeout
+      time_out = data.extras['state_extras']['time_out']
+      value = data.extras['policy_extras']['value']
+      data = types.Transition(
+          observation=data.observation,
+          action=data.action,
+          reward=data.reward + discounting * time_out * value,
+          discount=data.discount,
+          next_observation=data.next_observation,
+          extras=data.extras,
+      )
 
     normalizer_params = training_state.normalizer_params
     if not lr_is_adaptive_kl:

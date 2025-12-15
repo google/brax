@@ -9,3 +9,4 @@
 * Add `donate_argnums` to brax PPO to somewhat mitigate repeated graph captures when using MJX-Warp.
 * Add `normalize_observations_mode` to PPO to allow using EMA for running statistics instead of Welford. EMA is more stable for longer training runs.
 * Fix bug in PPO training metric logging frequency for multi-GPU devices.
+* Add value bootstrap on `timeout` for PPO. `reward += gamma * V(s) * time_out` if `bootstrap_on_timeout` is set to True.

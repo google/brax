@@ -32,8 +32,13 @@ class PPONetworks:
   parametric_action_distribution: distribution.ParametricDistribution
 
 
-def make_inference_fn(ppo_networks: PPONetworks):
-  """Creates params and inference function for the PPO agent."""
+def make_inference_fn(ppo_networks: PPONetworks, compute_value: bool = False):
+  """Creates params and inference function for the PPO agent.
+
+  Args:
+    ppo_networks: The PPO networks.
+    compute_value: If True, compute value during rollouts.
+  """
 
   def make_policy(
       params: types.Params, deterministic: bool = False
@@ -55,11 +60,16 @@ def make_inference_fn(ppo_networks: PPONetworks):
       postprocessed_actions = parametric_action_distribution.postprocess(
           raw_actions
       )
-      return postprocessed_actions, {
+      extras = {
           'log_prob': log_prob,
           'raw_action': raw_actions,
           'distribution_params': logits,
       }
+      if compute_value:
+        extras['value'] = ppo_networks.value_network.apply(
+            params[0], params[2], observations
+        )
+      return postprocessed_actions, extras
 
     return policy
 

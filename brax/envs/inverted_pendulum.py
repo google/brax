@@ -124,8 +124,9 @@ class InvertedPendulum(PipelineEnv):
     obs = self._get_obs(pipeline_state)
     reward, done = jp.zeros(2)
     metrics = {}
+    info = {'time_out': done}  # allows bootstrap_on_timeout for PPO
 
-    return State(pipeline_state, obs, reward, done, metrics)
+    return State(pipeline_state, obs, reward, done, metrics, info)
 
   def step(self, state: State, action: jax.Array) -> State:
     """Run one timestep of the environment's dynamics."""
@@ -140,7 +141,8 @@ class InvertedPendulum(PipelineEnv):
     reward = 1.0
     done = jp.where(jp.abs(obs[1]) > 0.2, 1.0, 0.0)
     return state.replace(
-        pipeline_state=pipeline_state, obs=obs, reward=reward, done=done
+        pipeline_state=pipeline_state, obs=obs, reward=reward, done=done,
+        info={**state.info, 'time_out': done}
     )
 
   @property
