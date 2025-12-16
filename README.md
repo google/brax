@@ -1,5 +1,8 @@
 <img src="https://github.com/google/brax/raw/main/docs/img/brax_logo.gif" width="336" height="80" alt="BRAX"/>
 
+> **WARNING**
+> Only `brax/training` is actively being maintained as of 0.13.0. Instead of `brax/envs`, users should use [MuJoCo Playground](https://github.com/google-deepmind/mujoco_playground), all of which train well with `brax/training`. If you want to use Brax for physics simulation, please use MJX available at [github.com/google-deepmind/mujoco](https://github.com/google-deepmind/mujoco) (`pip install mujoco_mjx`) or [MuJoCo Warp](https://github.com/google-deepmind/mujoco_warp) rather than Brax as a wrapper to MuJoCo physics simulation. We may repurpose `brax` purely as an RL library in the future.
+
 Brax is a fast and fully differentiable physics engine used for research and
 development of robotics, human perception, materials science, reinforcement
 learning, and other simulation-heavy applications.
@@ -100,7 +103,7 @@ If you would like to reference Brax in a publication, please use:
   author = {C. Daniel Freeman and Erik Frey and Anton Raichuk and Sertan Girgin and Igor Mordatch and Olivier Bachem},
   title = {Brax - A Differentiable Physics Engine for Large Scale Rigid Body Simulation},
   url = {http://github.com/google/brax},
-  version = {0.13.0},
+  version = {0.14.0},
   year = {2021},
 }
 ```
