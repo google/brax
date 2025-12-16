@@ -19,7 +19,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v1
         with:
-          python-version: "3.x"
+          python-version: "3.13"
       - name: Create Release
         id: create_release
         uses: actions/create-release@latest
