@@ -37,6 +37,7 @@ _KERNEL_INIT_FN_KEYWORDS = (
     'policy_network_kernel_init_fn',
     'value_network_kernel_init_fn',
     'q_network_kernel_init_fn',
+    'mean_kernel_init_fn',
 )
 
 

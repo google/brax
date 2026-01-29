@@ -94,11 +94,13 @@ def make_ppo_networks(
     value_network_kernel_init_fn: networks.Initializer = jax.nn.initializers.lecun_uniform,
     value_network_kernel_init_kwargs: Mapping[str, Any] | None = None,
     mean_clip_scale: float | None = None,
-    mean_kernel_init: networks.Initializer | None = None,
+    mean_kernel_init_fn: networks.Initializer | None = None,
+    mean_kernel_init_kwargs: Mapping[str, Any] | None = None,
 ) -> PPONetworks:
   """Make PPO networks with preprocessor."""
   policy_kernel_init_kwargs = policy_network_kernel_init_kwargs or {}
   value_kernel_init_kwargs = value_network_kernel_init_kwargs or {}
+  mean_kernel_init_kwargs_ = mean_kernel_init_kwargs or {}
 
   parametric_action_distribution: distribution.ParametricDistribution
   if distribution_type == 'normal':
@@ -127,7 +129,10 @@ def make_ppo_networks(
       state_dependent_std=state_dependent_std,
       kernel_init=policy_network_kernel_init_fn(**policy_kernel_init_kwargs),
       mean_clip_scale=mean_clip_scale,
-      mean_kernel_init=mean_kernel_init,
+      mean_kernel_init=(
+          mean_kernel_init_fn(**mean_kernel_init_kwargs_)
+          if mean_kernel_init_fn is not None else None
+      ),
   )
   value_network = networks.make_value_network(
       observation_size,
