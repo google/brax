@@ -93,6 +93,7 @@ def make_ppo_networks(
     policy_network_kernel_init_kwargs: Mapping[str, Any] | None = None,
     value_network_kernel_init_fn: networks.Initializer = jax.nn.initializers.lecun_uniform,
     value_network_kernel_init_kwargs: Mapping[str, Any] | None = None,
+    policy_network_kwargs: Mapping[str, Any] | None = None,
 ) -> PPONetworks:
   """Make PPO networks with preprocessor."""
   policy_kernel_init_kwargs = policy_network_kernel_init_kwargs or {}
@@ -124,6 +125,7 @@ def make_ppo_networks(
       init_noise_std=init_noise_std,
       state_dependent_std=state_dependent_std,
       kernel_init=policy_network_kernel_init_fn(**policy_kernel_init_kwargs),
+      **(policy_network_kwargs or {}),
   )
   value_network = networks.make_value_network(
       observation_size,

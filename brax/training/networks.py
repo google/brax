@@ -319,6 +319,8 @@ class PolicyModuleWithStd(linen.Module):
   noise_std_type: Literal['scalar', 'log']
   init_noise_std: float
   state_dependent_std: bool = False
+  mean_clip_scale: float | None = None
+  mean_kernel_init: jax.nn.initializers.Initializer | None = None
 
   @linen.compact
   def __call__(self, obs):
@@ -336,10 +338,18 @@ class PolicyModuleWithStd(linen.Module):
         activate_final=True,
     )(obs)
 
+    mean_kernel_init = (
+        self.mean_kernel_init if self.mean_kernel_init is not None
+        else self.kernel_init
+    )
     mean_params = linen.Dense(
         self.param_size,
-        kernel_init=self.kernel_init,
+        kernel_init=mean_kernel_init,
     )(outputs)
+    if self.mean_clip_scale is not None:
+      mean_params = self.mean_clip_scale * (
+          mean_params / (1.0 + jnp.abs(mean_params))
+      )
 
     if self.state_dependent_std:
       log_std_output = linen.Dense(
@@ -376,6 +386,8 @@ def make_policy_network(
     noise_std_type: Literal['scalar', 'log'] = 'scalar',
     init_noise_std: float = 1.0,
     state_dependent_std: bool = False,
+    mean_clip_scale: float | None = None,
+    mean_kernel_init: Initializer | None = None,
 ) -> FeedForwardNetwork:
   """Creates a policy network."""
   if distribution_type == 'tanh_normal':
@@ -395,6 +407,8 @@ def make_policy_network(
         noise_std_type=noise_std_type,
         init_noise_std=init_noise_std,
         state_dependent_std=state_dependent_std,
+        mean_clip_scale=mean_clip_scale,
+        mean_kernel_init=mean_kernel_init,
     )
   else:
     raise ValueError(
