@@ -84,10 +84,8 @@ class PPOTest(parameterized.TestCase):
         policy_network_kernel_init_kwargs={'scale': jnp.sqrt(2.0)},
         value_network_kernel_init_fn=jax.nn.initializers.orthogonal,
         value_network_kernel_init_kwargs={'scale': jnp.sqrt(2.0)},
-        policy_network_kwargs={
-            'mean_clip_scale': 5.0,
-            'mean_kernel_init': jax.nn.initializers.orthogonal(scale=0.001),
-        },
+        mean_clip_scale=5.0,
+        mean_kernel_init=jax.nn.initializers.orthogonal(scale=0.001),
     )
 
     _, _, _ = ppo.train(
