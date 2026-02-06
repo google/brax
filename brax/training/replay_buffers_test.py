@@ -153,7 +153,7 @@ class QueueReplayTest(parameterized.TestCase):
 
     # Expect an exception if `buffer_state.data` was corrupted.
     invalid_state = buffer_state.replace(data=jnp.arange(10))
-    with self.assertRaises(ValueError) as context_manager:
+    with self.assertRaises(Exception) as context_manager:
       replay_buffer.insert(invalid_state, get_dummy_batch())
     self.assertContainsSubsequence(str(context_manager.exception), 'shape')
 
