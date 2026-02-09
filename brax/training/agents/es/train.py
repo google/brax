@@ -1,4 +1,4 @@
-# Copyright 2025 The Brax Authors.
+# Copyright 2026 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -246,7 +246,20 @@ def train(
     )
     return params_with_noise, params_with_anti_noise, noise
 
-  prun_episode = jax.pmap(run_episode, in_axes=(None, 0, 0))
+  if jax.config.jax_pmap_shmap_merge:
+    def run_episode_shmap(normalizer_params, params, key):
+      params = jax.tree_util.tree_map(lambda x: jnp.squeeze(x, axis=0), params)
+      key = jnp.squeeze(key, axis=0)
+      return run_episode(normalizer_params, params, key)
+
+    mesh = jax.make_mesh((local_devices_to_use,), ('i',))
+    prun_episode = jax.shard_map(
+        run_episode_shmap, mesh=mesh,
+        in_specs=(jax.P(), jax.P('i'), jax.P('i')),
+        out_specs=(jax.P('i'), jax.P('i'), jax.P('i')),
+        check_vma=False)
+  else:
+    prun_episode = jax.pmap(run_episode, in_axes=(None, 0, 0))
 
   def compute_delta(
       params: jnp.ndarray,

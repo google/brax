@@ -1,4 +1,4 @@
-# Copyright 2025 The Brax Authors.
+# Copyright 2026 The Brax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -150,6 +150,8 @@ class Evaluator:
 
     eval_metrics = eval_state.info['eval_metrics']
     eval_metrics.active_episodes.block_until_ready()
+    if jax.config.jax_pmap_shmap_merge:
+      eval_metrics = jax.tree.map(np.asarray, eval_metrics)
     epoch_eval_time = time.time() - t
     episode_lengths = np.maximum(eval_metrics.episode_steps, 1.0).astype(float)
 
