@@ -141,6 +141,7 @@ def train(
         sac_networks.SACNetworks
     ] = sac_networks.make_sac_networks,
     progress_fn: Callable[[int, Metrics], None] = lambda *args: None,
+    policy_params_fn: Callable[..., None] = lambda *args: None,
     eval_env: Optional[envs.Env] = None,
     randomization_fn: Optional[
         Callable[[base.System, jnp.ndarray], Tuple[base.System, base.System]]
@@ -565,6 +566,12 @@ def train(
   training_walltime = time.time() - t
 
   current_step = 0
+  
+  params = _unpmap(
+        (training_state.normalizer_params, training_state.policy_params)
+    )
+  policy_params_fn(current_step, make_policy, params)
+
   for _ in range(num_evals_after_init):
     logging.info('step %s', current_step)
 
@@ -580,10 +587,11 @@ def train(
 
     # Eval and logging
     if process_id == 0:
-      if checkpoint_logdir:
-        params = _unpmap(
+      params = _unpmap(
             (training_state.normalizer_params, training_state.policy_params)
         )
+      policy_params_fn(current_step, make_policy, params)
+      if checkpoint_logdir:
         ckpt_config = checkpoint.network_config(
             observation_size=obs_size,
             action_size=env.action_size,
