@@ -162,6 +162,8 @@ def save(
   for init_fn_name in _KERNEL_INIT_FN_KEYWORDS:
     if init_fn_name not in config_cp_dict['network_factory_kwargs']:
       continue
+    if config_cp_dict['network_factory_kwargs'][init_fn_name] is None:
+      continue
     name_ = config_cp_dict['network_factory_kwargs'][init_fn_name].__name__
     if name_ not in networks.KERNEL_INITIALIZER:
       raise ValueError(
