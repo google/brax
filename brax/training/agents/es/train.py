@@ -314,8 +314,16 @@ def train(
         lambda x: jnp.reshape(x, (local_devices_to_use, -1) + x.shape[1:]),
         pparams,
     )
+    if jax.config.jax_pmap_shmap_merge:
+      sharding = jax.sharding.NamedSharding(mesh, jax.P('i'))
+      pparams = jax.tree_util.tree_map(
+          lambda x: jax.reshard(x, sharding), pparams
+      )
 
     key_es_eval = jax.random.split(key_es_eval, local_devices_to_use)
+    if jax.config.jax_pmap_shmap_merge:
+      sharding = jax.sharding.NamedSharding(mesh, jax.P('i'))
+      key_es_eval = jax.reshard(key_es_eval, sharding)
     eval_scores, obs, obs_weights = prun_episode(
         training_state.normalizer_params, pparams, key_es_eval
     )
