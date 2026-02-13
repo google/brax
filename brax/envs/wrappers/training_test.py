@@ -26,6 +26,40 @@ import numpy as np
 
 class TrainingTest(absltest.TestCase):
 
+  def test_autoreset_termination(self):
+    for env_id in ["ant", "halfcheetah"]:
+        with self.subTest(env_id=env_id):
+            self._run_termination(env_id)
+
+  def _run_termination(self, env_id):
+    env = envs.create(env_id)
+    key = jax.random.PRNGKey(42)
+    max_steps_in_episode = env.episode_length
+
+    state = jax.jit(env.reset)(key)
+    action = jp.zeros(env.sys.act_size())
+
+    env_step_fn =  jax.jit(env.step)
+
+    def step_fn(state, _):
+        next_state = env_step_fn(state, action)
+        return next_state, (next_state.obs, next_state.done, next_state.info)
+
+    _, (observations, dones, infos) = jax.lax.scan(
+        f=step_fn, init=state, xs=None, length=max_steps_in_episode + 1
+    )
+    
+    observations_step = infos["obs_st"]
+    # Should have at least finished once
+    assert sum(dones) >= 1
+    for i, (obs, done, obs_st) in enumerate(zip(observations, dones, observations_step)):
+      if done:
+        # Ensure we stored the last obs from finished episode, \\
+        # which differs from first obs of new episode
+        assert not jp.array_equal(obs_st, obs)
+      else:
+         assert jp.array_equal(obs_st, obs)
+
   def test_domain_randomization_wrapper(self):
     def rand(sys, rng):
       @jax.vmap
