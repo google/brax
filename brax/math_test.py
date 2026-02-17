@@ -65,6 +65,13 @@ class MathTest(absltest.TestCase):
     rot = math.from_to(v1, v2)
     np.testing.assert_array_almost_equal(v2, math.rotate(v1, rot))
 
+  def test_solve_pgs_diagonal(self):
+    a = jp.diag(jp.array([2.0, 4.0, 8.0]))
+    b = jp.array([-2.0, 2.0, -8.0])
+    expected = jp.array([1.0, 0.0, 1.0])
+    x = math.solve_pgs(a, b, num_iters=2)
+    np.testing.assert_allclose(x, expected, rtol=1e-6, atol=1e-6)
+
 
 class OrthoganalsTest(parameterized.TestCase):
   """Tests the orthogonals function."""
