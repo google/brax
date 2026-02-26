@@ -150,8 +150,7 @@ class Evaluator:
 
     eval_metrics = eval_state.info['eval_metrics']
     eval_metrics.active_episodes.block_until_ready()
-    if jax.config.jax_pmap_shmap_merge:
-      eval_metrics = jax.tree.map(np.asarray, eval_metrics)
+    eval_metrics = jax.tree.map(np.asarray, eval_metrics)
     epoch_eval_time = time.time() - t
     episode_lengths = np.maximum(eval_metrics.episode_steps, 1.0).astype(float)
 
