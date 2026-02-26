@@ -213,6 +213,7 @@ def compute_ppo_loss(
       'policy_loss': policy_loss,
       'v_loss': v_loss,
       'entropy_loss': entropy_loss,
+      'entropy_cost': entropy_cost,
       'kl_mean': kl,
       'policy_dist_mean_std': policy_dist_mean_std,
   }
