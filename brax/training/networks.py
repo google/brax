@@ -227,17 +227,45 @@ class SpatialSoftmax(linen.Module):
   temperature: float = 1.0
 
   @linen.compact
-  def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
-    # x: (..., H, W, C)
-    H, W, C = x.shape[-3], x.shape[-2], x.shape[-1]
-    x_flat = x.reshape(x.shape[:-3] + (H * W, C))
-    weights = jax.nn.softmax(x_flat / self.temperature, axis=-2)
-    pos_y = jnp.linspace(-1.0, 1.0, H)
-    pos_x = jnp.linspace(-1.0, 1.0, W)
-    grid_y, grid_x = jnp.meshgrid(pos_y, pos_x, indexing='ij')
-    pos = jnp.stack([grid_x.ravel(), grid_y.ravel()], axis=-1)  # (H*W, 2)
-    expected = jnp.einsum('...sc,sd->...cd', weights, pos)  # (..., C, 2)
-    return expected.reshape(x.shape[:-3] + (2 * C,))
+  # def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+  #   # x: (..., H, W, C)
+  #   H, W, C = x.shape[-3], x.shape[-2], x.shape[-1]
+  #   x_flat = x.reshape(x.shape[:-3] + (H * W, C))
+  #   weights = jax.nn.softmax(x_flat / self.temperature, axis=-2)
+  #   pos_y = jnp.linspace(-1.0, 1.0, H)
+  #   pos_x = jnp.linspace(-1.0, 1.0, W)
+  #   grid_y, grid_x = jnp.meshgrid(pos_y, pos_x, indexing='ij')
+  #   pos = jnp.stack([grid_x.ravel(), grid_y.ravel()], axis=-1)  # (H*W, 2)
+  #   expected = jnp.einsum('...sc,sd->...cd', weights, pos)  # (..., C, 2)
+  #   return expected.reshape(x.shape[:-3] + (2 * C,))
+  def __call__(self, x):
+    # x shape: (batch, height, width, channels)
+    batch, h, w, c = x.shape
+    
+    # 1. Flatten spatial dimensions and apply softmax
+    # We apply a temperature to control the "sharpness" of the focus
+    logits = x.reshape((batch, h * w, c))
+    probs = nn.softmax(logits / self.temperature, axis=1)
+    
+    # 2. Create a coordinate grid [-1, 1]
+    pos_y, pos_x = jnp.meshgrid(
+        jnp.linspace(-1.0, 1.0, h),
+        jnp.linspace(-1.0, 1.0, w),
+        indexing='ij'
+    )
+    # Flatten grid to (h*w, 1)
+    pos_x = pos_x.reshape(-1, 1)
+    pos_y = pos_y.reshape(-1, 1)
+    
+    # 3. Compute expected coordinates (Center of Mass)
+    # probs: (batch, h*w, c), pos: (h*w, 1) -> (batch, c)
+    expected_x = jnp.sum(probs * pos_x, axis=1)
+    expected_y = jnp.sum(probs * pos_y, axis=1)
+    
+    # 4. Concatenate to get (batch, c * 2)
+    # This provides a vector of (x1, y1, x2, y2...) for each feature channel
+    out = jnp.concatenate([expected_x, expected_y], axis=-1)
+    return out
 
 
 class VisionMLP(linen.Module):
