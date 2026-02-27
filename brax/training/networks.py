@@ -239,36 +239,40 @@ class SpatialSoftmax(linen.Module):
   #   expected = jnp.einsum('...sc,sd->...cd', weights, pos)  # (..., C, 2)
   #   return expected.reshape(x.shape[:-3] + (2 * C,))
   def __call__(self, x):
-    # x shape could be (Batch, H, W, C) or (Time, Batch, H, W, C)
-    # We take the last 3 dims for H, W, C
-    h, w, c = x.shape[-3:]
-    # Everything before the last 3 dims is the batch prefix (e.g., (B,) or (T, B))
-    batch_dims = x.shape[:-3] 
+    # x shape: (..., H, W, C)
+    # We capture the leading dimensions (e.g., Time and Batch)
+    *batch_dims, h, w, c = x.shape
     
-    # 1. Flatten spatial dimensions only
-    # We reshape to (Prod(batch_dims), H*W, C)
-    x_flat = x.reshape((-1, h * w, c))
+    # 1. Flatten spatial dimensions while preserving batch and channels
+    # Reshape to (Total_Batch_Size, H * W, C)
+    x_flat = x.reshape(-1, h * w, c)
     
-    # 2. Apply Softmax over the spatial (H*W) dimension
+    # 2. Compute Softmax over the spatial (H*W) dimension
+    # We apply temperature to sharpen the "attention" on the pole
     probs = nn.softmax(x_flat / self.temperature, axis=1)
     
-    # 3. Create Coordinate Grid [-1, 1]
+    # 3. Create a coordinate grid [-1, 1] for H and W
     pos_y, pos_x = jnp.meshgrid(
         jnp.linspace(-1.0, 1.0, h),
         jnp.linspace(-1.0, 1.0, w),
         indexing='ij'
     )
+    # Flatten grid to (H*W, 1) to multiply against probabilities
     pos_x = pos_x.reshape(-1, 1)
     pos_y = pos_y.reshape(-1, 1)
     
-    # 4. Compute Expected Coordinates
-    expected_x = jnp.sum(probs * pos_x, axis=1) # Shape: (Prod(batch_dims), c)
-    expected_y = jnp.sum(probs * pos_y, axis=1) # Shape: (Prod(batch_dims), c)
+    # 4. Compute expected coordinates (weighted average of positions)
+    # Result shapes: (Total_Batch_Size, C)
+    expected_x = jnp.sum(probs * pos_x, axis=1)
+    expected_y = jnp.sum(probs * pos_y, axis=1)
     
-    # 5. Concatenate and Restore Original Batch Dimensions
+    # 5. Concatenate (x, y) coordinates for each channel
+    # Result shape: (Total_Batch_Size, C * 2)
     out = jnp.concatenate([expected_x, expected_y], axis=-1)
-    # Shape is now (Prod(batch_dims), c*2). We reshape back to (BatchDims..., c*2)
-    return out.reshape(batch_dims + (c * 2,))
+    
+    # 6. Reshape back to original leading dimensions
+    # Final shape: (*batch_dims, C * 2)
+    return out.reshape((*batch_dims, c * 2))
 
 
 class VisionMLP(linen.Module):
