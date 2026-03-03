@@ -76,6 +76,26 @@ def _strip_weak_type(tree):
   return jax.tree_util.tree_map(f, tree)
 
 
+def _validate_madrona_args(
+    madrona_backend: bool,
+    num_envs: int,
+    num_eval_envs: int,
+    action_repeat: int,
+    eval_env: Optional[envs.Env] = None,
+):
+  """Validates arguments for Madrona-MJX."""
+  if madrona_backend:
+    if eval_env:
+      raise ValueError("Madrona-MJX doesn't support multiple env instances")
+    if num_eval_envs != num_envs:
+      raise ValueError('Madrona-MJX requires a fixed batch size')
+    if action_repeat != 1:
+      raise ValueError(
+          "Implement action_repeat using PipelineEnv's _n_frames to avoid"
+          ' unnecessary rendering!'
+      )
+
+
 def _maybe_wrap_env(
     env: envs.Env,
     wrap_env: bool,
@@ -179,7 +199,7 @@ def train(
     max_devices_per_host: Optional[int] = None,
     # high-level control flow
     wrap_env: bool = True,
-    vision: bool = False,
+    madrona_backend: bool = False,
     augment_pixels: bool = False,
     # environment wrapper
     num_envs: int = 1,
@@ -326,12 +346,9 @@ def train(
     Tuple of (make_policy function, network params, metrics)
   """
   assert batch_size * num_minibatches % num_envs == 0
-
-  if vision and action_repeat != 1:
-    raise ValueError(
-        "Implement action_repeat using PipelineEnv's _n_frames to avoid"
-        ' unnecessary rendering!'
-    )
+  _validate_madrona_args(
+      madrona_backend, num_envs, num_eval_envs, action_repeat, eval_env
+  )
 
   xt = time.time()
 

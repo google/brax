@@ -255,8 +255,16 @@ def train(
   prun_episode = jax.shard_map(
       run_episode_shmap,
       mesh=mesh,
-      in_specs=(jax.P(), jax.P('i'), jax.P('i')),
-      out_specs=(jax.P('i'), jax.P('i'), jax.P('i')),
+      in_specs=(
+          jax.sharding.PartitionSpec(),
+          jax.sharding.PartitionSpec('i'),
+          jax.sharding.PartitionSpec('i'),
+      ),
+      out_specs=(
+          jax.sharding.PartitionSpec('i'),
+          jax.sharding.PartitionSpec('i'),
+          jax.sharding.PartitionSpec('i'),
+      ),
       check_vma=False,
   )
 
@@ -313,13 +321,13 @@ def train(
         lambda x: jnp.reshape(x, (local_devices_to_use, -1) + x.shape[1:]),
         pparams,
     )
-    sharding = jax.sharding.NamedSharding(mesh, jax.P('i'))
+    sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec('i'))
     pparams = jax.tree_util.tree_map(
         lambda x: jax.reshard(x, sharding), pparams
     )
 
     key_es_eval = jax.random.split(key_es_eval, local_devices_to_use)
-    sharding = jax.sharding.NamedSharding(mesh, jax.P('i'))
+    sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec('i'))
     key_es_eval = jax.reshard(key_es_eval, sharding)
     eval_scores, obs, obs_weights = prun_episode(
         training_state.normalizer_params, pparams, key_es_eval
