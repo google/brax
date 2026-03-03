@@ -63,8 +63,6 @@ def make_ppo_networks_vision(
     cnn_activation: networks.ActivationFn = linen.relu,
     cnn_max_pool: bool = False,
     cnn_global_pool: str = 'avg',
-    cnn_spatial_softmax: bool = False,
-    cnn_spatial_softmax_temperature: float = 1.0,
 ) -> PPONetworks:
   """Make Vision PPO networks with preprocessor.
 
@@ -96,8 +94,6 @@ def make_ppo_networks_vision(
     cnn_activation: activation function or name (e.g. 'elu', 'relu').
     cnn_max_pool: whether to apply 2x2 max-pool after each conv layer.
     cnn_global_pool: pooling over spatial dims — 'avg', 'max', or 'none'.
-    cnn_spatial_softmax: use spatial softmax instead of global pooling.
-    cnn_spatial_softmax_temperature: temperature for spatial softmax.
   """
   policy_kernel_init_kwargs = policy_network_kernel_init_kwargs or {}
   value_kernel_init_kwargs = value_network_kernel_init_kwargs or {}
@@ -153,8 +149,6 @@ def make_ppo_networks_vision(
       cnn_activation=resolved_cnn_activation,
       cnn_max_pool=cnn_max_pool,
       cnn_global_pool=cnn_global_pool,
-      cnn_spatial_softmax=cnn_spatial_softmax,
-      cnn_spatial_softmax_temperature=cnn_spatial_softmax_temperature,
   )
 
   value_network = networks.make_value_network_vision(
@@ -172,8 +166,6 @@ def make_ppo_networks_vision(
       cnn_activation=resolved_cnn_activation,
       cnn_max_pool=cnn_max_pool,
       cnn_global_pool=cnn_global_pool,
-      cnn_spatial_softmax=cnn_spatial_softmax,
-      cnn_spatial_softmax_temperature=cnn_spatial_softmax_temperature,
   )
 
   return PPONetworks(

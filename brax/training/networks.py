@@ -217,64 +217,6 @@ class CNN(linen.Module):
     return hidden
 
 
-class SpatialSoftmax(linen.Module):
-  """Spatial softmax pooling.
-
-  Computes the expected (x, y) position for each channel using a softmax
-  distribution over spatial locations. Output size is 2 * C.
-  """
-
-  temperature: float = 1.0
-
-  @linen.compact
-  # def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
-  #   # x: (..., H, W, C)
-  #   H, W, C = x.shape[-3], x.shape[-2], x.shape[-1]
-  #   x_flat = x.reshape(x.shape[:-3] + (H * W, C))
-  #   weights = jax.nn.softmax(x_flat / self.temperature, axis=-2)
-  #   pos_y = jnp.linspace(-1.0, 1.0, H)
-  #   pos_x = jnp.linspace(-1.0, 1.0, W)
-  #   grid_y, grid_x = jnp.meshgrid(pos_y, pos_x, indexing='ij')
-  #   pos = jnp.stack([grid_x.ravel(), grid_y.ravel()], axis=-1)  # (H*W, 2)
-  #   expected = jnp.einsum('...sc,sd->...cd', weights, pos)  # (..., C, 2)
-  #   return expected.reshape(x.shape[:-3] + (2 * C,))
-  def __call__(self, x):
-    # x shape: (..., H, W, C)
-    # We capture the leading dimensions (e.g., Time and Batch)
-    *batch_dims, h, w, c = x.shape
-    
-    # 1. Flatten spatial dimensions while preserving batch and channels
-    # Reshape to (Total_Batch_Size, H * W, C)
-    x_flat = x.reshape(-1, h * w, c)
-    
-    # 2. Compute Softmax over the spatial (H*W) dimension
-    # We apply temperature to sharpen the "attention" on the pole
-    probs = nn.softmax(x_flat / self.temperature, axis=1)
-    
-    # 3. Create a coordinate grid [-1, 1] for H and W
-    pos_y, pos_x = jnp.meshgrid(
-        jnp.linspace(-1.0, 1.0, h),
-        jnp.linspace(-1.0, 1.0, w),
-        indexing='ij'
-    )
-    # Flatten grid to (H*W, 1) to multiply against probabilities
-    pos_x = pos_x.reshape(-1, 1)
-    pos_y = pos_y.reshape(-1, 1)
-    
-    # 4. Compute expected coordinates (weighted average of positions)
-    # Result shapes: (Total_Batch_Size, C)
-    expected_x = jnp.sum(probs * pos_x, axis=1)
-    expected_y = jnp.sum(probs * pos_y, axis=1)
-    
-    # 5. Concatenate (x, y) coordinates for each channel
-    # Result shape: (Total_Batch_Size, C * 2)
-    out = jnp.concatenate([expected_x, expected_y], axis=-1)
-    
-    # 6. Reshape back to original leading dimensions
-    # Final shape: (*batch_dims, C * 2)
-    return out.reshape((*batch_dims, c * 2))
-
-
 class VisionMLP(linen.Module):
   """Applies a configurable CNN backbone then an MLP."""
 
@@ -295,8 +237,6 @@ class VisionMLP(linen.Module):
   cnn_use_bias: bool = False
   cnn_max_pool: bool = False
   cnn_global_pool: str = 'avg'
-  cnn_spatial_softmax: bool = False
-  cnn_spatial_softmax_temperature: float = 1.0
 
   @linen.compact
   def __call__(self, data: dict):
@@ -332,11 +272,7 @@ class VisionMLP(linen.Module):
           padding=self.cnn_padding,
           max_pool=self.cnn_max_pool,
       )(pixels_hidden[key])
-      if self.cnn_spatial_softmax:
-        cnn_out = SpatialSoftmax(
-            temperature=self.cnn_spatial_softmax_temperature
-        )(cnn_out)
-      elif self.cnn_global_pool == 'avg':
+      if self.cnn_global_pool == 'avg':
         cnn_out = jnp.mean(cnn_out, axis=(-3, -2))
       elif self.cnn_global_pool == 'max':
         cnn_out = jnp.max(cnn_out, axis=(-3, -2))
@@ -387,8 +323,6 @@ class VisionPolicyWithStd(linen.Module):
   cnn_use_bias: bool = False
   cnn_max_pool: bool = False
   cnn_global_pool: str = 'avg'
-  cnn_spatial_softmax: bool = False
-  cnn_spatial_softmax_temperature: float = 1.0
 
   @linen.compact
   def __call__(self, data: dict):
@@ -414,8 +348,6 @@ class VisionPolicyWithStd(linen.Module):
         cnn_use_bias=self.cnn_use_bias,
         cnn_max_pool=self.cnn_max_pool,
         cnn_global_pool=self.cnn_global_pool,
-        cnn_spatial_softmax=self.cnn_spatial_softmax,
-        cnn_spatial_softmax_temperature=self.cnn_spatial_softmax_temperature,
     )(data)
 
     mean_kernel_init = (
@@ -779,8 +711,6 @@ def make_policy_network_vision(
     cnn_activation: ActivationFn = linen.relu,
     cnn_max_pool: bool = False,
     cnn_global_pool: str = 'avg',
-    cnn_spatial_softmax: bool = False,
-    cnn_spatial_softmax_temperature: float = 1.0,
 ) -> FeedForwardNetwork:
   """Creates a policy network for vision inputs."""
   if distribution_type == 'tanh_normal':
@@ -798,8 +728,6 @@ def make_policy_network_vision(
         cnn_activation=cnn_activation,
         cnn_max_pool=cnn_max_pool,
         cnn_global_pool=cnn_global_pool,
-        cnn_spatial_softmax=cnn_spatial_softmax,
-        cnn_spatial_softmax_temperature=cnn_spatial_softmax_temperature,
     )
   elif distribution_type == 'normal':
     module = VisionPolicyWithStd(
@@ -822,8 +750,6 @@ def make_policy_network_vision(
         cnn_activation=cnn_activation,
         cnn_max_pool=cnn_max_pool,
         cnn_global_pool=cnn_global_pool,
-        cnn_spatial_softmax=cnn_spatial_softmax,
-        cnn_spatial_softmax_temperature=cnn_spatial_softmax_temperature,
     )
   else:
     raise ValueError(
@@ -862,8 +788,6 @@ def make_value_network_vision(
     cnn_activation: ActivationFn = linen.relu,
     cnn_max_pool: bool = False,
     cnn_global_pool: str = 'avg',
-    cnn_spatial_softmax: bool = False,
-    cnn_spatial_softmax_temperature: float = 1.0,
 ) -> FeedForwardNetwork:
   """Creates a value network for vision inputs."""
   value_module = VisionMLP(
@@ -879,8 +803,6 @@ def make_value_network_vision(
       cnn_activation=cnn_activation,
       cnn_max_pool=cnn_max_pool,
       cnn_global_pool=cnn_global_pool,
-      cnn_spatial_softmax=cnn_spatial_softmax,
-      cnn_spatial_softmax_temperature=cnn_spatial_softmax_temperature,
   )
 
   def apply(processor_params, policy_params, obs):
