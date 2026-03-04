@@ -189,8 +189,8 @@ class CNN(linen.Module):
   """CNN module. Inputs are expected in Batch * HWC format."""
 
   num_filters: Sequence[int]
-  kernel_sizes: Sequence[Tuple]
-  strides: Sequence[Tuple]
+  kernel_sizes: Sequence
+  strides: Sequence
   activation: ActivationFn = linen.relu
   use_bias: bool = True
 
