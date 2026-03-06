@@ -63,6 +63,10 @@ def make_ppo_networks_vision(
     cnn_activation: networks.ActivationFn = linen.relu,
     cnn_max_pool: bool = False,
     cnn_global_pool: str = 'avg',
+    cnn_kernel_init_fn: networks.Initializer = jax.nn.initializers.lecun_normal,
+    cnn_kernel_init_kwargs: Mapping[str, Any] | None = None,
+    output_kernel_init_fn: networks.Initializer | None = None,
+    output_kernel_init_kwargs: Mapping[str, Any] | None = None,
 ) -> PPONetworks:
   """Make Vision PPO networks with preprocessor.
 
@@ -94,10 +98,13 @@ def make_ppo_networks_vision(
     cnn_activation: activation function or name (e.g. 'elu', 'relu').
     cnn_max_pool: whether to apply 2x2 max-pool after each conv layer.
     cnn_global_pool: pooling over spatial dims — 'avg', 'max', or 'none'.
+    cnn_kernel_init_fn: kernel initializer factory for CNN conv layers.
+    cnn_kernel_init_kwargs: kwargs for CNN kernel init factory.
   """
   policy_kernel_init_kwargs = policy_network_kernel_init_kwargs or {}
   value_kernel_init_kwargs = value_network_kernel_init_kwargs or {}
   mean_kernel_init_kwargs_ = mean_kernel_init_kwargs or {}
+  cnn_kernel_init_kwargs_ = cnn_kernel_init_kwargs or {}
 
   # Resolve string-based CNN config values.
   resolved_padding = _PADDING_MAP.get(
@@ -108,6 +115,19 @@ def make_ppo_networks_vision(
       if isinstance(cnn_activation, str)
       else cnn_activation
   )
+  resolved_cnn_kernel_init_fn: networks.Initializer = (
+      networks.KERNEL_INITIALIZER[cnn_kernel_init_fn]
+      if isinstance(cnn_kernel_init_fn, str)
+      else cnn_kernel_init_fn
+  )
+  output_kernel_init_kwargs_ = output_kernel_init_kwargs or {}
+  resolved_output_kernel_init_fn = None
+  if output_kernel_init_fn is not None:
+    resolved_output_kernel_init_fn = (
+        networks.KERNEL_INITIALIZER[output_kernel_init_fn]
+        if isinstance(output_kernel_init_fn, str)
+        else output_kernel_init_fn
+    )
 
   parametric_action_distribution: distribution.ParametricDistribution
   if distribution_type == 'normal':
@@ -149,6 +169,11 @@ def make_ppo_networks_vision(
       cnn_activation=resolved_cnn_activation,
       cnn_max_pool=cnn_max_pool,
       cnn_global_pool=cnn_global_pool,
+      cnn_kernel_init=resolved_cnn_kernel_init_fn(**cnn_kernel_init_kwargs_),
+      output_kernel_init=(
+          resolved_output_kernel_init_fn(**output_kernel_init_kwargs_)
+          if resolved_output_kernel_init_fn is not None else None
+      ),
   )
 
   value_network = networks.make_value_network_vision(
@@ -166,6 +191,7 @@ def make_ppo_networks_vision(
       cnn_activation=resolved_cnn_activation,
       cnn_max_pool=cnn_max_pool,
       cnn_global_pool=cnn_global_pool,
+      cnn_kernel_init=resolved_cnn_kernel_init_fn(**cnn_kernel_init_kwargs_),
   )
 
   return PPONetworks(

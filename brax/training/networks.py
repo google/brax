@@ -140,6 +140,7 @@ class MLP(linen.Module):
   layer_sizes: Sequence[int]
   activation: ActivationFn = linen.relu
   kernel_init: Initializer = jax.nn.initializers.lecun_uniform()
+  output_kernel_init: Initializer | None = None
   activate_final: bool = False
   bias: bool = True
   layer_norm: bool = False
@@ -148,13 +149,16 @@ class MLP(linen.Module):
   def __call__(self, data: jnp.ndarray):
     hidden = data
     for i, hidden_size in enumerate(self.layer_sizes):
+      is_last = i == len(self.layer_sizes) - 1
+      ki = (self.output_kernel_init if is_last and self.output_kernel_init
+            else self.kernel_init)
       hidden = linen.Dense(
           hidden_size,
           name=f'hidden_{i}',
-          kernel_init=self.kernel_init,
+          kernel_init=ki,
           use_bias=self.bias,
       )(hidden)
-      if i != len(self.layer_sizes) - 1 or self.activate_final:
+      if not is_last or self.activate_final:
         hidden = self.activation(hidden)
         if self.layer_norm:
           hidden = linen.LayerNorm()(hidden)
@@ -195,6 +199,7 @@ class CNN(linen.Module):
   use_bias: bool = True
   padding: str = 'SAME'
   max_pool: bool = False
+  kernel_init: Initializer = jax.nn.initializers.lecun_normal()
 
   @linen.compact
   def __call__(self, data: jnp.ndarray):
@@ -208,6 +213,7 @@ class CNN(linen.Module):
           strides=stride,
           use_bias=self.use_bias,
           padding=self.padding,
+          kernel_init=self.kernel_init,
       )(hidden)
       hidden = self.activation(hidden)
       if self.max_pool:
@@ -217,12 +223,28 @@ class CNN(linen.Module):
     return hidden
 
 
+def _spatial_softmax(feature_map: jnp.ndarray) -> jnp.ndarray:
+  h, w, c = feature_map.shape[-3], feature_map.shape[-2], feature_map.shape[-1]
+  pos_x, pos_y = jnp.meshgrid(
+      jnp.linspace(-1.0, 1.0, h), jnp.linspace(-1.0, 1.0, w),
+      indexing='ij',
+  )
+  flat = feature_map.reshape(feature_map.shape[:-3] + (h * w, c))
+  softmax_attention = jax.nn.softmax(flat, axis=-2)
+  expected_x = jnp.sum(
+      softmax_attention * pos_x.reshape(-1)[..., None], axis=-2)
+  expected_y = jnp.sum(
+      softmax_attention * pos_y.reshape(-1)[..., None], axis=-2)
+  return jnp.concatenate([expected_x, expected_y], axis=-1)
+
+
 class VisionMLP(linen.Module):
   """Applies a configurable CNN backbone then an MLP."""
 
   layer_sizes: Sequence[int]
   activation: ActivationFn = linen.relu
   kernel_init: Initializer = jax.nn.initializers.lecun_uniform()
+  output_kernel_init: Initializer | None = None
   activate_final: bool = False
   layer_norm: bool = False
   normalise_channels: bool = False
@@ -234,9 +256,10 @@ class VisionMLP(linen.Module):
   cnn_stride: Sequence[int] = (4, 2, 1)
   cnn_padding: str = 'SAME'
   cnn_activation: ActivationFn = linen.relu
-  cnn_use_bias: bool = False
+  cnn_use_bias: bool = True
   cnn_max_pool: bool = False
   cnn_global_pool: str = 'avg'
+  cnn_kernel_init: Initializer = jax.nn.initializers.lecun_normal()
 
   @linen.compact
   def __call__(self, data: dict):
@@ -271,11 +294,14 @@ class VisionMLP(linen.Module):
           use_bias=self.cnn_use_bias,
           padding=self.cnn_padding,
           max_pool=self.cnn_max_pool,
+          kernel_init=self.cnn_kernel_init,
       )(pixels_hidden[key])
       if self.cnn_global_pool == 'avg':
         cnn_out = jnp.mean(cnn_out, axis=(-3, -2))
       elif self.cnn_global_pool == 'max':
         cnn_out = jnp.max(cnn_out, axis=(-3, -2))
+      elif self.cnn_global_pool == 'spatial_softmax':
+        cnn_out = _spatial_softmax(cnn_out)
       elif self.cnn_global_pool == 'none':
         cnn_out = cnn_out.reshape(cnn_out.shape[:-3] + (-1,))
       cnn_outs.append(cnn_out)
@@ -290,6 +316,7 @@ class VisionMLP(linen.Module):
         layer_sizes=self.layer_sizes,
         activation=self.activation,
         kernel_init=self.kernel_init,
+        output_kernel_init=self.output_kernel_init,
         activate_final=self.activate_final,
         layer_norm=self.layer_norm,
     )(hidden)
@@ -320,9 +347,10 @@ class VisionPolicyWithStd(linen.Module):
   cnn_stride: Sequence[int] = (4, 2, 1)
   cnn_padding: str = 'SAME'
   cnn_activation: ActivationFn = linen.relu
-  cnn_use_bias: bool = False
+  cnn_use_bias: bool = True
   cnn_max_pool: bool = False
   cnn_global_pool: str = 'avg'
+  cnn_kernel_init: Initializer = jax.nn.initializers.lecun_normal()
 
   @linen.compact
   def __call__(self, data: dict):
@@ -348,6 +376,7 @@ class VisionPolicyWithStd(linen.Module):
         cnn_use_bias=self.cnn_use_bias,
         cnn_max_pool=self.cnn_max_pool,
         cnn_global_pool=self.cnn_global_pool,
+        cnn_kernel_init=self.cnn_kernel_init,
     )(data)
 
     mean_kernel_init = (
@@ -711,6 +740,8 @@ def make_policy_network_vision(
     cnn_activation: ActivationFn = linen.relu,
     cnn_max_pool: bool = False,
     cnn_global_pool: str = 'avg',
+    cnn_kernel_init: Initializer = jax.nn.initializers.lecun_normal(),
+    output_kernel_init: Initializer | None = None,
 ) -> FeedForwardNetwork:
   """Creates a policy network for vision inputs."""
   if distribution_type == 'tanh_normal':
@@ -718,6 +749,7 @@ def make_policy_network_vision(
         layer_sizes=list(hidden_layer_sizes) + [output_size],
         activation=activation,
         kernel_init=kernel_init,
+        output_kernel_init=output_kernel_init,
         layer_norm=layer_norm,
         normalise_channels=normalise_channels,
         state_obs_key=state_obs_key,
@@ -728,6 +760,7 @@ def make_policy_network_vision(
         cnn_activation=cnn_activation,
         cnn_max_pool=cnn_max_pool,
         cnn_global_pool=cnn_global_pool,
+        cnn_kernel_init=cnn_kernel_init,
     )
   elif distribution_type == 'normal':
     module = VisionPolicyWithStd(
@@ -750,6 +783,7 @@ def make_policy_network_vision(
         cnn_activation=cnn_activation,
         cnn_max_pool=cnn_max_pool,
         cnn_global_pool=cnn_global_pool,
+        cnn_kernel_init=cnn_kernel_init,
     )
   else:
     raise ValueError(
@@ -788,6 +822,7 @@ def make_value_network_vision(
     cnn_activation: ActivationFn = linen.relu,
     cnn_max_pool: bool = False,
     cnn_global_pool: str = 'avg',
+    cnn_kernel_init: Initializer = jax.nn.initializers.lecun_normal(),
 ) -> FeedForwardNetwork:
   """Creates a value network for vision inputs."""
   value_module = VisionMLP(
@@ -803,6 +838,7 @@ def make_value_network_vision(
       cnn_activation=cnn_activation,
       cnn_max_pool=cnn_max_pool,
       cnn_global_pool=cnn_global_pool,
+      cnn_kernel_init=cnn_kernel_init,
   )
 
   def apply(processor_params, policy_params, obs):
