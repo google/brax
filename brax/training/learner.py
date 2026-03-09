@@ -532,6 +532,7 @@ def main(unused_argv):
           save_checkpoint_path=ckpt_dir.as_posix(),
           restore_checkpoint_path=_RESTOREDIR.value,
           vf_loss_coefficient=_PPO_VF_LOSS_COEFFICIENT.value,
+          max_grad_norm=_MAX_GRADIENT_NORM.value,
       )
     elif _LEARNER.value == 'apg':
       make_policy, params, _ = apg.train(
