@@ -342,6 +342,12 @@ def train(
 
     weights = jnp.reshape(eval_scores, [-1])
 
+    # Reshard to full replication (None) so argsort in fitness_shaping doesn't fail on sharded dimensions.
+    sharding_repl = jax.sharding.NamedSharding(
+        mesh, jax.sharding.PartitionSpec(None)
+    )
+    weights = jax.reshard(weights, sharding_repl)
+
     weights = fitness_shaping.value(weights)
 
     if center_fitness:
