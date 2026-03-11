@@ -32,12 +32,17 @@ class PPONetworks:
   parametric_action_distribution: distribution.ParametricDistribution
 
 
-def make_inference_fn(ppo_networks: PPONetworks, compute_value: bool = False):
+def make_inference_fn(
+    ppo_networks: PPONetworks,
+    compute_value: bool = False,
+    use_distributional_critic: bool = False,
+):
   """Creates params and inference function for the PPO agent.
 
   Args:
     ppo_networks: The PPO networks.
     compute_value: If True, compute value during rollouts.
+    use_distributional_critic: If True, value network returns (v, quantiles).
   """
 
   def make_policy(
@@ -66,9 +71,16 @@ def make_inference_fn(ppo_networks: PPONetworks, compute_value: bool = False):
           'distribution_params': logits,
       }
       if compute_value:
-        extras['value'] = ppo_networks.value_network.apply(
-            params[0], params[2], observations
-        )
+        if use_distributional_critic:
+          v_estimate, quantiles = ppo_networks.value_network.apply(
+              params[0], params[2], observations
+          )
+          extras['value'] = v_estimate
+          extras['quantiles'] = quantiles
+        else:
+          extras['value'] = ppo_networks.value_network.apply(
+              params[0], params[2], observations
+          )
       return postprocessed_actions, extras
 
     return policy
@@ -96,6 +108,8 @@ def make_ppo_networks(
     mean_clip_scale: float | None = None,
     mean_kernel_init_fn: networks.Initializer | None = None,
     mean_kernel_init_kwargs: Mapping[str, Any] | None = None,
+    use_distributional_critic: bool = False,
+    num_quantiles: int = 32,
 ) -> PPONetworks:
   """Make PPO networks with preprocessor."""
   policy_kernel_init_kwargs = policy_network_kernel_init_kwargs or {}
@@ -141,6 +155,8 @@ def make_ppo_networks(
       activation=activation,
       obs_key=value_obs_key,
       kernel_init=value_network_kernel_init_fn(**value_kernel_init_kwargs),
+      use_distributional_critic=use_distributional_critic,
+      num_quantiles=num_quantiles,
   )
 
   return PPONetworks(

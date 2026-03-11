@@ -100,6 +100,47 @@ def compute_gae(
   return jax.lax.stop_gradient(vs), jax.lax.stop_gradient(advantages)
 
 
+def quantile_huber_loss(
+    quantiles: jax.Array, targets: jax.Array, kappa: float = 1.0
+) -> jax.Array:
+  """Computes the Quantile Huber loss.
+
+  Args:
+      quantiles: (unroll_length, batch_size, num_quantiles)
+      targets: (unroll_length, batch_size)
+      kappa: Threshold for Huber loss
+
+  Returns:
+    The mean quantile Huber loss.
+  """
+  # 1. Align targets to (T, B, 1, 1) and quantiles to (T, B, N, 1)
+  # This allows pairwise comparison across the quantile dimension
+  targets = targets[:, :, jnp.newaxis, jnp.newaxis]
+  quantiles = quantiles[:, :, :, jnp.newaxis]
+
+  num_quantiles = quantiles.shape[2]
+  tau = (jnp.arange(num_quantiles) + 0.5) / num_quantiles
+  tau = tau[jnp.newaxis, jnp.newaxis, :, jnp.newaxis]
+
+  # 2. Compute errors
+  pairwise_errors = targets - quantiles
+  abs_errors = jnp.abs(pairwise_errors)
+
+  # 3. Huber element
+  huber_loss = jnp.where(
+      abs_errors <= kappa,
+      0.5 * pairwise_errors**2,
+      kappa * (abs_errors - 0.5 * kappa),
+  )
+
+  # 4. Quantile regression penalty
+  # Loss = |tau - I(errors < 0)| * Huber
+  check_weight = jnp.abs(tau - (pairwise_errors < 0).astype(jnp.float32))
+  loss = check_weight * huber_loss
+
+  return jnp.mean(loss)
+
+
 def compute_ppo_loss(
     params: PPONetworkParams,
     normalizer_params: Any,
@@ -114,6 +155,7 @@ def compute_ppo_loss(
     normalize_advantage: bool = True,
     vf_coefficient: float = 0.5,
     clipping_epsilon_value: float | None = None,
+    use_distributional_critic: bool = False,
 ) -> Tuple[jnp.ndarray, types.Metrics]:
   """Computes PPO loss.
 
@@ -134,6 +176,7 @@ def compute_ppo_loss(
     vf_coefficient: Coefficient for value function loss, for RSL-RL parity this
       should be set to 1.0.
     clipping_epsilon_value: Value function loss clipping epsilon
+    use_distributional_critic: If True, use quantile Huber loss for value fn.
 
   Returns:
     A tuple (loss, metrics)
@@ -148,9 +191,23 @@ def compute_ppo_loss(
       normalizer_params, params.policy, data.observation
   )
 
-  baseline = value_apply(normalizer_params, params.value, data.observation)
-  terminal_obs = jax.tree_util.tree_map(lambda x: x[-1], data.next_observation)
-  bootstrap_value = value_apply(normalizer_params, params.value, terminal_obs)
+  if use_distributional_critic:
+    baseline, baseline_quantiles = value_apply(
+        normalizer_params, params.value, data.observation
+    )
+    terminal_obs = jax.tree_util.tree_map(
+        lambda x: x[-1], data.next_observation
+    )
+    bootstrap_value, _ = value_apply(
+        normalizer_params, params.value, terminal_obs
+    )
+  else:
+    baseline = value_apply(normalizer_params, params.value, data.observation)
+    terminal_obs = jax.tree_util.tree_map(
+        lambda x: x[-1], data.next_observation
+    )
+    bootstrap_value = value_apply(normalizer_params, params.value, terminal_obs)
+    baseline_quantiles = None
 
   rewards = data.reward * reward_scaling
   truncation = data.extras['state_extras']['truncation']
@@ -182,16 +239,28 @@ def compute_ppo_loss(
   policy_loss = -jnp.mean(jnp.minimum(surrogate_loss1, surrogate_loss2))
 
   # Value function loss
-  v_error = vs - baseline
-  v_loss = v_error * v_error
-  if clipping_epsilon_value is not None:
-    old_values = data.extras['policy_extras']['value']
-    v_clipped = old_values + jnp.clip(
-        baseline - old_values, -clipping_epsilon_value, clipping_epsilon_value
+  if use_distributional_critic:
+    v_loss = (
+        quantile_huber_loss(
+            baseline_quantiles,
+            vs,
+            kappa=clipping_epsilon_value,
+        )
+        * vf_coefficient
     )
-    v_loss_clipped = (vs - v_clipped) ** 2
-    v_loss = jnp.maximum(v_loss, v_loss_clipped)
-  v_loss = jnp.mean(v_loss) * 0.5 * vf_coefficient
+  else:
+    v_error = vs - baseline
+    v_loss = v_error * v_error
+    if clipping_epsilon_value is not None:
+      old_values = data.extras['policy_extras']['value']
+      v_clipped = old_values + jnp.clip(
+          baseline - old_values,
+          -clipping_epsilon_value,
+          clipping_epsilon_value,
+      )
+      v_loss_clipped = (vs - v_clipped) ** 2
+      v_loss = jnp.maximum(v_loss, v_loss_clipped)
+    v_loss = jnp.mean(v_loss) * 0.5 * vf_coefficient
 
   # Entropy reward
   entropy = jnp.mean(parametric_action_distribution.entropy(policy_logits, rng))
@@ -204,9 +273,15 @@ def compute_ppo_loss(
     old_dist_params = data.extras['policy_extras']['distribution_params']
     old_dist = parametric_action_distribution.create_dist(old_dist_params)
     kl = jnp.mean(new_dist.kl_divergence(old_dist))  # pytype: disable=attribute-error
-    policy_dist_mean_std = jnp.mean(new_dist.scale)  # pytype: disable=attribute-error
   else:
-    kl, policy_dist_mean_std = jnp.array(0.0), jnp.array(0.0)
+    kl = jnp.array(0.0)
+
+  policy_dist_mean_std = jnp.mean(new_dist.scale)  # pytype: disable=attribute-error
+  policy_dist_max_std = jnp.max(new_dist.scale)  # pytype: disable=attribute-error
+  policy_dist_min_std = jnp.min(new_dist.scale)  # pytype: disable=attribute-error
+  policy_dist_mean_loc = jnp.mean(new_dist.loc)  # pytype: disable=attribute-error
+  policy_dist_max_loc = jnp.max(new_dist.loc)  # pytype: disable=attribute-error
+  policy_dist_min_loc = jnp.min(new_dist.loc)  # pytype: disable=attribute-error
 
   return total_loss, {
       'total_loss': total_loss,
@@ -215,4 +290,9 @@ def compute_ppo_loss(
       'entropy_loss': entropy_loss,
       'kl_mean': kl,
       'policy_dist_mean_std': policy_dist_mean_std,
+      'policy_dist_max_std': policy_dist_max_std,
+      'policy_dist_min_std': policy_dist_min_std,
+      'policy_dist_mean_loc': policy_dist_mean_loc,
+      'policy_dist_max_loc': policy_dist_max_loc,
+      'policy_dist_min_loc': policy_dist_min_loc,
   }

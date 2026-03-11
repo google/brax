@@ -29,7 +29,11 @@ class LRSchedule(enum.Enum):
 
 
 def adaptive_kl_learning_rate(
-    optimizer_state: optax.OptState, kl_mean: jnp.ndarray, desired_kl: float
+    optimizer_state: optax.OptState,
+    kl_mean: jnp.ndarray,
+    desired_kl: float,
+    min_learning_rate: float = 1e-5,
+    max_learning_rate: float = 1e-2,
 ) -> Tuple[optax.OptState, jnp.ndarray]:
   """Adaptive KL learning rate schedule."""
   kl_mean = jax.lax.stop_gradient(kl_mean)
@@ -42,10 +46,14 @@ def adaptive_kl_learning_rate(
     assert hasattr(optim_state, 'hyperparams')
 
   lr = optim_state.hyperparams['learning_rate']  # pytype: disable=attribute-error
-  lr = jnp.where(kl_mean > desired_kl * 2.0, jnp.maximum(1e-5, lr / 1.5), lr)
+  lr = jnp.where(
+      kl_mean > desired_kl * 2.0,
+      jnp.maximum(min_learning_rate, lr / 1.5),
+      lr,
+  )
   lr = jnp.where(
       (kl_mean < desired_kl / 2.0) & (kl_mean > 0.0),
-      jnp.minimum(1e-2, lr * 1.5),
+      jnp.minimum(max_learning_rate, lr * 1.5),
       lr,
   )
   optim_state.hyperparams['learning_rate'] = lr  # pytype: disable=attribute-error

@@ -113,6 +113,45 @@ class PPOTest(parameterized.TestCase):
         clipping_epsilon_value=clipping_epsilon_value,
     )
 
+  def testTrainWithDistributionalCritic(self):
+    """Test PPO runs with distributional critic and adaptive KL."""
+    network_factory = functools.partial(
+        ppo_networks.make_ppo_networks,
+        distribution_type='normal',
+        noise_std_type='log',
+        init_noise_std=0.8,
+        activation=jax.nn.elu,
+        use_distributional_critic=True,
+    )
+
+    _, _, metrics = ppo.train(
+        envs.get_environment('inverted_pendulum', backend='spring'),
+        num_timesteps=2**13,
+        episode_length=50,
+        num_envs=64,
+        learning_rate=3e-4,
+        entropy_cost=1e-2,
+        discounting=0.95,
+        unroll_length=5,
+        batch_size=64,
+        num_minibatches=8,
+        num_updates_per_batch=4,
+        normalize_observations=True,
+        max_grad_norm=1.0,
+        seed=2,
+        reward_scaling=10,
+        normalize_advantage=False,
+        network_factory=network_factory,
+        learning_rate_schedule='ADAPTIVE_KL',
+        clipping_epsilon_value=1.0,
+        use_distributional_critic=True,
+    )
+    # Verify training produced finite results.
+    self.assertTrue(
+        jnp.isfinite(metrics['eval/episode_reward']),
+        f'Reward is not finite: {metrics["eval/episode_reward"]}',
+    )
+
   def testTrainAsymmetricActorCritic(self):
     """Test PPO with asymmetric actor critic."""
     env = envs.get_environment(

@@ -512,6 +512,30 @@ class PolicyModuleWithStd(linen.Module):
     return mean_params, jnp.broadcast_to(std_params, mean_params.shape)
 
 
+class DistributionalCritic(nn.Module):
+  """Distributional critic module: https://arxiv.org/pdf/1710.10044."""
+
+  hidden_layer_sizes: Sequence[int]
+  activation: ActivationFn
+  kernel_init: jax.nn.initializers.Initializer
+  num_quantiles: int = 32  # Standard for QR-DQN/PPO
+
+  @nn.compact
+  def __call__(self, obs: jax.Array) -> Tuple[jax.Array, jax.Array]:
+    # Output layer: num_quantiles instead of 1
+    # Shape: (batch, num_quantiles)
+    quantiles = MLP(
+        layer_sizes=list(self.hidden_layer_sizes) + [self.num_quantiles],
+        activation=self.activation,
+        kernel_init=self.kernel_init,
+    )(obs)
+
+    # The expected value V(s) is the mean of the quantiles
+    v_estimate = jnp.mean(quantiles, axis=-1, keepdims=True)
+
+    return v_estimate, quantiles
+
+
 def make_policy_network(
     param_size: int,
     obs_size: types.ObservationSize,
@@ -581,13 +605,23 @@ def make_value_network(
     activation: ActivationFn = linen.relu,
     obs_key: str = 'state',
     kernel_init: Initializer = jax.nn.initializers.lecun_uniform(),
+    use_distributional_critic: bool = False,
+    num_quantiles: int = 32,
 ) -> FeedForwardNetwork:
   """Creates a value network."""
-  value_module = MLP(
-      layer_sizes=list(hidden_layer_sizes) + [1],
-      activation=activation,
-      kernel_init=kernel_init,
-  )
+  if use_distributional_critic:
+    value_module = DistributionalCritic(
+        hidden_layer_sizes=list(hidden_layer_sizes),
+        activation=activation,
+        kernel_init=kernel_init,
+        num_quantiles=num_quantiles,
+    )
+  else:
+    value_module = MLP(
+        layer_sizes=list(hidden_layer_sizes) + [1],
+        activation=activation,
+        kernel_init=kernel_init,
+    )
 
   def apply(processor_params, value_params, obs):
     if isinstance(obs, Mapping):
@@ -596,7 +630,11 @@ def make_value_network(
       )
     else:
       obs = preprocess_observations_fn(obs, processor_params)
-    return jnp.squeeze(value_module.apply(value_params, obs), axis=-1)
+    if use_distributional_critic:
+      v_estimate, quantiles = value_module.apply(value_params, obs)
+      return jnp.squeeze(v_estimate, axis=-1), quantiles
+    else:
+      return jnp.squeeze(value_module.apply(value_params, obs), axis=-1)
 
   obs_size = _get_obs_state_size(obs_size, obs_key)
   dummy_obs = jnp.zeros((1, obs_size))

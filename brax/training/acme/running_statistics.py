@@ -124,7 +124,8 @@ def update(state: RunningStatisticsState,
            std_min_value: float = 1e-6,
            std_max_value: float = 1e6,
            pmap_axis_name: Optional[str] = None,
-           validate_shapes: bool = True) -> RunningStatisticsState:
+           validate_shapes: bool = True,
+           until_count: Optional[int] = None) -> RunningStatisticsState:
   """Updates the running statistics with the given batch of data.
 
   Note: data batch and state elements (mean, etc.) must have the same structure.
@@ -147,6 +148,8 @@ def update(state: RunningStatisticsState,
     pmap_axis_name: Name of the pmapped axis, if any.
     validate_shapes: If true, the shapes of all leaves of the batch will be
       validated. Enabled by default. Doesn't impact performance when jitted.
+    until_count: If not None, the update will be skipped if the count is more
+      than this value.
 
   Returns:
     Updated running statistics.
@@ -191,6 +194,8 @@ def update(state: RunningStatisticsState,
     # RSL-RL's EmpiricalNormalization algorithm uses
     # rate = batch_size / total_count instead of fixed alpha.
     rate = jnp.float32(step_increment) / count_float
+    if until_count is not None:
+      rate = jnp.where(count_float > until_count, 0.0, rate)
 
     def _compute_ema_statistics(
         mean: jnp.ndarray,
