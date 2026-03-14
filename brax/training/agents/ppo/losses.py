@@ -227,6 +227,12 @@ def compute_ppo_loss(
       lambda_=gae_lambda,
       discount=discounting,
   )
+  # Do not normalize the gae_returns. The returns must remain in the same scale
+  # as your rewards so the value network learns the true physical scale of the
+  # task (e.g., energy consumption or tracking error).
+  gae_returns = jax.lax.stop_gradient(
+      jnp.add(advantages, jax.lax.stop_gradient(baseline))
+  )
   if normalize_advantage:
     advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
   rho_s = jnp.exp(target_action_log_probs - behaviour_action_log_probs)
@@ -243,7 +249,7 @@ def compute_ppo_loss(
     v_loss = (
         quantile_huber_loss(
             baseline_quantiles,
-            vs,
+            gae_returns,
             kappa=clipping_epsilon_value,
         )
         * vf_coefficient
