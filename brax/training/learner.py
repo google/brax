@@ -74,6 +74,9 @@ _SEED = flags.DEFINE_integer('seed', 0, 'Random seed.')
 _NUM_ENVS = flags.DEFINE_integer(
     'num_envs', 4, 'Number of envs to run in parallel.'
 )
+_NUM_EVAL_ENVS = flags.DEFINE_integer(
+    'num_eval_envs', 128, 'Number of envs to run in parallel for eval.'
+)
 _ACTION_REPEAT = flags.DEFINE_integer('action_repeat', 1, 'Action repeat.')
 _UNROLL_LENGTH = flags.DEFINE_integer('unroll_length', 30, 'Unroll length.')
 _BATCH_SIZE = flags.DEFINE_integer('batch_size', 4, 'Batch size.')
@@ -298,7 +301,7 @@ _WARP_KERNEL_CACHE_DIR = flags.DEFINE_string(
 )
 
 
-def get_env_factory(env_name: str):
+def get_env_factory(env_name: str, vision_nworld: int | None = None):
   """Returns a function that creates an environment."""
   wrap_fn = None
   randomizer_fn = None
@@ -309,7 +312,9 @@ def get_env_factory(env_name: str):
       overrides = json.loads(_PLAYGROUND_CONFIG_OVERRIDES.value)
     if _VISION.value:
       overrides['vision'] = True
-      overrides['vision_config.nworld'] = _NUM_ENVS.value
+      overrides['vision_config.nworld'] = (
+          vision_nworld if vision_nworld is not None else _NUM_ENVS.value
+      )
     if _PLAYGROUND_DM_CONTROL_SUITE.value:
       get_environment = lambda *args, **kwargs: mjp.dm_control_suite.load(  # pytype: disable=attribute-error
           *args, **kwargs, config_overrides=overrides
@@ -499,9 +504,13 @@ def main(unused_argv):
             network_factory,
             value_obs_key=_PPO_VALUE_OBS_KEY.value,
         )
+      eval_get_environment, _, _ = get_env_factory(
+          _ENV.value,
+          vision_nworld=_NUM_EVAL_ENVS.value if _VISION.value else None,
+      )
       make_policy, params, _ = ppo.train(
           environment=get_environment(_ENV.value),
-          eval_env=get_environment(_ENV.value),
+          eval_env=eval_get_environment(_ENV.value),
           wrap_env_fn=wrap_fn,
           randomization_fn=randomizer_fn,
           num_timesteps=_TOTAL_ENV_STEPS.value,
@@ -509,6 +518,7 @@ def main(unused_argv):
           network_factory=network_factory,
           action_repeat=_ACTION_REPEAT.value,
           num_envs=_NUM_ENVS.value,
+          num_eval_envs=_NUM_EVAL_ENVS.value,
           max_devices_per_host=_MAX_DEVICES_PER_HOST.value,
           learning_rate=_LEARNING_RATE.value,
           entropy_cost=_ENTROPY_COST.value,
