@@ -33,6 +33,7 @@ from brax.training.types import PRNGKey
 import flax
 import jax
 import jax.numpy as jnp
+import numpy as np
 import optax
 
 InferenceParams = Tuple[running_statistics.NestedMeanStd, Params]
@@ -310,9 +311,16 @@ def train(
           specs.Array((env.observation_size,), jnp.dtype(dtype))
       ),
   )
-  training_state = jax.device_put_replicated(
-      training_state, jax.local_devices()[:local_devices_to_use]
-  )
+  devices = jax.local_devices()[:local_devices_to_use]
+  mesh = jax.sharding.Mesh(np.array(devices), ('_device_put_sharded',))
+  sharding = jax.NamedSharding(mesh, jax.P('_device_put_sharded'))
+
+  def _replicate(x):
+    if isinstance(x, jax.Array):
+      return jax.device_put(jnp.stack([x] * len(devices)), sharding)
+    return jax.device_put(np.stack([x] * len(devices)), sharding)
+
+  training_state = jax.tree_util.tree_map(_replicate, training_state)
 
   if not eval_env:
     eval_env = environment
