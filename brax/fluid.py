@@ -70,7 +70,7 @@ def force(
   diag_inertia = jax.vmap(jp.diag)(inertia)
   diag_inertia_v = jp.repeat(diag_inertia, 3, axis=-2).reshape((-1, 3, 3))
   diag_inertia_v *= jp.ones((3, 3)) - 2 * jp.eye(3)
-  box = 6.0 * jp.clip(jp.sum(diag_inertia_v, axis=-1), a_min=1e-12)
+  box = 6.0 * jp.clip(jp.sum(diag_inertia_v, axis=-1), min=1e-12)
   box = jp.sqrt(box / mass[:, None])
 
   frc = _box_viscosity(box, xd_i, sys.viscosity)
