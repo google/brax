@@ -16,20 +16,21 @@
 
 import functools
 import pickle
+
 from absl.testing import absltest
 from absl.testing import parameterized
+import jax
+from jax import numpy as jnp
+
 from brax import envs
 from brax.training.acme import running_statistics
 from brax.training.agents.ppo import networks as ppo_networks
 from brax.training.agents.ppo import networks_vision as ppo_networks_vision
 from brax.training.agents.ppo import train as ppo
-import jax
-from jax import numpy as jnp
 
 
 class PPOTest(parameterized.TestCase):
   """Tests for PPO module."""
-
 
   @parameterized.parameters('ndarray', 'dict_state')
   def testTrain(self, obs_mode):
@@ -211,8 +212,14 @@ class PPOTest(parameterized.TestCase):
         env.observation_size, env.action_size, normalize_fn
     )
     inference = ppo_networks.make_inference_fn(ppo_network)
-    byte_encoding = pickle.dumps(params)
-    decoded_params = pickle.loads(byte_encoding)
+    import tempfile
+
+    from brax.io import model as brax_model
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+      path = f'{tmpdir}/params.msgpack'
+      brax_model.save_params(path, params)
+      decoded_params = brax_model.load_params(path)
 
     # Compute one action.
     state = env.reset(jax.random.PRNGKey(0))
