@@ -40,7 +40,13 @@ class MassTest(parameterized.TestCase):
 
     for mj_prev, mj_next in test_utils.sample_mujoco_states(xml_file):
       state = jax.jit(pipeline.init)(sys, mj_prev.qpos, mj_prev.qvel)
-      mujoco.mj_fullM(model, mj_mass_mx, mj_next.qM)
+      mujoco.mju_sym2dense(
+          mj_mass_mx,
+          mj_next.M,
+          model.M_rownnz,
+          model.M_rowadr,
+          model.M_colind,
+      )
       np.testing.assert_almost_equal(state.mass_mx, mj_mass_mx, 5)
 
 
