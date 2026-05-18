@@ -41,7 +41,7 @@ dependencies = [
     "jaxopt",
     "jinja2",
     "ml_collections",
-    "mujoco",
+    "mujoco>=3.8.1",
     "mujoco-mjx",
     "numpy",
     "optax",
