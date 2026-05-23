@@ -77,7 +77,6 @@ def _unpmap(v):
 def _init_training_state(
     key: PRNGKey,
     obs_size: int,
-    local_devices_to_use: int,
     sac_network: sac_networks.SACNetworks,
     alpha_optimizer: optax.GradientTransformation,
     policy_optimizer: optax.GradientTransformation,
@@ -109,16 +108,7 @@ def _init_training_state(
       alpha_params=log_alpha,
       normalizer_params=normalizer_params,
   )
-  devices = jax.local_devices()[:local_devices_to_use]
-  mesh = jax.sharding.Mesh(np.array(devices), ('_device_put_sharded',))
-  sharding = jax.NamedSharding(mesh, jax.P('_device_put_sharded'))
-
-  def _replicate(x):
-    if isinstance(x, jax.Array):
-      return jax.device_put(jnp.stack([x] * len(devices)), sharding)
-    return jax.device_put(np.stack([x] * len(devices)), sharding)
-
-  return jax.tree_util.tree_map(_replicate, training_state)
+  return training_state
 
 
 def train(
@@ -491,7 +481,6 @@ def train(
   training_state = _init_training_state(
       key=global_key,
       obs_size=obs_size,
-      local_devices_to_use=local_devices_to_use,
       sac_network=sac_network,
       alpha_optimizer=alpha_optimizer,
       policy_optimizer=policy_optimizer,
@@ -505,6 +494,19 @@ def train(
         normalizer_params=params[0],
         policy_params=params[1],
     )
+
+  # Replicate training state across devices AFTER checkpoint restoration
+  # so that restored params have the correct per-device shape.  Fixes #659.
+  devices = jax.local_devices()[:local_devices_to_use]
+  mesh = jax.sharding.Mesh(np.array(devices), ('_device_put_sharded',))
+  sharding = jax.NamedSharding(mesh, jax.P('_device_put_sharded'))
+
+  def _replicate(x):
+    if isinstance(x, jax.Array):
+      return jax.device_put(jnp.stack([x] * len(devices)), sharding)
+    return jax.device_put(np.stack([x] * len(devices)), sharding)
+
+  training_state = jax.tree_util.tree_map(_replicate, training_state)
 
   local_key, rb_key, env_key, eval_key = jax.random.split(local_key, 4)
 
