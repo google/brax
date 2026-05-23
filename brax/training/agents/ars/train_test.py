@@ -18,11 +18,12 @@ import pickle
 
 from absl.testing import absltest
 from absl.testing import parameterized
+import jax
+
 from brax import envs
 from brax.training.acme import running_statistics
 from brax.training.agents.ars import networks as ars_networks
 from brax.training.agents.ars import train as ars
-import jax
 
 
 class ARSTest(parameterized.TestCase):
@@ -44,8 +45,14 @@ class ARSTest(parameterized.TestCase):
         env.observation_size, env.action_size, normalize_fn
     )
     inference = ars_networks.make_inference_fn(ars_network)
-    byte_encoding = pickle.dumps(params)
-    decoded_params = pickle.loads(byte_encoding)
+    import tempfile
+
+    from brax.io import model as brax_model
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+      path = f'{tmpdir}/params.msgpack'
+      brax_model.save_params(path, params)
+      decoded_params = brax_model.load_params(path)
 
     # Compute one action.
     state = env.reset(jax.random.PRNGKey(0))
