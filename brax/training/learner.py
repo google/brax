@@ -40,7 +40,7 @@ from etils import epath
 import jax
 import mediapy as media
 try:
-  import mujoco_playground as mjp
+  from mujoco_playground import rss2025 as mjp
 except ImportError as e:
   print(
       'MuJoCo Playground is not available. Install it via `pip install'
