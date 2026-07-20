@@ -22,11 +22,13 @@ import jax.numpy as jnp
 import numpy as np
 
 
-def bcast_local_devices(value, local_devices_to_use=1):
+def bcast_local_devices(
+    value, local_devices_to_use=1, axis_name='_device_put_sharded'
+):
   """Broadcasts an object to all local devices."""
   devices = jax.local_devices()[:local_devices_to_use]
-  mesh = jax.sharding.Mesh(np.array(devices), ('_device_put_sharded',))
-  sharding = jax.NamedSharding(mesh, jax.P('_device_put_sharded'))
+  mesh = jax.sharding.Mesh(np.array(devices), (axis_name,))
+  sharding = jax.NamedSharding(mesh, jax.P(axis_name))
 
   def _replicate(x):
     if isinstance(x, jax.Array):
