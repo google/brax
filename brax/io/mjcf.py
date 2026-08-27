@@ -246,8 +246,19 @@ def validate_model(mj: mujoco.MjModel) -> None:
     raise NotImplementedError('Only euler integration is supported.')
   if mj.opt.cone != 0:
     raise NotImplementedError('Only pyramidal cone friction is supported.')
+  # explore_bench fork: MuJoCo's ELLIPSOID fluid model is per-geom (blunt and
+  # slender drag, angular drag, Kutta and Magnus lift, added mass from
+  # precomputed virtual mass/inertia). brax has its own fluid model -- an
+  # inertia-equivalent BOX per link, brax/fluid.py -- driven by the same
+  # opt.density/opt.viscosity, and it stays enabled here. So the model is not
+  # dropped, it is SUBSTITUTED, and the difference is a solver difference of
+  # the same kind as positional-PBD-vs-Newton and pyramidal-vs-elliptic
+  # friction cones. Recorded so callers can report it rather than assume the
+  # aerodynamics matched. mjx does not implement the ellipsoid model either
+  # (mjx._src.passive carries only _inertia_box_fluid_model), so there is no
+  # existing implementation to delegate to.
   if (mj.geom_fluid != 0).any():
-    raise NotImplementedError('Ellipsoid fluid model not implemented.')
+    _FORK_IGNORED.add('geom_fluid (ellipsoid model -> brax inertia-box model)')
   if mj.opt.wind.any():
     raise NotImplementedError('option.wind is not implemented.')
   # explore_bench fork: impratio scales MuJoCo's normal-vs-friction constraint
@@ -274,6 +285,8 @@ def validate_model(mj: mujoco.MjModel) -> None:
     _trn = int(mj.actuator_trntype[_a])
     if _trn == mujoco.mjtTrn.mjTRN_JOINT:
       continue
+    if _trn == mujoco.mjtTrn.mjTRN_SITE:
+      continue        # applied as a link wrench, see actuator.site_force
     if _trn == mujoco.mjtTrn.mjTRN_TENDON:
       _t = int(mj.actuator_trnid[_a, 0])
       _adr, _num = int(mj.tendon_adr[_t]), int(mj.tendon_num[_t])
@@ -285,7 +298,8 @@ def validate_model(mj: mujoco.MjModel) -> None:
           f'tendon {_t} wraps types {sorted(_wt)}.'
       )
     raise NotImplementedError(
-        'Only joint and fixed-tendon transmission types are supported for '
+        'Only joint, fixed-tendon and site transmission types are '
+        'supported for '
         f'actuators; actuator {_a} uses trntype {_trn}.'
     )
 
@@ -529,6 +543,10 @@ def load_model(mj: mujoco.MjModel) -> System:
       geom_link_idx=lm.geom_link_idx,
       geom_link_pos=lm.geom_link_pos,
       geom_link_quat=lm.geom_link_quat,
+      site_act_link=lm.site_act_link,
+      site_act_pos=lm.site_act_pos,
+      site_act_quat=lm.site_act_quat,
+      site_act_gear=lm.site_act_gear,
       **mjx_model.__dict__,
   )
 

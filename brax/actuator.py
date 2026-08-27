@@ -68,3 +68,54 @@ def to_tau(
     tau = moment_qd.T @ force
 
   return tau
+
+
+def site_force(sys: System, act: jax.Array, x, x_i):
+  """explore_bench fork: per-link wrench from SITE-transmission actuators.
+
+  A site actuator (a quadrotor rotor, say) applies a force and torque at a
+  FRAME rather than about a joint, so it has no joint-space equivalent and no
+  model-level substitution that leaves the force where the task's rules read
+  it. brax's positional pipeline is maximal-coordinate, so no Jacobian is
+  needed: rotate the geared wrench into the world, then move the force to the
+  link's centre of mass, adding the r x F transport torque.
+
+  Args:
+    sys: system, carrying the fork's site_act_* arrays
+    act: (act_size,) actuator input vector
+    x: link transforms in world frame
+    x_i: link centre-of-mass transforms in world frame
+
+  Returns:
+    Force with one row per link.
+  """
+  from brax import math
+  from brax.base import Force
+  from jax.ops import segment_sum
+
+  link = sys.site_act_link
+  n_link = sys.num_links()
+  gear = sys.site_act_gear
+  is_site = link >= 0
+  idx = jp.where(is_site, link, 0)
+
+  act = jp.clip(act, sys.actuator.ctrl_range[:, 0], sys.actuator.ctrl_range[:, 1])
+  f = sys.actuator.gain * act
+  f = jp.clip(f, sys.actuator.force_range[:, 0], sys.actuator.force_range[:, 1])
+  f = jp.where(is_site, f, 0.0)
+
+  # site frame in world: link transform composed with the site's link-relative
+  # pose (both recorded by io/_fork_links)
+  link_rot = x.rot[idx]
+  site_rot = jax.vmap(math.quat_mul)(link_rot, sys.site_act_quat)
+  site_pos = x.pos[idx] + jax.vmap(math.rotate)(sys.site_act_pos, link_rot)
+
+  vel = jax.vmap(math.rotate)(gear[:, 0:3] * f[:, None], site_rot)
+  ang = jax.vmap(math.rotate)(gear[:, 3:6] * f[:, None], site_rot)
+  # transport the force from the site to the link centre of mass
+  ang = ang + jp.cross(site_pos - x_i.pos[idx], vel)
+
+  return Force(
+      vel=segment_sum(vel, idx, n_link),
+      ang=segment_sum(ang, idx, n_link),
+  )

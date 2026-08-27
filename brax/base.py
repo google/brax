@@ -496,6 +496,14 @@ class System(mjx.Model):
   geom_link_idx: jax.Array = None
   geom_link_pos: jax.Array = None
   geom_link_quat: jax.Array = None
+  # explore_bench fork: SITE-transmission actuators, resolved onto links. A
+  # site actuator applies a wrench at a frame; in maximal coordinates that is
+  # a force and torque on the link, applied at the site offset. -1 marks an
+  # actuator that is not a site transmission.
+  site_act_link: jax.Array = None
+  site_act_pos: jax.Array = None
+  site_act_quat: jax.Array = None
+  site_act_gear: jax.Array = None
 
   def num_links(self) -> int:
     """Returns the number of links in the system."""

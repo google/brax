@@ -184,6 +184,7 @@ class LinkMap:
     self._build_transforms()
     self._build_inertia()
     self._build_geoms()
+    self._build_site_actuators()
 
   def _build_transforms(self):
     """Parent-link-relative rest transform for every link."""
@@ -291,6 +292,38 @@ class LinkMap:
     self.geom_link_idx = idx
     self.geom_link_pos = pos
     self.geom_link_quat = quat
+
+  def _build_site_actuators(self):
+    """Site-transmission actuators, resolved onto links.
+
+    A site actuator applies a WRENCH at a frame rather than a torque about a
+    joint, so it has no joint-space equivalent -- which is why it cannot be
+    substituted away without moving where the force acts. In a maximal-
+    coordinate solver it needs no Jacobian: it is a force and torque on the
+    link the site rides, applied at the site's offset.
+    """
+    import mujoco
+    mj = self.mj
+    nu = mj.nu
+    link = np.full(nu, -1, dtype=np.int64)
+    pos = np.zeros((nu, 3))
+    quat = np.tile(_IDENTITY_QUAT, (nu, 1))
+    gear = np.zeros((nu, 6))
+    for a in range(nu):
+      if int(mj.actuator_trntype[a]) != int(mujoco.mjtTrn.mjTRN_SITE):
+        continue
+      sid = int(mj.actuator_trnid[a, 0])
+      b = int(mj.site_bodyid[sid])
+      li = int(self.link_of_body[b])
+      link[a] = li
+      stop = int(self.link_bodies[li]) if li >= 0 else 0
+      p_b, q_b = self._rel_transform(b, stop)
+      pos[a], quat[a] = _compose(p_b, q_b, mj.site_pos[sid], mj.site_quat[sid])
+      gear[a] = np.asarray(mj.actuator_gear[a], float)[:6]
+    self.site_act_link = link
+    self.site_act_pos = pos
+    self.site_act_quat = quat
+    self.site_act_gear = gear
 
 
 def _body_name(mj, i):

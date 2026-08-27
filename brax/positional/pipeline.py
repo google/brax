@@ -85,6 +85,10 @@ def step(
   xdd_i = Motion.create(vel=sys.gravity)
   # get joint constraint forces
   xf_i = joints.acceleration_update(sys, state, tau)
+  # explore_bench fork: site-transmission actuators apply a wrench at a frame
+  # (rotor thrust), which to_tau cannot express -- see actuator.site_force.
+  if sys.site_act_link is not None:
+    xf_i += actuator.site_force(sys, act, state.x, state.x_i)
   if sys.enable_fluid:
     inertia = sys.link.inertia.i ** (1 - sys.spring_inertia_scale)
     xf_i += fluid.force(sys, state.x, state.xd, state.mass, inertia)
