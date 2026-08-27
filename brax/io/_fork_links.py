@@ -37,11 +37,18 @@ import numpy as np
 
 _IDENTITY_QUAT = np.array([1.0, 0.0, 0.0, 0.0])
 
-#: Mass (and inertia) share handed to the massless intermediate link of a
-#: split joint stack, as a fraction of its host body. Small enough to be a
-#: minor perturbation, large enough that 1/mass stays well conditioned next to
-#: the other links in these scenes.
-SPLIT_MASS_FRACTION = 1e-2
+#: Fraction of a split body's mass carried by the INTERMEDIATE link, with the
+#: remainder left on the terminal link, so total mass is conserved.
+#:
+#: This is not a numerical fudge, it is where the actuators act. In a split
+#: chain the first group's DOFs (for the paddle: its three slides) belong to
+#: the intermediate, so an actuator on them accelerates THAT link's mass. With
+#: a token intermediate (1e-2) the paddle's 225 N position servo pushed 0.007
+#: kg and dragged the 0.7 kg tool behind it through a compliant PBD
+#: constraint: measured, the tool overshot to 1.8 m under zero control where
+#: MuJoCo settles at its 0.25 m servo equilibrium. Splitting the mass makes
+#: the actuated link's inertia representative of what it actually moves.
+SPLIT_MASS_FRACTION = 0.5
 
 
 def _quat_mul(u, v):
@@ -136,7 +143,7 @@ class LinkMap:
     # several links appears once per link, and link_of_body points at the LAST
     # (the one carrying the body's mass and geometry).
     link_bodies, link_types, link_parents, link_joint_pos = [], [], [], []
-    link_names, link_is_terminal = [], []
+    link_names, link_is_terminal, link_is_first = [], [], []
     link_of_body = np.full(mj.nbody, -1, dtype=np.int64)
     self.split_bodies = {}
 
@@ -159,15 +166,22 @@ class LinkMap:
         self.split_bodies[b] = len(groups)
       parent_link = link_of_body[parent]
       base_name = _body_name(mj, b)
-      for k, (typ, _) in enumerate(groups):
+      # joints of this body, in model order, so each split group anchors on
+      # its OWN first joint rather than the body's
+      body_jnts = [j for j in range(mj.njnt) if int(mj.jnt_bodyid[j]) == b]
+      taken = 0
+      for k, (typ, ndof) in enumerate(groups):
         idx = len(link_bodies)
         link_bodies.append(b)
         link_types.append(typ)
         link_parents.append(int(parent_link))
-        link_joint_pos.append(np.array(mj.jnt_pos[j0]))
+        jk = body_jnts[min(taken, len(body_jnts) - 1)]
+        link_joint_pos.append(np.array(mj.jnt_pos[jk]))
+        taken += ndof if typ != 'f' else 1
         link_names.append(base_name if k == len(groups) - 1
                           else f'{base_name}#split{k}')
         link_is_terminal.append(k == len(groups) - 1)
+        link_is_first.append(k == 0)
         parent_link = idx
       link_of_body[b] = parent_link                  # last link of the chain
 
@@ -178,6 +192,7 @@ class LinkMap:
     self.link_joint_pos = np.array(link_joint_pos) if link_joint_pos else \
         np.zeros((0, 3))
     self.link_is_terminal = np.array(link_is_terminal, dtype=bool)
+    self.link_is_first = np.array(link_is_first, dtype=bool)
     self.link_of_body = link_of_body
     self.num_links = len(link_bodies)
 
@@ -192,13 +207,16 @@ class LinkMap:
     pos = np.zeros((self.num_links, 3))
     quat = np.tile(_IDENTITY_QUAT, (self.num_links, 1))
     for i in range(self.num_links):
-      if not self.link_is_terminal[i]:
-        continue                                     # massless intermediate
+      # The body's rest offset belongs to the FIRST link of its chain: the
+      # split inserts frames that are coincident with the body, so every later
+      # link in the chain is identity. Putting the offset on the last link
+      # instead detaches the chain from its parent -- measured, the paddle
+      # climbed 1.8 m under zero control while MuJoCo's stayed put.
+      if not self.link_is_first[i]:
+        continue
       b = int(self.link_bodies[i])
       p_link = self.link_parents[i]
       stop = int(self.link_bodies[p_link]) if p_link >= 0 else 0
-      # a split body's chain sits between its parent link and itself; the
-      # intermediates are identity, so the whole body offset rides the last
       p, q = self._rel_transform(b, stop)
       pos[i], quat[i] = p, q
     self.link_pos, self.link_quat = pos, quat
@@ -235,13 +253,20 @@ class LinkMap:
                                                     float)
         invweight[i] = float(mj.body_invweight0[host, 0])
         continue
+      # (terminal links of a SPLIT body keep 1 - SPLIT_MASS_FRACTION; see the
+      # fast path below, which subtracts the share handed to intermediates)
       host = int(self.link_bodies[i])
       invweight[i] = float(mj.body_invweight0[host, 0])
       bodies = members[i]
       if len(bodies) == 1 and bodies[0] == host:     # fast path: untouched
-        mass[i] = float(mj.body_mass[host])
+        # conserve total mass across a split: whatever the intermediates took
+        n_split = self.split_bodies.get(host, 1) - 1
+        keep = 1.0 - n_split * SPLIT_MASS_FRACTION
+        mass[i] = keep * float(mj.body_mass[host])
         ipos[i] = mj.body_ipos[host]
         iquat[i] = mj.body_iquat[host]
+        # the terminal keeps the FULL inertia tensor: only it rotates about
+        # the split joint, so scaling it would change rotational dynamics
         idiag[i] = mj.body_inertia[host]
         continue
       # merge every member's inertia into the host frame
