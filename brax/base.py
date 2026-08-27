@@ -30,8 +30,11 @@ from mujoco import mjx
 import numpy as np
 
 # f: free, 1: 1-dof, 2: 2-dof, 3: 3-dof
-Q_WIDTHS = {'f': 7, '1': 1, '2': 2, '3': 3}
-QD_WIDTHS = {'f': 6, '1': 1, '2': 2, '3': 3}
+# explore_bench fork: 4/5/6-DOF joint stacks. mjcf.py already emits
+# str(len(typs)) and kinematics.jcalc composes num_dofs = int(typ)
+# transforms generically, so these two tables were the only cap.
+Q_WIDTHS = {'f': 7, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6}
+QD_WIDTHS = {'f': 6, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6}
 
 
 @struct.dataclass

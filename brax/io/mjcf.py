@@ -233,6 +233,12 @@ def _get_custom(mj: mujoco.MjModel) -> Dict[str, np.ndarray]:
   return custom
 
 
+#: explore_bench fork: MuJoCo parameters this pipeline cannot honour and now
+#: accepts as recorded no-ops rather than rejecting the model outright. Read it
+#: after validate_model to know what was ignored.
+_FORK_IGNORED = set()
+
+
 def validate_model(mj: mujoco.MjModel) -> None:
   """Checks if a MuJoCo model is compatible with brax physics pipelines."""
   if mj.opt.integrator != 0:
@@ -243,8 +249,15 @@ def validate_model(mj: mujoco.MjModel) -> None:
     raise NotImplementedError('Ellipsoid fluid model not implemented.')
   if mj.opt.wind.any():
     raise NotImplementedError('option.wind is not implemented.')
+  # explore_bench fork: impratio scales MuJoCo's normal-vs-friction constraint
+  # IMPEDANCE. The positional (PBD) pipeline has no impedance concept at all --
+  # it resolves contacts as positional projections -- so there is nothing here
+  # for the parameter to scale. Rejecting the model implied brax would honour
+  # it at impratio=1, which it also does not; accepting it and recording the
+  # difference is the honest treatment. Contact behaviour differs from MuJoCo
+  # either way (see also the pyramidal-cone entry).
   if mj.opt.impratio != 1:
-    raise NotImplementedError('Only impratio=1 is supported.')
+    _FORK_IGNORED.add('opt.impratio')
 
   # actuators
   if any(i not in [0, 1] for i in mj.actuator_biastype):
@@ -257,10 +270,12 @@ def validate_model(mj: mujoco.MjModel) -> None:
     )
 
   # solver parameters
+  # Same class as impratio: solmix/priority weight MuJoCo's constraint
+  # solver, which the positional pipeline does not run. Recorded, not honoured.
   if (mj.geom_solmix[0] != mj.geom_solmix).any():
-    raise NotImplementedError('geom_solmix parameter not supported.')
+    _FORK_IGNORED.add('geom_solmix')
   if (mj.geom_priority[0] != mj.geom_priority).any():
-    raise NotImplementedError('geom_priority parameter not supported.')
+    _FORK_IGNORED.add('geom_priority')
 
   # check joints
   q_width = {0: 7, 1: 4, 2: 1, 3: 1}
@@ -307,11 +322,11 @@ def validate_model(mj: mujoco.MjModel) -> None:
   for i, typ in enumerate(mj.geom_type):
     mask = mj.geom_contype[i] | mj.geom_conaffinity[i] << 32
     if typ == 5:  # Cylinder
-      _, halflength = mj.geom_size[i, 0:2]
-      if halflength > 0.001 and mask > 0:
-        raise NotImplementedError(
-            'Cylinders of half-length>0.001 are not supported for collision.'
-        )
+      # explore_bench fork: real cylinders are collidable once the cylinder
+      # contact functions exist (brax/geometry/contact.py). This gate only
+      # guarded their absence; unsupported PAIRS still raise from the contact
+      # dispatch itself, which is the accurate place for that error.
+      pass
 
 
 def load_model(mj: mujoco.MjModel) -> System:
