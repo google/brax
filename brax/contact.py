@@ -24,6 +24,12 @@ import jax
 from jax import numpy as jp
 from mujoco import mjx
 
+# explore_bench fork: brax's supported geom pairs are mjx's, and mjx omits
+# CYLINDER-BOX despite carrying the generic convex routine. See
+# brax/_fork_collisions.py.
+from brax import _fork_collisions as _fork_collisions
+_fork_collisions.register()
+
 
 def get(sys: System, x: Transform) -> Optional[Contact]:
   """Calculates contacts.
