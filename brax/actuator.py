@@ -40,7 +40,17 @@ def to_tau(
   ctrl_range = sys.actuator.ctrl_range
   force_range = sys.actuator.force_range
 
-  q, qd = q[sys.actuator.q_id], qd[sys.actuator.qd_id]
+  # explore_bench fork: transmission through a MOMENT MATRIX. For a joint
+  # transmission the row is one-hot and this is identical to the previous
+  # q[q_id] / tau.at[qd_id].add(...) formulation. For a FIXED TENDON the row
+  # holds the wrap coefficients, so the transmission coordinate is the tendon
+  # LENGTH sum(coef_i * q_i) -- which is what a tendon position servo
+  # (biastype 1) reads, and what per-joint indices could not express.
+  moment_q, moment_qd = sys.actuator.moment_q, sys.actuator.moment_qd
+  if moment_q is None:
+    q, qd = q[sys.actuator.q_id], qd[sys.actuator.qd_id]
+  else:
+    q, qd = moment_q @ q, moment_qd @ qd
   act = jp.clip(act, ctrl_range[:, 0], ctrl_range[:, 1])
   # See https://github.com/deepmind/mujoco/discussions/754 for why gear is
   # used for the bias term.
@@ -52,6 +62,9 @@ def to_tau(
   force = jp.clip(force, force_range[:, 0], force_range[:, 1])
 
   force *= sys.actuator.gear
-  tau = jp.zeros(sys.qd_size()).at[sys.actuator.qd_id].add(force)
+  if moment_qd is None:
+    tau = jp.zeros(sys.qd_size()).at[sys.actuator.qd_id].add(force)
+  else:
+    tau = moment_qd.T @ force
 
   return tau

@@ -394,6 +394,13 @@ class Actuator(Base):
   gear: jax.Array
   bias_q: jax.Array
   bias_qd: jax.Array
+  # explore_bench fork: transmission MOMENT matrices, (num_actuators, q_size)
+  # and (num_actuators, qd_size). A joint transmission is the one-hot row that
+  # q_id/qd_id already encoded; a FIXED TENDON is the row of its wrap
+  # coefficients, which is what q_id/qd_id could not express. See
+  # brax/actuator.py::to_tau.
+  moment_q: jax.Array = None
+  moment_qd: jax.Array = None
 
 
 @struct.dataclass
@@ -481,6 +488,14 @@ class System(mjx.Model):
   solver_iterations: int = struct.field(pytree_node=False)
   solver_maxls: int = struct.field(pytree_node=False)
   mj_model: mujoco.MjModel = struct.field(pytree_node=False, default=None)
+  # explore_bench fork: geom -> link resolution. Stock brax computed a geom's
+  # link as `geom_bodyid - 1`, which is only correct when every body is a link.
+  # With welded bodies fused and wide joint stacks split (see io/_fork_links),
+  # the mapping is explicit, and the geom's pose is stored relative to its
+  # LINK's frame rather than its body's.
+  geom_link_idx: jax.Array = None
+  geom_link_pos: jax.Array = None
+  geom_link_quat: jax.Array = None
 
   def num_links(self) -> int:
     """Returns the number of links in the system."""

@@ -45,11 +45,13 @@ def get(sys: System, x: Transform) -> Optional[Contact]:
     mat = math.quat_to_3x3(math.quat_mul(quat1, quat2))
     return pos, mat
 
+  # explore_bench fork: resolve a geom's link through the explicit map, and
+  # place it with its LINK-relative pose. `geom_bodyid - 1` was only valid
+  # while every body was a link (see io/_fork_links).
   x = x.concatenate(Transform.zero((1,)))
-  xpos = x.pos[sys.geom_bodyid - 1]
-  xquat = x.rot[sys.geom_bodyid - 1]
+  g_link = sys.geom_link_idx
   geom_xpos, geom_xmat = local_to_global(
-      xpos, xquat, sys.geom_pos, sys.geom_quat
+      x.pos[g_link], x.rot[g_link], sys.geom_link_pos, sys.geom_link_quat
   )
 
   # pytype: disable=wrong-arg-types
@@ -60,8 +62,6 @@ def get(sys: System, x: Transform) -> Optional[Contact]:
   c = d.contact
   elasticity = (sys.elasticity[c.geom1] + sys.elasticity[c.geom2]) * 0.5
 
-  body1 = jp.array(sys.geom_bodyid)[c.geom1] - 1
-  body2 = jp.array(sys.geom_bodyid)[c.geom2] - 1
-  link_idx = (body1, body2)
+  link_idx = (jp.array(g_link)[c.geom1], jp.array(g_link)[c.geom2])
 
   return Contact(elasticity=elasticity, link_idx=link_idx, **c.__dict__)
