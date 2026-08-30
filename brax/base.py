@@ -488,6 +488,69 @@ class System(mjx.Model):
   solver_iterations: int = struct.field(pytree_node=False)
   solver_maxls: int = struct.field(pytree_node=False)
   mj_model: mujoco.MjModel = struct.field(pytree_node=False, default=None)
+  # explore_bench fork: how many Jacobi sweeps the POSITIONAL pipeline runs
+  # over the joint position projection per substep. brax ran exactly one, so a
+  # serial arm's constraint could propagate only one link per substep and a
+  # 6-DOF chain visibly sagged under its own servos. `solver_iterations` was
+  # not reusable for this: it carries mj.opt.iterations (100 on these models),
+  # which is a budget for MuJoCo's Newton solve, not a PBD sweep count.
+  joint_solver_iterations: int = struct.field(pytree_node=False, default=1)
+  #: how many times a DETECTED contact manifold is re-projected per substep.
+  #: 1 reproduces brax's single post-hoc contact impulse, which let a gripper
+  #: close through the object it held. Detection is never repeated -- only the
+  #: penetration depth is refreshed. See positional/pipeline._contact_sweeps.
+  contact_solver_iterations: int = struct.field(pytree_node=False, default=1)
+  # explore_bench fork: mjx's broadphase budgets, which are otherwise
+  # reachable only through `custom` numerics in an uncompiled MjModel. -1
+  # disables, which is stock mjx behaviour. See _fork_collisions.collide --
+  # and set them from a MEASURED contact budget, never from a guess.
+  max_geom_pairs: int = struct.field(pytree_node=False, default=-1)
+  max_contact_points: int = struct.field(pytree_node=False, default=-1)
+  #: per (geom_type, geom_type) overrides of max_geom_pairs, as a static
+  #: tuple of (t1, t2, budget) triples. -1 in a triple disables the cull for
+  #: that group. See _fork_collisions.collide.
+  max_geom_pairs_by_type: Tuple = struct.field(pytree_node=False, default=())
+  # explore_bench fork: position servos resolved as positional DRIVES rather
+  # than as forces -- see io/mjcf.py and positional/joints.drive_update.
+  # drive_act[dof] is the actuator supplying the target (-1 for none). It is a
+  # STATIC tuple, not a device array: it selects which links carry a drive,
+  # which is structure rather than data.
+  drive_act: Tuple[int, ...] = struct.field(pytree_node=False, default=None)
+  drive_gear: jax.Array = None
+  drive_alpha: jax.Array = None
+  drive_w: jax.Array = None
+  drive_at: jax.Array = None
+  drive_lam_max: jax.Array = None
+  #: kv / kp per DOF for position servos. MuJoCo's position actuator is
+  #: tau = kp (q* - q) - kv qd; the drive models kp as XPBD compliance, so
+  #: folding (kv/kp) qd into the constraint ERROR reproduces the kv half
+  #: exactly: kp (C + (kv/kp) qd) = kp C + kv qd.
+  drive_kvkp: jax.Array = None
+  # explore_bench fork: mjEQ_JOINT couplings, q index and dof index per side,
+  # with the 5 polynomial coefficients. Indices are STATIC (they select which
+  # joints are coupled, which is structure); the coefficients are data.
+  eq_q1: Tuple[int, ...] = struct.field(pytree_node=False, default=())
+  eq_q2: Tuple[int, ...] = struct.field(pytree_node=False, default=())
+  eq_dof1: Tuple[int, ...] = struct.field(pytree_node=False, default=())
+  eq_dof2: Tuple[int, ...] = struct.field(pytree_node=False, default=())
+  eq_poly: jax.Array = None
+  #: 1.0 where the coupled pair is SLIDE (a translational correction along
+  #: the joint axis) rather than HINGE (an angular one).
+  eq_is_slide: jax.Array = None
+  #: fraction of an equality's positional error corrected per SWEEP. A hard
+  #: projection satisfies the constraint inside one substep, and
+  #: `integrator.project_xd` then reads that whole displacement as velocity --
+  #: measured on the arm pair, a follower joint catching up injected |qd| 39
+  #: where MuJoCo sat at 0.94. Under-relaxing spreads the correction over
+  #: sweeps and substeps; with n sweeps the per-substep correction is
+  #: 1 - (1 - eq_relax)^n, so the constraint is still satisfied, just not
+  #: instantaneously.
+  eq_relax: Union[float, jax.Array] = 1.0
+  drive_lo: jax.Array = None
+  drive_hi: jax.Array = None
+  #: 0 for actuators resolved as drives, so they are not double-counted as a
+  #: torque in `actuator.to_tau`.
+  drive_force_mask: jax.Array = None
   # explore_bench fork: geom -> link resolution. Stock brax computed a geom's
   # link as `geom_bodyid - 1`, which is only correct when every body is a link.
   # With welded bodies fused and wide joint stacks split (see io/_fork_links),
@@ -504,6 +567,14 @@ class System(mjx.Model):
   site_act_pos: jax.Array = None
   site_act_quat: jax.Array = None
   site_act_gear: jax.Array = None
+  # explore_bench fork: implicit integration of velocity-proportional joint
+  # forces (MuJoCo's mjINT_IMPLICITFAST, which every dynmanip model is
+  # authored for). dof_damping_total is the diagonal of the actuator damping
+  # matrix plus dof_damping; dof_inertia is a LOWER bound on diag(M) over
+  # configuration space, which is what makes the relaxation unconditionally
+  # stable. See brax/_fork_joint_dynamics.py.
+  dof_damping_total: jax.Array = None
+  dof_inertia: jax.Array = None
 
   def num_links(self) -> int:
     """Returns the number of links in the system."""

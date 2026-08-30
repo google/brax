@@ -60,6 +60,10 @@ def to_tau(
 
   force = sys.actuator.gain * act + bias
   force = jp.clip(force, force_range[:, 0], force_range[:, 1])
+  # explore_bench fork: a position servo resolved as a positional DRIVE
+  # (positional/joints.drive_update) must not also be applied here.
+  if sys.drive_force_mask is not None:
+    force = force * sys.drive_force_mask
 
   force *= sys.actuator.gear
   if moment_qd is None:
