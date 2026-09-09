@@ -101,7 +101,7 @@ class EpisodeWrapper(Wrapper):
       return nstate, nstate.reward
 
     state, rewards = jax.lax.scan(f, state, (), self.action_repeat)
-    state = state.replace(reward=jp.sum(rewards, axis=0))
+    state = state.replace(reward=jp.sum(rewards, axis=0))  # pyrefly: ignore[missing-attribute]
     steps = state.info['steps'] + self.action_repeat
     one = jp.ones_like(state.done)
     zero = jp.zeros_like(state.done)

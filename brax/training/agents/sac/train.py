@@ -206,7 +206,7 @@ def train(
     if randomization_fn is not None:
       v_randomization_fn = functools.partial(
           randomization_fn,
-          rng=jax.random.split(
+          rng=jax.random.split(  # pyrefly: ignore[unexpected-keyword]
               key, num_envs // jax.process_count() // local_devices_to_use
           ),
       )
@@ -525,7 +525,7 @@ def train(
   if wrap_env:
     if randomization_fn is not None:
       v_randomization_fn = functools.partial(
-          randomization_fn, rng=jax.random.split(eval_key, num_eval_envs)
+          randomization_fn, rng=jax.random.split(eval_key, num_eval_envs)  # pyrefly: ignore[unexpected-keyword]
       )
     eval_env = wrap_for_training(  # pyrefly: ignore[unbound-name]
         eval_env,

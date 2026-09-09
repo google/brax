@@ -79,7 +79,7 @@ class CheckpointTest(absltest.TestCase):
     ppo_network = network_factory(
         config.observation_size,
         config.action_size,
-        preprocess_observations_fn=normalize,
+        preprocess_observations_fn=normalize,  # pyrefly: ignore[bad-argument-type]
         **config.network_factory_kwargs,
     )
     dummy_key = jax.random.PRNGKey(0)

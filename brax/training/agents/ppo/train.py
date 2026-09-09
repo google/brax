@@ -100,7 +100,7 @@ def _maybe_wrap_env(
     # all devices gets the same randomization rng
     randomization_rng = jax.random.split(key_env, randomization_batch_size)
     v_randomization_fn = functools.partial(
-        randomization_fn, rng=randomization_rng
+        randomization_fn, rng=randomization_rng  # pyrefly: ignore[unexpected-keyword]
     )
   if wrap_env_fn is not None:
     wrap_for_training = wrap_env_fn
