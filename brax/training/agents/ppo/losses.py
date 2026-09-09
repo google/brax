@@ -17,7 +17,7 @@
 See: https://arxiv.org/pdf/1707.06347.pdf
 """
 
-from typing import Any, Tuple
+from typing import Any, Tuple, Union
 
 from brax.training import types
 from brax.training.agents.ppo import networks as ppo_networks
@@ -147,7 +147,7 @@ def compute_ppo_loss(
     data: types.Transition,
     rng: jnp.ndarray,
     ppo_network: ppo_networks.PPONetworks,
-    entropy_cost: float = 1e-4,
+    entropy_cost: Union[float, jax.Array] = 1e-4,
     discounting: float = 0.9,
     reward_scaling: float = 1.0,
     gae_lambda: float = 0.95,

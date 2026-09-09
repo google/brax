@@ -173,6 +173,18 @@ def _remove_pixels(
   return {k: v for k, v in obs.items() if not k.startswith('pixels/')}
 
 
+def _compute_entropy_cost(
+    entropy_cost: Union[float, optax.Schedule], env_steps: types.UInt64
+) -> Union[float, jax.Array]:
+  """Evaluates the entropy coefficient at the current environment step."""
+  if callable(entropy_cost):
+    # Include both words without requiring JAX's 64-bit mode.  Large step
+    # counts are approximate, as with float32 Optax schedule arithmetic.
+    count = jnp.float32(env_steps.hi) * 4294967296.0 + jnp.float32(env_steps.lo)
+    return entropy_cost(count)
+  return entropy_cost
+
+
 def train(
     environment: envs.Env,
     num_timesteps: int,
@@ -191,9 +203,7 @@ def train(
     ] = None,
     # ppo params
     learning_rate: float = 1e-4,
-    entropy_cost: float = 1e-4,
-    entropy_cost_end: Optional[float] = None,
-    entropy_schedule: str = 'linear',
+    entropy_cost: Union[float, optax.Schedule] = 1e-4,
     discounting: float = 0.9,
     unroll_length: int = 10,
     batch_size: int = 32,
@@ -268,7 +278,11 @@ def train(
       environments
     learning_rate: learning rate for ppo loss
     entropy_cost: entropy reward for ppo loss, higher values increase entropy of
-      the policy
+      the policy. A scalar or JAX-compatible schedule mapping a float32 count of
+      environment steps (including action_repeat) to a scalar coefficient. The
+      schedule is evaluated once per rollout, before advancing the step count,
+      and shared by all gradient updates on that rollout. The count starts at
+      zero for each train call, including when restoring parameters.
     discounting: discounting rate
     unroll_length: the number of timesteps to unroll in each environment. The
       PPO loss is computed over `unroll_length` timesteps
@@ -468,19 +482,6 @@ def train(
   else:
     optimizer = base_optimizer
 
-  # Entropy annealing helpers.
-  def _uint64_to_jnp(u):
-    return jnp.float32(u.hi) * 4294967296.0 + jnp.float32(u.lo)
-
-  def _compute_entropy_cost(env_steps, total_steps, start, end, schedule):
-    progress = jnp.clip(
-        _uint64_to_jnp(env_steps) / float(total_steps), 0.0, 1.0
-    )
-    if schedule == 'cosine':
-      return end + (start - end) * (1.0 + jnp.cos(jnp.pi * progress)) / 2.0
-    else:  # linear
-      return start + (end - start) * progress
-
   loss_fn = functools.partial(
       ppo_losses.compute_ppo_loss,
       ppo_network=ppo_network,
@@ -508,12 +509,15 @@ def train(
       carry,
       data: types.Transition,
       normalizer_params: running_statistics.RunningStatisticsState,
-      entropy_cost: jnp.ndarray = None,
+      entropy_cost: Union[float, jax.Array],
   ):
     optimizer_state, params, key = carry
     key, key_loss = jax.random.split(key)
     (_, metrics), grads = loss_and_pgrad_fn(
-        params, normalizer_params, data, key_loss,
+        params,
+        normalizer_params,
+        data,
+        key_loss,
         entropy_cost=entropy_cost,
     )
 
@@ -540,7 +544,7 @@ def train(
       unused_t,
       data: types.Transition,
       normalizer_params: running_statistics.RunningStatisticsState,
-      entropy_cost: jnp.ndarray = None,
+      entropy_cost: Union[float, jax.Array],
   ):
     optimizer_state, params, key = carry
     key, key_perm, key_grad = jax.random.split(key, 3)
@@ -639,16 +643,15 @@ def train(
           until_count=normalize_until_count,
       )
 
-    if entropy_cost_end is not None:
-      current_entropy_cost = _compute_entropy_cost(
-          training_state.env_steps, num_timesteps,
-          entropy_cost, entropy_cost_end, entropy_schedule)
-    else:
-      current_entropy_cost = jnp.array(entropy_cost, dtype=jnp.float32)
+    current_entropy_cost = _compute_entropy_cost(
+        entropy_cost, training_state.env_steps
+    )
 
     (optimizer_state, params, _), metrics = jax.lax.scan(
         functools.partial(
-            sgd_step, data=data, normalizer_params=normalizer_params,
+            sgd_step,
+            data=data,
+            normalizer_params=normalizer_params,
             entropy_cost=current_entropy_cost,
         ),
         (training_state.optimizer_state, training_state.params, key_sgd),
