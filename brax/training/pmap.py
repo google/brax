@@ -19,12 +19,21 @@ from typing import Any
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 
 def bcast_local_devices(value, local_devices_to_use=1):
   """Broadcasts an object to all local devices."""
   devices = jax.local_devices()[:local_devices_to_use]
-  return jax.device_put_replicated(value, devices)
+  mesh = jax.sharding.Mesh(np.array(devices), ('_device_put_sharded',))
+  sharding = jax.NamedSharding(mesh, jax.P('_device_put_sharded'))
+
+  def _replicate(x):
+    if isinstance(x, jax.Array):
+      return jax.device_put(jnp.stack([x] * len(devices)), sharding)
+    return jax.device_put(np.stack([x] * len(devices)), sharding)
+
+  return jax.tree_util.tree_map(_replicate, value)
 
 
 def synchronize_hosts():

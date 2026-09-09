@@ -52,7 +52,7 @@ def make_inference_fn(sac_networks: SACNetworks):
           {},
       )
 
-    return policy
+    return policy  # pyrefly: ignore[bad-return]
 
   return make_policy
 

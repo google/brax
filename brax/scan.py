@@ -82,7 +82,7 @@ def tree(
     The stacked outputs of ``f``, matching the system link order.
   """
   if len(args) != len(in_types):
-    return ValueError('len(args) must match len(in_types)')
+    return ValueError('len(args) must match len(in_types)')  # pyrefly: ignore[bad-return]
 
   depth_fn = lambda i, p=sys.link_parents: p[i] + 1 and 1 + depth_fn(p[i])
   q_idx, qd_idx, depth_idxs = 0, 0, []
@@ -190,4 +190,4 @@ def link_types(
       out_ys.append(ys[idxs])
   y = out_ys[0] if len(out_types) == 1 else out_ys
 
-  return y
+  return y  # pyrefly: ignore[bad-return]

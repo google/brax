@@ -133,20 +133,20 @@ def _translation_update(
 ) -> Tuple[Transform, Transform]:
   """Calculates a position based translational update."""
 
-  pos_p, pos_c = pos_p.pos - xi_p.pos, pos_c.pos - xi_c.pos
+  pos_p, pos_c = pos_p.pos - xi_p.pos, pos_c.pos - xi_c.pos  # pyrefly: ignore[bad-assignment]
   n, c = math.normalize(dx)
 
-  cr1, cr2 = jp.cross(pos_p, n), jp.cross(pos_c, n)
+  cr1, cr2 = jp.cross(pos_p, n), jp.cross(pos_c, n)  # pyrefly: ignore[bad-argument-type]
   w1 = mass_inv_p + jp.dot(cr1, i_inv_p @ cr1)
   w2 = mass_inv_c + jp.dot(cr2, i_inv_c @ cr2)
   dlambda = -c / (w1 + w2 + 1e-6)
   p = dlambda * n
 
-  rot_p = -0.5 * math.vec_quat_mul(i_inv_p @ jp.cross(pos_p, p), xi_p.rot)
-  rot_c = 0.5 * math.vec_quat_mul(i_inv_c @ jp.cross(pos_c, p), xi_c.rot)
-  pos_p, pos_c = -p * mass_inv_p, p * mass_inv_c
+  rot_p = -0.5 * math.vec_quat_mul(i_inv_p @ jp.cross(pos_p, p), xi_p.rot)  # pyrefly: ignore[bad-argument-type]
+  rot_c = 0.5 * math.vec_quat_mul(i_inv_c @ jp.cross(pos_c, p), xi_c.rot)  # pyrefly: ignore[bad-argument-type]
+  pos_p, pos_c = -p * mass_inv_p, p * mass_inv_c  # pyrefly: ignore[bad-assignment]
 
-  return Transform(pos=pos_p, rot=rot_p), Transform(pos=pos_c, rot=rot_c)
+  return Transform(pos=pos_p, rot=rot_p), Transform(pos=pos_c, rot=rot_c)  # pyrefly: ignore[bad-argument-type]
 
 
 def _rotation_update(

@@ -50,7 +50,7 @@ def network_config(
 ) -> config_dict.ConfigDict:
   """Returns a config dict for re-creating a network from a checkpoint."""
   return checkpoint.network_config(
-      observation_size, action_size, normalize_observations, network_factory
+      observation_size, action_size, normalize_observations, network_factory  # pyrefly: ignore[bad-argument-type]
   )
 
 

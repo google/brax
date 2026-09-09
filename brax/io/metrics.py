@@ -40,7 +40,7 @@ class Writer:
   def write_hparams(self, hparams):
     """Writes global hparams."""
     logging.info('Hyperparameters: %s', hparams)
-    self._writer.add_hparams(hparams, {})
+    self._writer.add_hparams(hparams, {})  # pyrefly: ignore[missing-attribute]
 
   def write_scalars(self, step, scalars):
     """Writers scalar metrics."""
@@ -50,4 +50,4 @@ class Writer:
     ]
     logging.info('[%d] %s', step, ', '.join(values))
     for k, v in scalars.items():
-      self._writer.add_scalar(k, v, step)
+      self._writer.add_scalar(k, v, step)  # pyrefly: ignore[missing-attribute]

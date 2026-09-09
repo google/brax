@@ -103,4 +103,4 @@ def matrix_inv(sys: System, state: State, num_iter: int) -> State:
   else:
     mx_inv = jax.scipy.linalg.solve(mx, jp.eye(sys.qd_size()), assume_a='pos')
 
-  return state.replace(mass_mx=mx, mass_mx_inv=mx_inv)
+  return state.replace(mass_mx=mx, mass_mx_inv=mx_inv)  # pyrefly: ignore[missing-attribute]

@@ -230,12 +230,12 @@ class Walker2d(PipelineEnv):
     state.metrics.update(
         reward_forward=forward_reward,
         reward_ctrl=-ctrl_cost,
-        reward_healthy=healthy_reward,
+        reward_healthy=healthy_reward,  # pyrefly: ignore[bad-argument-type]
         x_position=pipeline_state.x.pos[0, 0],
         x_velocity=x_velocity,
     )
 
-    return state.replace(
+    return state.replace(  # pyrefly: ignore[missing-attribute]
         pipeline_state=pipeline_state, obs=obs, reward=reward, done=done
     )
 

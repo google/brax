@@ -210,7 +210,7 @@ class Reacher(PipelineEnv):
         reward_ctrl=reward_ctrl,
     )
 
-    return state.replace(pipeline_state=pipeline_state, obs=obs, reward=reward)
+    return state.replace(pipeline_state=pipeline_state, obs=obs, reward=reward)  # pyrefly: ignore[missing-attribute]
 
   def _get_obs(self, pipeline_state: base.State) -> jax.Array:
     """Returns egocentric observation of target and arm body."""

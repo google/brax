@@ -140,6 +140,7 @@ class MLP(linen.Module):
   layer_sizes: Sequence[int]
   activation: ActivationFn = linen.relu
   kernel_init: Initializer = jax.nn.initializers.lecun_uniform()
+  output_kernel_init: Initializer | None = None
   activate_final: bool = False
   bias: bool = True
   layer_norm: bool = False
@@ -148,13 +149,16 @@ class MLP(linen.Module):
   def __call__(self, data: jnp.ndarray):
     hidden = data
     for i, hidden_size in enumerate(self.layer_sizes):
+      is_last = i == len(self.layer_sizes) - 1
+      ki = (self.output_kernel_init if is_last and self.output_kernel_init
+            else self.kernel_init)
       hidden = linen.Dense(
           hidden_size,
           name=f'hidden_{i}',
-          kernel_init=self.kernel_init,
+          kernel_init=ki,
           use_bias=self.bias,
       )(hidden)
-      if i != len(self.layer_sizes) - 1 or self.activate_final:
+      if not is_last or self.activate_final:
         hidden = self.activation(hidden)
         if self.layer_norm:
           hidden = linen.LayerNorm()(hidden)
@@ -189,10 +193,13 @@ class CNN(linen.Module):
   """CNN module. Inputs are expected in Batch * HWC format."""
 
   num_filters: Sequence[int]
-  kernel_sizes: Sequence[Tuple]
-  strides: Sequence[Tuple]
+  kernel_sizes: Sequence[Tuple[int, ...]]
+  strides: Sequence[Tuple[int, ...]]
   activation: ActivationFn = linen.relu
   use_bias: bool = True
+  padding: str = 'SAME'
+  max_pool: bool = False
+  kernel_init: Initializer = jax.nn.initializers.lecun_normal()
 
   @linen.compact
   def __call__(self, data: jnp.ndarray):
@@ -205,28 +212,54 @@ class CNN(linen.Module):
           kernel_size=kernel_size,
           strides=stride,
           use_bias=self.use_bias,
+          padding=self.padding,
+          kernel_init=self.kernel_init,
       )(hidden)
-
       hidden = self.activation(hidden)
+      if self.max_pool:
+        hidden = linen.max_pool(
+            hidden, window_shape=(2, 2), strides=(2, 2), padding='SAME'
+        )
     return hidden
 
 
-class VisionMLP(linen.Module):
-  """Applies a CNN backbone then an MLP.
+def _spatial_softmax(feature_map: jnp.ndarray) -> jnp.ndarray:
+  h, w, c = feature_map.shape[-3], feature_map.shape[-2], feature_map.shape[-1]
+  pos_x, pos_y = jnp.meshgrid(
+      jnp.linspace(-1.0, 1.0, h), jnp.linspace(-1.0, 1.0, w),
+      indexing='ij',
+  )
+  flat = feature_map.reshape(feature_map.shape[:-3] + (h * w, c))
+  softmax_attention = jax.nn.softmax(flat, axis=-2)
+  expected_x = jnp.sum(
+      softmax_attention * pos_x.reshape(-1)[..., None], axis=-2)
+  expected_y = jnp.sum(
+      softmax_attention * pos_y.reshape(-1)[..., None], axis=-2)
+  return jnp.concatenate([expected_x, expected_y], axis=-1)
 
-  The CNN architecture originates from the paper:
-  "Human-level control through deep reinforcement learning",
-  Nature 518, no. 7540 (2015): 529-533
-  """
+
+class VisionMLP(linen.Module):
+  """Applies a configurable CNN backbone then an MLP."""
 
   layer_sizes: Sequence[int]
   activation: ActivationFn = linen.relu
   kernel_init: Initializer = jax.nn.initializers.lecun_uniform()
+  output_kernel_init: Initializer | None = None
   activate_final: bool = False
   layer_norm: bool = False
   normalise_channels: bool = False
   state_obs_key: str = ''
   policy_head: bool = True  # = False is useful for frozen encoders.
+  # CNN backbone configuration. Defaults match the original NatureCNN.
+  cnn_output_channels: Sequence[int] = (32, 64, 64)
+  cnn_kernel_size: Sequence[int] = (8, 4, 3)
+  cnn_stride: Sequence[int] = (4, 2, 1)
+  cnn_padding: str = 'SAME'
+  cnn_activation: ActivationFn = linen.relu
+  cnn_use_bias: bool = True
+  cnn_max_pool: bool = False
+  cnn_global_pool: str = 'avg'
+  cnn_kernel_init: Initializer = jax.nn.initializers.lecun_normal()
 
   @linen.compact
   def __call__(self, data: dict):
@@ -248,35 +281,141 @@ class VisionMLP(linen.Module):
 
       pixels_hidden = jax.tree.map(ln_per_chan, pixels_hidden)
 
-    natureCNN = functools.partial(
-        CNN,
-        num_filters=[32, 64, 64],
-        kernel_sizes=[(8, 8), (4, 4), (3, 3)],
-        strides=[(4, 4), (2, 2), (1, 1)],
-        activation=linen.relu,
-        use_bias=False,
-    )
-    cnn_outs = [natureCNN()(pixels_hidden[key]) for key in pixels_hidden]
-    cnn_outs = [jnp.mean(cnn_out, axis=(-2, -3)) for cnn_out in cnn_outs]
+    kernel_sizes = tuple((k, k) for k in self.cnn_kernel_size)
+    strides = tuple((s, s) for s in self.cnn_stride)
+
+    cnn_outs = []
+    for key in pixels_hidden:
+      cnn_out = CNN(
+          num_filters=self.cnn_output_channels,
+          kernel_sizes=kernel_sizes,
+          strides=strides,
+          activation=self.cnn_activation,
+          use_bias=self.cnn_use_bias,
+          padding=self.cnn_padding,
+          max_pool=self.cnn_max_pool,
+          kernel_init=self.cnn_kernel_init,
+      )(pixels_hidden[key])
+      if self.cnn_global_pool == 'avg':
+        cnn_out = jnp.mean(cnn_out, axis=(-3, -2))
+      elif self.cnn_global_pool == 'max':
+        cnn_out = jnp.max(cnn_out, axis=(-3, -2))
+      elif self.cnn_global_pool == 'spatial_softmax':
+        cnn_out = _spatial_softmax(cnn_out)
+      elif self.cnn_global_pool == 'none':
+        cnn_out = cnn_out.reshape(cnn_out.shape[:-3] + (-1,))
+      cnn_outs.append(cnn_out)
+
     if not self.policy_head:
       return jnp.concatenate(cnn_outs, axis=-1)
     if self.state_obs_key:
-      cnn_outs.append(
-          data[self.state_obs_key]
-      )  # TODO: Try with dedicated state network
+      cnn_outs.append(data[self.state_obs_key])
 
     hidden = jnp.concatenate(cnn_outs, axis=-1)
     return MLP(
         layer_sizes=self.layer_sizes,
         activation=self.activation,
         kernel_init=self.kernel_init,
+        output_kernel_init=self.output_kernel_init,
         activate_final=self.activate_final,
         layer_norm=self.layer_norm,
     )(hidden)
 
 
+class VisionPolicyWithStd(linen.Module):
+  """Vision CNN+MLP policy with separate mean and std outputs.
+
+  Mirrors PolicyModuleWithStd but uses VisionMLP as the backbone.
+  Used when distribution_type='normal'.
+  """
+
+  param_size: int
+  hidden_layer_sizes: Sequence[int]
+  activation: ActivationFn = linen.relu
+  kernel_init: Initializer = jax.nn.initializers.lecun_uniform()
+  layer_norm: bool = False
+  normalise_channels: bool = False
+  state_obs_key: str = ''
+  noise_std_type: Literal['scalar', 'log'] = 'scalar'
+  init_noise_std: float = 1.0
+  state_dependent_std: bool = False
+  mean_clip_scale: float | None = None
+  mean_kernel_init: Initializer | None = None
+  # CNN config (forwarded to VisionMLP).
+  cnn_output_channels: Sequence[int] = (32, 64, 64)
+  cnn_kernel_size: Sequence[int] = (8, 4, 3)
+  cnn_stride: Sequence[int] = (4, 2, 1)
+  cnn_padding: str = 'SAME'
+  cnn_activation: ActivationFn = linen.relu
+  cnn_use_bias: bool = True
+  cnn_max_pool: bool = False
+  cnn_global_pool: str = 'avg'
+  cnn_kernel_init: Initializer = jax.nn.initializers.lecun_normal()
+
+  @linen.compact
+  def __call__(self, data: dict):
+    if self.noise_std_type not in ['scalar', 'log']:
+      raise ValueError(
+          f'Unsupported noise std type: {self.noise_std_type}. Must be one of'
+          ' "scalar" or "log".'
+      )
+
+    outputs = VisionMLP(
+        layer_sizes=list(self.hidden_layer_sizes),
+        activation=self.activation,
+        kernel_init=self.kernel_init,
+        activate_final=True,
+        layer_norm=self.layer_norm,
+        normalise_channels=self.normalise_channels,
+        state_obs_key=self.state_obs_key,
+        cnn_output_channels=self.cnn_output_channels,
+        cnn_kernel_size=self.cnn_kernel_size,
+        cnn_stride=self.cnn_stride,
+        cnn_padding=self.cnn_padding,
+        cnn_activation=self.cnn_activation,
+        cnn_use_bias=self.cnn_use_bias,
+        cnn_max_pool=self.cnn_max_pool,
+        cnn_global_pool=self.cnn_global_pool,
+        cnn_kernel_init=self.cnn_kernel_init,
+    )(data)
+
+    mean_kernel_init = (
+        self.mean_kernel_init if self.mean_kernel_init is not None
+        else self.kernel_init
+    )
+    mean_params = linen.Dense(
+        self.param_size,
+        kernel_init=mean_kernel_init,
+    )(outputs)
+    if self.mean_clip_scale is not None:
+      mean_params = self.mean_clip_scale * (
+          mean_params / (1.0 + jnp.abs(mean_params))
+      )
+
+    if self.state_dependent_std:
+      log_std_output = linen.Dense(
+          self.param_size, kernel_init=self.kernel_init
+      )(outputs)
+      if self.noise_std_type == 'log':
+        std_params = jnp.exp(log_std_output)
+      else:
+        std_params = log_std_output
+    else:
+      if self.noise_std_type == 'scalar':
+        std_module = Param(
+            self.init_noise_std, size=self.param_size, name='std_param'
+        )
+      else:
+        std_module = LogParam(
+            self.init_noise_std, size=self.param_size, name='std_logparam'
+        )
+      std_params = std_module()
+
+    return mean_params, jnp.broadcast_to(std_params, mean_params.shape)
+
+
 def _get_obs_state_size(obs_size: types.ObservationSize, obs_key: str) -> int:
-  obs_size = obs_size[obs_key] if isinstance(obs_size, Mapping) else obs_size
+  obs_size = obs_size[obs_key] if isinstance(obs_size, Mapping) else obs_size  # pyrefly: ignore[bad-assignment]
   return jax.tree_util.tree_flatten(obs_size)[0][-1]
 
 
@@ -373,6 +512,30 @@ class PolicyModuleWithStd(linen.Module):
     return mean_params, jnp.broadcast_to(std_params, mean_params.shape)
 
 
+class DistributionalCritic(nn.Module):
+  """Distributional critic module: https://arxiv.org/pdf/1710.10044."""
+
+  hidden_layer_sizes: Sequence[int]
+  activation: ActivationFn
+  kernel_init: jax.nn.initializers.Initializer
+  num_quantiles: int = 32  # Standard for QR-DQN/PPO
+
+  @nn.compact
+  def __call__(self, obs: jax.Array) -> Tuple[jax.Array, jax.Array]:
+    # Output layer: num_quantiles instead of 1
+    # Shape: (batch, num_quantiles)
+    quantiles = MLP(
+        layer_sizes=list(self.hidden_layer_sizes) + [self.num_quantiles],
+        activation=self.activation,
+        kernel_init=self.kernel_init,
+    )(obs)
+
+    # The expected value V(s) is the mean of the quantiles
+    v_estimate = jnp.mean(quantiles, axis=-1, keepdims=True)
+
+    return v_estimate, quantiles
+
+
 def make_policy_network(
     param_size: int,
     obs_size: types.ObservationSize,
@@ -442,13 +605,23 @@ def make_value_network(
     activation: ActivationFn = linen.relu,
     obs_key: str = 'state',
     kernel_init: Initializer = jax.nn.initializers.lecun_uniform(),
+    use_distributional_critic: bool = False,
+    num_quantiles: int = 32,
 ) -> FeedForwardNetwork:
   """Creates a value network."""
-  value_module = MLP(
-      layer_sizes=list(hidden_layer_sizes) + [1],
-      activation=activation,
-      kernel_init=kernel_init,
-  )
+  if use_distributional_critic:
+    value_module = DistributionalCritic(
+        hidden_layer_sizes=list(hidden_layer_sizes),
+        activation=activation,
+        kernel_init=kernel_init,
+        num_quantiles=num_quantiles,
+    )
+  else:
+    value_module = MLP(
+        layer_sizes=list(hidden_layer_sizes) + [1],
+        activation=activation,
+        kernel_init=kernel_init,
+    )
 
   def apply(processor_params, value_params, obs):
     if isinstance(obs, Mapping):
@@ -457,7 +630,11 @@ def make_value_network(
       )
     else:
       obs = preprocess_observations_fn(obs, processor_params)
-    return jnp.squeeze(value_module.apply(value_params, obs), axis=-1)
+    if use_distributional_critic:
+      v_estimate, quantiles = value_module.apply(value_params, obs)
+      return jnp.squeeze(v_estimate, axis=-1), quantiles
+    else:
+      return jnp.squeeze(value_module.apply(value_params, obs), axis=-1)  # pyrefly: ignore[bad-argument-type]
 
   obs_size = _get_obs_state_size(obs_size, obs_key)
   dummy_obs = jnp.zeros((1, obs_size))
@@ -572,9 +749,9 @@ def normalizer_select(
 ) -> running_statistics.RunningStatisticsState:
   return running_statistics.RunningStatisticsState(
       count=processor_params.count,
-      mean=processor_params.mean[obs_key],
-      summed_variance=processor_params.summed_variance[obs_key],
-      std=processor_params.std[obs_key],
+      mean=processor_params.mean[obs_key],  # pyrefly: ignore[bad-index]
+      summed_variance=processor_params.summed_variance[obs_key],  # pyrefly: ignore[bad-index]
+      std=processor_params.std[obs_key],  # pyrefly: ignore[bad-index]
   )
 
 
@@ -588,16 +765,69 @@ def make_policy_network_vision(
     layer_norm: bool = False,
     state_obs_key: str = '',
     normalise_channels: bool = False,
+    distribution_type: Literal['tanh_normal', 'normal'] = 'tanh_normal',
+    noise_std_type: Literal['scalar', 'log'] = 'scalar',
+    init_noise_std: float = 1.0,
+    state_dependent_std: bool = False,
+    mean_clip_scale: float | None = None,
+    mean_kernel_init: Initializer | None = None,
+    cnn_output_channels: Sequence[int] = (32, 64, 64),
+    cnn_kernel_size: Sequence[int] = (8, 4, 3),
+    cnn_stride: Sequence[int] = (4, 2, 1),
+    cnn_padding: str = 'SAME',
+    cnn_activation: ActivationFn = linen.relu,
+    cnn_max_pool: bool = False,
+    cnn_global_pool: str = 'avg',
+    cnn_kernel_init: Initializer = jax.nn.initializers.lecun_normal(),
+    output_kernel_init: Initializer | None = None,
 ) -> FeedForwardNetwork:
   """Creates a policy network for vision inputs."""
-  module = VisionMLP(
-      layer_sizes=list(hidden_layer_sizes) + [output_size],
-      activation=activation,
-      kernel_init=kernel_init,
-      layer_norm=layer_norm,
-      normalise_channels=normalise_channels,
-      state_obs_key=state_obs_key,
-  )
+  if distribution_type == 'tanh_normal':
+    module = VisionMLP(
+        layer_sizes=list(hidden_layer_sizes) + [output_size],
+        activation=activation,
+        kernel_init=kernel_init,
+        output_kernel_init=output_kernel_init,
+        layer_norm=layer_norm,
+        normalise_channels=normalise_channels,
+        state_obs_key=state_obs_key,
+        cnn_output_channels=cnn_output_channels,
+        cnn_kernel_size=cnn_kernel_size,
+        cnn_stride=cnn_stride,
+        cnn_padding=cnn_padding,
+        cnn_activation=cnn_activation,
+        cnn_max_pool=cnn_max_pool,
+        cnn_global_pool=cnn_global_pool,
+        cnn_kernel_init=cnn_kernel_init,
+    )
+  elif distribution_type == 'normal':
+    module = VisionPolicyWithStd(
+        param_size=output_size,
+        hidden_layer_sizes=hidden_layer_sizes,
+        activation=activation,
+        kernel_init=kernel_init,
+        layer_norm=layer_norm,
+        normalise_channels=normalise_channels,
+        state_obs_key=state_obs_key,
+        noise_std_type=noise_std_type,
+        init_noise_std=init_noise_std,
+        state_dependent_std=state_dependent_std,
+        mean_clip_scale=mean_clip_scale,
+        mean_kernel_init=mean_kernel_init,
+        cnn_output_channels=cnn_output_channels,
+        cnn_kernel_size=cnn_kernel_size,
+        cnn_stride=cnn_stride,
+        cnn_padding=cnn_padding,
+        cnn_activation=cnn_activation,
+        cnn_max_pool=cnn_max_pool,
+        cnn_global_pool=cnn_global_pool,
+        cnn_kernel_init=cnn_kernel_init,
+    )
+  else:
+    raise ValueError(
+        f'Unsupported distribution type: {distribution_type}. Must be one'
+        ' of "normal" or "tanh_normal".'
+    )
 
   def apply(processor_params, policy_params, obs):
     if state_obs_key:
@@ -623,6 +853,14 @@ def make_value_network_vision(
     kernel_init: Initializer = jax.nn.initializers.lecun_uniform(),
     state_obs_key: str = '',
     normalise_channels: bool = False,
+    cnn_output_channels: Sequence[int] = (32, 64, 64),
+    cnn_kernel_size: Sequence[int] = (8, 4, 3),
+    cnn_stride: Sequence[int] = (4, 2, 1),
+    cnn_padding: str = 'SAME',
+    cnn_activation: ActivationFn = linen.relu,
+    cnn_max_pool: bool = False,
+    cnn_global_pool: str = 'avg',
+    cnn_kernel_init: Initializer = jax.nn.initializers.lecun_normal(),
 ) -> FeedForwardNetwork:
   """Creates a value network for vision inputs."""
   value_module = VisionMLP(
@@ -631,6 +869,14 @@ def make_value_network_vision(
       kernel_init=kernel_init,
       normalise_channels=normalise_channels,
       state_obs_key=state_obs_key,
+      cnn_output_channels=cnn_output_channels,
+      cnn_kernel_size=cnn_kernel_size,
+      cnn_stride=cnn_stride,
+      cnn_padding=cnn_padding,
+      cnn_activation=cnn_activation,
+      cnn_max_pool=cnn_max_pool,
+      cnn_global_pool=cnn_global_pool,
+      cnn_kernel_init=cnn_kernel_init,
   )
 
   def apply(processor_params, policy_params, obs):
@@ -639,7 +885,7 @@ def make_value_network_vision(
           obs[state_obs_key], normalizer_select(processor_params, state_obs_key)
       )
       obs = {**obs, state_obs_key: state_obs}
-    return jnp.squeeze(value_module.apply(policy_params, obs), axis=-1)
+    return jnp.squeeze(value_module.apply(policy_params, obs), axis=-1)  # pyrefly: ignore[bad-argument-type]
 
   dummy_obs = {
       key: jnp.zeros((1,) + shape) for key, shape in observation_size.items()
@@ -691,7 +937,7 @@ def make_policy_network_latents(
     )
 
   dummy_obs = {
-      key: jnp.zeros((1,) + shape) for key, shape in observation_size.items()
+      key: jnp.zeros((1,) + shape) for key, shape in observation_size.items()  # pyrefly: ignore[unsupported-operation]
   }
   return FeedForwardNetwork(
       init=lambda key: module.init(key, dummy_obs), apply=apply

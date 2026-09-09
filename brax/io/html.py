@@ -28,10 +28,10 @@ import jinja2
 
 def save(path: str, sys: System, states: List[State]):
   """Saves trajectory as an HTML text file."""
-  path = epath.Path(path)
-  if not path.parent.exists():
-    path.parent.mkdir(parents=True)
-  path.write_text(render(sys, states))
+  path = epath.Path(path)  # pyrefly: ignore[bad-assignment]
+  if not path.parent.exists():  # pyrefly: ignore[missing-attribute]
+    path.parent.mkdir(parents=True)  # pyrefly: ignore[missing-attribute]
+  path.write_text(render(sys, states))  # pyrefly: ignore[missing-attribute]
 
 
 def render_from_json(

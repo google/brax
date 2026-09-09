@@ -119,7 +119,7 @@ class SNDense(linen.Module):
       u0 = _l2_normalize(jnp.matmul(v0, kernel), eps=self.eps)
 
     u0 = lax.stop_gradient(u0)
-    v0 = lax.stop_gradient(v0)
+    v0 = lax.stop_gradient(v0)  # pyrefly: ignore[unbound-name]
 
     sigma = jnp.matmul(jnp.matmul(v0, kernel), jnp.transpose(u0))[0, 0]
 

@@ -264,7 +264,7 @@ class Humanoid(PipelineEnv):
     pipeline_state0 = state.pipeline_state
     pipeline_state = self.pipeline_step(pipeline_state0, action)
 
-    com_before, *_ = self._com(pipeline_state0)
+    com_before, *_ = self._com(pipeline_state0)  # pyrefly: ignore[bad-argument-type]
     com_after, *_ = self._com(pipeline_state)
     velocity = (com_after - com_before) / self.dt
     forward_reward = self._forward_reward_weight * velocity[0]
@@ -286,7 +286,7 @@ class Humanoid(PipelineEnv):
         forward_reward=forward_reward,
         reward_linvel=forward_reward,
         reward_quadctrl=-ctrl_cost,
-        reward_alive=healthy_reward,
+        reward_alive=healthy_reward,  # pyrefly: ignore[bad-argument-type]
         x_position=com_after[0],
         y_position=com_after[1],
         distance_from_origin=jp.linalg.norm(com_after),
@@ -294,7 +294,7 @@ class Humanoid(PipelineEnv):
         y_velocity=velocity[1],
     )
 
-    return state.replace(
+    return state.replace(  # pyrefly: ignore[missing-attribute]
         pipeline_state=pipeline_state, obs=obs, reward=reward, done=done
     )
 
@@ -339,7 +339,7 @@ class Humanoid(PipelineEnv):
   def _com(self, pipeline_state: base.State) -> jax.Array:
     inertia = self.sys.link.inertia
     if self.backend in ['spring', 'positional']:
-      inertia = inertia.replace(
+      inertia = inertia.replace(  # pyrefly: ignore[missing-attribute]
           i=jax.vmap(jp.diag)(
               jax.vmap(jp.diagonal)(inertia.i)
               ** (1 - self.sys.spring_inertia_scale)

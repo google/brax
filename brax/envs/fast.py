@@ -98,9 +98,9 @@ class Fast(PipelineEnv):
     vel = state.pipeline_state.xd.vel + (action > 0) * self._dt
     pos = state.pipeline_state.x.pos + vel * self._dt
 
-    qp = state.pipeline_state.replace(
-        x=state.pipeline_state.x.replace(pos=pos),
-        xd=state.pipeline_state.xd.replace(vel=vel),
+    qp = state.pipeline_state.replace(  # pyrefly: ignore[missing-attribute]
+        x=state.pipeline_state.x.replace(pos=pos),  # pyrefly: ignore[missing-attribute]
+        xd=state.pipeline_state.xd.replace(vel=vel),  # pyrefly: ignore[missing-attribute]
     )
     obs = {'state': jp.array([pos[0], vel[0]])}
     if self._asymmetric_obs:
@@ -124,7 +124,7 @@ class Fast(PipelineEnv):
       obs = obs['state']
 
     reward = pos[0]
-    return state.replace(pipeline_state=qp, obs=obs, reward=reward)
+    return state.replace(pipeline_state=qp, obs=obs, reward=reward)  # pyrefly: ignore[missing-attribute]
 
   @property
   def reset_count(self):

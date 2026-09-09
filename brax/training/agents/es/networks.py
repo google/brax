@@ -48,7 +48,7 @@ def make_inference_fn(es_networks: ESNetworks):
           {},
       )
 
-    return policy
+    return policy  # pyrefly: ignore[bad-return]
 
   return make_policy
 

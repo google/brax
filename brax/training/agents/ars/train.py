@@ -69,7 +69,7 @@ def train(
     reward_shift: float = 0.0,
     network_factory: types.NetworkFactory[
         ars_networks.ARSNetwork
-    ] = ars_networks.make_policy_network,
+    ] = ars_networks.make_policy_network,  # pyrefly: ignore[bad-function-definition]
     progress_fn: Callable[[int, Metrics], None] = lambda *args: None,
     eval_env: Optional[envs.Env] = None,
     randomization_fn: Optional[
@@ -120,9 +120,9 @@ def train(
       )
     env = wrap_for_training(
         env,
-        episode_length=episode_length,
-        action_repeat=action_repeat,
-        randomization_fn=v_randomization_fn,
+        episode_length=episode_length,  # pyrefly: ignore[unexpected-keyword]
+        action_repeat=action_repeat,  # pyrefly: ignore[unexpected-keyword]
+        randomization_fn=v_randomization_fn,  # pyrefly: ignore[unexpected-keyword]
     )  # pytype: disable=wrong-keyword-args
 
   obs_size = env.observation_size
@@ -135,7 +135,7 @@ def train(
   ars_network = network_factory(
       observation_size=obs_size,
       action_size=env.action_size,
-      preprocess_observations_fn=normalize_fn,
+      preprocess_observations_fn=normalize_fn,  # pyrefly: ignore[bad-argument-type]
   )
   make_policy = ars_networks.make_inference_fn(ars_network)
 
@@ -316,7 +316,7 @@ def train(
     return training_state, metrics  # pytype: disable=bad-return-type  # py311-upgrade
 
   normalizer_params = running_statistics.init_state(
-      specs.Array((obs_size,), jnp.dtype('float32'))
+      specs.Array((obs_size,), jnp.dtype('float32'))  # pyrefly: ignore[bad-argument-type]
   )
   policy_params = ars_network.init(network_key)
   training_state = TrainingState(
@@ -332,11 +332,11 @@ def train(
       v_randomization_fn = functools.partial(
           randomization_fn, rng=jax.random.split(eval_key, num_eval_envs)
       )
-    eval_env = wrap_for_training(
+    eval_env = wrap_for_training(  # pyrefly: ignore[unbound-name]
         eval_env,
-        episode_length=episode_length,
-        action_repeat=action_repeat,
-        randomization_fn=v_randomization_fn,
+        episode_length=episode_length,  # pyrefly: ignore[unexpected-keyword]
+        action_repeat=action_repeat,  # pyrefly: ignore[unexpected-keyword]
+        randomization_fn=v_randomization_fn,  # pyrefly: ignore[unbound-name, unexpected-keyword]
     )  # pytype: disable=wrong-keyword-args
 
   # Evaluator function
@@ -375,4 +375,4 @@ def train(
 
   logging.info('total steps: %s', total_steps)
   params = training_state.normalizer_params, training_state.policy_params
-  return (make_policy, params, metrics)
+  return (make_policy, params, metrics)  # pyrefly: ignore[unbound-name]

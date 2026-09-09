@@ -88,13 +88,13 @@ def train(
     scramble_time: int = 0,
     network_factory: types.NetworkFactory[
         bc_networks.BCNetworks
-    ] = bc_networks.make_bc_networks,
+    ] = bc_networks.make_bc_networks,  # pyrefly: ignore[bad-function-definition]
     progress_fn: Callable[[int, Metrics], None] = lambda *args: None,
     madrona_backend: bool = False,
     seed: int = 0,
     learning_rate=4e-4,
     dagger_steps: int = 1,
-    dagger_beta_fn: Callable[[int], float] = lambda step: jp.where(
+    dagger_beta_fn: Callable[[int], float] = lambda step: jp.where(  # pyrefly: ignore[bad-function-definition]
         step == 0, 1.0, 0.0
     ),
     num_evals=0,
@@ -184,7 +184,7 @@ def train(
   if normalize_observations:
     normalize = running_statistics.normalize
   bc_network = network_factory(
-      obs_shape, env.action_size, preprocess_observations_fn=normalize
+      obs_shape, env.action_size, preprocess_observations_fn=normalize  # pyrefly: ignore[bad-argument-type]
   )
   make_policy = functools.partial(
       bc_networks.make_inference_fn(bc_network),
@@ -210,14 +210,14 @@ def train(
 
   if restore_checkpoint_path is not None:
     params = checkpoint.load(restore_checkpoint_path)
-    training_state = training_state.replace(
+    training_state = training_state.replace(  # pyrefly: ignore[missing-attribute]
         normalizer_params=params[0],
         params=params[1],
     )
 
   if restore_params is not None:
     logging.info('Restoring TrainingState from `restore_params`.')
-    training_state = training_state.replace(
+    training_state = training_state.replace(  # pyrefly: ignore[missing-attribute]
         normalizer_params=restore_params[0],
         params=restore_params[1],
     )
@@ -358,7 +358,7 @@ def train(
     (params, optimizer_state, _), metrics = jax.lax.scan(
         epoch, (ts.params, ts.optimizer_state, key_epoch), length=epochs
     )
-    return ts.replace(optimizer_state=optimizer_state, params=params), metrics
+    return ts.replace(optimizer_state=optimizer_state, params=params), metrics  # pyrefly: ignore[missing-attribute]
 
   @jax.jit
   def dagger_step(
@@ -379,7 +379,7 @@ def train(
     )
 
     X_cur = combine_batch_axes(raw_data)
-    ts = ts.replace(
+    ts = ts.replace(  # pyrefly: ignore[missing-attribute]
         normalizer_params=running_statistics.update(
             ts.normalizer_params,
             ppo_train._remove_pixels(X_cur),
@@ -389,7 +389,7 @@ def train(
     key, key_fit = jax.random.split(key)
     ts, metrics = fit_student(ts, X_cur, key_fit)
     metrics = {**data_metrics, **metrics}
-    return (key, env_state, ts.replace(dagger_step=ts.dagger_step + 1)), metrics
+    return (key, env_state, ts.replace(dagger_step=ts.dagger_step + 1)), metrics  # pyrefly: ignore[missing-attribute]
 
   def evaluate(training_state: TrainingState, other_metrics: Metrics):
     inference_params = (training_state.normalizer_params, training_state.params)
@@ -403,7 +403,7 @@ def train(
     if save_checkpoint_path is not None:
       checkpoint.save(  # pytype: disable=wrong-arg-types
           save_checkpoint_path,
-          training_state.dagger_step,
+          training_state.dagger_step,  # pyrefly: ignore[bad-argument-type]
           inference_params,
           ckpt_config,
       )
@@ -418,7 +418,7 @@ def train(
         eval_env,
         make_policy,
         num_eval_envs=num_eval_envs,
-        episode_length=eval_length,
+        episode_length=eval_length,  # pyrefly: ignore[bad-argument-type]
         action_repeat=1,
         key=eval_key,
     )

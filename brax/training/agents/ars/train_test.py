@@ -41,7 +41,7 @@ class ARSTest(parameterized.TestCase):
     if normalize_observations:
       normalize_fn = running_statistics.normalize
     ars_network = ars_networks.make_policy_network(
-        env.observation_size, env.action_size, normalize_fn
+        env.observation_size, env.action_size, normalize_fn  # pyrefly: ignore[bad-argument-type]
     )
     inference = ars_networks.make_inference_fn(ars_network)
     byte_encoding = pickle.dumps(params)

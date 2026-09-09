@@ -242,22 +242,22 @@ def link_to_joint_frame(motion: Motion) -> Tuple[Motion, float]:
     axis_p_3 = jp.cross(axis_p_1, axis_p_2)
 
   # branch based on whether the joint has both `p` and `r` types
-  ang_frame_p = jp.array([axis_r_1, axis_r_2, axis_r_3])
-  vel_frame_p = jp.array([axis_p_1, axis_p_2, axis_p_3])
+  ang_frame_p = jp.array([axis_r_1, axis_r_2, axis_r_3])  # pyrefly: ignore[unbound-name]
+  vel_frame_p = jp.array([axis_p_1, axis_p_2, axis_p_3])  # pyrefly: ignore[unbound-name]
 
   is_both = jp.logical_and(motion.ang.any(), motion.vel.any())
 
   ang_frame = jp.where(
       is_both,
       ang_frame_p,
-      ang_frame,
+      ang_frame,  # pyrefly: ignore[unbound-name]
   )
   vel_frame = jp.where(
       is_both,
       vel_frame_p,
-      vel_frame,
+      vel_frame,  # pyrefly: ignore[unbound-name]
   )
-  parity = jp.where(is_both, 1, parity)
+  parity = jp.where(is_both, 1, parity)  # pyrefly: ignore[unbound-name]
 
   return Motion(ang=ang_frame, vel=vel_frame), parity  # pytype: disable=bad-return-type  # jnp-type
 

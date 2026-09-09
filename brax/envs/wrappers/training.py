@@ -140,7 +140,7 @@ class AutoResetWrapper(Wrapper):
       steps = state.info['steps']
       steps = jp.where(state.done, jp.zeros_like(steps), steps)
       state.info.update(steps=steps)
-    state = state.replace(done=jp.zeros_like(state.done))
+    state = state.replace(done=jp.zeros_like(state.done))  # pyrefly: ignore[missing-attribute]
     state = self.env.step(state, action)
 
     def where_done(x, y):
@@ -155,7 +155,7 @@ class AutoResetWrapper(Wrapper):
         where_done, state.info['first_pipeline_state'], state.pipeline_state
     )
     obs = jax.tree.map(where_done, state.info['first_obs'], state.obs)
-    return state.replace(pipeline_state=pipeline_state, obs=obs)
+    return state.replace(pipeline_state=pipeline_state, obs=obs)  # pyrefly: ignore[missing-attribute]
 
 
 @struct.dataclass
@@ -236,10 +236,10 @@ class DomainRandomizationVmapWrapper(Wrapper):
     env = self.env.unwrapped
     old_sys = env.sys  # pytype: disable=attribute-error
     try:
-      env.sys = new_sys
+      env.sys = new_sys  # pyrefly: ignore[missing-attribute]
       yield env
     finally:
-      env.unwrapped.sys = old_sys
+      env.unwrapped.sys = old_sys  # pyrefly: ignore[missing-attribute]
 
   def reset(self, rng: jax.Array) -> State:
     def reset(sys, rng):

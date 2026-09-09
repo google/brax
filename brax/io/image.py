@@ -33,15 +33,15 @@ def render_array(
 ) -> Union[Sequence[np.ndarray], np.ndarray]:
   """Returns a sequence of np.ndarray images using the MuJoCo renderer."""
   renderer = mujoco.Renderer(sys.mj_model, height=height, width=width)
-  camera = camera or -1
+  camera = camera or -1  # pyrefly: ignore[bad-assignment]
 
   def get_image(state: base.State):
     d = mujoco.MjData(sys.mj_model)
-    d.qpos, d.qvel = state.q, state.qd
+    d.qpos, d.qvel = state.q, state.qd  # pyrefly: ignore[bad-assignment]
     if hasattr(state, 'mocap_pos') and hasattr(state, 'mocap_quat'):
       d.mocap_pos, d.mocap_quat = state.mocap_pos, state.mocap_quat
     mujoco.mj_forward(sys.mj_model, d)
-    renderer.update_scene(d, camera=camera)
+    renderer.update_scene(d, camera=camera)  # pyrefly: ignore[bad-argument-type]
     return renderer.render()
 
   if isinstance(trajectory, list):

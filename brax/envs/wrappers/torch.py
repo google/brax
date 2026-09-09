@@ -33,7 +33,7 @@ class TorchWrapper(gym.Wrapper):
     super().__init__(env)
     self.device = device
 
-  def reset(self):
+  def reset(self):  # pyrefly: ignore[bad-override]
     obs = super().reset()
     return torch.jax_to_torch(obs, device=self.device)
 

@@ -188,7 +188,7 @@ def jacobian(sys: System, state: State) -> State:
   """
   jpds = jac_contact(sys, state), jac_limit(sys, state)
   jac, diag, aref = jax.tree.map(lambda *x: jp.concatenate(x), *jpds)
-  return state.replace(con_jac=jac, con_diag=diag, con_aref=aref)
+  return state.replace(con_jac=jac, con_diag=diag, con_aref=aref)  # pyrefly: ignore[missing-attribute]
 
 
 def force(sys: System, state: State) -> jax.Array:

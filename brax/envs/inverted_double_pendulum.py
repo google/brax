@@ -176,7 +176,7 @@ class InvertedDoublePendulum(PipelineEnv):
     done = jp.where(y <= 1, jp.float32(1), jp.float32(0))
     reward = (1 - done) * alive_bonus - dist_penalty - vel_penalty
 
-    return state.replace(
+    return state.replace(  # pyrefly: ignore[missing-attribute]
         pipeline_state=pipeline_state, obs=obs, reward=reward, done=done
     )
 

@@ -38,13 +38,13 @@ class GymWrapper(gym.Env):
     self._env = env
     self.metadata = {
         'render.modes': ['human', 'rgb_array'],
-        'video.frames_per_second': 1 / self._env.dt,
+        'video.frames_per_second': 1 / self._env.dt,  # pyrefly: ignore[bad-assignment]
     }
     self.seed(seed)
     self.backend = backend
     self._state = None
 
-    obs = np.inf * np.ones(self._env.observation_size, dtype='float32')
+    obs = np.inf * np.ones(self._env.observation_size, dtype='float32')  # pyrefly: ignore[no-matching-overload]
     self.observation_space = spaces.Box(-obs, obs, dtype='float32')
 
     action = jax.tree.map(np.array, self._env.sys.actuator.ctrl_range)
@@ -74,7 +74,7 @@ class GymWrapper(gym.Env):
     # We return device arrays for pytorch users.
     return obs, reward, done, info
 
-  def seed(self, seed: int = 0):
+  def seed(self, seed: int = 0):  # pyrefly: ignore[bad-override]
     self._key = jax.random.PRNGKey(seed)
 
   def render(self, mode='human', width=256, height=256):
@@ -102,7 +102,7 @@ class VectorGymWrapper(gym.vector.VectorEnv):
     self._env = env
     self.metadata = {
         'render.modes': ['human', 'rgb_array'],
-        'video.frames_per_second': 1 / self._env.dt,
+        'video.frames_per_second': 1 / self._env.dt,  # pyrefly: ignore[bad-assignment]
     }
     if not hasattr(self._env, 'batch_size'):
       raise ValueError('underlying env must be batched')
@@ -112,7 +112,7 @@ class VectorGymWrapper(gym.vector.VectorEnv):
     self.backend = backend
     self._state = None
 
-    obs = np.inf * np.ones(self._env.observation_size, dtype='float32')
+    obs = np.inf * np.ones(self._env.observation_size, dtype='float32')  # pyrefly: ignore[no-matching-overload]
     obs_space = spaces.Box(-obs, obs, dtype='float32')
     self.observation_space = utils.batch_space(obs_space, self.num_envs)
 
@@ -151,7 +151,7 @@ class VectorGymWrapper(gym.vector.VectorEnv):
       if state is None:
         raise RuntimeError('must call reset or step before rendering')
       state_list = [state.take(i).pipeline_state for i in range(self.num_envs)]
-      return np.stack(
+      return np.stack(  # pyrefly: ignore[no-matching-overload]
           image.render_array(sys, state_list, width=width, height=height)
       )
     else:

@@ -30,6 +30,7 @@ from brax.training.agents.apg import train as apg
 from brax.training.agents.ars import train as ars
 from brax.training.agents.es import train as es
 from brax.training.agents.ppo import networks as ppo_networks
+from brax.training.agents.ppo import networks_vision as ppo_networks_vision
 from brax.training.agents.ppo import optimizer as ppo_optimizer
 from brax.training.agents.ppo import train as ppo
 from brax.training.agents.sac import networks as sac_networks
@@ -72,6 +73,9 @@ _NUM_EVALS = flags.DEFINE_integer(
 _SEED = flags.DEFINE_integer('seed', 0, 'Random seed.')
 _NUM_ENVS = flags.DEFINE_integer(
     'num_envs', 4, 'Number of envs to run in parallel.'
+)
+_NUM_EVAL_ENVS = flags.DEFINE_integer(
+    'num_eval_envs', 128, 'Number of envs to run in parallel for eval.'
 )
 _ACTION_REPEAT = flags.DEFINE_integer('action_repeat', 1, 'Action repeat.')
 _UNROLL_LENGTH = flags.DEFINE_integer('unroll_length', 30, 'Unroll length.')
@@ -203,6 +207,56 @@ _PPO_VF_LOSS_COEFFICIENT = flags.DEFINE_float(
     0.5,
     'Value function loss coefficient for PPO.',
 )
+_PPO_CNN_OUTPUT_CHANNELS = flags.DEFINE_string(
+    'ppo_cnn_output_channels', None,
+    'Comma-separated CNN output channels, e.g. "32,64,64".'
+)
+_PPO_CNN_KERNEL_SIZE = flags.DEFINE_string(
+    'ppo_cnn_kernel_size', None,
+    'Comma-separated CNN kernel sizes, e.g. "8,4,3".'
+)
+_PPO_CNN_STRIDE = flags.DEFINE_string(
+    'ppo_cnn_stride', None,
+    'Comma-separated CNN strides, e.g. "4,2,1".'
+)
+_PPO_CNN_PADDING = flags.DEFINE_string(
+    'ppo_cnn_padding', None, 'CNN padding mode: "zeros" or "valid".'
+)
+_PPO_CNN_ACTIVATION = flags.DEFINE_string(
+    'ppo_cnn_activation', None,
+    'CNN activation function, e.g. "relu" or "elu".'
+)
+_PPO_CNN_MAX_POOL = flags.DEFINE_bool(
+    'ppo_cnn_max_pool', None, 'Apply 2x2 max-pool after each conv layer.'
+)
+_PPO_CNN_GLOBAL_POOL = flags.DEFINE_string(
+    'ppo_cnn_global_pool', None,
+    'Global pooling: "avg", "max", "none", or "spatial_softmax".'
+)
+_PPO_CNN_KERNEL_INIT_FN = flags.DEFINE_string(
+    'ppo_cnn_kernel_init_fn', None,
+    'CNN kernel initializer, e.g. "orthogonal" or "lecun_normal".'
+)
+_PPO_CNN_KERNEL_INIT_KWARGS = flags.DEFINE_string(
+    'ppo_cnn_kernel_init_kwargs', None,
+    'JSON dict of kwargs for CNN kernel init, e.g. \'{"scale": 1.414}\'.',
+)
+_PPO_OUTPUT_KERNEL_INIT_FN = flags.DEFINE_string(
+    'ppo_output_kernel_init_fn', None,
+    'Output layer kernel initializer, e.g. "orthogonal".'
+)
+_PPO_OUTPUT_KERNEL_INIT_KWARGS = flags.DEFINE_string(
+    'ppo_output_kernel_init_kwargs', None,
+    'JSON dict of kwargs for output kernel init, e.g. \'{"scale": 0.01}\'.',
+)
+
+_VISION = flags.DEFINE_bool(
+    'vision', False, 'Enable vision-based (pixel) training.'
+)
+_AUGMENT_PIXELS = flags.DEFINE_bool(
+    'augment_pixels', False, 'Apply random-translate augmentation to pixels.'
+)
+
 
 # ARS hps.
 _NUMBER_OF_DIRECTIONS = flags.DEFINE_integer(
@@ -241,9 +295,13 @@ _PLAYGROUND_CONFIG_OVERRIDES = flags.DEFINE_string(
     None,
     'Overrides for the playground env config.',
 )
+_WARP_KERNEL_CACHE_DIR = flags.DEFINE_string(
+    'warp_kernel_cache_dir', None,
+    'Directory for caching compiled Warp kernels.',
+)
 
 
-def get_env_factory(env_name: str):
+def get_env_factory(env_name: str, vision_nworld: int | None = None):
   """Returns a function that creates an environment."""
   wrap_fn = None
   randomizer_fn = None
@@ -252,6 +310,11 @@ def get_env_factory(env_name: str):
     randomizer_fn = None
     if _PLAYGROUND_CONFIG_OVERRIDES.value is not None:
       overrides = json.loads(_PLAYGROUND_CONFIG_OVERRIDES.value)
+    if _VISION.value:
+      overrides['vision'] = True
+      overrides['vision_config.nworld'] = (
+          vision_nworld if vision_nworld is not None else _NUM_ENVS.value
+      )
     if _PLAYGROUND_DM_CONTROL_SUITE.value:
       get_environment = lambda *args, **kwargs: mjp.dm_control_suite.load(  # pytype: disable=attribute-error
           *args, **kwargs, config_overrides=overrides
@@ -277,6 +340,10 @@ def get_env_factory(env_name: str):
 
 
 def main(unused_argv):
+  if _WARP_KERNEL_CACHE_DIR.value is not None:
+    import warp as wp
+    wp.config.kernel_cache_dir = _WARP_KERNEL_CACHE_DIR.value
+
   logdir = _LOGDIR.value
 
   ckpt_dir = epath.Path(logdir) / 'checkpoints'
@@ -307,7 +374,7 @@ def main(unused_argv):
           batch_size=_BATCH_SIZE.value,
           min_replay_size=_MIN_REPLAY_SIZE.value,
           max_replay_size=_MAX_REPLAY_SIZE.value,
-          network_factory=network_factory,
+          network_factory=network_factory,  # pyrefly: ignore[bad-argument-type]
           learning_rate=_LEARNING_RATE.value,
           discounting=_DISCOUNTING.value,
           max_devices_per_host=_MAX_DEVICES_PER_HOST.value,
@@ -339,7 +406,10 @@ def main(unused_argv):
           progress_fn=writer.write_scalars,
       )
     elif _LEARNER.value == 'ppo':
-      network_factory = ppo_networks.make_ppo_networks
+      if _VISION.value:
+        network_factory = ppo_networks_vision.make_ppo_networks_vision
+      else:
+        network_factory = ppo_networks.make_ppo_networks
       network_factory = functools.partial(
           network_factory,
           distribution_type=_PPO_DISTRIBUTION_TYPE.value,
@@ -347,6 +417,67 @@ def main(unused_argv):
           init_noise_std=_PPO_INIT_NOISE_STD.value,
           activation=brax_networks.ACTIVATION[_PPO_ACTIVATION_FN.value],
       )
+      if _PPO_CNN_OUTPUT_CHANNELS.value is not None:
+        network_factory = functools.partial(
+            network_factory,
+            cnn_output_channels=[
+                int(x) for x in _PPO_CNN_OUTPUT_CHANNELS.value.split(',')
+            ],
+        )
+      if _PPO_CNN_KERNEL_SIZE.value is not None:
+        network_factory = functools.partial(
+            network_factory,
+            cnn_kernel_size=[
+                int(x) for x in _PPO_CNN_KERNEL_SIZE.value.split(',')
+            ],
+        )
+      if _PPO_CNN_STRIDE.value is not None:
+        network_factory = functools.partial(
+            network_factory,
+            cnn_stride=[
+                int(x) for x in _PPO_CNN_STRIDE.value.split(',')
+            ],
+        )
+      if _PPO_CNN_PADDING.value is not None:
+        network_factory = functools.partial(
+            network_factory, cnn_padding=_PPO_CNN_PADDING.value,
+        )
+      if _PPO_CNN_ACTIVATION.value is not None:
+        network_factory = functools.partial(
+            network_factory, cnn_activation=_PPO_CNN_ACTIVATION.value,
+        )
+      if _PPO_CNN_MAX_POOL.value is not None:
+        network_factory = functools.partial(
+            network_factory, cnn_max_pool=_PPO_CNN_MAX_POOL.value,
+        )
+      if _PPO_CNN_GLOBAL_POOL.value is not None:
+        network_factory = functools.partial(
+            network_factory, cnn_global_pool=_PPO_CNN_GLOBAL_POOL.value,
+        )
+      if _PPO_CNN_KERNEL_INIT_FN.value is not None:
+        network_factory = functools.partial(
+            network_factory,
+            cnn_kernel_init_fn=_PPO_CNN_KERNEL_INIT_FN.value,
+        )
+      if _PPO_CNN_KERNEL_INIT_KWARGS.value is not None:
+        network_factory = functools.partial(
+            network_factory,
+            cnn_kernel_init_kwargs=json.loads(
+                _PPO_CNN_KERNEL_INIT_KWARGS.value
+            ),
+        )
+      if _PPO_OUTPUT_KERNEL_INIT_FN.value is not None:
+        network_factory = functools.partial(
+            network_factory,
+            output_kernel_init_fn=_PPO_OUTPUT_KERNEL_INIT_FN.value,
+        )
+      if _PPO_OUTPUT_KERNEL_INIT_KWARGS.value is not None:
+        network_factory = functools.partial(
+            network_factory,
+            output_kernel_init_kwargs=json.loads(
+                _PPO_OUTPUT_KERNEL_INIT_KWARGS.value
+            ),
+        )
       if _PPO_POLICY_HIDDEN_LAYER_SIZES.value is not None:
         policy_hidden_layer_sizes = [
             int(x) for x in _PPO_POLICY_HIDDEN_LAYER_SIZES.value.split(',')
@@ -373,16 +504,21 @@ def main(unused_argv):
             network_factory,
             value_obs_key=_PPO_VALUE_OBS_KEY.value,
         )
+      eval_get_environment, _, _ = get_env_factory(
+          _ENV.value,
+          vision_nworld=_NUM_EVAL_ENVS.value if _VISION.value else None,
+      )
       make_policy, params, _ = ppo.train(
           environment=get_environment(_ENV.value),
-          eval_env=get_environment(_ENV.value),
+          eval_env=eval_get_environment(_ENV.value),
           wrap_env_fn=wrap_fn,
           randomization_fn=randomizer_fn,
           num_timesteps=_TOTAL_ENV_STEPS.value,
           episode_length=_EPISODE_LENGTH.value,
-          network_factory=network_factory,
+          network_factory=network_factory,  # pyrefly: ignore[bad-argument-type]
           action_repeat=_ACTION_REPEAT.value,
           num_envs=_NUM_ENVS.value,
+          num_eval_envs=_NUM_EVAL_ENVS.value,
           max_devices_per_host=_MAX_DEVICES_PER_HOST.value,
           learning_rate=_LEARNING_RATE.value,
           entropy_cost=_ENTROPY_COST.value,
@@ -401,9 +537,12 @@ def main(unused_argv):
           desired_kl=_PPO_DESIRED_KL.value,
           num_resets_per_eval=_NUM_RESETS_PER_EVAL.value,
           progress_fn=writer.write_scalars,
+          vision=_VISION.value,
+          augment_pixels=_AUGMENT_PIXELS.value,
           save_checkpoint_path=ckpt_dir.as_posix(),
           restore_checkpoint_path=_RESTOREDIR.value,
           vf_loss_coefficient=_PPO_VF_LOSS_COEFFICIENT.value,
+          max_grad_norm=_MAX_GRADIENT_NORM.value,
       )
     elif _LEARNER.value == 'apg':
       make_policy, params, _ = apg.train(
@@ -411,7 +550,7 @@ def main(unused_argv):
           eval_env=get_environment(_ENV.value),
           wrap_env_fn=wrap_fn,
           randomization_fn=randomizer_fn,
-          policy_updates=_POLICY_UPDATES.value,
+          policy_updates=_POLICY_UPDATES.value,  # pyrefly: ignore[bad-argument-type]
           num_envs=_NUM_ENVS.value,
           action_repeat=_ACTION_REPEAT.value,
           num_evals=_NUM_EVALS.value,
@@ -455,53 +594,54 @@ def main(unused_argv):
   get_environment, *_ = get_env_factory(_ENV.value)
   env = get_environment(_ENV.value)
 
-  def do_rollout(rng, state):
+  def do_rollout_batched(rng, states):
     data_attr_name = 'pipeline_state' if hasattr(env, 'sys') else 'data'
-    empty_data = getattr(state, data_attr_name).__class__(
-        **{k: None for k in getattr(state, data_attr_name).__annotations__}
+    empty_data = getattr(states, data_attr_name).__class__(
+        **{k: None for k in getattr(states, data_attr_name).__annotations__}
     )  # pytype: disable=attribute-error
-    empty_traj = state.__class__(**{k: None for k in state.__annotations__})  # pytype: disable=attribute-error
+    empty_traj = states.__class__(**{k: None for k in states.__annotations__})  # pytype: disable=attribute-error
     empty_traj = empty_traj.replace(**{data_attr_name: empty_data})
 
     def step(carry, _):
-      state, rng = carry
-      rng, act_key = jax.random.split(rng)
-      act = make_policy(params)(state.obs, act_key)[0]
-      state = env.step(state, act)
-      if hasattr(state, 'data'):
-        # select a sub-set of the data for playground envs
+      states, rng = carry
+      rng_split = jax.vmap(jax.random.split)(rng)
+      rng = rng_split[:, 0]
+      act_key = rng_split[:, 1]
+      act = jax.vmap(make_policy(params))(states.obs, act_key)[0]
+      states = jax.vmap(env.step)(states, act)
+      if hasattr(states, 'data'):
         traj_data = empty_traj.tree_replace({
-            'data.qpos': state.data.qpos,
-            'data.qvel': state.data.qvel,
-            'data.time': state.data.time,
-            'data.ctrl': state.data.ctrl,
-            'data.mocap_pos': state.data.mocap_pos,
-            'data.mocap_quat': state.data.mocap_quat,
-            'data.xfrc_applied': state.data.xfrc_applied,
+            'data.qpos': states.data.qpos,
+            'data.qvel': states.data.qvel,
+            'data.time': states.data.time,
+            'data.ctrl': states.data.ctrl,
+            'data.mocap_pos': states.data.mocap_pos,
+            'data.mocap_quat': states.data.mocap_quat,
+            'data.xfrc_applied': states.data.xfrc_applied,
         })
-      elif hasattr(state, 'pipeline_state'):
-        # select the entire state for brax envs
+      elif hasattr(states, 'pipeline_state'):
         traj_data = empty_traj.replace(
-            **{data_attr_name: getattr(state, data_attr_name)}
+            **{data_attr_name: getattr(states, data_attr_name)}
         )
       else:
         raise ValueError(
-            f'Unknown data attribute name: {data_attr_name} on state: {state}.'
+            f'Unknown data attribute name: {data_attr_name} on state: {states}.'
         )
-      return (state, rng), traj_data
+      return (states, rng), traj_data
 
     _, traj = jax.lax.scan(
-        step, (state, rng), None, length=_EPISODE_LENGTH.value
+        step, (states, rng), None, length=_EPISODE_LENGTH.value
     )
     return traj
 
   rng = jax.random.split(jax.random.PRNGKey(_SEED.value), _NUM_VIDEOS.value)
   reset_states = jax.jit(jax.vmap(env.reset))(rng)
-  traj_stacked = jax.jit(jax.vmap(do_rollout))(rng, reset_states)
+  traj_stacked = jax.jit(do_rollout_batched)(rng, reset_states)
+  traj_stacked = jax.tree.map(lambda x: jax.numpy.moveaxis(x, 0, 1), traj_stacked)
   trajectories = [None] * _NUM_VIDEOS.value
   for i in range(_NUM_VIDEOS.value):
     t = jax.tree.map(lambda x, i=i: x[i], traj_stacked)
-    trajectories[i] = [
+    trajectories[i] = [  # pyrefly: ignore[unsupported-operation]
         jax.tree.map(lambda x, j=j: x[j], t)
         for j in range(_EPISODE_LENGTH.value)
     ]

@@ -27,7 +27,7 @@ from mujoco.mjx._src.types import Contact as MJXContact
 def _reformat_contact(sys: System, contact: MJXContact) -> Contact:
   """Reformats the mjx.Contact into a brax.base.Contact."""
   if contact is None:
-    return
+    return  # pyrefly: ignore[bad-return]
 
   elasticity = jp.zeros(contact.pos.shape[0])
   body1 = jp.array(sys.geom_bodyid)[contact.geom1] - 1

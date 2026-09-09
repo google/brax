@@ -177,7 +177,7 @@ def _get_custom(mj: mujoco.MjModel) -> Dict[str, np.ndarray]:
     name = _get_name(mj, ni)
     val = mj.numeric_data[mj.numeric_adr[i] : mj.numeric_adr[i] + nsize]
     typ = default[name][1] if name in default else None
-    default[name] = (val, typ)
+    default[name] = (val, typ)  # pyrefly: ignore[unsupported-operation]
 
   # gather custom overrides with correct sizes
   custom = {}
@@ -186,7 +186,7 @@ def _get_custom(mj: mujoco.MjModel) -> Dict[str, np.ndarray]:
     size = {
         'body': mj.nbody - 1,  # ignore the world body
         'geom': mj.ngeom,
-    }.get(typ, val.shape[-1])
+    }.get(typ, val.shape[-1])  # pyrefly: ignore[no-matching-overload]
     if val.shape[-1] != size and val.shape[-1] > 1:
       # the provided shape does not match against our default size
       raise ValueError(
@@ -331,15 +331,15 @@ def load_model(mj: mujoco.MjModel) -> System:
       transform=Transform(pos=mj.body_pos, rot=mj.body_quat),  # pytype: disable=wrong-arg-types  # jax-ndarray
       inertia=Inertia(  # pytype: disable=wrong-arg-types  # jax-ndarray
           transform=Transform(pos=mj.body_ipos, rot=mj.body_iquat),  # pytype: disable=wrong-arg-types  # jax-ndarray
-          i=np.array([np.diag(i) for i in mj.body_inertia]),
-          mass=mj.body_mass,
+          i=np.array([np.diag(i) for i in mj.body_inertia]),  # pyrefly: ignore[bad-argument-type]
+          mass=mj.body_mass,  # pyrefly: ignore[bad-argument-type]
       ),
-      invweight=mj.body_invweight0[:, 0],
+      invweight=mj.body_invweight0[:, 0],  # pyrefly: ignore[bad-argument-type]
       joint=Transform(pos=joint_position, rot=identity),  # pytype: disable=wrong-arg-types  # jax-ndarray
-      constraint_stiffness=custom['constraint_stiffness'],
-      constraint_vel_damping=custom['constraint_vel_damping'],
-      constraint_limit_stiffness=custom['constraint_limit_stiffness'],
-      constraint_ang_damping=custom['constraint_ang_damping'],
+      constraint_stiffness=custom['constraint_stiffness'],  # pyrefly: ignore[bad-argument-type]
+      constraint_vel_damping=custom['constraint_vel_damping'],  # pyrefly: ignore[bad-argument-type]
+      constraint_limit_stiffness=custom['constraint_limit_stiffness'],  # pyrefly: ignore[bad-argument-type]
+      constraint_ang_damping=custom['constraint_ang_damping'],  # pyrefly: ignore[bad-argument-type]
   )
   # skip link 0 which is the world body in mujoco
   # copy to avoid writing to mj model
@@ -352,19 +352,19 @@ def load_model(mj: mujoco.MjModel) -> System:
       mj.jnt_type, mj.jnt_axis, mj.jnt_range, mj.jnt_stiffness
   ):
     if typ == 0:
-      motion = Motion(ang=np.eye(6, 3, -3), vel=np.eye(6, 3))
+      motion = Motion(ang=np.eye(6, 3, -3), vel=np.eye(6, 3))  # pyrefly: ignore[bad-argument-type]
       limit = np.array([-np.inf] * 6), np.array([np.inf] * 6)
       stiffness = np.zeros(6)
     elif typ == 1:
-      motion = Motion(ang=np.eye(3), vel=np.zeros((3, 3)))
+      motion = Motion(ang=np.eye(3), vel=np.zeros((3, 3)))  # pyrefly: ignore[bad-argument-type]
       limit = np.array([-np.inf] * 3), np.array([np.inf] * 3)
       stiffness = np.zeros(3)
     elif typ == 2:
-      motion = Motion(ang=np.zeros((1, 3)), vel=axis.reshape((1, 3)))
+      motion = Motion(ang=np.zeros((1, 3)), vel=axis.reshape((1, 3)))  # pyrefly: ignore[bad-argument-type]
       limit = limit[0:1], limit[1:2]
       stiffness = np.array([stiffness])
     elif typ == 3:
-      motion = Motion(ang=axis.reshape((1, 3)), vel=np.zeros((1, 3)))
+      motion = Motion(ang=axis.reshape((1, 3)), vel=np.zeros((1, 3)))  # pyrefly: ignore[bad-argument-type]
       limit = limit[0:1], limit[1:2]
       stiffness = np.array([stiffness])
     else:
@@ -384,11 +384,11 @@ def load_model(mj: mujoco.MjModel) -> System:
 
   dof = DoF(  # pytype: disable=wrong-arg-types
       motion=motion,
-      armature=mj.dof_armature,
-      stiffness=stiffness,
-      damping=mj.dof_damping,
-      limit=limit,
-      invweight=mj.dof_invweight0,
+      armature=mj.dof_armature,  # pyrefly: ignore[bad-argument-type]
+      stiffness=stiffness,  # pyrefly: ignore[bad-argument-type]
+      damping=mj.dof_damping,  # pyrefly: ignore[bad-argument-type]
+      limit=limit,  # pyrefly: ignore[bad-argument-type]
+      invweight=mj.dof_invweight0,  # pyrefly: ignore[bad-argument-type]
       solver_params=solver_params_dof,
   )
 
@@ -491,9 +491,9 @@ def load_model(mj: mujoco.MjModel) -> System:
 
 def fuse_bodies(xml: str):
   """Fuses together parent child bodies that have no joint."""
-  xml = ElementTree.fromstring(xml)
-  _fuse_bodies(xml)
-  return ElementTree.tostring(xml, encoding='unicode')
+  xml = ElementTree.fromstring(xml)  # pyrefly: ignore[bad-assignment]
+  _fuse_bodies(xml)  # pyrefly: ignore[bad-argument-type]
+  return ElementTree.tostring(xml, encoding='unicode')  # pyrefly: ignore[no-matching-overload]
 
 
 def loads(xml: str, asset_path: Union[str, epath.Path, None] = None) -> System:

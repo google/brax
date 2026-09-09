@@ -162,7 +162,7 @@ class QueueBase(ReplayBuffer[ReplayBufferState, Sample], Generic[Sample]):
     position = (position + len(update)) % (len(data) + 1)
     sample_position = jnp.maximum(0, buffer_state.sample_position + roll)
 
-    return buffer_state.replace(
+    return buffer_state.replace(  # pyrefly: ignore[missing-attribute]
         data=data,
         insert_position=position,
         sample_position=sample_position,
@@ -245,7 +245,7 @@ class Queue(QueueBase[Sample], Generic[Sample]):
     if self._cyclic:
       sample_position = sample_position % buffer_state.insert_position
 
-    new_state = buffer_state.replace(sample_position=sample_position)
+    new_state = buffer_state.replace(sample_position=sample_position)  # pyrefly: ignore[missing-attribute]
     return new_state, self._unflatten_fn(flat_batch)
 
   def size(self, buffer_state: ReplayBufferState) -> int:
@@ -282,7 +282,7 @@ class UniformSamplingQueue(QueueBase[Sample], Generic[Sample]):
         maxval=buffer_state.insert_position,
     )
     batch = jnp.take(buffer_state.data, idx, axis=0, mode='wrap')
-    return buffer_state.replace(key=key), self._unflatten_fn(batch)
+    return buffer_state.replace(key=key), self._unflatten_fn(batch)  # pyrefly: ignore[missing-attribute]
 
 
 class PmapWrapper(ReplayBuffer[State, Sample]):

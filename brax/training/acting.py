@@ -42,12 +42,12 @@ def actor_step(
   nstate = env.step(env_state, actions)
   state_extras = {x: nstate.info[x] for x in extra_fields}
   return nstate, Transition(  # pytype: disable=wrong-arg-types  # jax-ndarray
-      observation=env_state.obs,
+      observation=env_state.obs,  # pyrefly: ignore[bad-argument-type]
       action=actions,
       reward=nstate.reward,
       discount=1 - nstate.done,
-      next_observation=nstate.obs,
-      extras={'policy_extras': policy_extras, 'state_extras': state_extras},
+      next_observation=nstate.obs,  # pyrefly: ignore[bad-argument-type]
+      extras={'policy_extras': policy_extras, 'state_extras': state_extras},  # pyrefly: ignore[bad-argument-type]
   )
 
 

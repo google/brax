@@ -113,6 +113,45 @@ class PPOTest(parameterized.TestCase):
         clipping_epsilon_value=clipping_epsilon_value,
     )
 
+  def testTrainWithDistributionalCritic(self):
+    """Test PPO runs with distributional critic and adaptive KL."""
+    network_factory = functools.partial(
+        ppo_networks.make_ppo_networks,
+        distribution_type='normal',
+        noise_std_type='log',
+        init_noise_std=0.8,
+        activation=jax.nn.elu,
+        use_distributional_critic=True,
+    )
+
+    _, _, metrics = ppo.train(
+        envs.get_environment('inverted_pendulum', backend='spring'),
+        num_timesteps=2**13,
+        episode_length=50,
+        num_envs=64,
+        learning_rate=3e-4,
+        entropy_cost=1e-2,
+        discounting=0.95,
+        unroll_length=5,
+        batch_size=64,
+        num_minibatches=8,
+        num_updates_per_batch=4,
+        normalize_observations=True,
+        max_grad_norm=1.0,
+        seed=2,
+        reward_scaling=10,
+        normalize_advantage=False,
+        network_factory=network_factory,
+        learning_rate_schedule='ADAPTIVE_KL',
+        clipping_epsilon_value=1.0,
+        use_distributional_critic=True,
+    )
+    # Verify training produced finite results.
+    self.assertTrue(
+        jnp.isfinite(metrics['eval/episode_reward']),
+        f'Reward is not finite: {metrics["eval/episode_reward"]}',
+    )
+
   def testTrainAsymmetricActorCritic(self):
     """Test PPO with asymmetric actor critic."""
     env = envs.get_environment(
@@ -148,11 +187,11 @@ class PPOTest(parameterized.TestCase):
 
     self.assertEqual(
         policy_params['params']['hidden_0']['kernel'].shape,
-        (env.observation_size['state'], 32),
+        (env.observation_size['state'], 32),  # pyrefly: ignore[bad-index]
     )
     self.assertEqual(
         value_params['params']['hidden_0']['kernel'].shape,
-        (env.observation_size['privileged_state'], 32),
+        (env.observation_size['privileged_state'], 32),  # pyrefly: ignore[bad-index]
     )
 
   @parameterized.parameters(True, False)
@@ -169,7 +208,7 @@ class PPOTest(parameterized.TestCase):
     if normalize_observations:
       normalize_fn = running_statistics.normalize
     ppo_network = ppo_networks.make_ppo_networks(
-        env.observation_size, env.action_size, normalize_fn
+        env.observation_size, env.action_size, normalize_fn  # pyrefly: ignore[bad-argument-type]
     )
     inference = ppo_networks.make_inference_fn(ppo_network)
     byte_encoding = pickle.dumps(params)
@@ -262,7 +301,7 @@ class PPOTest(parameterized.TestCase):
         seed=2,
         reward_scaling=10,
         normalize_advantage=False,
-        network_factory=network_factory,
+        network_factory=network_factory,  # pyrefly: ignore[bad-argument-type]
         augment_pixels=True,
     )
     num_views = 2
@@ -271,13 +310,13 @@ class PPOTest(parameterized.TestCase):
     if asymmetric_obs:
       self.assertEqual(
           policy_params['params']['MLP_0']['hidden_0']['kernel'].shape,
-          (num_views * cnn_features + env.observation_size['state'], 32),
+          (num_views * cnn_features + env.observation_size['state'], 32),  # pyrefly: ignore[bad-index, unsupported-operation]
       )
       self.assertEqual(
           value_params['params']['MLP_0']['hidden_0']['kernel'].shape,
           (
-              num_views * cnn_features
-              + env.observation_size['privileged_state'],
+              num_views * cnn_features  # pyrefly: ignore[unsupported-operation]
+              + env.observation_size['privileged_state'],  # pyrefly: ignore[bad-index]
               32,
           ),
       )

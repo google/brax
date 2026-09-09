@@ -254,9 +254,9 @@ class Ant(PipelineEnv):
     done = 1.0 - is_healthy if self._terminate_when_unhealthy else 0.0
     state.metrics.update(
         reward_forward=forward_reward,
-        reward_survive=healthy_reward,
+        reward_survive=healthy_reward,  # pyrefly: ignore[bad-argument-type]
         reward_ctrl=-ctrl_cost,
-        reward_contact=-contact_cost,
+        reward_contact=-contact_cost,  # pyrefly: ignore[bad-argument-type]
         x_position=pipeline_state.x.pos[0, 0],
         y_position=pipeline_state.x.pos[0, 1],
         distance_from_origin=math.safe_norm(pipeline_state.x.pos[0]),
@@ -264,7 +264,7 @@ class Ant(PipelineEnv):
         y_velocity=velocity[1],
         forward_reward=forward_reward,
     )
-    return state.replace(
+    return state.replace(  # pyrefly: ignore[missing-attribute]
         pipeline_state=pipeline_state, obs=obs, reward=reward, done=done
     )
 

@@ -236,7 +236,7 @@ class HumanoidStandup(PipelineEnv):
     reward = uph_cost + 1 - quad_ctrl_cost
     state.metrics.update(reward_linup=uph_cost, reward_quadctrl=-quad_ctrl_cost)
 
-    return state.replace(pipeline_state=pipeline_state, obs=obs, reward=reward)
+    return state.replace(pipeline_state=pipeline_state, obs=obs, reward=reward)  # pyrefly: ignore[missing-attribute]
 
   def _get_obs(
       self, pipeline_state: base.State, action: jax.Array
@@ -276,7 +276,7 @@ class HumanoidStandup(PipelineEnv):
   def _com(self, pipeline_state: base.State) -> jax.Array:
     inertia = self.sys.link.inertia
     if self.backend in ['spring', 'positional']:
-      inertia = inertia.replace(
+      inertia = inertia.replace(  # pyrefly: ignore[missing-attribute]
           i=jax.vmap(jp.diag)(
               jax.vmap(jp.diagonal)(inertia.i)
               ** (1 - self.sys.spring_inertia_scale)

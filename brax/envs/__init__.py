@@ -70,7 +70,7 @@ def register_environment(env_name: str, env_class: Type[Env]):
     env_name: environment name string
     env_class: the Env class to add to the registry
   """
-  _envs[env_name] = env_class
+  _envs[env_name] = env_class  # pyrefly: ignore[unsupported-operation]
 
 
 def create(

@@ -33,6 +33,7 @@ from brax.training.types import PRNGKey
 import flax
 import jax
 import jax.numpy as jnp
+import numpy as np
 import optax
 
 InferenceParams = Tuple[running_statistics.NestedMeanStd, Params]
@@ -77,7 +78,7 @@ def train(
     deterministic_eval: bool = False,
     network_factory: types.NetworkFactory[
         apg_networks.APGNetworks
-    ] = apg_networks.make_apg_networks,
+    ] = apg_networks.make_apg_networks,  # pyrefly: ignore[bad-function-definition]
     progress_fn: Callable[[int, Metrics], None] = lambda *args: None,
     eval_env: Optional[envs.Env] = None,
     randomization_fn: Optional[
@@ -129,9 +130,9 @@ def train(
       )
     env = wrap_for_training(
         env,
-        episode_length=episode_length,
-        action_repeat=action_repeat,
-        randomization_fn=v_randomization_fn,
+        episode_length=episode_length,  # pyrefly: ignore[unexpected-keyword]
+        action_repeat=action_repeat,  # pyrefly: ignore[unexpected-keyword]
+        randomization_fn=v_randomization_fn,  # pyrefly: ignore[unexpected-keyword]
     )  # pytype: disable=wrong-keyword-args
 
   reset_fn = jax.jit(jax.vmap(env.reset))
@@ -145,12 +146,12 @@ def train(
   if normalize_observations:
     normalize = running_statistics.normalize
   apg_network = network_factory(
-      obs_size, env.action_size, preprocess_observations_fn=normalize
+      obs_size, env.action_size, preprocess_observations_fn=normalize  # pyrefly: ignore[bad-argument-type]
   )
   make_policy = apg_networks.make_inference_fn(apg_network)
 
   if use_schedule:
-    learning_rate = optax.exponential_decay(
+    learning_rate = optax.exponential_decay(  # pyrefly: ignore[bad-assignment]
         init_value=learning_rate, transition_steps=1, decay_rate=schedule_decay
     )
 
@@ -307,12 +308,19 @@ def train(
       optimizer_state=optimizer.init(policy_params),
       policy_params=policy_params,
       normalizer_params=running_statistics.init_state(
-          specs.Array((env.observation_size,), jnp.dtype(dtype))
+          specs.Array((env.observation_size,), jnp.dtype(dtype))  # pyrefly: ignore[bad-argument-type]
       ),
   )
-  training_state = jax.device_put_replicated(
-      training_state, jax.local_devices()[:local_devices_to_use]
-  )
+  devices = jax.local_devices()[:local_devices_to_use]
+  mesh = jax.sharding.Mesh(np.array(devices), ('_device_put_sharded',))
+  sharding = jax.NamedSharding(mesh, jax.P('_device_put_sharded'))
+
+  def _replicate(x):
+    if isinstance(x, jax.Array):
+      return jax.device_put(jnp.stack([x] * len(devices)), sharding)
+    return jax.device_put(np.stack([x] * len(devices)), sharding)
+
+  training_state = jax.tree_util.tree_map(_replicate, training_state)
 
   if not eval_env:
     eval_env = environment
@@ -321,11 +329,11 @@ def train(
       v_randomization_fn = functools.partial(
           randomization_fn, rng=jax.random.split(eval_key, num_eval_envs)
       )
-    eval_env = wrap_for_training(
+    eval_env = wrap_for_training(  # pyrefly: ignore[unbound-name]
         eval_env,
-        episode_length=episode_length,
-        action_repeat=action_repeat,
-        randomization_fn=v_randomization_fn,
+        episode_length=episode_length,  # pyrefly: ignore[unexpected-keyword]
+        action_repeat=action_repeat,  # pyrefly: ignore[unexpected-keyword]
+        randomization_fn=v_randomization_fn,  # pyrefly: ignore[unbound-name, unexpected-keyword]
     )  # pytype: disable=wrong-keyword-args
 
   evaluator = acting.Evaluator(

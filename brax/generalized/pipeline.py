@@ -56,7 +56,7 @@ def init(
   state = mass.matrix_inv(sys, state, 0)
   state = constraint.jacobian(sys, state)
   if debug:
-    state = state.replace(contact=contact.get(sys, state.x))
+    state = state.replace(contact=contact.get(sys, state.x))  # pyrefly: ignore[missing-attribute]
 
   return state
 
@@ -77,18 +77,18 @@ def step(
   """
   # calculate acceleration terms
   tau = actuator.to_tau(sys, act, state.q, state.qd)
-  state = state.replace(qf_smooth=dynamics.forward(sys, state, tau))
+  state = state.replace(qf_smooth=dynamics.forward(sys, state, tau))  # pyrefly: ignore[missing-attribute]
   state = state.replace(qf_constraint=constraint.force(sys, state))
 
   # update position/velocity level terms
   state = integrator.integrate(sys, state)
   x, xd = kinematics.forward(sys, state.q, state.qd)
-  state = state.replace(x=x, xd=xd)
+  state = state.replace(x=x, xd=xd)  # pyrefly: ignore[missing-attribute]
   state = dynamics.transform_com(sys, state)
   state = mass.matrix_inv(sys, state, sys.matrix_inv_iterations)
   state = constraint.jacobian(sys, state)
 
   if debug:
-    state = state.replace(contact=contact.get(sys, state.x))
+    state = state.replace(contact=contact.get(sys, state.x))  # pyrefly: ignore[missing-attribute]
 
   return state

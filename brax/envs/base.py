@@ -166,7 +166,7 @@ class PipelineEnv(Env):
       camera: Optional[str] = None,
   ) -> Sequence[np.ndarray]:
     """Renders a trajectory using the MuJoCo renderer."""
-    return image.render_array(self.sys, trajectory, height, width, camera)
+    return image.render_array(self.sys, trajectory, height, width, camera)  # pyrefly: ignore[bad-return]
 
 
 class Wrapper(Env):

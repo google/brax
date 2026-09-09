@@ -50,6 +50,6 @@ def make_inference_fn(policy_network: ARSNetwork):
     ) -> Tuple[types.Action, types.Extra]:
       return policy_network.apply(*params, observations), {}
 
-    return policy
+    return policy  # pyrefly: ignore[bad-return]
 
   return make_policy

@@ -183,7 +183,7 @@ class Swimmer(PipelineEnv):
         y_velocity=y_velocity,
     )
 
-    return state.replace(pipeline_state=pipeline_state, obs=obs, reward=reward)
+    return state.replace(pipeline_state=pipeline_state, obs=obs, reward=reward)  # pyrefly: ignore[missing-attribute]
 
   def _get_obs(self, pipeline_state: base.State) -> jax.Array:
     """Observe swimmer body position and velocities."""

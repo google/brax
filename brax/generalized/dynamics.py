@@ -129,7 +129,7 @@ def transform_com(sys: System, state: State) -> State:
   cd_p = cd.concatenate(Motion.zero(shape=(1,))).take(parent_idx)
   cdofd = scan.link_types(sys, cdofd_fn, 'ldd', 'd', cd_p, cdof, cdof_qd)
 
-  return state.replace(
+  return state.replace(  # pyrefly: ignore[missing-attribute]
       root_com=root_com, cinr=cinr, cd=cd, cdof=cdof, cdofd=cdofd
   )
 

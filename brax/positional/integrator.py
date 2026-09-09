@@ -34,7 +34,7 @@ def integrate_xdv(sys: System, xd: Motion, xdv: Motion) -> Motion:
   Returns:
     xd: updated velocity
   """
-  damp = Motion(vel=sys.vel_damping, ang=sys.ang_damping)
+  damp = Motion(vel=sys.vel_damping, ang=sys.ang_damping)  # pyrefly: ignore[bad-argument-type]
   xd = (
       jax.tree.map(lambda d, x: jp.exp(d * sys.opt.timestep) * x, damp, xd)
       + xdv
@@ -63,7 +63,7 @@ def integrate_xdd(
   """
 
   xd = xd + xdd * sys.opt.timestep
-  damp = Motion(vel=sys.vel_damping, ang=sys.ang_damping)
+  damp = Motion(vel=sys.vel_damping, ang=sys.ang_damping)  # pyrefly: ignore[bad-argument-type]
   xd = jax.tree.map(lambda d, x: jp.exp(d * sys.opt.timestep) * x, damp, xd)
 
   @jax.vmap

@@ -66,7 +66,7 @@ class SACTest(parameterized.TestCase):
     if normalize_observations:
       normalize_fn = running_statistics.normalize
     sac_network = sac_networks.make_sac_networks(
-        env.observation_size, env.action_size, normalize_fn
+        env.observation_size, env.action_size, normalize_fn  # pyrefly: ignore[bad-argument-type]
     )
     inference = sac_networks.make_inference_fn(sac_network)
     byte_encoding = pickle.dumps(params)

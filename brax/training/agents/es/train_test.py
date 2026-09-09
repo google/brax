@@ -51,7 +51,7 @@ class ESTest(parameterized.TestCase):
     if normalize_observations:
       normalize_fn = running_statistics.normalize
     es_network = es_networks.make_es_networks(
-        env.observation_size, env.action_size, normalize_fn
+        env.observation_size, env.action_size, normalize_fn  # pyrefly: ignore[bad-argument-type]
     )
     inference = es_networks.make_inference_fn(es_network)
     byte_encoding = pickle.dumps(params)

@@ -50,7 +50,7 @@ def make_inference_fn(apg_networks: APGNetworks):
           {},
       )
 
-    return policy
+    return policy  # pyrefly: ignore[bad-return]
 
   return make_policy
 

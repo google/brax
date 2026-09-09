@@ -154,15 +154,15 @@ def _tree_replace(
     for i, g in enumerate(lst):
       if not hasattr(g, attr[1]):
         continue
-      v = val if not hasattr(val, '__iter__') else val[i]
+      v = val if not hasattr(val, '__iter__') else val[i]  # pyrefly: ignore[bad-index, unsupported-operation]
       lst[i] = _tree_replace(g, attr[1:], v)
 
-    return base.replace(**{attr[0]: lst})
+    return base.replace(**{attr[0]: lst})  # pyrefly: ignore[missing-attribute]
 
   if len(attr) == 1:
-    return base.replace(**{attr[0]: val})
+    return base.replace(**{attr[0]: val})  # pyrefly: ignore[missing-attribute]
 
-  return base.replace(
+  return base.replace(  # pyrefly: ignore[missing-attribute]
       **{attr[0]: _tree_replace(getattr(base, attr[0]), attr[1:], val)}
   )
 
@@ -204,7 +204,7 @@ class Transform(Base):
       pos = jp.zeros(rot.shape[:-1] + (3,))
     elif rot is None and pos is not None:
       rot = jp.tile(jp.array([1.0, 0.0, 0.0, 0.0]), pos.shape[:-1] + (1,))
-    return Transform(pos=pos, rot=rot)
+    return Transform(pos=pos, rot=rot)  # pyrefly: ignore[bad-argument-type]
 
   @classmethod
   def zero(cls, shape=()) -> 'Transform':
@@ -243,7 +243,7 @@ class Motion(Base):
   ) -> 'Motion':
     if ang is None and vel is None:
       raise ValueError('must specify either ang or vel')
-    ang = jp.zeros_like(vel) if ang is None else ang
+    ang = jp.zeros_like(vel) if ang is None else ang  # pyrefly: ignore[bad-argument-type]
     vel = jp.zeros_like(ang) if vel is None else vel
 
     return Motion(ang=ang, vel=vel)
@@ -273,7 +273,7 @@ class Force(Base):
   ) -> 'Force':
     if ang is None and vel is None:
       raise ValueError('must specify either ang or vel')
-    ang = jp.zeros_like(vel) if ang is None else ang
+    ang = jp.zeros_like(vel) if ang is None else ang  # pyrefly: ignore[bad-argument-type]
     vel = jp.zeros_like(ang) if vel is None else vel
 
     return Force(ang=ang, vel=vel)

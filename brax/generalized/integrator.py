@@ -81,4 +81,4 @@ def integrate(sys: System, state: State) -> State:
 
   q = scan.link_types(sys, q_fn, 'lqd', 'q', sys.link, state.q, qd)
 
-  return state.replace(q=q, qd=qd, qdd=qdd)
+  return state.replace(q=q, qd=qd, qdd=qdd)  # pyrefly: ignore[missing-attribute]

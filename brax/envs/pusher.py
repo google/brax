@@ -219,7 +219,7 @@ class Pusher(PipelineEnv):
         reward_dist=reward_dist,
         reward_ctrl=reward_ctrl,
     )
-    return state.replace(pipeline_state=pipeline_state, obs=obs, reward=reward)
+    return state.replace(pipeline_state=pipeline_state, obs=obs, reward=reward)  # pyrefly: ignore[missing-attribute]
 
   def _get_obs(self, pipeline_state: base.State) -> jax.Array:
     """Observes pusher body position and velocities."""

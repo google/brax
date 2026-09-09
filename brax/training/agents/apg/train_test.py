@@ -59,7 +59,7 @@ class APGTest(parameterized.TestCase):
     if normalize_observations:
       normalize_fn = running_statistics.normalize
     apg_network = apg_networks.make_apg_networks(
-        env.observation_size, env.action_size, normalize_fn
+        env.observation_size, env.action_size, normalize_fn  # pyrefly: ignore[bad-argument-type]
     )
     inference = apg_networks.make_inference_fn(apg_network)
     byte_encoding = pickle.dumps(params)

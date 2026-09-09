@@ -99,11 +99,11 @@ def make_bc_networks(
 
   policy_network = make_policy_network(
       parametric_action_distribution.param_size,
-      observation_size,
+      observation_size,  # pyrefly: ignore[bad-argument-type]
       preprocess_observations_fn=preprocess_observations_fn,
       hidden_layer_sizes=policy_hidden_layer_sizes,
       activation=activation,
-      obs_key=policy_obs_key,
+      obs_key=policy_obs_key,  # pyrefly: ignore[unexpected-keyword]
   )
 
   return BCNetworks(

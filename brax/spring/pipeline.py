@@ -94,7 +94,7 @@ def step(
     xd: updated link motion in world frame
   """
   # pre-calculate some auxiliary terms used further down
-  state = state.replace(i_inv=com.inv_inertia(sys, state.x))
+  state = state.replace(i_inv=com.inv_inertia(sys, state.x))  # pyrefly: ignore[missing-attribute]
 
   # calculate acceleration and delta-velocity terms
   tau = actuator.to_tau(sys, act, state.q, state.qd)

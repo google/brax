@@ -39,6 +39,7 @@ from brax.training.types import PRNGKey
 import flax
 import jax
 import jax.numpy as jnp
+import numpy as np
 import optax
 
 Metrics = types.Metrics
@@ -108,9 +109,16 @@ def _init_training_state(
       alpha_params=log_alpha,
       normalizer_params=normalizer_params,
   )
-  return jax.device_put_replicated(
-      training_state, jax.local_devices()[:local_devices_to_use]
-  )
+  devices = jax.local_devices()[:local_devices_to_use]
+  mesh = jax.sharding.Mesh(np.array(devices), ('_device_put_sharded',))
+  sharding = jax.NamedSharding(mesh, jax.P('_device_put_sharded'))
+
+  def _replicate(x):
+    if isinstance(x, jax.Array):
+      return jax.device_put(jnp.stack([x] * len(devices)), sharding)
+    return jax.device_put(np.stack([x] * len(devices)), sharding)
+
+  return jax.tree_util.tree_map(_replicate, training_state)
 
 
 def train(
@@ -137,7 +145,7 @@ def train(
     deterministic_eval: bool = False,
     network_factory: types.NetworkFactory[
         sac_networks.SACNetworks
-    ] = sac_networks.make_sac_networks,
+    ] = sac_networks.make_sac_networks,  # pyrefly: ignore[bad-function-definition]
     progress_fn: Callable[[int, Metrics], None] = lambda *args: None,
     eval_env: Optional[envs.Env] = None,
     randomization_fn: Optional[
@@ -204,9 +212,9 @@ def train(
       )
     env = wrap_for_training(
         env,
-        episode_length=episode_length,
-        action_repeat=action_repeat,
-        randomization_fn=v_randomization_fn,
+        episode_length=episode_length,  # pyrefly: ignore[unexpected-keyword]
+        action_repeat=action_repeat,  # pyrefly: ignore[unexpected-keyword]
+        randomization_fn=v_randomization_fn,  # pyrefly: ignore[unexpected-keyword]
     )  # pytype: disable=wrong-keyword-args
 
   obs_size = env.observation_size
@@ -220,7 +228,7 @@ def train(
   sac_network = network_factory(
       observation_size=obs_size,
       action_size=action_size,
-      preprocess_observations_fn=normalize_fn,
+      preprocess_observations_fn=normalize_fn,  # pyrefly: ignore[bad-argument-type]
   )
   make_policy = sac_networks.make_inference_fn(sac_network)
 
@@ -234,10 +242,10 @@ def train(
   dummy_transition = Transition(  # pytype: disable=wrong-arg-types  # jax-ndarray
       observation=dummy_obs,
       action=dummy_action,
-      reward=0.0,
-      discount=0.0,
+      reward=0.0,  # pyrefly: ignore[bad-argument-type]
+      discount=0.0,  # pyrefly: ignore[bad-argument-type]
       next_observation=dummy_obs,
-      extras={'state_extras': {'truncation': 0.0}, 'policy_extras': {}},
+      extras={'state_extras': {'truncation': 0.0}, 'policy_extras': {}},  # pyrefly: ignore[bad-argument-type]
   )
   replay_buffer = replay_buffers.UniformSamplingQueue(
       max_replay_size=max_replay_size // device_count,
@@ -368,7 +376,7 @@ def train(
         buffer_state,
         experience_key,
     )
-    training_state = training_state.replace(
+    training_state = training_state.replace(  # pyrefly: ignore[missing-attribute]
         normalizer_params=normalizer_params,
         env_steps=training_state.env_steps + env_steps_per_actor_step,
     )
@@ -476,13 +484,13 @@ def train(
     }
     return training_state, env_state, buffer_state, metrics  # pytype: disable=bad-return-type  # py311-upgrade
 
-  global_key, local_key = jax.random.split(rng)
+  global_key, local_key = jax.random.split(rng)  # pyrefly: ignore[unbound-name]
   local_key = jax.random.fold_in(local_key, process_id)
 
   # Training state init
   training_state = _init_training_state(
       key=global_key,
-      obs_size=obs_size,
+      obs_size=obs_size,  # pyrefly: ignore[bad-argument-type]
       local_devices_to_use=local_devices_to_use,
       sac_network=sac_network,
       alpha_optimizer=alpha_optimizer,
@@ -493,7 +501,7 @@ def train(
 
   if restore_checkpoint_path is not None:
     params = checkpoint.load(restore_checkpoint_path)
-    training_state = training_state.replace(
+    training_state = training_state.replace(  # pyrefly: ignore[missing-attribute]
         normalizer_params=params[0],
         policy_params=params[1],
     )
@@ -519,11 +527,11 @@ def train(
       v_randomization_fn = functools.partial(
           randomization_fn, rng=jax.random.split(eval_key, num_eval_envs)
       )
-    eval_env = wrap_for_training(
+    eval_env = wrap_for_training(  # pyrefly: ignore[unbound-name]
         eval_env,
-        episode_length=episode_length,
-        action_repeat=action_repeat,
-        randomization_fn=v_randomization_fn,
+        episode_length=episode_length,  # pyrefly: ignore[unexpected-keyword]
+        action_repeat=action_repeat,  # pyrefly: ignore[unexpected-keyword]
+        randomization_fn=v_randomization_fn,  # pyrefly: ignore[unbound-name, unexpected-keyword]
     )  # pytype: disable=wrong-keyword-args
 
   evaluator = acting.Evaluator(
