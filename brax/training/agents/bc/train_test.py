@@ -102,7 +102,7 @@ class BCTest(parameterized.TestCase):
     normalize_fn = running_statistics.normalize
 
     bc_network = network_factory(
-        fast.observation_size, fast.action_size, normalize_fn
+        fast.observation_size, fast.action_size, normalize_fn  # pyrefly: ignore[bad-argument-type]
     )
     make_inference = bc_networks.make_inference_fn(bc_network)
 
