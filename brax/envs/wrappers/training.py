@@ -98,10 +98,12 @@ class EpisodeWrapper(Wrapper):
   def step(self, state: State, action: jax.Array) -> State:
     def f(state, _):
       nstate = self.env.step(state, action)
-      return nstate, nstate.reward
+      return nstate, (nstate.reward, nstate.metrics)
 
-    state, rewards = jax.lax.scan(f, state, (), self.action_repeat)
-    state = state.replace(reward=jp.sum(rewards, axis=0))  # pyrefly: ignore[missing-attribute]
+    state, (rewards, metrics) = jax.lax.scan(f, state, (), self.action_repeat)
+    # Sum rewards and metrics across action_repeat sub-steps
+    summed_metrics = jax.tree.map(lambda m: jp.sum(m, axis=0), metrics)
+    state = state.replace(reward=jp.sum(rewards, axis=0), metrics=summed_metrics)  # pyrefly: ignore[missing-attribute]
     steps = state.info['steps'] + self.action_repeat
     one = jp.ones_like(state.done)
     zero = jp.zeros_like(state.done)
