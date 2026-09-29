@@ -60,7 +60,7 @@ def gradient_update_fn(
 
   def f(*args, optimizer_state):
     value, grads = loss_and_pgrad_fn(*args)
-    params_update, optimizer_state = optimizer.update(grads, optimizer_state)
+    params_update, optimizer_state = optimizer.update(grads, optimizer_state, args[0])
     params = optax.apply_updates(args[0], params_update)
     return value, params, optimizer_state
 
