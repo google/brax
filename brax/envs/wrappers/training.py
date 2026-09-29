@@ -123,7 +123,7 @@ class EpisodeWrapper(Wrapper):
         state.info['episode_metrics'][metric_name] *= (1 - prev_done)
         state.info['episode_metrics'][metric_name] += state.metrics[metric_name]
     state.info['episode_done'] = done
-    return state.replace(done=done)
+    return state.replace(done=done)  # pyrefly: ignore[missing-attribute]
 
 
 class AutoResetWrapper(Wrapper):

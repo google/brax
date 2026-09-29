@@ -776,7 +776,7 @@ def train(
       randomization_fn=randomization_fn,
   )
   evaluator = acting.Evaluator(
-      eval_env,
+      eval_env,  # pyrefly: ignore[bad-argument-type]
       functools.partial(make_policy, deterministic=deterministic_eval),
       num_eval_envs=num_eval_envs,
       episode_length=episode_length,  # pyrefly: ignore[bad-argument-type]

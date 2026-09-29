@@ -78,7 +78,7 @@ def step(
   # calculate acceleration terms
   tau = actuator.to_tau(sys, act, state.q, state.qd)
   state = state.replace(qf_smooth=dynamics.forward(sys, state, tau))  # pyrefly: ignore[missing-attribute]
-  state = state.replace(qf_constraint=constraint.force(sys, state))
+  state = state.replace(qf_constraint=constraint.force(sys, state))  # pyrefly: ignore[missing-attribute]
 
   # update position/velocity level terms
   state = integrator.integrate(sys, state)

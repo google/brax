@@ -101,7 +101,7 @@ def step(
   # perform position level joint updates
   x_i = joints.position_update(sys, state)
   x, _ = com.to_world(sys, x_i, xd_i)
-  state = state.replace(x=x, x_i=x_i)
+  state = state.replace(x=x, x_i=x_i)  # pyrefly: ignore[missing-attribute]
 
   # apply position level collision updates
   c = contact.get(sys, x)
@@ -110,7 +110,7 @@ def step(
 
   xd_i = integrator.project_xd(sys, x_i, x_i_prev)
   x, xd = com.to_world(sys, x_i, xd_i)
-  state = state.replace(x=x, xd=xd, x_i=x_i, xd_i=xd_i)
+  state = state.replace(x=x, xd=xd, x_i=x_i, xd_i=xd_i)  # pyrefly: ignore[missing-attribute]
 
   # apply velocity level collision updates
   xdv_i = collisions.resolve_velocity(sys, state, xd_i_prev, c, dlambda)  # pyrefly: ignore[bad-argument-type]

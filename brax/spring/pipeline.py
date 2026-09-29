@@ -109,16 +109,16 @@ def step(
   )
 
   # semi-implicit euler: apply acceleration update before resolving collisions
-  state = state.replace(xd_i=state.xd_i + xdd_i * sys.opt.timestep)
+  state = state.replace(xd_i=state.xd_i + xdd_i * sys.opt.timestep)  # pyrefly: ignore[missing-attribute]
   xdv_i = collisions.resolve(sys, state)
 
   # now integrate and update position/velocity-level terms
   x_i, xd_i = integrator.integrate(sys, state.x_i, state.xd_i, xdv_i)
   x, xd = com.to_world(sys, x_i, xd_i)
-  state = state.replace(x=x, xd=xd, x_i=x_i, xd_i=xd_i)
+  state = state.replace(x=x, xd=xd, x_i=x_i, xd_i=xd_i)  # pyrefly: ignore[missing-attribute]
   j, jd, a_p, a_c = kinematics.world_to_joint(sys, x, xd)
   q, qd = kinematics.inverse(sys, j, jd)
-  state = state.replace(
+  state = state.replace(  # pyrefly: ignore[missing-attribute]
       q=q,
       qd=qd,
       a_p=a_p,
