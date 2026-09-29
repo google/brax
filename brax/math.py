@@ -268,9 +268,11 @@ def solve_pgs(a: jax.Array, b: jax.Array, num_iters: int) -> jax.Array:
 
     return x, None
 
-  # TODO(brax-team): turn this into a scan
-  for _ in range(num_iters):
+  def iterate(x, _):
     x, _ = jax.lax.scan(get_x, x, (jp.arange(num_rows), a, b))
+    return x, None
+
+  x, _ = jax.lax.scan(iterate, x, None, length=num_iters)
 
   return x
 
