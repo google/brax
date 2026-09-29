@@ -753,16 +753,11 @@ def train(
         {},
     )
 
-  devices = jax.local_devices()[:local_devices_to_use]
-  mesh = jax.sharding.Mesh(np.array(devices), ('_device_put_sharded',))
-  sharding = jax.NamedSharding(mesh, jax.P('_device_put_sharded'))
-
-  def _replicate(x):
-    if isinstance(x, jax.Array):
-      return jax.device_put(jnp.stack([x] * len(devices)), sharding)
-    return jax.device_put(np.stack([x] * len(devices)), sharding)
-
-  training_state = jax.tree_util.tree_map(_replicate, training_state)
+  training_state = pmap.bcast_local_devices(
+      training_state,
+      local_devices_to_use,
+      axis_name=_PMAP_AXIS_NAME,
+  )
 
   eval_env = _maybe_wrap_env(
       eval_env or environment,
