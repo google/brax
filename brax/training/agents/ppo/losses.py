@@ -278,16 +278,16 @@ def compute_ppo_loss(
   if hasattr(new_dist, 'kl_divergence'):
     old_dist_params = data.extras['policy_extras']['distribution_params']
     old_dist = parametric_action_distribution.create_dist(old_dist_params)
-    kl = jnp.mean(new_dist.kl_divergence(old_dist))  # pytype: disable=attribute-error
+    kl = jnp.mean(new_dist.kl_divergence(old_dist))
   else:
     kl = jnp.array(0.0)
 
-  policy_dist_mean_std = jnp.mean(new_dist.scale)  # pytype: disable=attribute-error
-  policy_dist_max_std = jnp.max(new_dist.scale)  # pytype: disable=attribute-error
-  policy_dist_min_std = jnp.min(new_dist.scale)  # pytype: disable=attribute-error
-  policy_dist_mean_loc = jnp.mean(new_dist.loc)  # pytype: disable=attribute-error
-  policy_dist_max_loc = jnp.max(new_dist.loc)  # pytype: disable=attribute-error
-  policy_dist_min_loc = jnp.min(new_dist.loc)  # pytype: disable=attribute-error
+  policy_dist_mean_std = jnp.mean(new_dist.scale)
+  policy_dist_max_std = jnp.max(new_dist.scale)
+  policy_dist_min_std = jnp.min(new_dist.scale)
+  policy_dist_mean_loc = jnp.mean(new_dist.loc)
+  policy_dist_max_loc = jnp.max(new_dist.loc)
+  policy_dist_min_loc = jnp.min(new_dist.loc)
 
   return total_loss, {
       'total_loss': total_loss,

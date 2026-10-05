@@ -174,7 +174,7 @@ class QueueBase(ReplayBuffer[ReplayBufferState, Sample], Generic[Sample]):
     raise NotImplementedError(f'{self.__class__}.sample() is not implemented.')
 
   def size(self, buffer_state: ReplayBufferState) -> int:
-    return buffer_state.insert_position - buffer_state.sample_position  # pytype: disable=bad-return-type  # jax-ndarray
+    return buffer_state.insert_position - buffer_state.sample_position  # pyrefly: ignore[bad-return]
 
 
 class Queue(QueueBase[Sample], Generic[Sample]):
@@ -250,9 +250,9 @@ class Queue(QueueBase[Sample], Generic[Sample]):
 
   def size(self, buffer_state: ReplayBufferState) -> int:
     if self._cyclic:
-      return buffer_state.insert_position  # pytype: disable=bad-return-type  # jax-ndarray
+      return buffer_state.insert_position  # pyrefly: ignore[bad-return]
     else:
-      return buffer_state.insert_position - buffer_state.sample_position  # pytype: disable=bad-return-type  # jax-ndarray
+      return buffer_state.insert_position - buffer_state.sample_position  # pyrefly: ignore[bad-return]
 
 
 class UniformSamplingQueue(QueueBase[Sample], Generic[Sample]):
@@ -404,7 +404,7 @@ class PjitWrapper(ReplayBuffer[State, Sample]):
       return buffer_state, samples
 
     def size(buffer_state: State) -> int:
-      return jnp.sum(jax.vmap(self._buffer.size)(buffer_state))  # pytype: disable=bad-return-type  # jnp-type
+      return jnp.sum(jax.vmap(self._buffer.size)(buffer_state))  # pyrefly: ignore[bad-return]
 
     partition_spec = jax.sharding.PartitionSpec(
         (axis_names),

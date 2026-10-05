@@ -111,7 +111,7 @@ def _maybe_wrap_env(
       episode_length=episode_length,  # pyrefly: ignore[unexpected-keyword]
       action_repeat=action_repeat,  # pyrefly: ignore[unexpected-keyword]
       randomization_fn=v_randomization_fn,  # pyrefly: ignore[unexpected-keyword]
-  )  # pytype: disable=wrong-keyword-args
+  )
   return env
 
 
@@ -532,11 +532,11 @@ def train(
       key, key_rt = jax.random.split(key)
       r_translate = functools.partial(_random_translate_pixels, key=key_rt)
       data = types.Transition(
-          observation=r_translate(data.observation),  # pytype: disable=wrong-arg-types
+          observation=r_translate(data.observation),  # pyrefly: ignore[bad-argument-type]
           action=data.action,
           reward=data.reward,
           discount=data.discount,
-          next_observation=r_translate(data.next_observation),  # pytype: disable=wrong-arg-types
+          next_observation=r_translate(data.next_observation),  # pyrefly: ignore[bad-argument-type]
           extras=data.extras,
       )
 
@@ -700,7 +700,7 @@ def train(
         'training/walltime': training_walltime,
         **{f'training/{name}': value for name, value in metrics.items()},
     }
-    return training_state, env_state, metrics  # pytype: disable=bad-return-type  # py311-upgrade
+    return training_state, env_state, metrics  # pyrefly: ignore[bad-return]
 
   # Initialize model params and training state.
   init_params = ppo_losses.PPONetworkParams(
@@ -711,8 +711,8 @@ def train(
   obs_shape = jax.tree_util.tree_map(
       lambda x: specs.Array(x.shape[-1:], jnp.dtype('float32')), env_state.obs
   )
-  training_state = TrainingState(  # pytype: disable=wrong-arg-types  # jax-ndarray
-      optimizer_state=optimizer.init(init_params),  # pytype: disable=wrong-arg-types  # numpy-scalars
+  training_state = TrainingState(
+      optimizer_state=optimizer.init(init_params),  # pyrefly: ignore[bad-argument-type]
       params=init_params,
       normalizer_params=running_statistics.init_state(
           _remove_pixels(obs_shape),

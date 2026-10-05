@@ -45,7 +45,7 @@ def adaptive_kl_learning_rate(
     optim_state = optimizer_state[-1]
     assert hasattr(optim_state, 'hyperparams')
 
-  lr = optim_state.hyperparams['learning_rate']  # pytype: disable=attribute-error
+  lr = optim_state.hyperparams['learning_rate']  # pyrefly: ignore[missing-attribute]
   lr = jnp.where(
       kl_mean > desired_kl * 2.0,
       jnp.maximum(min_learning_rate, lr / 1.5),
@@ -56,6 +56,6 @@ def adaptive_kl_learning_rate(
       jnp.minimum(max_learning_rate, lr * 1.5),
       lr,
   )
-  optim_state.hyperparams['learning_rate'] = lr  # pytype: disable=attribute-error
+  optim_state.hyperparams['learning_rate'] = lr  # pyrefly: ignore[missing-attribute]
 
   return optimizer_state, lr

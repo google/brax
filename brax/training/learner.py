@@ -316,16 +316,16 @@ def get_env_factory(env_name: str, vision_nworld: int | None = None):
           vision_nworld if vision_nworld is not None else _NUM_ENVS.value
       )
     if _PLAYGROUND_DM_CONTROL_SUITE.value:
-      get_environment = lambda *args, **kwargs: mjp.dm_control_suite.load(  # pytype: disable=attribute-error
+      get_environment = lambda *args, **kwargs: mjp.dm_control_suite.load(
           *args, **kwargs, config_overrides=overrides
       )
     elif _PLAYGROUND_LOCOMOTION_SUITE.value:
-      get_environment = lambda *args, **kwargs: mjp.locomotion.load(  # pytype: disable=attribute-error
+      get_environment = lambda *args, **kwargs: mjp.locomotion.load(
           *args, **kwargs, config_overrides=overrides
       )
       randomizer_fn = mjp.locomotion.get_domain_randomizer(env_name)
     elif _PLAYGROUND_MANIPULATION_SUITE.value:
-      get_environment = lambda *args, **kwargs: mjp.manipulation.load(  # pytype: disable=attribute-error
+      get_environment = lambda *args, **kwargs: mjp.manipulation.load(
           *args, **kwargs, config_overrides=overrides
       )
       randomizer_fn = mjp.manipulation.get_domain_randomizer(env_name)
@@ -598,8 +598,8 @@ def main(unused_argv):
     data_attr_name = 'pipeline_state' if hasattr(env, 'sys') else 'data'
     empty_data = getattr(states, data_attr_name).__class__(
         **{k: None for k in getattr(states, data_attr_name).__annotations__}
-    )  # pytype: disable=attribute-error
-    empty_traj = states.__class__(**{k: None for k in states.__annotations__})  # pytype: disable=attribute-error
+    )
+    empty_traj = states.__class__(**{k: None for k in states.__annotations__})
     empty_traj = empty_traj.replace(**{data_attr_name: empty_data})
 
     def step(carry, _):

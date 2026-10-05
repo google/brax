@@ -51,7 +51,7 @@ class Transition(NamedTuple):
   reward: NestedArray
   discount: NestedArray
   next_observation: NestedArray
-  extras: NestedArray = ()  # pytype: disable=annotation-type-mismatch  # jax-ndarray
+  extras: NestedArray = ()  # pyrefly: ignore[bad-assignment]
 
 
 class Policy(Protocol):
