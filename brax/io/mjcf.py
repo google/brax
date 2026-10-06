@@ -327,15 +327,15 @@ def load_model(mj: mujoco.MjModel) -> System:
     joint_positions.append(position[0])
   joint_position = np.array(joint_positions)
   identity = np.tile(np.array([1.0, 0.0, 0.0, 0.0]), (mj.nbody, 1))
-  link = Link(  # pytype: disable=wrong-arg-types  # jax-ndarray
-      transform=Transform(pos=mj.body_pos, rot=mj.body_quat),  # pytype: disable=wrong-arg-types  # jax-ndarray
-      inertia=Inertia(  # pytype: disable=wrong-arg-types  # jax-ndarray
-          transform=Transform(pos=mj.body_ipos, rot=mj.body_iquat),  # pytype: disable=wrong-arg-types  # jax-ndarray
+  link = Link(
+      transform=Transform(pos=mj.body_pos, rot=mj.body_quat),  # pyrefly: ignore[bad-argument-type]
+      inertia=Inertia(
+          transform=Transform(pos=mj.body_ipos, rot=mj.body_iquat),  # pyrefly: ignore[bad-argument-type]
           i=np.array([np.diag(i) for i in mj.body_inertia]),  # pyrefly: ignore[bad-argument-type]
           mass=mj.body_mass,  # pyrefly: ignore[bad-argument-type]
       ),
       invweight=mj.body_invweight0[:, 0],  # pyrefly: ignore[bad-argument-type]
-      joint=Transform(pos=joint_position, rot=identity),  # pytype: disable=wrong-arg-types  # jax-ndarray
+      joint=Transform(pos=joint_position, rot=identity),  # pyrefly: ignore[bad-argument-type]
       constraint_stiffness=custom['constraint_stiffness'],  # pyrefly: ignore[bad-argument-type]
       constraint_vel_damping=custom['constraint_vel_damping'],  # pyrefly: ignore[bad-argument-type]
       constraint_limit_stiffness=custom['constraint_limit_stiffness'],  # pyrefly: ignore[bad-argument-type]
@@ -382,7 +382,7 @@ def load_model(mj: mujoco.MjModel) -> System:
   solver_params_jnt = np.concatenate((mj.jnt_solref, mj.jnt_solimp), axis=1)
   solver_params_dof = solver_params_jnt[mj.dof_jntid]
 
-  dof = DoF(  # pytype: disable=wrong-arg-types
+  dof = DoF(
       motion=motion,
       armature=mj.dof_armature,  # pyrefly: ignore[bad-argument-type]
       stiffness=stiffness,  # pyrefly: ignore[bad-argument-type]
@@ -415,7 +415,7 @@ def load_model(mj: mujoco.MjModel) -> System:
   }
   act_kwargs = jax.tree.map(lambda x: x[act_mask], act_kwargs)
 
-  actuator = Actuator(  # pytype: disable=wrong-arg-types
+  actuator = Actuator(
       q_id=q_id, qd_id=qd_id, **act_kwargs
   )
 
@@ -447,7 +447,7 @@ def load_model(mj: mujoco.MjModel) -> System:
 
   mjx_model = mjx.put_model(mj)
 
-  sys = System(  # pytype: disable=wrong-arg-types  # jax-ndarray
+  sys = System(
       gravity=mj.opt.gravity,
       viscosity=mj.opt.viscosity,
       density=mj.opt.density,

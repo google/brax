@@ -27,12 +27,10 @@ import jax.numpy as jnp
 NestedArray = jnp.ndarray
 NestedTensor = Any
 
-# pytype: disable=not-supported-yet
 NestedSpec = Union[
     specs.Array,
     Iterable['NestedSpec'],
     Mapping[Any, 'NestedSpec'],
 ]
-# pytype: enable=not-supported-yet
 
 Nest = Union[NestedArray, NestedTensor, NestedSpec]

@@ -204,7 +204,7 @@ def train(
       ),
       optimizer_state=optimizer.init(
           init_params
-      ),  # pytype: disable=wrong-arg-types  # numpy-scalars
+      ),
       dagger_step=jp.array(0, dtype=int),
   )
 
@@ -253,7 +253,7 @@ def train(
       actions = jp.where(
           teachers_turn,
           teacher_inference_fn(env_state.obs, None)[0],  # E x action_size
-          student_inference_fn(env_state.obs, None)[0],  # pytype: disable=wrong-arg-types
+          student_inference_fn(env_state.obs, None)[0],
       )
       nstate = env.step(env_state, actions)
       return (key, nstate), (env_state.obs, env_state.reward)  # E x ...
@@ -371,7 +371,7 @@ def train(
         env_state,
         key_data,
         (ts.normalizer_params, ts.params),
-        dagger_beta_fn(ts.dagger_step),  # pytype: disable=wrong-arg-types
+        dagger_beta_fn(ts.dagger_step),  # pyrefly: ignore[bad-argument-type]
     )
     assert data_metrics['reward_mean'].shape == (demo_length,), (
         f'Expected shape {(demo_length,)} but got'
@@ -398,17 +398,17 @@ def train(
           inference_params,
           training_metrics={},
       )
-      other_metrics.update(eval_metrics)  # pytype: disable=attribute-error
+      other_metrics.update(eval_metrics)  # pyrefly: ignore[missing-attribute]
 
     if save_checkpoint_path is not None:
-      checkpoint.save(  # pytype: disable=wrong-arg-types
+      checkpoint.save(
           save_checkpoint_path,
           training_state.dagger_step,  # pyrefly: ignore[bad-argument-type]
           inference_params,
           ckpt_config,
       )
 
-    progress_fn(training_state.dagger_step, other_metrics)  # pytype: disable=wrong-arg-types
+    progress_fn(training_state.dagger_step, other_metrics)  # pyrefly: ignore[bad-argument-type]
 
   if num_evals:
     eval_env = env

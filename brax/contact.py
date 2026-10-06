@@ -52,10 +52,8 @@ def get(sys: System, x: Transform) -> Optional[Contact]:
       xpos, xquat, sys.geom_pos, sys.geom_quat
   )
 
-  # pytype: disable=wrong-arg-types
   d = d.replace(geom_xpos=geom_xpos, geom_xmat=geom_xmat)
   d = mjx.collision(sys, d)
-  # pytype: enable=wrong-arg-types
 
   c = d.contact
   elasticity = (sys.elasticity[c.geom1] + sys.elasticity[c.geom2]) * 0.5

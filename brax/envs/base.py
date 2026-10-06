@@ -139,7 +139,7 @@ class PipelineEnv(Env):
   @property
   def dt(self) -> jax.Array:
     """The timestep used for each env step."""
-    return self.sys.opt.timestep * self._n_frames  # pytype: disable=attribute-error
+    return self.sys.opt.timestep * self._n_frames
 
   @property
   def observation_size(self) -> ObservationSize:

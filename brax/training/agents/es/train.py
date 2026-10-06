@@ -155,7 +155,7 @@ def train(
         episode_length=episode_length,  # pyrefly: ignore[unexpected-keyword]
         action_repeat=action_repeat,  # pyrefly: ignore[unexpected-keyword]
         randomization_fn=v_randomization_fn,  # pyrefly: ignore[unexpected-keyword]
-    )  # pytype: disable=wrong-keyword-args
+    )
 
   obs_size = env.observation_size
   if isinstance(obs_size, Dict):
@@ -410,7 +410,7 @@ def train(
         'training/walltime': training_walltime,
         **{f'training/{name}': value for name, value in metrics.items()},
     }
-    return training_state, metrics  # pytype: disable=bad-return-type  # py311-upgrade
+    return training_state, metrics  # pyrefly: ignore[bad-return]
 
   normalizer_params = running_statistics.init_state(
       specs.Array((obs_size,), jnp.dtype('float32'))  # pyrefly: ignore[bad-argument-type]
@@ -436,7 +436,7 @@ def train(
         episode_length=episode_length,  # pyrefly: ignore[unexpected-keyword]
         action_repeat=action_repeat,  # pyrefly: ignore[unexpected-keyword]
         randomization_fn=v_randomization_fn,  # pyrefly: ignore[unbound-name, unexpected-keyword]
-    )  # pytype: disable=wrong-keyword-args
+    )
 
   # Evaluator function
   evaluator = acting.Evaluator(

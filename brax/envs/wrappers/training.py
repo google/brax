@@ -234,7 +234,7 @@ class DomainRandomizationVmapWrapper(Wrapper):
   @contextlib.contextmanager
   def v_env_fn(self, new_sys: System):
     env = self.env.unwrapped
-    old_sys = env.sys  # pytype: disable=attribute-error
+    old_sys = env.sys  # pyrefly: ignore[missing-attribute]
     try:
       env.sys = new_sys  # pyrefly: ignore[missing-attribute]
       yield env

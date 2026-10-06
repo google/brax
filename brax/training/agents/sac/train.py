@@ -215,7 +215,7 @@ def train(
         episode_length=episode_length,  # pyrefly: ignore[unexpected-keyword]
         action_repeat=action_repeat,  # pyrefly: ignore[unexpected-keyword]
         randomization_fn=v_randomization_fn,  # pyrefly: ignore[unexpected-keyword]
-    )  # pytype: disable=wrong-keyword-args
+    )
 
   obs_size = env.observation_size
   if isinstance(obs_size, Dict):
@@ -239,7 +239,7 @@ def train(
 
   dummy_obs = jnp.zeros((obs_size,))
   dummy_action = jnp.zeros((action_size,))
-  dummy_transition = Transition(  # pytype: disable=wrong-arg-types  # jax-ndarray
+  dummy_transition = Transition(
       observation=dummy_obs,
       action=dummy_action,
       reward=0.0,  # pyrefly: ignore[bad-argument-type]
@@ -259,13 +259,13 @@ def train(
       discounting=discounting,
       action_size=action_size,
   )
-  alpha_update = gradients.gradient_update_fn(  # pytype: disable=wrong-arg-types  # jax-ndarray
+  alpha_update = gradients.gradient_update_fn(
       alpha_loss, alpha_optimizer, pmap_axis_name=_PMAP_AXIS_NAME
   )
-  critic_update = gradients.gradient_update_fn(  # pytype: disable=wrong-arg-types  # jax-ndarray
+  critic_update = gradients.gradient_update_fn(
       critic_loss, q_optimizer, pmap_axis_name=_PMAP_AXIS_NAME
   )
-  actor_update = gradients.gradient_update_fn(  # pytype: disable=wrong-arg-types  # jax-ndarray
+  actor_update = gradients.gradient_update_fn(
       actor_loss, policy_optimizer, pmap_axis_name=_PMAP_AXIS_NAME
   )
 
@@ -392,7 +392,7 @@ def train(
         sgd_step, (training_state, training_key), transitions
     )
 
-    metrics['buffer_current_size'] = replay_buffer.size(buffer_state)  # pytype: disable=unsupported-operands  # lax-types
+    metrics['buffer_current_size'] = replay_buffer.size(buffer_state)  # pyrefly: ignore[unsupported-operation]
     return training_state, env_state, buffer_state, metrics
 
   def prefill_replay_buffer(
@@ -482,7 +482,7 @@ def train(
         'training/walltime': training_walltime,
         **{f'training/{name}': value for name, value in metrics.items()},
     }
-    return training_state, env_state, buffer_state, metrics  # pytype: disable=bad-return-type  # py311-upgrade
+    return training_state, env_state, buffer_state, metrics  # pyrefly: ignore[bad-return]
 
   global_key, local_key = jax.random.split(rng)  # pyrefly: ignore[unbound-name]
   local_key = jax.random.fold_in(local_key, process_id)
@@ -532,7 +532,7 @@ def train(
         episode_length=episode_length,  # pyrefly: ignore[unexpected-keyword]
         action_repeat=action_repeat,  # pyrefly: ignore[unexpected-keyword]
         randomization_fn=v_randomization_fn,  # pyrefly: ignore[unbound-name, unexpected-keyword]
-    )  # pytype: disable=wrong-keyword-args
+    )
 
   evaluator = acting.Evaluator(
       eval_env,

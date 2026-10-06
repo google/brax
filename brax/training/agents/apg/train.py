@@ -133,7 +133,7 @@ def train(
         episode_length=episode_length,  # pyrefly: ignore[unexpected-keyword]
         action_repeat=action_repeat,  # pyrefly: ignore[unexpected-keyword]
         randomization_fn=v_randomization_fn,  # pyrefly: ignore[unexpected-keyword]
-    )  # pytype: disable=wrong-keyword-args
+    )
 
   reset_fn = jax.jit(jax.vmap(env.reset))
   step_fn = jax.jit(jax.vmap(env.step))
@@ -247,7 +247,7 @@ def train(
         policy_params,
         key,
         state_h,
-    ), metrics = jax.lax.scan(  # pytype: disable=wrong-arg-types  # lax-types
+    ), metrics = jax.lax.scan(
         minibatch_step,
         (
             training_state.optimizer_state,
@@ -296,7 +296,7 @@ def train(
         'training/walltime': training_walltime,
         **{f'training/{name}': value for name, value in metrics.items()},
     }
-    return training_state, env_state, metrics, key  # pytype: disable=bad-return-type  # py311-upgrade
+    return training_state, env_state, metrics, key  # pyrefly: ignore[bad-return]
 
   # The network key should be global, so that networks are initialized the same
   # way for different processes.
@@ -334,7 +334,7 @@ def train(
         episode_length=episode_length,  # pyrefly: ignore[unexpected-keyword]
         action_repeat=action_repeat,  # pyrefly: ignore[unexpected-keyword]
         randomization_fn=v_randomization_fn,  # pyrefly: ignore[unbound-name, unexpected-keyword]
-    )  # pytype: disable=wrong-keyword-args
+    )
 
   evaluator = acting.Evaluator(
       eval_env,

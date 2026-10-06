@@ -51,7 +51,7 @@ def init(
   if sys.mj_model is not None:
     mjcf.validate_model(sys.mj_model)
   x, xd = kinematics.forward(sys, q, qd)
-  state = State.init(q, qd, x, xd)  # pytype: disable=wrong-arg-types  # jax-ndarray
+  state = State.init(q, qd, x, xd)
   state = dynamics.transform_com(sys, state)
   state = mass.matrix_inv(sys, state, 0)
   state = constraint.jacobian(sys, state)

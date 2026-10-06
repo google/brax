@@ -106,7 +106,7 @@ def benchmark(
 
   @jax.jit
   def run_batch(seed: jax.Array):
-    rngs = jax.random.split(jax.random.PRNGKey(seed), batch_size)  # pytype: disable=wrong-arg-types  # jax-ndarray
+    rngs = jax.random.split(jax.random.PRNGKey(seed), batch_size)
     init_state = jax.vmap(init_fn)(rngs)
 
     @jax.vmap
@@ -122,7 +122,7 @@ def benchmark(
   times = []
   for i in range(5):
     t = time.time()
-    jax.tree_util.tree_map(lambda x: x.block_until_ready(), run_batch(i))  # pyrefly: ignore[bad-argument-type]
+    jax.tree_util.tree_map(lambda x: x.block_until_ready(), run_batch(i))
     times.append(time.time() - t)
   op_time = jp.mean(jp.array(times[1:]))  # ignore JIT time
 
@@ -134,4 +134,4 @@ def benchmark(
       f'{jax.devices()[0].device_kind}'
   )
 
-  return batch_sps  # pytype: disable=bad-return-type  # jnp-type
+  return batch_sps  # pyrefly: ignore[bad-return]

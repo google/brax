@@ -288,4 +288,4 @@ class HumanoidStandup(PipelineEnv):
     com = (
         jp.sum(jax.vmap(jp.multiply)(inertia.mass, x_i.pos), axis=0) / mass_sum
     )
-    return com, inertia, mass_sum, x_i  # pytype: disable=bad-return-type  # jax-ndarray
+    return com, inertia, mass_sum, x_i  # pyrefly: ignore[bad-return]

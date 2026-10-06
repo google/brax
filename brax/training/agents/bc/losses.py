@@ -29,7 +29,7 @@ def bc_loss(
     make_policy: Callable[[Tuple[Any, Params]], networks.BCInferenceFn],
 ):
   policy = make_policy((normalizer_params, params))
-  _, action_extras = policy(data['observations'], key_sample=None)  # pytype: disable=wrong-keyword-args
+  _, action_extras = policy(data['observations'], key_sample=None)  # pyrefly: ignore[bad-argument-count, unexpected-keyword]
   actor_loss = (
       (
           (

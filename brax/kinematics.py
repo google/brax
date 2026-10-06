@@ -259,7 +259,7 @@ def link_to_joint_frame(motion: Motion) -> Tuple[Motion, float]:
   )
   parity = jp.where(is_both, 1, parity)  # pyrefly: ignore[unbound-name]
 
-  return Motion(ang=ang_frame, vel=vel_frame), parity  # pytype: disable=bad-return-type  # jnp-type
+  return Motion(ang=ang_frame, vel=vel_frame), parity  # pyrefly: ignore[bad-return]
 
 
 def axis_angle_ang(

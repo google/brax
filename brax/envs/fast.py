@@ -142,7 +142,7 @@ class Fast(PipelineEnv):
     # Turn 1-D tuples to ints.
     return {
         key: value[0] if len(value) == 1 else value
-        for key, value in ret.items()  # pytype: disable=attribute-error
+        for key, value in ret.items()  # pyrefly: ignore[missing-attribute]
     }
 
   @property

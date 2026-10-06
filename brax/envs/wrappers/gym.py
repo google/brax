@@ -38,7 +38,7 @@ class GymWrapper(gym.Env):
     self._env = env
     self.metadata = {
         'render.modes': ['human', 'rgb_array'],
-        'video.frames_per_second': 1 / self._env.dt,  # pyrefly: ignore[bad-assignment]
+        'video.frames_per_second': 1 / self._env.dt,
     }
     self.seed(seed)
     self.backend = backend
@@ -74,7 +74,7 @@ class GymWrapper(gym.Env):
     # We return device arrays for pytorch users.
     return obs, reward, done, info
 
-  def seed(self, seed: int = 0):  # pyrefly: ignore[bad-override]
+  def seed(self, seed: int = 0):
     self._key = jax.random.PRNGKey(seed)
 
   def render(self, mode='human', width=256, height=256):
@@ -102,7 +102,7 @@ class VectorGymWrapper(gym.vector.VectorEnv):
     self._env = env
     self.metadata = {
         'render.modes': ['human', 'rgb_array'],
-        'video.frames_per_second': 1 / self._env.dt,  # pyrefly: ignore[bad-assignment]
+        'video.frames_per_second': 1 / self._env.dt,
     }
     if not hasattr(self._env, 'batch_size'):
       raise ValueError('underlying env must be batched')

@@ -59,7 +59,7 @@ def _get_network(
     network_factory: types.NetworkFactory[sac_networks.SACNetworks],
 ) -> sac_networks.SACNetworks:
   """Generates a SAC network given config."""
-  return checkpoint.get_network(config, network_factory)  # pytype: disable=bad-return-type
+  return checkpoint.get_network(config, network_factory)  # pyrefly: ignore[bad-argument-type, bad-return]
 
 
 def load_config(
