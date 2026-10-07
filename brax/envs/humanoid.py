@@ -309,17 +309,17 @@ class Humanoid(PipelineEnv):
       position = position[2:]
 
     com, inertia, mass_sum, x_i = self._com(pipeline_state)
-    cinr = x_i.replace(pos=x_i.pos - com).vmap().do(inertia)
+    cinr = x_i.replace(pos=x_i.pos - com).vmap().do(inertia)  # pyrefly: ignore[missing-attribute]
     com_inertia = jp.hstack(
-        [cinr.i.reshape((cinr.i.shape[0], -1)), inertia.mass[:, None]]
+        [cinr.i.reshape((cinr.i.shape[0], -1)), inertia.mass[:, None]]  # pyrefly: ignore[missing-attribute]
     )
 
     xd_i = (
-        base.Transform.create(pos=x_i.pos - pipeline_state.x.pos)
+        base.Transform.create(pos=x_i.pos - pipeline_state.x.pos)  # pyrefly: ignore[missing-attribute]
         .vmap()
         .do(pipeline_state.xd)
     )
-    com_vel = inertia.mass[:, None] * xd_i.vel / mass_sum
+    com_vel = inertia.mass[:, None] * xd_i.vel / mass_sum  # pyrefly: ignore[missing-attribute]
     com_ang = xd_i.ang
     com_velocity = jp.hstack([com_vel, com_ang])
 
