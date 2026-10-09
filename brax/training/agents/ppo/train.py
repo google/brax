@@ -173,6 +173,18 @@ def _remove_pixels(
   return {k: v for k, v in obs.items() if not k.startswith('pixels/')}
 
 
+def _compute_entropy_cost(
+    entropy_cost: Union[float, optax.Schedule], env_steps: types.UInt64
+) -> Union[float, jax.Array]:
+  """Evaluates the entropy coefficient at the current environment step."""
+  if callable(entropy_cost):
+    # Include both words without requiring JAX's 64-bit mode.  Large step
+    # counts are approximate, as with float32 Optax schedule arithmetic.
+    count = jnp.float32(env_steps.hi) * 4294967296.0 + jnp.float32(env_steps.lo)
+    return entropy_cost(count)
+  return entropy_cost
+
+
 def train(
     environment: envs.Env,
     num_timesteps: int,
@@ -191,7 +203,7 @@ def train(
     ] = None,
     # ppo params
     learning_rate: float = 1e-4,
-    entropy_cost: float = 1e-4,
+    entropy_cost: Union[float, optax.Schedule] = 1e-4,
     discounting: float = 0.9,
     unroll_length: int = 10,
     batch_size: int = 32,
@@ -266,7 +278,11 @@ def train(
       environments
     learning_rate: learning rate for ppo loss
     entropy_cost: entropy reward for ppo loss, higher values increase entropy of
-      the policy
+      the policy. A scalar or JAX-compatible schedule mapping a float32 count of
+      environment steps (including action_repeat) to a scalar coefficient. The
+      schedule is evaluated once per rollout, before advancing the step count,
+      and shared by all gradient updates on that rollout. The count starts at
+      zero for each train call, including when restoring parameters.
     discounting: discounting rate
     unroll_length: the number of timesteps to unroll in each environment. The
       PPO loss is computed over `unroll_length` timesteps
@@ -469,7 +485,6 @@ def train(
   loss_fn = functools.partial(
       ppo_losses.compute_ppo_loss,
       ppo_network=ppo_network,
-      entropy_cost=entropy_cost,
       discounting=discounting,
       reward_scaling=reward_scaling,
       gae_lambda=gae_lambda,
@@ -494,11 +509,16 @@ def train(
       carry,
       data: types.Transition,
       normalizer_params: running_statistics.RunningStatisticsState,
+      entropy_cost: Union[float, jax.Array],
   ):
     optimizer_state, params, key = carry
     key, key_loss = jax.random.split(key)
     (_, metrics), grads = loss_and_pgrad_fn(
-        params, normalizer_params, data, key_loss
+        params,
+        normalizer_params,
+        data,
+        key_loss,
+        entropy_cost=entropy_cost,
     )
 
     if lr_is_adaptive_kl:
@@ -524,6 +544,7 @@ def train(
       unused_t,
       data: types.Transition,
       normalizer_params: running_statistics.RunningStatisticsState,
+      entropy_cost: Union[float, jax.Array],
   ):
     optimizer_state, params, key = carry
     key, key_perm, key_grad = jax.random.split(key, 3)
@@ -547,7 +568,11 @@ def train(
 
     shuffled_data = jax.tree_util.tree_map(convert_data, data)
     (optimizer_state, params, _), metrics = jax.lax.scan(
-        functools.partial(minibatch_step, normalizer_params=normalizer_params),
+        functools.partial(
+            minibatch_step,
+            normalizer_params=normalizer_params,
+            entropy_cost=entropy_cost,
+        ),
         (optimizer_state, params, key_grad),
         shuffled_data,
         length=num_minibatches,
@@ -618,9 +643,16 @@ def train(
           until_count=normalize_until_count,
       )
 
+    current_entropy_cost = _compute_entropy_cost(
+        entropy_cost, training_state.env_steps
+    )
+
     (optimizer_state, params, _), metrics = jax.lax.scan(
         functools.partial(
-            sgd_step, data=data, normalizer_params=normalizer_params
+            sgd_step,
+            data=data,
+            normalizer_params=normalizer_params,
+            entropy_cost=current_entropy_cost,
         ),
         (training_state.optimizer_state, training_state.params, key_sgd),
         (),

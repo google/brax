@@ -19,17 +19,156 @@ import pickle
 from absl.testing import absltest
 from absl.testing import parameterized
 from brax import envs
+from brax.training import types
 from brax.training.acme import running_statistics
 from brax.training.agents.ppo import networks as ppo_networks
 from brax.training.agents.ppo import networks_vision as ppo_networks_vision
 from brax.training.agents.ppo import train as ppo
 import jax
 from jax import numpy as jnp
+import numpy as np
+import optax
 
 
 class PPOTest(parameterized.TestCase):
   """Tests for PPO module."""
 
+  @parameterized.parameters(
+      (0.25, [0.25, 0.25, 0.25, 0.25, 0.25]),
+      (optax.constant_schedule(0.25), [0.25, 0.25, 0.25, 0.25, 0.25]),
+      (optax.linear_schedule(1.0, 0.0, 100), [1.0, 0.75, 0.5, 0.0, 0.0]),
+      (
+          optax.cosine_decay_schedule(1.0, 100),
+          [1.0, (2 + 2**0.5) / 4, 0.5, 0.0, 0.0],
+      ),
+      (
+          lambda step: jnp.where(step < 50, 1.0, 0.25),
+          [1.0, 1.0, 0.25, 0.25, 0.25],
+      ),
+  )
+  def testEntropyCostSchedule(self, entropy_cost, expected):
+    compute = jax.jit(
+        functools.partial(ppo._compute_entropy_cost, entropy_cost)
+    )
+    actual = jnp.array(
+        [compute(types.UInt64(hi=0, lo=step)) for step in [0, 25, 50, 100, 150]]
+    )
+    self.assertEqual(actual.dtype, jnp.float32)
+    np.testing.assert_allclose(actual, expected, atol=1e-7)
+
+  def testEntropyCostScheduleUInt64(self):
+    compute = jax.jit(
+        functools.partial(
+            ppo._compute_entropy_cost,
+            lambda step: 1.0 - step / float(2**33),
+        )
+    )
+    # Use representable float32 counts on both sides of the low-word rollover.
+    steps = types.UInt64(
+        hi=jnp.array([0, 1, 1]),
+        lo=jnp.array([2**32 - 4096, 0, 4096], dtype=jnp.uint32),
+    )
+    np.testing.assert_array_equal(
+        compute(steps), [0.5 + 2**-21, 0.5, 0.5 - 2**-21]
+    )
+
+  @parameterized.parameters(False, True)
+  def testEntropyCostScheduleFloat64(self, scheduled):
+    coefficient = 0.123456789012345
+    entropy_cost = (
+        (lambda _: jnp.asarray(coefficient, dtype=jnp.float64))
+        if scheduled
+        else coefficient
+    )
+    self.addCleanup(jax.config.update, 'jax_enable_x64', jax.config.x64_enabled)
+    jax.config.update('jax_enable_x64', True)
+    compute = jax.jit(
+        functools.partial(ppo._compute_entropy_cost, entropy_cost)
+    )
+    actual = compute(types.UInt64(hi=0, lo=0))
+    self.assertEqual(actual.dtype, jnp.float64)
+    np.testing.assert_array_equal(actual, coefficient)
+    loss = jax.jit(lambda cost, entropy: cost * -entropy)
+    entropy = jnp.asarray(1.25, dtype=jnp.float64)
+    np.testing.assert_array_equal(
+        loss(actual, entropy), loss(coefficient, entropy)
+    )
+
+  def testTrainConstantEntropySchedule(self):
+    train = functools.partial(
+        ppo.train,
+        envs.get_environment('fast'),
+        num_timesteps=48,
+        episode_length=16,
+        num_envs=4,
+        batch_size=4,
+        unroll_length=2,
+        num_minibatches=2,
+        num_updates_per_batch=2,
+        max_devices_per_host=1,
+        run_evals=False,
+        network_factory=functools.partial(
+            ppo_networks.make_ppo_networks,
+            policy_hidden_layer_sizes=(8,),
+            value_hidden_layer_sizes=(8,),
+        ),
+    )
+    _, scalar_params, scalar_metrics = train(entropy_cost=0.01)
+    _, schedule_params, schedule_metrics = train(
+        entropy_cost=optax.constant_schedule(0.01)
+    )
+    self.assertEqual(
+        jax.tree.structure(scalar_params), jax.tree.structure(schedule_params)
+    )
+    for scalar, scheduled in zip(
+        jax.tree.leaves(scalar_params), jax.tree.leaves(schedule_params)
+    ):
+      np.testing.assert_array_equal(scalar, scheduled)
+    self.assertEqual(scalar_metrics.keys(), schedule_metrics.keys())
+    for key in scalar_metrics:
+      if key not in ('training/sps', 'training/walltime'):
+        np.testing.assert_array_equal(
+            scalar_metrics[key], schedule_metrics[key]
+        )
+    self.assertAlmostEqual(float(scalar_metrics['training/entropy_cost']), 0.01)
+
+  @parameterized.parameters((1, 1), (2, 3))
+  def testTrainEntropyScheduleClock(self, action_repeat, num_updates_per_batch):
+    schedule_steps = []
+
+    def entropy_schedule(step):
+      jax.debug.callback(
+          lambda value: schedule_steps.append(float(value)), step
+      )
+      return step / 1000.0
+
+    steps_per_rollout = 4 * 2 * 2 * action_repeat
+    _, _, metrics = ppo.train(
+        envs.get_environment('fast'),
+        num_timesteps=3 * steps_per_rollout,
+        episode_length=16,
+        num_envs=4,
+        batch_size=4,
+        unroll_length=2,
+        num_minibatches=2,
+        num_updates_per_batch=num_updates_per_batch,
+        action_repeat=action_repeat,
+        entropy_cost=entropy_schedule,
+        max_devices_per_host=1,
+        run_evals=False,
+        network_factory=functools.partial(
+            ppo_networks.make_ppo_networks,
+            policy_hidden_layer_sizes=(8,),
+            value_hidden_layer_sizes=(8,),
+        ),
+    )
+    jax.effects_barrier()
+    self.assertEqual(
+        sorted(schedule_steps), [0, steps_per_rollout, 2 * steps_per_rollout]
+    )
+    self.assertAlmostEqual(
+        float(metrics['training/entropy_cost']), steps_per_rollout / 1000.0
+    )
 
   @parameterized.parameters('ndarray', 'dict_state')
   def testTrain(self, obs_mode):
