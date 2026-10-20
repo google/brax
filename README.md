@@ -1,5 +1,7 @@
 <img src="https://github.com/google/brax/raw/main/docs/img/brax_logo.gif" width="336" height="80" alt="BRAX"/>
 
+[English](README.md) | [简体中文](https://github.com/google/brax/blob/main/README.zh.md)
+
 > **WARNING**
 > Only `brax/training` is actively being maintained as of 0.13.0. Instead of `brax/envs`, users should use [MuJoCo Playground](https://github.com/google-deepmind/mujoco_playground), all of which train well with `brax/training`. If you want to use Brax for physics simulation, please use MJX available at [github.com/google-deepmind/mujoco](https://github.com/google-deepmind/mujoco) (`pip install mujoco_mjx`) or [MuJoCo Warp](https://github.com/google-deepmind/mujoco_warp) rather than Brax as a wrapper to MuJoCo physics simulation. We may repurpose `brax` purely as an RL library in the future.
 
