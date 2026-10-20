@@ -289,6 +289,20 @@ def update(state: RunningStatisticsState,
 
   std = jax.tree_util.tree_map(compute_std, summed_variance, state.std)
 
+  if until_count is not None:
+    # Same rule as the EMA branch: freeze the statistics once the count passes
+    # `until_count`.
+    frozen = count_float > until_count
+
+    def freeze(old, new):
+      return jax.tree_util.tree_map(
+          lambda o, n: jnp.where(frozen, o, n), old, new
+      )
+
+    mean = freeze(state.mean, mean)
+    summed_variance = freeze(state.summed_variance, summed_variance)
+    std = freeze(state.std, std)
+
   return RunningStatisticsState(
       count=count,
       mean=mean,
