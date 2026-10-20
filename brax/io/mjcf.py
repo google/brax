@@ -389,7 +389,7 @@ def load_model(mj: mujoco.MjModel) -> System:
       damping=mj.dof_damping,  # pyrefly: ignore[bad-argument-type]
       limit=limit,  # pyrefly: ignore[bad-argument-type]
       invweight=mj.dof_invweight0,  # pyrefly: ignore[bad-argument-type]
-      solver_params=solver_params_dof,
+      solver_params=solver_params_dof,  # pyrefly: ignore[bad-argument-type]
   )
 
   # create actuators
