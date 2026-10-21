@@ -60,3 +60,7 @@ sysinfo.txt
 *.unitypackage
 
 UnitySDK.log
+.venv/
+PR.md
+PR_Arguments.md
+PR_Opening.md
