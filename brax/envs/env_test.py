@@ -57,6 +57,20 @@ class EnvTest(parameterized.TestCase):
     )
     self.assertGreater(mean_sps, expected_sps * 0.99)
 
+  def testInvertedPendulumFallIsNotTimeOut(self):
+    env = envs.get_environment('inverted_pendulum', backend='spring')
+    step_fn = jax.jit(env.step)
+    state = jax.jit(env.reset)(jax.random.PRNGKey(0))
+    # Push the cart one way until the pole falls.
+    action = jp.ones(env.action_size)
+    for _ in range(50):
+      state = step_fn(state, action)
+      if state.done:
+        break
+
+    self.assertEqual(float(state.done), 1.0)
+    self.assertEqual(float(state.info['time_out']), 0.0)
+
 
 
 if __name__ == '__main__':
