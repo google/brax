@@ -56,6 +56,59 @@ def wrap(
   return env
 
 
+class HistoryWrapper(Wrapper):
+  """Stacks the last ``context_length`` observations and actions.
+
+  The wrapped observation is the flattened concatenation of the last
+  ``context_length`` ``(observation, previous_action)`` pairs, oldest first.
+  The previous action paired with the observation returned by ``reset`` is
+  zero, and steps before the start of the episode are zero padded.
+
+  The history lives in ``state.obs`` itself, so wrappers that replace the
+  observation on reset (such as ``AutoResetWrapper``) also reset the history.
+  Apply this wrapper to the base environment, before ``wrap`` or any other
+  batching and auto-reset wrapper. Only environments with a flat (1-D)
+  observation are supported.
+  """
+
+  def __init__(self, env: Env, context_length: int):
+    super().__init__(env)
+    if context_length < 1:
+      raise ValueError(f'context_length must be >= 1, got {context_length}.')
+    if not isinstance(env.observation_size, int):
+      raise ValueError(
+          'HistoryWrapper only supports environments with a flat observation,'
+          f' got observation_size={env.observation_size}.'
+      )
+    self.context_length = context_length
+    self._frame_size = env.observation_size + env.action_size
+
+  @property
+  def observation_size(self) -> int:
+    return self.context_length * self._frame_size
+
+  def reset(self, rng: jax.Array) -> State:
+    state = self.env.reset(rng)
+    action = jp.zeros(state.obs.shape[:-1] + (self.env.action_size,))
+    frame = jp.concatenate([state.obs, action], axis=-1)
+    history = jp.zeros(
+        frame.shape[:-1] + (self.context_length - 1, self._frame_size),
+        dtype=frame.dtype,
+    )
+    history = jp.concatenate([history, frame[..., None, :]], axis=-2)
+    return state.replace(obs=history.reshape(frame.shape[:-1] + (-1,)))  # pyrefly: ignore[missing-attribute]
+
+  def step(self, state: State, action: jax.Array) -> State:
+    history = state.obs.reshape(
+        state.obs.shape[:-1] + (self.context_length, self._frame_size)
+    )
+    inner = state.replace(obs=history[..., -1, : self.env.observation_size])  # pyrefly: ignore[missing-attribute]
+    nstate = self.env.step(inner, action)
+    frame = jp.concatenate([nstate.obs, action], axis=-1)
+    history = jp.concatenate([history[..., 1:, :], frame[..., None, :]], axis=-2)
+    return nstate.replace(obs=history.reshape(frame.shape[:-1] + (-1,)))  # pyrefly: ignore[missing-attribute]
+
+
 class VmapWrapper(Wrapper):
   """Vectorizes Brax env."""
 
