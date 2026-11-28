@@ -257,8 +257,6 @@ def validate_model(mj: mujoco.MjModel) -> None:
     )
 
   # solver parameters
-  if (mj.geom_solmix[0] != mj.geom_solmix).any():
-    raise NotImplementedError('geom_solmix parameter not supported.')
   if (mj.geom_priority[0] != mj.geom_priority).any():
     raise NotImplementedError('geom_priority parameter not supported.')
 
@@ -478,7 +476,7 @@ def load_model(mj: mujoco.MjModel) -> System:
   sys = jax.tree.map(jp.array, sys)
 
   warnings.warn(
-      'Brax System, piplines and environments are not actively being'
+      'Brax System, pipelines and environments are not actively being'
       ' maintained. Please see MJX for a well maintained JAX-based physics'
       ' engine: https://github.com/google-deepmind/mujoco/tree/main/mjx. For a'
       ' host of environments that use MJX, see:'
