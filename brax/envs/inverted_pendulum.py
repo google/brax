@@ -142,7 +142,8 @@ class InvertedPendulum(PipelineEnv):
     done = jp.where(jp.abs(obs[1]) > 0.2, 1.0, 0.0)
     return state.replace(  # pyrefly: ignore[missing-attribute]
         pipeline_state=pipeline_state, obs=obs, reward=reward, done=done,
-        info={**state.info, 'time_out': done}
+        # A fall is not a time-out.
+        info={**state.info, 'time_out': jp.zeros_like(done)}
     )
 
   @property
